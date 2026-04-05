@@ -1,0 +1,10 @@
+﻿# moddota_scripting_systems  Source: raw/moddota_scripting_systems.md  ## Sections 
+- [Custom Mana System](./01-custom-mana-system.md)
+- [Item Restrictions & Requirements](./02-item-restrictions-requirements.md)
+- [Item Drop System](./03-item-drop-system.md)
+- [Making a "rpg-like" looting chest](./04-making-a-rpg-like-looting-chest.md)
+- [Scripted Shop Spawning](./05-scripted-shop-spawning.md)
+- [Lava damage](./06-lava-damage.md)
+- [Using the order filter and other filters](./07-using-the-order-filter-and-other-filters.md)
+- [Particle Attachment](./08-particle-attachment.md)
+- [Basic Vector Math](./09-basic-vector-math.md)

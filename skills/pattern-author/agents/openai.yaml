@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pattern Author"
+  short_description: "Draft Rune Weaver Patterns from Dota2 references."
+  default_prompt: "Use $pattern-author to turn a Dota2 mechanic or source reference into a Rune Weaver Pattern draft."

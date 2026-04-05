@@ -1,0 +1,28 @@
+{
+  "name": "rune-weaver",
+  "version": "0.1.0",
+  "description": "自然语言游戏功能编织引擎",
+  "type": "module",
+  "bin": {
+    "rune-weaver": "./apps/cli/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "cli": "tsx apps/cli/index.ts",
+    "cli:help": "tsx apps/cli/index.ts --help",
+    "cli:micro": "tsx apps/cli/index.ts --input \"做一个按Q键的冲刺技能\" --type micro-feature --trigger Q",
+    "cli:system": "tsx apps/cli/index.ts --input \"做一个按F4触发的三选一天赋抽取系统\" --type standalone-system --ui",
+    "test": "tsx core/validation/schema-validator.test.ts",
+    "examples": "tsx examples/index.ts",
+    "verify:p0": "npm run check-types && npm run test && npm run examples && npm run cli:micro"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

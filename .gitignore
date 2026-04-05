@@ -1,0 +1,17 @@
+node_modules/
+dist/
+
+.env
+api.txt
+
+tmp/
+references/dota2/dota-data/
+
+*.log
+npm-debug.log*
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
