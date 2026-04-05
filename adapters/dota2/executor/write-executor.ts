@@ -42,44 +42,36 @@ export interface WriteAction {
  * 写入计划
  */
 export interface WritePlan {
-  /** 要执行的动作列表 */
   actions: WriteAction[];
-  /** 预计创建的文件 */
   filesToCreate: string[];
-  /** 预计修改的文件 */
   filesToModify: string[];
-  /** 关联的 featureId */
   featureId: string;
+  readyForHostWrite?: boolean;
+  readinessBlockers?: string[];
 }
 
 /**
  * 写入执行结果
  */
 export interface WriteResult {
-  /** 是否整体成功 */
   success: boolean;
-  /** 成功执行的动作 */
   executed: WriteAction[];
-  /** 失败的动作 */
   failed: { action: WriteAction; error: string }[];
-  /** 跳过的动作 */
   skipped: WriteAction[];
-  /** 创建的文件列表 */
   createdFiles: string[];
-  /** 修改的文件列表 */
   modifiedFiles: string[];
+  blockedByReadinessGate?: boolean;
+  readinessBlockers?: string[];
 }
 
 /**
  * Write Executor 选项
  */
 export interface WriteExecutorOptions {
-  /** 宿主根目录 */
   hostRoot: string;
-  /** 是否 dry-run 模式 */
   dryRun?: boolean;
-  /** 是否创建备份 */
   createBackup?: boolean;
+  force?: boolean;
 }
 
 /**
@@ -313,6 +305,17 @@ export async function executeWritePlan(
     createdFiles: [],
     modifiedFiles: [],
   };
+
+  if (plan.readyForHostWrite === false && !options.force) {
+    result.success = false;
+    result.blockedByReadinessGate = true;
+    result.readinessBlockers = plan.readinessBlockers || ["readyForHostWrite is false"];
+    result.failed.push({
+      action: { type: "create", targetPath: "", rwOwned: true, description: "Readiness Gate Check" },
+      error: `Execution blocked by readiness gate: ${result.readinessBlockers.join(", ")}. Use force: true to override.`,
+    });
+    return result;
+  }
 
   for (const action of plan.actions) {
     const validation = validateWriteAction(action);

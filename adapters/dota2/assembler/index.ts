@@ -42,28 +42,23 @@ export interface WritePlanEntry {
  * 写入计划
  */
 export interface WritePlan {
-  /** 计划 ID */
   id: string;
-  /** 目标项目路径 */
   targetProject: string;
-  /** 生成时间 */
   generatedAt: string;
-  /** 命名空间根目录 */
   namespaceRoots: {
     server: string;
     panorama: string;
   };
-  /** 写入条目 */
   entries: WritePlanEntry[];
-  /** 统计 */
   stats: {
     total: number;
     create: number;
     update: number;
     conflicts: number;
   };
-  /** 建议执行顺序 */
   executionOrder: number[];
+  readyForHostWrite?: boolean;
+  readinessBlockers?: string[];
 }
 
 /**
@@ -161,6 +156,8 @@ export function generateWritePlan(
     entries,
     stats,
     executionOrder,
+    readyForHostWrite: plan.readyForHostWrite,
+    readinessBlockers: plan.hostWriteReadiness?.blockers,
   };
 }
 
@@ -177,7 +174,13 @@ function generateEntriesForPattern(
   if (!patternMeta) return entries;
 
   // 确定基础路径（使用命名空间）
-  const baseName = binding.role.replace(/^mod_/, "").replace(/\s+/g, "_").toLowerCase();
+  // 仅使用 role 会让同一 case 内多个 effect/data/rule 模块落到同一路径。
+  const roleSegment = sanitizeSegment(binding.role.replace(/^mod_/, ""));
+  const patternSegment = sanitizeSegment(binding.patternId.replace(/\./g, "_"));
+  const baseName =
+    roleSegment === patternSegment || roleSegment.endsWith(`_${patternSegment}`)
+      ? roleSegment
+      : `${roleSegment}_${patternSegment}`;
   const targetId = `${featureId}_${baseName}`;
 
   // 为每种输出类型生成条目
@@ -230,6 +233,18 @@ function generateEntriesForPattern(
   }
 
   return entries;
+}
+
+function sanitizeSegment(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}_-]/gu, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+
+  return normalized || "module";
 }
 
 /**

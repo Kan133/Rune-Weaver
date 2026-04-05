@@ -19,6 +19,23 @@ import {
 } from "../schema/types";
 import { BlueprintBuilderConfig, BlueprintBuildResult } from "./types";
 
+const AVAILABLE_PATTERNS = new Set([
+  "input.key_binding",
+  "data.weighted_pool",
+  "rule.selection_flow",
+  "effect.dash",
+  "effect.modifier_applier",
+  "effect.resource_consume",
+  "resource.basic_pool",
+  "ui.selection_modal",
+  "ui.key_hint",
+  "ui.resource_bar",
+]);
+
+function isPatternAvailable(patternId: string): boolean {
+  return AVAILABLE_PATTERNS.has(patternId);
+}
+
 /**
  * Blueprint Builder 类
  * 
@@ -302,61 +319,81 @@ export class BlueprintBuilder {
   private buildPatternHints(schema: IntentSchema): PatternHint[] {
     const hints: PatternHint[] = [];
 
-    // 基于 normalizedMechanics 生成 pattern hints
     if (schema.normalizedMechanics.trigger) {
-      hints.push({
-        category: "input",
-        suggestedPatterns: ["input.key_binding", "input.event_handler"],
-        rationale: "需要输入触发机制",
-      });
+      const patterns = ["input.key_binding"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "input",
+          suggestedPatterns: patterns,
+          rationale: "需要输入触发机制",
+        });
+      }
     }
 
     if (schema.normalizedMechanics.candidatePool) {
-      hints.push({
-        category: "data",
-        suggestedPatterns: ["data.weighted_pool", "data.registry"],
-        rationale: "需要候选项池管理",
-      });
+      const patterns = ["data.weighted_pool"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "data",
+          suggestedPatterns: patterns,
+          rationale: "需要候选项池管理",
+        });
+      }
     }
 
     if (schema.normalizedMechanics.weightedSelection) {
-      hints.push({
-        category: "rule",
-        suggestedPatterns: ["rule.weighted_random", "rule.selection_flow"],
-        rationale: "需要加权随机选择",
-      });
+      const patterns = ["rule.selection_flow"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "rule",
+          suggestedPatterns: patterns,
+          rationale: "需要加权随机选择",
+        });
+      }
     }
 
     if (schema.normalizedMechanics.playerChoice) {
-      hints.push({
-        category: "rule",
-        suggestedPatterns: ["rule.player_selection", "rule.choice_validator"],
-        rationale: "需要玩家选择处理",
-      });
+      const patterns = ["rule.selection_flow"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "rule",
+          suggestedPatterns: patterns,
+          rationale: "需要玩家选择处理",
+        });
+      }
     }
 
     if (schema.normalizedMechanics.uiModal) {
-      hints.push({
-        category: "ui",
-        suggestedPatterns: ["ui.selection_modal", "ui.modal_container"],
-        rationale: "需要模态 UI 界面",
-      });
+      const patterns = ["ui.selection_modal"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "ui",
+          suggestedPatterns: patterns,
+          rationale: "需要模态 UI 界面",
+        });
+      }
     }
 
     if (schema.normalizedMechanics.outcomeApplication) {
-      hints.push({
-        category: "effect",
-        suggestedPatterns: ["effect.modifier_applier", "effect.state_updater"],
-        rationale: "需要结果应用机制",
-      });
+      const patterns = ["effect.modifier_applier", "effect.resource_consume"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "effect",
+          suggestedPatterns: patterns,
+          rationale: "需要结果应用机制",
+        });
+      }
     }
 
     if (schema.normalizedMechanics.resourceConsumption) {
-      hints.push({
-        category: "resource",
-        suggestedPatterns: ["resource.basic_pool", "resource.cost_validator"],
-        rationale: "需要资源消耗处理",
-      });
+      const patterns = ["resource.basic_pool", "effect.resource_consume"].filter(isPatternAvailable);
+      if (patterns.length > 0) {
+        hints.push({
+          category: "resource",
+          suggestedPatterns: patterns,
+          rationale: "需要资源消耗处理",
+        });
+      }
     }
 
     return hints;
