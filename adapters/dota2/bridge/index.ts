@@ -28,12 +28,39 @@ const BRIDGE_PATHS = {
   uiGeneratedIndex: "content/panorama/src/rune_weaver/generated/ui/index.tsx",
 } as const;
 
-function generateServerIndexContent(features: RuneWeaverFeatureRecord[]): string {
+function generateServerIndexContent(
+  features: RuneWeaverFeatureRecord[],
+  hostRoot: string
+): string {
   const activeFeatures = features.filter((feature) => feature.status === "active");
   const imports: string[] = [];
   const registrations: string[] = [];
+  const generatedAbilityNames: string[] = [];
 
   for (const feature of activeFeatures) {
+    const featureKvFiles = feature.generatedFiles.filter(
+      (file) => file.includes("npc_abilities_custom") && file.endsWith(".txt")
+    );
+
+    for (const kvFile of featureKvFiles) {
+      const fullPath = join(hostRoot, kvFile);
+      if (existsSync(fullPath)) {
+        const kvContent = readFileSync(fullPath, "utf-8");
+        const abilityNameMatches = kvContent.match(/"([^"]+)"\s*\{/g);
+        if (abilityNameMatches) {
+          for (const match of abilityNameMatches) {
+            const nameMatch = match.match(/"([^"]+)"/);
+            if (nameMatch && nameMatch[1] && nameMatch[1].startsWith("rw_")) {
+              const abilityName = nameMatch[1];
+              if (!generatedAbilityNames.includes(abilityName)) {
+                generatedAbilityNames.push(abilityName);
+              }
+            }
+          }
+        }
+      }
+    }
+
     for (const file of feature.generatedFiles) {
       if (!file.includes("server") || !file.endsWith(".ts")) {
         continue;
@@ -41,6 +68,12 @@ function generateServerIndexContent(features: RuneWeaverFeatureRecord[]): string
 
       const fileName = file.split("/").pop()?.replace(".ts", "");
       if (!fileName || fileName === "index") {
+        continue;
+      }
+
+      const fullPath = join(hostRoot, file);
+      if (!existsSync(fullPath)) {
+        console.warn(`[Bridge] Skipping non-existent server module: ${file}`);
         continue;
       }
 
@@ -56,11 +89,17 @@ function generateServerIndexContent(features: RuneWeaverFeatureRecord[]): string
 
 ${imports.join("\n")}
 
+// Rune Weaver Generated Ability Names for Hero Attachment
+// These abilities will be automatically attached to heroes by the host addon
+// Format: abilityName = "rw_xxx"
+${generatedAbilityNames.map((name) => `const ${name.replace(/-/g, "_").toUpperCase()}_ABILITY = "${name}";`).join("\n")}
+
 export function activateRwGeneratedServer(): void {
   // Mount ${activeFeatures.length} active features
 ${registrations.join("\n")}
 
-  console.log("[Rune Weaver] ${activeFeatures.length} server modules activated");
+  print("[Rune Weaver] ${activeFeatures.length} server modules activated");
+  print("[Rune Weaver] Hero attachment abilities registered: ${generatedAbilityNames.length}");
 }
 `;
 }
@@ -121,6 +160,25 @@ export function refreshBridge(
   const activeFeatures = getActiveFeatures(workspace);
   result.mountedFeatures = activeFeatures.map((feature) => feature.featureId);
 
+  const serverBridgePath = join(projectPath, BRIDGE_PATHS.serverBridge);
+  if (existsSync(serverBridgePath)) {
+    const existingContent = readFileSync(serverBridgePath, "utf-8");
+    if (!existingContent.includes("activateRwGeneratedServer")) {
+      const correctContent = `// Rune Weaver Server Bridge
+// This file is the entry point for Rune Weaver generated server modules
+// Bridge 只做聚合与接线，业务逻辑在 generated/server/ 中
+
+import { activateRwGeneratedServer } from "./generated/server";
+
+export function activateRuneWeaverModules(): void {
+  activateRwGeneratedServer();
+}
+`;
+      console.warn("[Bridge] Server bridge has incorrect content, fixing...");
+      writeFileSync(serverBridgePath, correctContent, "utf-8");
+    }
+  }
+
   const serverIndexPath = join(projectPath, BRIDGE_PATHS.serverGeneratedIndex);
   try {
     if (!existsSync(serverIndexPath)) {
@@ -128,7 +186,7 @@ export function refreshBridge(
       return result;
     }
 
-    writeFileSync(serverIndexPath, generateServerIndexContent(workspace.features), "utf-8");
+    writeFileSync(serverIndexPath, generateServerIndexContent(workspace.features, projectPath), "utf-8");
     result.serverRefreshed = true;
   } catch (error) {
     result.errors.push(

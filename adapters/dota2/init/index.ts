@@ -320,6 +320,22 @@ export function activateRuneWeaverModules(): void {
 }
 `;
     writeFileSync(serverBridgePath, serverContent, "utf-8");
+  } else {
+    const existingContent = readFileSync(serverBridgePath, "utf-8");
+    const correctContent = `// Rune Weaver Server Bridge
+// This file is the entry point for Rune Weaver generated server modules
+// Bridge 只做聚合与接线，业务逻辑在 generated/server/ 中
+
+import { activateRwGeneratedServer } from "./generated/server";
+
+export function activateRuneWeaverModules(): void {
+  activateRwGeneratedServer();
+}
+`;
+    if (!existingContent.includes("activateRwGeneratedServer")) {
+      console.warn("[Init] Server bridge has incorrect content, fixing...");
+      writeFileSync(serverBridgePath, correctContent, "utf-8");
+    }
   }
 
   // 2. 服务端 generated 索引文件

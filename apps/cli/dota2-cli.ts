@@ -35,8 +35,10 @@ import {
   findFeatureById,
 } from "../../core/workspace/index.js";
 
-import { generateWritePlan as assemblerGenerateWritePlan, WritePlan, WritePlanEntry } from "../../adapters/dota2/assembler/index.js";
+import { createWritePlan as assemblerCreateWritePlan, WritePlan, WritePlanEntry } from "../../adapters/dota2/assembler/index.js";
 import { generateCode } from "../../adapters/dota2/generator/index.js";
+import { generateAbilityKV } from "../../adapters/dota2/generator/kv/index.js";
+import { KVGeneratorInput } from "../../adapters/dota2/generator/kv/types.js";
 import {
   executeWritePlan,
   generateWriteReview,
@@ -49,8 +51,11 @@ import {
 import {
   validateHostRuntime,
 } from "../../adapters/dota2/validator/runtime-validator.js";
+import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage } from "./helpers/index.js";
+import type { VerdictInput } from "./helpers/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
-import type { HostRealizationPlan } from "../../core/schema/types.js";
+import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
+import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } from "../../adapters/dota2/routing/index.js";
 import { refreshBridge } from "../../adapters/dota2/bridge/index.js";
 import {
   generateCleanupPlan,
@@ -119,7 +124,10 @@ export interface Dota2ReviewArtifact {
     patternResolution: { success: boolean; resolvedPatterns: string[]; unresolvedPatterns: string[]; issues: string[]; complete: boolean; skipped?: boolean };
     assemblyPlan: { success: boolean; selectedPatterns: string[]; writeTargets: string[]; readyForHostWrite: boolean; blockers: string[]; skipped?: boolean };
     hostRealization: { success: boolean; units: Array<{ id: string; sourceModuleId: string; sourcePatternIds: string[]; role: string; realizationType: string; hostTargets: string[]; confidence: string; blockers?: string[] }>; blockers: string[]; skipped?: boolean };
-    generator: { success: boolean; generatedFiles: string[]; issues: string[]; skipped?: boolean; /** T112-R1: Realization context from write plan */ realizationContext?: { version: string; host: string; sourceBlueprintId: string; units: Array<{ id: string; sourcePatternIds: string[]; realizationType: string; hostTargets: string[]; confidence: string }>; isFallback: boolean }; /** T112-R2: Warnings for deferred entries */ deferredWarnings?: string[] };
+    /** T115: Generator routing - routes realization to generator families */
+    generatorRouting?: { success: boolean; routes: Array<{ id: string; sourceUnitId: string; generatorFamily: string; routeKind: string; hostTarget: string; rationale: string[]; blockers?: string[] }>; warnings: string[]; blockers: string[]; skipped?: boolean };
+    /** T115-R2: Added deferredEntries to track deferred entries separately from generatedFiles */
+    generator: { success: boolean; generatedFiles: string[]; issues: string[]; skipped?: boolean; deferredEntries?: Array<{ pattern: string; reason: string }>; /** T112-R1: Realization context from write plan */ realizationContext?: { version: string; host: string; sourceBlueprintId: string; units: Array<{ id: string; sourcePatternIds: string[]; realizationType: string; hostTargets: string[]; confidence: string }>; isFallback: boolean }; /** T112-R2: Warnings for deferred entries */ deferredWarnings?: string[] };
     writeExecutor: { success: boolean; executedActions: number; skippedActions: number; failedActions: number; createdFiles: string[]; modifiedFiles: string[]; blockedByReadinessGate?: boolean; readinessBlockers?: string[]; skipped?: boolean };
     hostValidation: { success: boolean; checks: string[]; issues: string[]; details: Record<string, unknown>; skipped?: boolean };
     runtimeValidation: { success: boolean; serverPassed: boolean; uiPassed: boolean; serverErrors: number; uiErrors: number; limitations: string[]; skipped?: boolean };
@@ -277,6 +285,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       "patternResolution",
       "assemblyPlan",
       "hostRealization",
+      "generatorRouting",
       "generator",
       "writeExecutor",
       "hostValidation",
@@ -456,21 +465,85 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
+  // Stage 4.6: Generator Routing (T115)
+  // Routes HostRealizationPlan to concrete generator families
+  let generatorRoutingPlan: GeneratorRoutingPlan | null = null;
+  try {
+    generatorRoutingPlan = generateGeneratorRoutingPlan(hostRealizationPlan);
+    
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 4.6: Generator Routing");
+    console.log("=".repeat(70));
+    
+    // Summarize routing results
+    const tsRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ts");
+    const uiRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ui");
+    const kvRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "kv");
+    const bridgeRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "bridge");
+    
+    console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
+    console.log(`    - TS routes: ${tsRoutes.length} (${tsRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
+    console.log(`    - UI routes: ${uiRoutes.length} (${uiRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
+    console.log(`    - KV routes: ${kvRoutes.length} (${kvRoutes.filter(r => !r.blockers?.length).length} unblocked, ${kvRoutes.filter(r => r.blockers?.length).length} blocked)`);
+    console.log(`    - Bridge routes: ${bridgeRoutes.length}`);
+    
+    if (generatorRoutingPlan.warnings.length > 0) {
+      console.log(`  Warnings:`);
+      for (const warning of generatorRoutingPlan.warnings) {
+        console.log(`    - ${warning}`);
+      }
+    }
+    
+    if (generatorRoutingPlan.blockers.length > 0) {
+      console.log(`  Blockers:`);
+      for (const blocker of generatorRoutingPlan.blockers) {
+        console.log(`    - ${blocker}`);
+      }
+    }
+    
+    artifact.stages.generatorRouting = {
+      success: generatorRoutingPlan.blockers.length === 0,
+      routes: generatorRoutingPlan.routes.map(r => ({
+        id: r.id,
+        sourceUnitId: r.sourceUnitId,
+        generatorFamily: r.generatorFamily,
+        routeKind: r.routeKind,
+        hostTarget: r.hostTarget,
+        rationale: r.rationale,
+        blockers: r.blockers,
+      })),
+      warnings: generatorRoutingPlan.warnings,
+      blockers: generatorRoutingPlan.blockers,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`  ❌ Generator Routing failed: ${message}`);
+    artifact.stages.generatorRouting = {
+      success: false,
+      routes: [],
+      warnings: [],
+      blockers: [message],
+    };
+    artifact.finalVerdict.weakestStage = "generatorRouting";
+    artifact.finalVerdict.remainingRisks = [message];
+    return artifact;
+  }
+
   // Stage 5: Generator
   const { writePlan, issues: generatorIssues } = createWritePlan(
     plan,
     options.hostRoot,
     existingFeatureContext.feature,
     featureMode,
-    hostRealizationPlan ?? undefined
+    hostRealizationPlan ?? undefined,
+    generatorRoutingPlan ?? undefined
   );
-  artifact.stages.generator = {
-    success: writePlan !== null,
-    generatedFiles: writePlan?.entries.map((e) => e.targetPath) || [],
-    issues: generatorIssues,
-    // T112-R1: Pass through realization context from write plan
-    realizationContext: writePlan?.realizationContext,
-  };
+
+  // T120-R1: Use helper for generator stage assembly
+  artifact.stages.generator = buildGeneratorStage(writePlan, generatorIssues);
+
+  // T120-R1: Build deferred entries info for host validation
+  const deferredEntriesInfo = buildDeferredEntriesInfo(writePlan?.entries || []);
 
   if (!writePlan) {
     artifact.finalVerdict.weakestStage = "generator";
@@ -498,7 +571,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 7: Host Validation (enhanced)
-  const hostValidation = validateHost(options.hostRoot, writePlan, result, stableFeatureId);
+  const hostValidation = validateHost(options.hostRoot, writePlan, result, stableFeatureId, deferredEntriesInfo);
   artifact.stages.hostValidation = {
     success: hostValidation.success,
     checks: hostValidation.checks,
@@ -614,98 +687,26 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     skipped: workspaceStateResult.skipped,
   };
 
-  // Calculate final verdict with realistic assessment
-  const coreStages = [
-    artifact.stages.intentSchema,
-    artifact.stages.blueprint,
-    artifact.stages.patternResolution,
-    artifact.stages.assemblyPlan,
-    artifact.stages.hostRealization,
-    artifact.stages.generator,
-    artifact.stages.writeExecutor,
-    artifact.stages.hostValidation,
-    artifact.stages.runtimeValidation,
-    artifact.stages.workspaceState,
-  ];
-  const allStagesSuccess = coreStages.every((s) => s.success);
-  const hasUnresolvedPatterns = artifact.stages.patternResolution.unresolvedPatterns.length > 0;
-  const wasForceOverride = options.force && artifact.stages.assemblyPlan.readyForHostWrite === false;
-  const featureFilesCreated = (hostValidation.details.featureFilesCount as number) > 0;
-  const workspaceStateFailed = !workspaceStateResult.success && !workspaceStateResult.skipped;
-  const runtimeValidationFailed = !runtimeValidationResult.success && !options.dryRun;
-
-  // Determine completion kind
-  let completionKind: "default-safe" | "forced" | "partial" | "requires-regenerate" = "partial";
-  if (allStagesSuccess && !hasUnresolvedPatterns && !wasForceOverride && artifact.stages.assemblyPlan.readyForHostWrite && !workspaceStateFailed && !runtimeValidationFailed) {
-    completionKind = "default-safe";
-  } else if (allStagesSuccess && wasForceOverride && !workspaceStateFailed && !runtimeValidationFailed) {
-    completionKind = "forced";
-  } else if (allStagesSuccess && hasUnresolvedPatterns && !workspaceStateFailed && !runtimeValidationFailed) {
-    completionKind = "partial";
-  } else if (workspaceStateFailed || runtimeValidationFailed) {
-    completionKind = "partial";
-  }
-
-  artifact.finalVerdict.pipelineComplete =
-    allStagesSuccess &&
-    !workspaceStateFailed &&
-    !runtimeValidationFailed &&
-    !hasUnresolvedPatterns &&
-    !wasForceOverride &&
-    artifact.stages.assemblyPlan.readyForHostWrite;
-  artifact.finalVerdict.completionKind = completionKind;
-  artifact.finalVerdict.weakestStage = allStagesSuccess && !workspaceStateFailed
-    ? "none"
-    : workspaceStateFailed
-      ? "workspaceState"
-      : Object.entries(artifact.stages)
-          .filter(([k, s]) => k !== "cleanupPlan" && "success" in s && !s.success)
-          .map(([k]) => k)[0] || "unknown";
-  artifact.finalVerdict.sufficientForDemo = 
-    completionKind === "default-safe" && 
-    hostValidation.success && 
-    featureFilesCreated &&
-    !workspaceStateFailed;
-  artifact.finalVerdict.hasUnresolvedPatterns = hasUnresolvedPatterns;
-  artifact.finalVerdict.wasForceOverride = wasForceOverride;
-  
-  // Build remaining risks
-  const risks: string[] = [...hostValidation.issues];
-  if (hasUnresolvedPatterns) {
-    risks.push(`Has ${artifact.stages.patternResolution.unresolvedPatterns.length} unresolved patterns`);
-  }
-  if (wasForceOverride) {
-    risks.push("Execution required --force override");
-  }
-  if (!featureFilesCreated) {
-    risks.push("Feature-specific files could not be identified");
-  }
-  if (workspaceStateFailed) {
-    risks.push(`Workspace state update failed: ${workspaceStateResult.error}`);
-  }
-  artifact.finalVerdict.remainingRisks = risks;
-
-  // Build next steps
-  const nextSteps: string[] = [];
-  if (workspaceStateFailed) {
-    nextSteps.push("Fix workspace state update failure");
-  }
-  if (completionKind === "partial") {
-    if (hasUnresolvedPatterns) {
-      nextSteps.push("Add missing patterns to resolve all pattern hints");
-    }
-    if (!featureFilesCreated) {
-      nextSteps.push("Improve feature file identification");
-    }
-  }
-  if (completionKind === "forced") {
-    nextSteps.push("Resolve blockers to enable default-safe execution");
-  }
-  if (completionKind === "default-safe") {
-    nextSteps.push("Host runtime validation");
-    nextSteps.push("Rollback support");
-  }
-  artifact.finalVerdict.nextSteps = nextSteps.length > 0 ? nextSteps : ["Improve pipeline completeness"];
+  // T120-R1: Use helper for final verdict calculation
+  const verdictInput: VerdictInput = {
+    stages: artifact.stages,
+    options: {
+      force: options.force,
+      dryRun: options.dryRun,
+    },
+    writePlan,
+    runtimeValidationResult: {
+      success: runtimeValidationResult.success,
+    },
+    workspaceStateResult: {
+      success: workspaceStateResult.success,
+      error: workspaceStateResult.error,
+      skipped: workspaceStateResult.skipped,
+    },
+    hostValidationDetails: hostValidation.details,
+  };
+  const verdict = calculateFinalVerdict(verdictInput);
+  artifact.finalVerdict = verdict;
 
   return artifact;
 }
@@ -958,17 +959,20 @@ function createWritePlan(
   hostRoot: string,
   existingFeature: RuneWeaverFeatureRecord | null,
   mode: FeatureMode,
-  hostRealizationPlan?: HostRealizationPlan
+  hostRealizationPlan?: HostRealizationPlan,
+  generatorRoutingPlan?: GeneratorRoutingPlan
 ): { writePlan: WritePlan | null; issues: string[] } {
   console.log("\n" + "=".repeat(70));
   console.log("Stage 5: Generator");
   console.log("=".repeat(70));
 
   try {
-    const writePlan = assemblerGenerateWritePlan(
+    // T115: Pass routing plan as primary input, realization plan as fallback
+    const writePlan = assemblerCreateWritePlan(
       assemblyPlan,
       hostRoot,
       existingFeature?.featureId,
+      generatorRoutingPlan ?? undefined,
       hostRealizationPlan ?? undefined
     );
 
@@ -989,7 +993,7 @@ function createWritePlan(
     }
 
     // T112-R2: Show generator family hint distribution
-    const familyHints = writePlan.entries.reduce((acc, e) => {
+    const familyHints = writePlan.entries.reduce((acc: Record<string, number>, e: WritePlanEntry) => {
       if (e.generatorFamilyHint) {
         acc[e.generatorFamilyHint] = (acc[e.generatorFamilyHint] || 0) + 1;
       }
@@ -1145,7 +1149,50 @@ async function executeWrite(
   console.log("Stage 6: Write Executor");
   console.log("=".repeat(70));
 
-  const actions: WriteAction[] = writePlan.entries.map((entry) => ({
+  // T115-R2: Filter out deferred entries - they should not become WriteActions
+  // Deferred entries remain in artifact/stats for traceability but don't generate files
+  const deferredEntries = writePlan.entries.filter((e) => e.deferred);
+  const executableEntries = writePlan.entries.filter((e) => !e.deferred);
+
+  if (deferredEntries.length > 0) {
+    console.log(`  ⚠️  Deferred entries (not executing): ${deferredEntries.length}`);
+    for (const entry of deferredEntries) {
+      console.log(`    - ${entry.sourcePattern}: ${entry.deferredReason || "Generator not yet implemented"}`);
+    }
+  }
+
+  // T118-R1: Aggregate KV entries by target file to avoid overwriting
+  // Multiple KV entries can target the same npc_abilities_custom.txt
+  const kvEntries = executableEntries.filter((e) => e.contentType === "kv");
+  const nonKvEntries = executableEntries.filter((e) => e.contentType !== "kv");
+
+  // Build aggregated KV actions if any KV entries exist
+  const kvActions: WriteAction[] = [];
+  if (kvEntries.length > 0) {
+    const kvEntriesByTarget = new Map<string, WritePlanEntry[]>();
+    for (const entry of kvEntries) {
+      const existing = kvEntriesByTarget.get(entry.targetPath) || [];
+      existing.push(entry);
+      kvEntriesByTarget.set(entry.targetPath, existing);
+    }
+
+    for (const [targetPath, entries] of kvEntriesByTarget) {
+      // T118-R2: Generate unique ability names for each entry by adding index suffix
+      const combinedContent = entries.map((e, idx) => generateKVContentWithIndex(e, idx)).join("\n\n");
+      const aggregatedDescription = `KV aggregation: ${entries.length} abilities -> ${targetPath}`;
+      console.log(`  [KV] Aggregated ${entries.length} entries into ${targetPath}`);
+      kvActions.push({
+        type: "create",
+        targetPath,
+        content: combinedContent,
+        rwOwned: true,
+        description: aggregatedDescription,
+      });
+    }
+  }
+
+  // Non-KV actions are generated individually
+  const nonKvActions: WriteAction[] = nonKvEntries.map((entry) => ({
     type: entry.operation === "create" ? "create" : "refresh",
     targetPath: entry.targetPath,
     content: generateCodeContent(entry),
@@ -1153,15 +1200,19 @@ async function executeWrite(
     description: entry.contentSummary,
   }));
 
+  const actions: WriteAction[] = [...nonKvActions, ...kvActions];
+
+  // T118-R2: Compute file lists from aggregated actions, not from raw executableEntries
+  // This ensures KV targets appear once even if multiple KV entries were aggregated
   const executorPlan: ExecutorWritePlan = {
     featureId: stableFeatureId,
     actions,
-    filesToCreate: writePlan.entries
-      .filter((e) => e.operation === "create")
-      .map((e) => e.targetPath),
-    filesToModify: writePlan.entries
-      .filter((e) => e.operation === "update")
-      .map((e) => e.targetPath),
+    filesToCreate: actions
+      .filter((a) => a.type === "create")
+      .map((a) => a.targetPath),
+    filesToModify: actions
+      .filter((a) => a.type === "refresh")
+      .map((a) => a.targetPath),
     readyForHostWrite: writePlan.readyForHostWrite,
     readinessBlockers: writePlan.readinessBlockers,
   };
@@ -1206,7 +1257,147 @@ async function executeWrite(
   return { result, review };
 }
 
+function generateKVContentWithIndex(entry: WritePlanEntry, index: number): string {
+  // T121-R3: Generate unique ability name by adding index suffix when multiple entries have same base name
+  const patternSegment = entry.sourcePattern.includes(".")
+    ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
+    : entry.sourcePattern;
+  const baseName = patternSegment;
+  const featureSegment = entry.targetPath.includes("feature_")
+    ? entry.targetPath.match(/feature_([^/]+)/)?.[1]
+    : entry.targetPath.includes("micro_feature_")
+      ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
+      : null;
+  const abilityName = featureSegment
+    ? `rw_${featureSegment}_${baseName}_${index}`
+    : `rw_${baseName}_${index}`;
+
+  const kvInput: KVGeneratorInput = {
+    routeId: `route_${entry.sourcePattern}_kv`,
+    sourceUnitId: entry.sourceModule,
+    generatorFamily: "dota2-kv",
+    hostTarget: "ability_kv",
+    abilityConfig: {
+      abilityName,
+      baseClass: "ability_datadriven",
+      abilityType: "DOTA_ABILITY_TYPE_BASIC",
+      behavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
+      abilityCooldown: "8.0",
+      abilityManaCost: "50",
+      abilityCastRange: "0",
+      abilityCastPoint: "0.1",
+      maxLevel: "4",
+      requiredLevel: "1",
+      levelsBetweenUpgrades: "3",
+    },
+    rationale: [
+      `Generated from pattern: ${entry.sourcePattern}`,
+      `Module: ${entry.sourceModule}`,
+      `Feature: ${featureSegment}`,
+    ],
+    blockers: entry.deferred ? [entry.deferredReason || "Entry marked deferred"] : [],
+  };
+
+  try {
+    const kvOutput = generateAbilityKV(kvInput);
+    console.log(`  [KV] Generated ability: ${kvOutput.abilityName} -> ${entry.targetPath}`);
+    return kvOutput.kvBlock;
+  } catch (error) {
+    console.log(`  [KV] Error generating KV: ${error}`);
+    return `// KV generation failed: ${error}\n`;
+  }
+}
+
+function generateKVContent(entry: WritePlanEntry): string {
+  // T118-R1: Build KVGeneratorInput from WritePlanEntry
+  // T118-R1: Use semantic naming from sourceModule + sourcePattern, NOT target file basename
+  // Extract meaningful segment from pattern (e.g., "modifier_applier" from "effect.modifier_applier")
+  const patternSegment = entry.sourcePattern.includes(".")
+    ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
+    : entry.sourcePattern;
+  // Use patternSegment as baseName - sourceModule may be generic (e.g., "effect")
+  const baseName = patternSegment;
+  // Try to extract feature ID from targetPath if present
+  const featureSegment = entry.targetPath.includes("feature_")
+    ? entry.targetPath.match(/feature_([^/]+)/)?.[1]
+    : entry.targetPath.includes("micro_feature_")
+      ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
+      : null;
+  const abilityName = featureSegment
+    ? `rw_${featureSegment}_${baseName}`
+    : `rw_${baseName}`;
+
+  const kvInput: KVGeneratorInput = {
+    routeId: `route_${entry.sourcePattern}_kv`,
+    sourceUnitId: entry.sourceModule,
+    generatorFamily: "dota2-kv",
+    hostTarget: "ability_kv",
+    abilityConfig: {
+      abilityName,
+      baseClass: "ability_datadriven",
+      abilityType: "DOTA_ABILITY_TYPE_BASIC",
+      behavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
+      abilityCooldown: "8.0",
+      abilityManaCost: "50",
+      abilityCastRange: "0",
+      abilityCastPoint: "0.1",
+      maxLevel: "4",
+      requiredLevel: "1",
+      levelsBetweenUpgrades: "3",
+    },
+    rationale: [
+      `Generated from pattern: ${entry.sourcePattern}`,
+      `Module: ${entry.sourceModule}`,
+      `Feature: ${featureSegment}`,
+    ],
+    blockers: entry.deferred ? [entry.deferredReason || "Entry marked deferred"] : [],
+  };
+
+  try {
+    const kvOutput = generateAbilityKV(kvInput);
+    console.log(`  [KV] Generated ability: ${kvOutput.abilityName} -> ${entry.targetPath}`);
+    return kvOutput.kvBlock;
+  } catch (error) {
+    console.log(`  [KV] Error generating KV: ${error}`);
+    return `// KV generation failed: ${error}\n`;
+  }
+}
+
 function generateCodeContent(entry: WritePlanEntry): string {
+  // T115-R1/R2: Implement minimal generator-family dispatch
+  const familyHint = entry.generatorFamilyHint;
+
+  // T115-R2: Deferred entries are already filtered before this function is called
+  // This check is a safety net for any edge cases
+  if (entry.deferred) {
+    return `// Deferred: ${entry.deferredReason || "Generator not yet implemented"}\n`;
+  }
+
+  // Family-specific dispatch
+  switch (familyHint) {
+    case "dota2-ui":
+      // T115-R2: Option A - Transitional UI Path
+      // UI family is transitional: it works via generic TS generation
+      // but is NOT a dedicated dota2-ui generator family
+      // This is intentional until dota2-ui generator is implemented
+      console.log(`  [TRANSITIONAL] UI family entry using generic generation: ${entry.sourcePattern}`);
+      break;
+
+    case "dota2-kv":
+      // T118: KV family now implemented - call KV generator
+      // Build minimal KVGeneratorInput from entry
+      return generateKVContent(entry);
+
+    case "bridge-support":
+      // T115-R1: Bridge support is separate path
+      return `// Bridge support: handled via bridge adapter\n`;
+
+    case "dota2-ts":
+    default:
+      // T115-R1: TS family dispatch (default)
+      break;
+  }
+
   const generated = generateCode(entry, entry.sourcePattern);
   return generated.content;
 }
@@ -1215,7 +1406,8 @@ function validateHost(
   hostRoot: string,
   writePlan: WritePlan,
   writeResult: WriteResult,
-  stableFeatureId: string
+  stableFeatureId: string,
+  deferredEntries?: Array<{ pattern: string; reason: string }>
 ): { success: boolean; checks: string[]; issues: string[]; details: Record<string, unknown> } {
   console.log("\n" + "=".repeat(70));
   console.log("Stage 7: Host Validation");
@@ -1305,22 +1497,30 @@ function validateHost(
   }
 
   // 4. Check write plan vs write result consistency
-  const plannedFiles = writePlan.entries.map((e) => e.targetPath);
+  // T115-R2: Exclude deferred entries from planned files check
+  // Deferred entries are intentionally not executed
+  const nonDeferredEntries = writePlan.entries.filter((e) => !e.deferred);
+  const plannedFiles = nonDeferredEntries.map((e) => e.targetPath);
   const realizedFiles = [
     ...writeResult.createdFiles,
     ...writeResult.modifiedFiles.filter((file) => file.startsWith("game/scripts/src/rune_weaver/") || file.startsWith("content/panorama/src/rune_weaver/")),
   ];
-  
+
   const missingFiles = plannedFiles.filter((f) => !realizedFiles.includes(f));
   const extraFiles = realizedFiles.filter((f) => !plannedFiles.includes(f));
-  
+
   if (missingFiles.length === 0) {
     checks.push("✅ All planned files were created");
   } else {
     checks.push(`❌ ${missingFiles.length} planned files not created`);
     issues.push(`Missing files: ${missingFiles.slice(0, 3).join(", ")}${missingFiles.length > 3 ? "..." : ""}`);
   }
-  
+
+  // T115-R2: Report deferred entries as informational, not as missing files
+  if (deferredEntries && deferredEntries.length > 0) {
+    checks.push(`ℹ️  ${deferredEntries.length} deferred entries not executed (expected - KV generator not implemented)`);
+  }
+
   details.plannedFilesCount = plannedFiles.length;
   details.createdFilesCount = realizedFiles.length;
   details.missingFiles = missingFiles;
@@ -1409,7 +1609,15 @@ function updateWorkspaceState(
 
   // Extract entry bindings
   const entryBindings = extractEntryBindings(assemblyPlan.bridgeUpdates);
-  const generatedFiles = writePlan.entries.map((entry) => entry.targetPath);
+  // T115-R2-FIX: Only include non-deferred entries in generatedFiles
+  // T118-R2: Apply KV aggregation to generatedFiles for workspace state
+  const executableEntries = writePlan.entries.filter((e) => !e.deferred);
+  const kvEntriesForWs = executableEntries.filter((e) => e.contentType === "kv");
+  const nonKvEntriesForWs = executableEntries.filter((e) => e.contentType !== "kv");
+  const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e) => e.targetPath));
+  const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
+  const nonKvFilesForWs = nonKvEntriesForWs.map((e) => e.targetPath);
+  const generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
 
   // Create feature write result
   const featureResult: FeatureWriteResult = {
@@ -1520,12 +1728,24 @@ async function runRegenerateCommand(options: Dota2CLIOptions): Promise<boolean> 
   console.log("=".repeat(70));
   console.log(summarizeRealization(hostRealizationPlan));
 
+  // T115: Build GeneratorRoutingPlan for route-aware generation
+  const generatorRoutingPlan = generateGeneratorRoutingPlan(hostRealizationPlan);
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 4.6: Generator Routing (for regenerate)");
+  console.log("=".repeat(70));
+  const tsRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ts");
+  const uiRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ui");
+  const kvRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "kv");
+  console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
+  console.log(`    - TS: ${tsRoutes.length}, UI: ${uiRoutes.length}, KV: ${kvRoutes.length} (${kvRoutes.filter(r => r.blockers?.length).length} blocked)`);
+
   const { writePlan, issues: generatorIssues } = createWritePlan(
     plan,
     options.hostRoot,
     existingFeature,
     "regenerate",
-    hostRealizationPlan
+    hostRealizationPlan,
+    generatorRoutingPlan
   );
   if (!writePlan) {
     console.error(`\n❌ Failed to create WritePlan: ${generatorIssues.join(", ")}`);
@@ -2245,6 +2465,17 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log("=".repeat(70));
   console.log(summarizeRealization(hostRealizationPlan));
 
+  // T115: Build GeneratorRoutingPlan for route-aware generation
+  const generatorRoutingPlan = generateGeneratorRoutingPlan(hostRealizationPlan);
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 4.6: Generator Routing (for update)");
+  console.log("=".repeat(70));
+  const tsRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ts");
+  const uiRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ui");
+  const kvRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "kv");
+  console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
+  console.log(`    - TS: ${tsRoutes.length}, UI: ${uiRoutes.length}, KV: ${kvRoutes.length} (${kvRoutes.filter(r => r.blockers?.length).length} blocked)`);
+
   console.log("\n" + "=".repeat(70));
   console.log("Stage 5: Generator");
   console.log("=".repeat(70));
@@ -2254,7 +2485,8 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
     options.hostRoot,
     existingFeature,
     "update",
-    hostRealizationPlan
+    hostRealizationPlan,
+    generatorRoutingPlan
   );
   if (!writePlan) {
     console.error(`\n❌ Failed to create WritePlan: ${generatorIssues.join(", ")}`);
@@ -2265,9 +2497,19 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
     return false;
   }
 
+  // T115-R2-FIX: Filter out deferred entries from generatedFiles
+  // T118-R2: Apply KV aggregation to generatedFiles
+  const executableEntries = writePlan.entries.filter((e) => !e.deferred);
+  const kvEntriesForGen = executableEntries.filter((e) => e.contentType === "kv");
+  const nonKvEntriesForGen = executableEntries.filter((e) => e.contentType !== "kv");
+  const kvTargetPathsForGen = new Set(kvEntriesForGen.map((e) => e.targetPath));
+  const aggregatedKvFilesForGen = Array.from(kvTargetPathsForGen);
+  const nonKvFilesForGen = nonKvEntriesForGen.map((e) => e.targetPath);
+  const aggregatedGeneratedFiles = [...nonKvFilesForGen, ...aggregatedKvFilesForGen];
+
   artifact.stages.generator = {
     success: true,
-    generatedFiles: writePlan.entries.map((e) => e.targetPath),
+    generatedFiles: aggregatedGeneratedFiles,
     issues: [],
     realizationContext: writePlan.realizationContext,
     deferredWarnings: writePlan.deferredWarnings,
@@ -2396,10 +2638,20 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log("=".repeat(70));
 
   if (!options.dryRun) {
+    // T115-R2-FIX: Only include non-deferred entries in workspace generatedFiles
+    // T118-R2-FIX: Apply KV aggregation to avoid duplicate KV target files
+    const executableEntries = writePlan.entries.filter((e) => !e.deferred);
+    const kvEntriesForRegen = executableEntries.filter((e) => e.contentType === "kv");
+    const nonKvEntriesForRegen = executableEntries.filter((e) => e.contentType !== "kv");
+    const kvTargetPathsForRegen = new Set(kvEntriesForRegen.map((e) => e.targetPath));
+    const aggregatedKvFilesForRegen = Array.from(kvTargetPathsForRegen);
+    const nonKvFilesForRegen = nonKvEntriesForRegen.map((e) => e.targetPath);
+    const generatedFilesForRegen = [...nonKvFilesForRegen, ...aggregatedKvFilesForRegen];
+
     const updatedFeature: RuneWeaverFeatureRecord = {
       ...existingFeature,
       revision: existingFeature.revision + 1,
-      generatedFiles: writePlan.entries.map(e => e.targetPath),
+      generatedFiles: generatedFilesForRegen,
       selectedPatterns: resolutionResult.patterns.map(p => p.patternId),
       updatedAt: new Date().toISOString(),
     };

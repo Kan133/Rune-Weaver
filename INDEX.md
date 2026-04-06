@@ -54,6 +54,8 @@ UI 是代码输出面的一部分，不是独立于主产品的新主线。
 ### Phase 2 Future Contracts
 
 - [FEATURE-SEMANTIC-STATE-CONTRACT.md](/D:/Rune%20Weaver/docs/FEATURE-SEMANTIC-STATE-CONTRACT.md)
+- [UI-WIZARD-INTAKE-CONTRACT.md](/D:/Rune%20Weaver/docs/UI-WIZARD-INTAKE-CONTRACT.md)
+- [GAP-FILL-POLICY.md](/D:/Rune%20Weaver/docs/GAP-FILL-POLICY.md)
 
 ## 当前关键文档
 

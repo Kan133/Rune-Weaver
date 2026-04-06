@@ -132,6 +132,7 @@ export interface WriteReviewArtifact {
 const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
   "content/panorama/src/rune_weaver/",
+  "game/scripts/npc/", // T118: KV files are part of game configuration
 ];
 
 /**

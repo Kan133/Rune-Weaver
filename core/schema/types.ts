@@ -332,6 +332,26 @@ export interface HostRealizationUnit {
 }
 
 /**
+ * Generator Routing Plan - T115
+ * Position: AssemblyPlan -> HostRealizationPlan -> GeneratorRoutingPlan -> Generators
+ * Routes each HostRealizationUnit to concrete generator families (ts/ui/kv/bridge)
+ */
+export interface GeneratorRoutingPlan {
+  /** Schema version */
+  version: "1.0";
+  /** Target host identifier */
+  host: string;
+  /** Source blueprint this routing plan is derived from */
+  sourceBlueprintId: string;
+  /** Individual routes from realization units to generator families */
+  routes: GeneratorRoute[];
+  /** Overall warnings from the routing process */
+  warnings: string[];
+  /** Overall blocking issues from the routing process */
+  blockers: string[];
+}
+
+/**
  * Generator Route - T113
  * Minimal routing unit from HostRealizationPlan to concrete generator families.
  * Aligns with docs/GENERATOR-ROUTING-SCHEMA.md GeneratorRoute shape.
@@ -403,3 +423,78 @@ export interface GeneratorRouteOutput {
   /** Reason for blocking if blocked */
   blockerReason?: string;
 }
+
+/**
+ * T119: Artifact Status Semantics
+ * Formalizes the meaning of routed / generated / deferred / blocked states
+ * in review artifacts. These apply to GeneratorRoute and GeneratorRouteOutput.
+ *
+ * ## routed
+ * Generator Router has assigned a generatorFamily and the unit is dispatched.
+ * Does NOT mean: output exists, file written, validation passed.
+ *
+ * ## generated
+ * Generator has produced output (string) for a routed unit, ready for write planning.
+ * Does NOT mean: file written, validation passed.
+ *
+ * ## deferred
+ * Unit is recognized but intentionally postponed - required generator not yet in mainline
+ * (e.g. KV before v1) or capability is beyond current scope.
+ * Not blocked - system is aware and waiting, not stuck.
+ *
+ * ## blocked
+ * Unit cannot proceed due to a named, articulable blocker.
+ * Requires resolution before continuation.
+ */
+export type ArtifactStatus = "routed" | "generated" | "deferred" | "blocked";
+
+/**
+ * T119: Validation Layering Types
+ * Five validation stages from route-level to runtime.
+ * Each stage is independent and produces its own issue list.
+ */
+
+/**
+ * Stage 1: Route-Level Validation
+ * Validates coherence between HostRealizationPlan and GeneratorRoutingPlan.
+ * Run after GeneratorRoutingPlan is built, before generators are called.
+ */
+export interface RouteLevelValidationResult {
+  stage: "route-level";
+  valid: boolean;
+  issues: ValidationIssue[];
+}
+
+/**
+ * Stage 2: Generator Output Validation
+ * Validates well-formed output from each generator family.
+ * Run after each generator completes, before write planning.
+ */
+export interface GeneratorOutputValidationResult {
+  stage: "generator-output";
+  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "bridge-support";
+  routeId: string;
+  valid: boolean;
+  issues: ValidationIssue[];
+}
+
+/**
+ * T119: Generator Stage vs GeneratorRouting Stage Boundary
+ *
+ * generatorRouting stage is responsible for:
+ * - Routing decisions (which generatorFamily receives which unit)
+ * - Per-route status: routed | deferred | blocked
+ * - blockers[] per route
+ * - NOT output content - only routing intent
+ *
+ * generator stage is responsible for:
+ * - Actual code emission (TS/KV/UI strings)
+ * - Per-route output status: generated | blocked
+ * - generatedFiles[] list
+ * - NOT routing decisions
+ *
+ * This separation allows:
+ * - Multi-generator (KV+TS+UI) to be tracked per-family
+ * - Deferred routes to be clearly distinguished from blocked routes
+ * - Per-generator validation at stage 2
+ */
