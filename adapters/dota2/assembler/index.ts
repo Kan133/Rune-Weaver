@@ -7,9 +7,14 @@
  * - content/panorama/src/rune_weaver/
  */
 
-import { AssemblyPlan } from "../../../core/schema/types";
-import { SelectedPattern } from "../../../core/schema/types";
+import { AssemblyPlan, HostRealizationPlan, SelectedPattern } from "../../../core/schema/types";
 import { getPatternMeta } from "../patterns";
+
+/**
+ * T112-R2: Generator family hint for transitional routing
+ * Indicates which generator family should handle this entry
+ */
+export type GeneratorFamilyHint = "dota2-ts" | "dota2-ui" | "dota2-kv" | "bridge-support";
 
 /**
  * 写入操作类型
@@ -36,6 +41,12 @@ export interface WritePlanEntry {
   safe: boolean;
   /** 潜在冲突 */
   conflicts?: string[];
+  /** T112-R2: Generator family hint for transitional routing */
+  generatorFamilyHint?: GeneratorFamilyHint;
+  /** T112-R2: Marks entry as deferred (generator not yet implemented) */
+  deferred?: boolean;
+  /** T112-R2: Reason for deferral if applicable */
+  deferredReason?: string;
 }
 
 /**
@@ -55,10 +66,16 @@ export interface WritePlan {
     create: number;
     update: number;
     conflicts: number;
+    /** T112-R2: Number of deferred entries (KV side not yet implemented) */
+    deferred: number;
   };
   executionOrder: number[];
   readyForHostWrite?: boolean;
   readinessBlockers?: string[];
+  /** T112-R1: Realization context for generator awareness */
+  realizationContext?: RealizationContext;
+  /** T112-R2: Warnings for deferred entries (KV not yet implemented) */
+  deferredWarnings?: string[];
 }
 
 /**
@@ -111,14 +128,22 @@ function getNamespacePath(
  * @param plan AssemblyPlan
  * @param projectPath 目标项目路径
  * @param featureId Feature 标识
+ * @param realizationPlan 可选的 HostRealizationPlan，使 write plan realization-aware
  */
 export function generateWritePlan(
   plan: AssemblyPlan,
   projectPath: string = "D:\\test1",
-  featureId?: string
+  featureId?: string,
+  realizationPlan?: HostRealizationPlan
 ): WritePlan {
   const entries: WritePlanEntry[] = [];
   const generatedFeatureId = featureId || plan.blueprintId;
+
+  // T112-R1: Create realization-aware context for downstream consumption
+  // This makes the generator realization-aware even before formal router exists
+  const realizationContext: RealizationContext | undefined = realizationPlan
+    ? createRealizationContext(realizationPlan)
+    : undefined;
 
   for (const binding of plan.selectedPatterns) {
     const patternMeta = getPatternMeta(binding.patternId);
@@ -127,7 +152,8 @@ export function generateWritePlan(
     const patternEntries = generateEntriesForPattern(
       binding,
       patternMeta,
-      generatedFeatureId
+      generatedFeatureId,
+      realizationContext
     );
     entries.push(...patternEntries);
   }
@@ -143,6 +169,8 @@ export function generateWritePlan(
     conflicts: entries.filter(
       (e) => !e.safe || (e.conflicts && e.conflicts.length > 0)
     ).length,
+    // T112-R2: Count deferred entries
+    deferred: entries.filter((e) => e.deferred).length,
   };
 
   return {
@@ -158,20 +186,161 @@ export function generateWritePlan(
     executionOrder,
     readyForHostWrite: plan.readyForHostWrite,
     readinessBlockers: plan.hostWriteReadiness?.blockers,
+    // T112-R1: Attach realization context to write plan
+    // This marks the write plan as "realization-aware" even if generator is still transitional
+    realizationContext,
+    // T112-R2: Capture deferred warnings for unsupported KV paths
+    deferredWarnings: entries
+      .filter((e) => e.deferred && e.deferredReason)
+      .map((e) => `[${e.sourcePattern}] ${e.deferredReason}`),
   };
 }
 
 /**
+ * T112-R1: Realization Context
+ * Encapsulates HostRealizationPlan data for downstream generator consumption.
+ * This is the transitional interface before formal GeneratorRoutingPlan exists.
+ */
+export interface RealizationContext {
+  version: string;
+  host: string;
+  sourceBlueprintId: string;
+  units: RealizationContextUnit[];
+  isFallback: boolean;
+}
+
+export interface RealizationContextUnit {
+  id: string;
+  sourcePatternIds: string[];
+  realizationType: string;
+  hostTargets: string[];
+  confidence: string;
+}
+
+/**
+ * T112-R1: Create RealizationContext from HostRealizationPlan
+ * This transforms the full realization plan into a consumer-friendly context.
+ */
+function createRealizationContext(plan: HostRealizationPlan): RealizationContext {
+  return {
+    version: plan.version,
+    host: plan.host,
+    sourceBlueprintId: plan.sourceBlueprintId,
+    units: plan.units.map((u) => ({
+      id: u.id,
+      sourcePatternIds: u.sourcePatternIds,
+      realizationType: u.realizationType,
+      hostTargets: u.hostTargets,
+      confidence: u.confidence,
+    })),
+    isFallback: plan.units.every((u) => u.confidence === "low"),
+  };
+}
+
+/**
+ * T112-R2: Find the realization unit that matches this binding's pattern
+ * Returns the unit whose sourcePatternIds include this binding's patternId
+ */
+function findMatchingRealizationUnit(
+  binding: SelectedPattern,
+  realizationContext?: RealizationContext
+): RealizationContextUnit | undefined {
+  if (!realizationContext?.units) return undefined;
+
+  return realizationContext.units.find((unit) =>
+    unit.sourcePatternIds.includes(binding.patternId)
+  );
+}
+
+/**
+ * T112-R2: Determine generator family hint based on realization context
+ */
+function determineGeneratorFamilyHint(
+  unit: RealizationContextUnit | undefined,
+  patternMeta: ReturnType<typeof getPatternMeta>
+): GeneratorFamilyHint | undefined {
+  if (!unit) return undefined;
+
+  // If realization says ui, use dota2-ui
+  if (unit.realizationType === "ui") {
+    return "dota2-ui";
+  }
+
+  // If realization says kv or kv+ts but pattern outputs TS, it's transitional TS handling
+  if (unit.realizationType === "kv" || unit.realizationType === "kv+ts") {
+    if (patternMeta?.outputTypes.includes("typescript")) {
+      return "dota2-ts"; // TS side handled by TS generator
+    }
+  }
+
+  // Default to TS for gameplay patterns
+  if (unit.realizationType === "ts" || unit.realizationType === "shared-ts") {
+    return "dota2-ts";
+  }
+
+  return undefined;
+}
+
+/**
+ * T112-R2: Check if realization indicates a KV-side that should be deferred
+ * Note: KV outputs should always be deferred because dota2-kv generator is not yet implemented
+ */
+function shouldDeferKVRelated(
+  unit: RealizationContextUnit | undefined,
+  outputType: string
+): { deferred: boolean; reason?: string } {
+  if (!unit) return { deferred: false };
+
+  // If output is KV type, always defer since dota2-kv generator is not implemented
+  if (outputType === "kv") {
+    return {
+      deferred: true,
+      reason: "KV side deferred - dota2-kv generator not yet implemented",
+    };
+  }
+
+  // If realization type is "kv" alone and we're generating something that's not KV
+  if (unit.realizationType === "kv") {
+    return {
+      deferred: true,
+      reason: "KV generator not yet implemented - realization expects kv but no dota2-kv generator available",
+    };
+  }
+
+  // If realization type is "kv+ts" but we're generating non-TS/non-KV output
+  if (unit.realizationType === "kv+ts" && outputType !== "typescript") {
+    return {
+      deferred: true,
+      reason: "KV side deferred - dota2-kv generator not yet implemented for kv+ts hybrid",
+    };
+  }
+
+  return { deferred: false };
+}
+
+/**
  * 为单个 Pattern 生成写入条目
+ * T112-R2: Now actually consumes realizationContext for decision making
  */
 function generateEntriesForPattern(
   binding: SelectedPattern,
   patternMeta: ReturnType<typeof getPatternMeta>,
-  featureId: string
+  featureId: string,
+  realizationContext?: RealizationContext
 ): WritePlanEntry[] {
   const entries: WritePlanEntry[] = [];
-  
+
   if (!patternMeta) return entries;
+
+  // T112-R2: Find matching realization unit for this binding
+  const matchingUnit = findMatchingRealizationUnit(binding, realizationContext);
+
+  // T112-R2: Determine if this pattern's outputs should be deferred based on realization
+  // This is the key decision: if realization expects KV but we can't provide it, defer
+  const kvDeferral = shouldDeferKVRelated(
+    matchingUnit,
+    patternMeta.outputTypes[0] || "typescript"
+  );
 
   // 确定基础路径（使用命名空间）
   // 仅使用 role 会让同一 case 内多个 effect/data/rule 模块落到同一路径。
@@ -183,6 +352,9 @@ function generateEntriesForPattern(
       : `${roleSegment}_${patternSegment}`;
   const targetId = `${featureId}_${baseName}`;
 
+  // T112-R2: Determine generator family hint from realization context
+  const generatorFamilyHint = determineGeneratorFamilyHint(matchingUnit, patternMeta);
+
   // 为每种输出类型生成条目
   for (const outputType of patternMeta.outputTypes) {
     const targetPath = getNamespacePath(
@@ -190,6 +362,9 @@ function generateEntriesForPattern(
       targetId,
       outputType
     );
+
+    // T112-R2: Check if this specific output should be deferred
+    const outputDeferral = shouldDeferKVRelated(matchingUnit, outputType);
 
     const entry: WritePlanEntry = {
       operation: "create",
@@ -199,6 +374,11 @@ function generateEntriesForPattern(
       sourcePattern: binding.patternId,
       sourceModule: binding.role,
       safe: true,
+      // T112-R2: Attach generator family hint for transitional routing
+      generatorFamilyHint,
+      // T112-R2: Mark as deferred if KV side not implementable
+      deferred: outputDeferral.deferred || kvDeferral.deferred,
+      deferredReason: outputDeferral.reason || kvDeferral.reason,
     };
 
     // 检查是否需要额外文件

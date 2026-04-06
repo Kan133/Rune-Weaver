@@ -8,12 +8,14 @@
 import {
   Blueprint,
   AssemblyPlan,
+  AssemblyModule,
   ValidationIssue,
   SelectedPattern,
   WriteTarget,
   BridgeUpdate,
   ValidationContract,
   HostWriteReadiness,
+  RealizationRole,
 } from "../schema/types";
 import { resolvePatterns, PatternResolutionResult, ResolvedPattern } from "../patterns/resolver";
 
@@ -336,12 +338,134 @@ export class AssemblyPlanBuilder {
     return {
       blueprintId: blueprint.id,
       selectedPatterns,
+      modules: this.buildAssemblyModules(blueprint, resolutionResult),
       writeTargets,
       bridgeUpdates,
       validations,
       readyForHostWrite: finalReadyForHostWrite,
       hostWriteReadiness,
     };
+  }
+
+  /**
+   * 构建 AssemblyModule 列表 - 为 Host Realization 提供结构化输入
+   * 与 docs/ASSEMBLY-REALIZATION-NOTES.md 对齐
+   */
+  private buildAssemblyModules(
+    blueprint: Blueprint,
+    resolutionResult: PatternResolutionResult
+  ): AssemblyModule[] {
+    const modules: AssemblyModule[] = [];
+
+    // 如果 Blueprint 有模块，使用 Blueprint 模块结构
+    if (blueprint.modules && blueprint.modules.length > 0) {
+      for (const bpModule of blueprint.modules) {
+        // 收集该 Blueprint 模块关联的 patterns
+        const modulePatterns = resolutionResult.patterns
+          .filter((p) => {
+            // 基于 pattern category 或参数推断 module 归属
+            // 这里用简单启发式：trigger 模块关联 input.key_binding，effect 模块关联 effect.* 等
+            if (bpModule.category === "trigger" && p.patternId === "input.key_binding") return true;
+            if (bpModule.category === "effect" && p.patternId.startsWith("effect.")) return true;
+            if (bpModule.category === "resource" && p.patternId.startsWith("resource.")) return true;
+            if (bpModule.category === "data" && p.patternId.startsWith("data.")) return true;
+            if (bpModule.category === "rule" && p.patternId.startsWith("rule.")) return true;
+            if (bpModule.category === "ui" && p.patternId.startsWith("ui.")) return true;
+            return false;
+          })
+          .map((p) => p.patternId);
+
+        if (modulePatterns.length === 0) continue;
+
+        // 推断 role
+        let role: RealizationRole = "gameplay-core";
+        if (bpModule.category === "ui") role = "ui-surface";
+        else if (bpModule.category === "data") role = "shared-support";
+
+        // 推断 outputKinds
+        const outputKinds: ("server" | "shared" | "ui" | "bridge")[] = [];
+        if (modulePatterns.some((p) => p.startsWith("ui."))) outputKinds.push("ui");
+        else if (modulePatterns.some((p) => p.startsWith("data."))) outputKinds.push("shared");
+        else outputKinds.push("server");
+
+        // 推断 realizationHints
+        const realizationHints: AssemblyModule["realizationHints"] = {};
+        if (bpModule.category === "effect" || modulePatterns.includes("effect.dash")) {
+          realizationHints.kvCapable = true;
+          realizationHints.runtimeHeavy = true;
+        }
+        if (modulePatterns.includes("input.key_binding") || modulePatterns.includes("rule.selection_flow")) {
+          realizationHints.runtimeHeavy = true;
+        }
+        if (modulePatterns.some((p) => p.startsWith("ui."))) {
+          realizationHints.uiRequired = true;
+        }
+
+        modules.push({
+          id: bpModule.id,
+          role,
+          selectedPatterns: modulePatterns,
+          outputKinds,
+          realizationHints,
+        });
+      }
+    } else {
+      // T112-R1: No Blueprint modules - using fallback module construction
+      // This is a conservative fallback, not a first-class realization
+      const allPatterns = resolutionResult.patterns.map((p) => p.patternId);
+
+      // 分类 patterns
+      const uiPatterns = allPatterns.filter((p) => p.startsWith("ui."));
+      const sharedPatterns = allPatterns.filter((p) => p.startsWith("data."));
+      const gameplayPatterns = allPatterns.filter(
+        (p) => !p.startsWith("ui.") && !p.startsWith("data.")
+      );
+
+      // T112-R1: Fallback modules have lower confidence and explicit isFallback marker
+      if (gameplayPatterns.length > 0) {
+        modules.push({
+          id: "gameplay-core",
+          role: "gameplay-core",
+          selectedPatterns: gameplayPatterns,
+          outputKinds: ["server"],
+          realizationHints: {
+            kvCapable: gameplayPatterns.some((p) => p.startsWith("effect.")),
+            runtimeHeavy: gameplayPatterns.some(
+              (p) => p === "input.key_binding" || p === "rule.selection_flow"
+            ),
+            // T112-R1: Mark as fallback - this is not first-class realization
+            isFallback: true,
+          },
+        });
+      }
+
+      if (uiPatterns.length > 0) {
+        modules.push({
+          id: "ui-surface",
+          role: "ui-surface",
+          selectedPatterns: uiPatterns,
+          outputKinds: ["ui"],
+          realizationHints: {
+            uiRequired: true,
+            // T112-R1: Mark as fallback
+            isFallback: true,
+          },
+        });
+      }
+
+      if (sharedPatterns.length > 0) {
+        modules.push({
+          id: "shared-support",
+          role: "shared-support",
+          selectedPatterns: sharedPatterns,
+          outputKinds: ["shared"],
+          // T112-R1: Mark as fallback
+          realizationHints: { isFallback: true },
+        });
+      }
+    }
+
+    return modules;
   }
 
   /**

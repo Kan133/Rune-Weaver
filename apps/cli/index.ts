@@ -18,6 +18,7 @@ import { createInterface } from "readline";
 import { runWizardCLI, showWizardHelp } from "./wizard-cli.js";
 import { runBlueprintCLI, showBlueprintHelp } from "./blueprint-cli.js";
 import { runAssemblyCLI, showAssemblyHelp } from "./assembly-cli.js";
+import { runDota2CLI, showDota2Help } from "./dota2-cli.js";
 
 // ============================================================================
 // CLI 配置与参数解析
@@ -27,10 +28,13 @@ interface CLIOptions {
   command: string;
   subcommand?: string;
   input?: string;
+  feature?: string;
   verbose: boolean;
   host?: string;
   run: boolean;
-  // Wizard / Blueprint specific
+  dryRun: boolean;
+  write: boolean;
+  force: boolean;
   json?: boolean;
   output?: string;
   temperature?: number;
@@ -43,15 +47,16 @@ function parseArgs(): CLIOptions {
     command: "create",
     verbose: false,
     run: false,
+    dryRun: false,
+    write: false,
+    force: false,
   };
 
-  // 解析命令
   if (args.length > 0 && !args[0].startsWith("-")) {
     options.command = args[0];
     args.shift();
   }
 
-  // Blueprint 命令: 第一个参数可能是子命令或输入文本
   if (options.command === "blueprint" && args.length > 0 && !args[0].startsWith("-")) {
     const firstArg = args[0];
     if (firstArg === "validate") {
@@ -67,8 +72,12 @@ function parseArgs(): CLIOptions {
     }
   }
 
-  // Assembly 命令: 捕获子命令
   if (options.command === "assembly" && args.length > 0 && !args[0].startsWith("-")) {
+    options.subcommand = args[0];
+    args.shift();
+  }
+
+  if (options.command === "dota2" && args.length > 0 && !args[0].startsWith("-")) {
     options.subcommand = args[0];
     args.shift();
   }
@@ -83,8 +92,20 @@ function parseArgs(): CLIOptions {
       case "-i":
         options.input = args[++i];
         break;
+      case "--feature":
+        options.feature = args[++i];
+        break;
       case "--run":
         options.run = true;
+        break;
+      case "--dry-run":
+        options.dryRun = true;
+        break;
+      case "--write":
+        options.write = true;
+        break;
+      case "--force":
+        options.force = true;
         break;
       case "--json":
         options.json = true;
@@ -130,6 +151,11 @@ function showHelp(command?: string, subcommand?: string): void {
     return;
   }
 
+  if (command === "dota2") {
+    showDota2Help();
+    return;
+  }
+
   console.log(`
 🧙 Rune Weaver - 自然语言游戏功能编织引擎
 
@@ -141,6 +167,13 @@ function showHelp(command?: string, subcommand?: string): void {
   create                创建新功能 (默认)
   wizard <text>         运行 Wizard 生成 IntentSchema
   blueprint <text>      运行 Wizard -> Blueprint 完整链路
+  dota2 run <prompt>    运行完整 Dota2 主链路
+
+dota2 命令:
+  npm run cli -- dota2 run "<需求文本>" --host D:\\test1
+  npm run cli -- dota2 run "<需求文本>" --host D:\\test1 --dry-run
+  npm run cli -- dota2 run "<需求文本>" --host D:\\test1 --write
+  npm run cli -- dota2 run "<需求文本>" --host D:\\test1 --write --force
 
 blueprint 命令:
   npm run cli -- blueprint "<需求文本>"
@@ -153,7 +186,10 @@ assembly 命令:
   npm run cli -- assembly review --from <blueprint-file>
 
 选项:
-  --from <file>         从文件读取输入
+  --host <path>         宿主项目根目录
+  --dry-run             预演模式，不写入文件 (默认)
+  --write               正式写入模式
+  --force               强制写入，覆盖 readiness gate
   -o, --output <file>   输出到文件
   --json                JSON 格式输出
   --temperature <num>   设置 LLM temperature
@@ -162,6 +198,9 @@ assembly 命令:
   -h, --help            显示帮助
 
 示例:
+  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1
+  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1 --dry-run
+  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1 --write
   npm run cli -- blueprint "做一个按Q键的冲刺技能"
   npm run cli -- blueprint "做一个按Q键的冲刺技能" --json
   npm run cli -- blueprint --from tmp/intent-schema.json
@@ -236,6 +275,123 @@ async function runAssemblyCommand(options: CLIOptions): Promise<boolean> {
   return await runAssemblyCLI(assemblyOptions);
 }
 
+async function runDota2Command(options: CLIOptions): Promise<boolean> {
+  const args = process.argv.slice(2);
+  let prompt: string | undefined;
+  let hostRoot: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--host") {
+      hostRoot = args[i + 1];
+    }
+    if (
+      !args[i].startsWith("-") &&
+      args[i] !== "dota2" &&
+      args[i] !== "run" &&
+      args[i] !== "dry-run" &&
+      args[i] !== "review" &&
+      args[i] !== "update" &&
+      args[i] !== "regenerate" &&
+      args[i] !== "rollback"
+    ) {
+      if (!prompt && !args[i - 1]?.startsWith("-")) {
+        prompt = args[i];
+      }
+    }
+  }
+
+  if (!prompt) {
+    prompt = options.input;
+  }
+
+  if (!hostRoot) {
+    hostRoot = options.host;
+  }
+
+  const subcommand = options.subcommand || "run";
+  
+  if (subcommand === "rollback") {
+    if (!hostRoot) {
+      console.error("❌ Missing --host. Usage: npm run cli -- dota2 rollback --host <path> --feature <id>");
+      return false;
+    }
+
+    if (!options.feature) {
+      console.error("❌ Missing --feature. Usage: npm run cli -- dota2 rollback --host <path> --feature <id>");
+      return false;
+    }
+
+    const dota2Options = {
+      command: "rollback" as const,
+      prompt: "",
+      hostRoot,
+      featureId: options.feature,
+      dryRun: options.dryRun || (!options.write && !options.force),
+      write: options.write,
+      force: options.force,
+      output: options.output,
+      verbose: options.verbose,
+    };
+
+    return await runDota2CLI(dota2Options);
+  }
+
+  if (subcommand === "update") {
+    if (!hostRoot) {
+      console.error("❌ Missing --host. Usage: npm run cli -- dota2 update \"<prompt>\" --host <path> --feature <id>");
+      return false;
+    }
+
+    if (!options.feature) {
+      console.error("❌ Missing --feature. Usage: npm run cli -- dota2 update \"<prompt>\" --host <path> --feature <id>");
+      return false;
+    }
+
+    if (!prompt) {
+      console.error("❌ Missing prompt. Usage: npm run cli -- dota2 update \"<prompt>\" --host <path> --feature <id>");
+      return false;
+    }
+
+    const dota2Options = {
+      command: "update" as const,
+      prompt,
+      hostRoot,
+      featureId: options.feature,
+      dryRun: options.dryRun || (!options.write && !options.force),
+      write: options.write,
+      force: options.force,
+      output: options.output,
+      verbose: options.verbose,
+    };
+
+    return await runDota2CLI(dota2Options);
+  }
+
+  if (!prompt) {
+    console.error("❌ Missing prompt. Usage: npm run cli -- dota2 run \"<prompt>\" --host <path>");
+    return false;
+  }
+
+  if (!hostRoot) {
+    console.error("❌ Missing --host. Usage: npm run cli -- dota2 run \"<prompt>\" --host <path>");
+    return false;
+  }
+
+  const dota2Options = {
+    command: (subcommand || "run") as "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback",
+    prompt,
+    hostRoot,
+    featureId: options.feature,
+    dryRun: options.dryRun || (!options.write && !options.force),
+    write: options.write,
+    force: options.force,
+    output: options.output,
+    verbose: options.verbose,
+  };
+
+  return await runDota2CLI(dota2Options);
+}
+
 // ============================================================================
 // Interactive Mode
 // ============================================================================
@@ -304,12 +460,13 @@ async function main() {
     } else if (options.command === "assembly") {
       const success = await runAssemblyCommand(options);
       exitCode = success ? 0 : 1;
+    } else if (options.command === "dota2") {
+      const success = await runDota2Command(options);
+      exitCode = success ? 0 : 1;
     } else if (options.input) {
-      // 默认使用 blueprint 命令
       const success = await runBlueprintCommand(options);
       exitCode = success ? 0 : 1;
     } else {
-      // 交互模式
       await runInteractiveMode();
       return;
     }

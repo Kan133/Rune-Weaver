@@ -1,5 +1,21 @@
 # Workspace Model
 
+## Status
+
+Implemented baseline:
+
+- workspace state file
+- create
+- update
+- regenerate
+- rollback
+
+Not yet implemented:
+
+- feature semantic state
+- entity-aware update planning
+- semantic incremental update
+
 ## 1. 文档目的
 
 本文档定义 Rune Weaver 在宿主工程中的工作区模型。

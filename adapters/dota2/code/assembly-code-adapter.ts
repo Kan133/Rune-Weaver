@@ -492,8 +492,6 @@ function generateKeyBindingServerCode(
  * Feature: ${featureId}
  */
 
-import { GameMode } from "../../../../GameMode";
-
 export class ${className} {
   private static instance: ${className};
   private boundKeys: Set<string> = new Set();
@@ -516,11 +514,14 @@ export class ${className} {
     
     this.boundKeys.add(key);
     
-    GameMode.on("player_key_pressed", (event: any) => {
-      if (event.key === key) {
-        callback();
-      }
-    });
+    // 监听按键事件 - 使用 GameRules 和自定义事件系统
+    if (GameRules && "XNetTable" in GameRules && (GameRules as any).XNetTable) {
+      CustomGameEventManager.RegisterListener("player_key_pressed", (event: any) => {
+        if (event.key === key) {
+          callback();
+        }
+      });
+    }
     
     print(\`[Rune Weaver] Bound key: \${key}\`);
   }
@@ -562,8 +563,7 @@ function generateDashServerCode(
  * Feature: ${featureId}
  */
 
-import { BaseAbility } from "../../../lib/dota_ts_adapter";
-import { Vector } from "../../../lib/vector";
+import { BaseAbility } from "../../../utils/dota_ts_adapter";
 
 export class ${className} extends BaseAbility {
   private readonly DEFAULT_DISTANCE: number = ${distance};
@@ -628,8 +628,6 @@ function generateResourcePoolServerCode(
  * Pattern: resource.basic_pool
  * Feature: ${featureId}
  */
-
-import { GameMode } from "../../../../GameMode";
 
 interface ResourceState {
   current: number;
@@ -696,7 +694,7 @@ export class ${className} {
     const res = this.playerResources.get(playerId);
     if (!res) return;
     
-    if ((GameRules as any).XNetTable) {
+    if (GameRules && "XNetTable" in GameRules && (GameRules as any).XNetTable) {
       (GameRules as any).XNetTable.SetTableValue(
         "rune_weaver_resources",
         \`player_\${playerId}\`,
@@ -710,12 +708,13 @@ export function register${className}(): void {
   const pool = ${className}.getInstance();
   print("[Rune Weaver] ${className} registered");
   
-  GameMode.on("player_connect", (event: any) => {
-    const playerId = event.player_id;
+  // 监听玩家连接事件 - 使用 GameRules 和自定义事件
+  ListenToGameEvent("player_connect_full", (event: any) => {
+    const playerId = event.PlayerID;
     if (playerId !== undefined) {
       pool.initPlayer(playerId);
     }
-  });
+  }, undefined);
 }
 `;
 }
@@ -905,7 +904,7 @@ export class ${className} {
   }
 
   private sendToClient(playerId: number, options: SelectionOption[]): void {
-    if ((GameRules as any).XNetTable) {
+    if (GameRules && "XNetTable" in GameRules && (GameRules as any).XNetTable) {
       (GameRules as any).XNetTable.SetTableValue(
         "rune_weaver_selection",
         \`player_\${playerId}\`,

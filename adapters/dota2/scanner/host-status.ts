@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { scanDota2Project } from "./project-scan.js";
-import { readWorkspace, RuneWeaverWorkspace } from "../../../core/workspace/index.js";
+import { loadWorkspace, RuneWeaverWorkspace } from "../../../core/workspace/index.js";
 
 /**
  * Rune Weaver 接入状态
@@ -122,15 +122,18 @@ export function checkHostStatus(hostRoot: string = "D:\\test1"): HostStatusResul
   }
 
   // Step 2: 检查初始化状态 (addon_name)
-  const { workspace, error: workspaceError } = readWorkspace(hostRoot);
+  const workspaceResult = loadWorkspace(hostRoot);
+  const workspace = workspaceResult.workspace;
   
-  const initialized = workspace ? workspace.addonName !== "x_template" : false;
+  const initialized = workspaceResult.success && workspace 
+    ? workspace.addonName !== "x_template" 
+    : false;
   
-  if (!workspace) {
+  if (!workspaceResult.success || !workspace) {
     issues.push({
       severity: "warning",
       code: "WORKSPACE_NOT_FOUND",
-      message: `Workspace 不存在: ${workspaceError}`,
+      message: `Workspace 不存在: ${workspaceResult.issues.join(", ")}`,
       step: "workspace",
       suggestion: "运行: npm run cli -- dota2 init --host " + hostRoot,
     });

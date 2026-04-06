@@ -295,7 +295,7 @@ function resolveEffectPattern(module: BlueprintModule): {
   const contextLower = roleLower + " " + responsibilitiesLower;
 
   // 1. 位移/冲刺语义 -> effect.dash
-  const dashKeywords = ["冲刺", "位移", "dash", "blink", "jump", " leap", "突进"];
+  const dashKeywords = ["冲刺", "位移", "dash", "blink", "jump", "leap", "突进", "move", "rapid", "speed", "快速移动", "向前"];
   const isDashRelated = dashKeywords.some(k => contextLower.includes(k));
   if (isDashRelated) {
     return {
@@ -311,7 +311,7 @@ function resolveEffectPattern(module: BlueprintModule): {
   }
 
   // 2. 资源消耗/扣除语义 -> effect.resource_consume
-  const resourceKeywords = ["消耗", "扣除", "cost", "consume", "消耗法力", "消耗能量", "resource"];
+  const resourceKeywords = ["消耗", "扣除", "cost", "consume", "消耗法力", "消耗能量", "resource", "mana", "energy", "冷却", "cooldown"];
   const isResourceRelated = resourceKeywords.some(k => contextLower.includes(k));
   if (isResourceRelated) {
     return {
@@ -327,7 +327,7 @@ function resolveEffectPattern(module: BlueprintModule): {
   }
 
   // 3. 修改器/效果应用语义 -> effect.modifier_applier
-  const modifierKeywords = ["应用", "modifier", "buff", "debuff", "效果", "天赋", "apply", "增益", "减益", "强化"];
+  const modifierKeywords = ["应用", "modifier", "buff", "debuff", "效果", "天赋", "apply", "增益", "减益", "强化", "bind", "绑定", "key", "键", "execute", "执行", "action", "动作", "capture", "捕获", "input", "输入", "configuration", "配置"];
   const isModifierRelated = modifierKeywords.some(k => contextLower.includes(k));
   if (isModifierRelated) {
     return {

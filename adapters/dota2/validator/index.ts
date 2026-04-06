@@ -8,6 +8,8 @@
 import { AssemblyPlan, ValidationIssue, SelectedPattern } from "../../../core/schema/types";
 import { dota2Patterns, Dota2PatternMeta } from "../patterns";
 
+export * from "./runtime-validator";
+
 export interface Dota2ValidationResult {
   valid: boolean;
   errors: ValidationIssue[];

@@ -221,6 +221,7 @@ export interface ValidationIssue {
 export interface AssemblyPlan {
   blueprintId: string;
   selectedPatterns: SelectedPattern[];
+  modules?: AssemblyModule[];
   writeTargets: WriteTarget[];
   bridgeUpdates?: BridgeUpdate[];
   validations: ValidationContract[];
@@ -231,6 +232,18 @@ export interface SelectedPattern {
   patternId: string;
   role: string;
   parameters?: Record<string, unknown>;
+}
+
+export interface AssemblyModule {
+  id: string;
+  role: "gameplay-core" | "ui-surface" | "shared-support" | "bridge-support";
+  selectedPatterns: string[];
+  outputKinds: ("server" | "shared" | "ui" | "bridge")[];
+  realizationHints?: {
+    kvCapable?: boolean;
+    runtimeHeavy?: boolean;
+    uiRequired?: boolean;
+  };
 }
 
 export interface WriteTarget {
@@ -251,6 +264,23 @@ export interface ValidationContract {
   message: string;
 }
 ```
+
+`AssemblyPlan.modules[].selectedPatterns` should be treated as the resolved core pattern subset owned by that module.
+
+It must remain:
+
+- resolved
+- core-pattern based
+- a subset of the global `AssemblyPlan.selectedPatterns`
+
+It must not be used for:
+
+- unresolved hints
+- raw mechanic keywords
+- host realization classes
+- host-specific pseudo-patterns
+
+`AssemblyPlan.modules` should therefore be read as realization-ready structural metadata, not as final host realization routing.
 
 ## 7. 关键边界
 

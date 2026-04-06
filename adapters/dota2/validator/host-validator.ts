@@ -9,7 +9,7 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { scanDota2Project } from "../scanner/index.js";
-import { readWorkspace } from "../../../core/workspace/index.js";
+import { loadWorkspace } from "../../../core/workspace/index.js";
 import { checkBridgeFiles, checkHostEntryBridge } from "../bridge/index.js";
 import { canExecuteWritePlan } from "../executor/index.js";
 
@@ -78,17 +78,19 @@ export function validateHostIntegration(
   }
 
   // Step 2: Workspace 验证
-  const { workspace, error: workspaceError } = readWorkspace(projectPath);
+  const workspaceResult = loadWorkspace(projectPath);
   steps.push({
     step: "workspace",
-    passed: !!workspace,
-    message: workspace
-      ? `✅ Workspace 有效: ${workspace.addonName}`
-      : `❌ Workspace 无效: ${workspaceError}`,
-    details: workspace
-      ? [`版本: ${workspace.version}`, `Addon: ${workspace.addonName}`, `Features: ${workspace.features.length}`]
+    passed: workspaceResult.success && !!workspaceResult.workspace,
+    message: workspaceResult.success && workspaceResult.workspace
+      ? `✅ Workspace 有效: ${workspaceResult.workspace.addonName}`
+      : `❌ Workspace 无效: ${workspaceResult.issues.join(", ")}`,
+    details: workspaceResult.workspace
+      ? [`版本: ${workspaceResult.workspace.version}`, `Addon: ${workspaceResult.workspace.addonName}`, `Features: ${workspaceResult.workspace.features.length}`]
       : undefined,
   });
+
+  const workspace = workspaceResult.workspace;
 
   // Step 3: 初始化验证 (addon_name 不是 x_template)
   const isInitialized = workspace ? workspace.addonName !== "x_template" : false;

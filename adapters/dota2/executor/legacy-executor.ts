@@ -13,8 +13,8 @@ import { dirname, join } from "path";
 import { WritePlan as LegacyWritePlan, WritePlanEntry } from "../assembler/index.js";
 import {
   RuneWeaverWorkspace,
-  readWorkspace,
-  writeWorkspace,
+  loadWorkspace,
+  saveWorkspace,
   addFeatureToWorkspace,
 } from "../../../core/workspace/index.js";
 import { generateCode } from "../generator/index.js";
@@ -135,11 +135,13 @@ export async function applyWritePlan(
     writtenFiles: [],
   };
 
-  const { workspace, error: readError } = readWorkspace(options.projectPath);
-  if (!workspace) {
-    result.errors.push(`无法读取 workspace: ${readError}`);
+  const workspaceResult = loadWorkspace(options.projectPath);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
+    result.errors.push(`无法读取 workspace: ${workspaceResult.issues.join(", ")}`);
     return result;
   }
+
+  const workspace = workspaceResult.workspace;
 
   if (workspace.hostType !== "dota2-x-template") {
     result.errors.push(`不支持的宿主类型: ${workspace.hostType}`);
@@ -194,22 +196,23 @@ export async function applyWritePlan(
   result.writtenFiles = writtenFiles;
 
   if (writtenFiles.length > 0) {
-    const updatedWorkspace = addFeatureToWorkspace(workspace, {
+    const featureResult = {
       featureId: options.featureId,
-      intentKind: options.intentKind,
-      status: "active",
       blueprintId: options.blueprintId,
+      selectedPatterns: [] as string[],
       generatedFiles: writtenFiles,
       entryBindings: writtenFiles.map((file) => ({
-        target: file.includes("panorama") ? "ui" : "server",
+        target: (file.includes("panorama") ? "ui" : "server") as "ui" | "server",
         file,
-        kind: "import",
+        kind: "import" as const,
       })),
-    });
+    };
 
-    const writeResult = writeWorkspace(options.projectPath, updatedWorkspace);
+    const updatedWorkspace = addFeatureToWorkspace(workspace, featureResult, options.intentKind);
+
+    const writeResult = saveWorkspace(options.projectPath, updatedWorkspace);
     if (!writeResult.success) {
-      result.errors.push(`更新 workspace 失败: ${writeResult.error}`);
+      result.errors.push(`更新 workspace 失败`);
     } else {
       result.workspace = updatedWorkspace;
     }
@@ -261,13 +264,15 @@ export function printExecutionResult(result: WritePlanExecutionResult): void {
 export function canExecuteWritePlan(
   projectPath: string
 ): { canExecute: boolean; error?: string } {
-  const { workspace, error } = readWorkspace(projectPath);
-  if (!workspace) {
+  const workspaceResult = loadWorkspace(projectPath);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
     return {
       canExecute: false,
-      error: `宿主未初始化: ${error}. 请先运行: npm run cli -- dota2 init --host ${projectPath}`,
+      error: `宿主未初始化: ${workspaceResult.issues.join(", ")}. 请先运行: npm run cli -- dota2 init --host ${projectPath}`,
     };
   }
+
+  const workspace = workspaceResult.workspace;
 
   if (workspace.hostType !== "dota2-x-template") {
     return {

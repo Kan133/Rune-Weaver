@@ -1,200 +1,236 @@
 # ARCHITECTURE
 
-## 分层
+## Purpose
 
-Rune Weaver 当前推荐分四层：
+This document describes the current Rune Weaver architecture baseline.
+
+It is intended to reflect the real mainline architecture used by the project, not an older simplified pipeline.
+
+## Mainline Pipeline
+
+The current intended mainline is:
+
+`User Prompt -> Wizard -> IntentSchema -> Blueprint -> Pattern Resolution -> AssemblyPlan -> HostRealizationPlan -> GeneratorRoutingPlan -> Generators -> Write Plan -> Write Executor -> Validation -> Workspace State`
+
+This is the architecture baseline other documents should align to.
+
+Important:
+
+- `HostRealizationPlan` is a real architectural layer
+- `GeneratorRoutingPlan` is a real architectural layer
+- generators should not be treated as a direct continuation of `AssemblyPlan`
+
+## Layering
+
+Rune Weaver currently recommends five architectural layers:
 
 1. Interface
 2. Core Planning
-3. Adapter
-4. Host Execution
+3. Host Realization
+4. Generation And Host Execution
+5. Validation And State
 
 ## 1. Interface
 
-负责用户入口与结构化输入输出。
+The Interface layer handles user entry and structured interaction surfaces.
 
-主要包括：
+Typical examples:
 
 - CLI
 - Wizard CLI
-- Blueprint CLI
-- Assembly CLI
+- review artifacts
 
-这一层不应硬编码 provider 细节，也不应直接写宿主文件。
+This layer should not:
+
+- hardcode host implementation details
+- directly write host files
+- bypass structured planning layers
 
 ## 2. Core Planning
 
-这是当前产品核心。
+Core Planning is responsible for converting user intent into structured, reviewable planning objects.
 
-主要包括：
+It includes:
 
 - Wizard
 - IntentSchema
 - Blueprint Builder
 - Pattern Resolution
 - AssemblyPlan Builder
-- Validation
 
-主链路：
+Its role is to answer:
 
-```text
-User Request
-  -> Wizard
-  -> IntentSchema
-  -> Blueprint
-  -> Pattern Resolution
-  -> AssemblyPlan
-```
+- what the user wants
+- what structure the feature should have
+- which core patterns were selected
+- what the feature needs before host realization
 
-这一层负责把自然语言逐步收敛成受控代码计划。
+Core Planning stops at:
 
-## 3. Adapter
+- `AssemblyPlan`
 
-Adapter 负责把抽象计划对齐到具体宿主语义。
+It does not decide final host realization medium.
 
-当前主要是 Dota2 Adapter，负责：
+## 3. Host Realization
 
-- host scanning
-- host validation
-- host mapping
-- bridge planning
-- assembler scope
-- UI adapter scope
+Host Realization is responsible for deciding how `AssemblyPlan` structure should be materialized inside the current host.
 
-Adapter 不应污染 Core 的抽象对象。
+It includes:
 
-## 4. Host Execution
+- HostRealizationPlan
+- host-specific realization policy
 
-这一层负责最终写入和运行。
+For Dota2, this is where the system decides whether a unit should be realized as:
 
-当前只允许受控写入：
+- `kv`
+- `ts`
+- `ui`
+- `kv+ts`
+- `shared-ts`
+- `bridge-only`
 
-- RW 自有文件
-- RW 索引刷新
-- 明确允许的 `inject_once`
+This layer must remain distinct from:
 
-不允许：
+- Pattern Resolution
+- concrete generators
 
-- 任意宿主旧文件智能改写
-- 任意 merge
-- 全项目重构
+## 4. Generation And Host Execution
 
-## 核心对象流
+This layer consumes routed realization outputs and turns them into host-shaped generated artifacts.
 
-```text
-IntentSchema
-  -> Blueprint
-  -> AssemblyPlan
-  -> Host Write Plan
-```
+It includes:
 
-边界必须保持：
+- GeneratorRoutingPlan
+- generator router
+- Dota2TSGenerator
+- Dota2UIGenerator
+- future `Dota2KVGenerator`
+- Write Plan
+- Write Executor
 
-- `IntentSchema` 不是 `Blueprint`
-- `Blueprint` 不是宿主代码
-- `AssemblyPlan` 不是最终落盘结果
+The expected sequence is:
 
-## UI 在架构中的位置
+`HostRealizationPlan -> GeneratorRoutingPlan -> Generators -> Write Plan -> Write Executor`
 
-UI 是代码输出面的一个子集，不是平行于主产品的新主线。
+This layer should not:
 
-当前应拆成三层理解：
+- reinterpret user intent
+- redo pattern resolution
+- redo host realization policy
+
+## 5. Validation And State
+
+This layer is responsible for:
+
+- static host validation
+- runtime validation
+- workspace state
+- lifecycle safety
+
+It should make it possible to distinguish:
+
+- command executed
+- files written
+- host wiring valid
+- runtime checks passed
+- workspace updated cleanly
+
+## Core Objects
+
+The current key architectural objects are:
+
+- `IntentSchema`
+- `Blueprint`
+- `AssemblyPlan`
+- `HostRealizationPlan`
+- `GeneratorRoutingPlan`
+
+These objects must remain distinct.
+
+### Boundary Rules
+
+- `IntentSchema` is not `Blueprint`
+- `Blueprint` is not `AssemblyPlan`
+- `AssemblyPlan` is not `HostRealizationPlan`
+- `HostRealizationPlan` is not generator output
+- `GeneratorRoutingPlan` is not final write execution
+
+## UI In The Architecture
+
+UI is a code output surface, not a separate main product line.
+
+UI should be understood in three layers:
 
 1. UI mechanic
 2. UI host binding
 3. UI design support
 
-### UI mechanic
-
-例如：
+Examples of UI mechanics:
 
 - `ui.selection_modal`
 - `ui.key_hint`
 - `ui.resource_bar`
 
-### UI host binding
+UI host binding decides how those surfaces are realized in Panorama-facing output.
 
-负责把 UI mechanic 落到 Panorama / TSX / LESS / bridge 规则。
+UI design support is expressed through `UIDesignSpec`, not through gameplay logic.
 
-### UI design support
+## LLM Placement
 
-由 `UIDesignSpec` 表达：
+The current intended LLM boundary is:
 
-- 布局
-- 信息密度
-- 风格关键词
-- 表现层提示
+- Wizard LLM: intent extraction only
+- Blueprint orchestration LLM/rules: structure only
+- Host Realization v1: rule-first, host-specific, no realization LLM
 
-### UI Wizard 的位置
+The system should not push LLM behavior into:
 
-UI Wizard 不应取代主 Wizard。
+- final pattern admission
+- host realization execution
+- write execution
 
-推荐结构是：
+## Current Architectural Guardrails
 
-- 主 Wizard 先产出 `IntentSchema`
-- Blueprint 或 UI Need Detection 判断是否需要 UI 分支
-- 只有在必要时进入 UI Wizard
-- UI Wizard 只负责产出 `UIDesignSpec`
+The project must avoid these regressions:
 
-## UI 入口原则
+1. treating generators as if they all default to TS
+2. skipping Host Realization and routing directly from Assembly to generation
+3. letting Blueprint decide final host realization
+4. letting generators silently re-decide realization policy
+5. letting maintenance commands drift into parallel execution systems
 
-在 Dota2 宿主中，UI 入口应分两层理解：
+## Current Architectural Status
 
-- `UI entry root`
-  - 例如宿主 HUD 入口 `content/panorama/src/hud/script.tsx`
-  - 只负责一次性桥接接线
-- `UI surfaces`
-  - 例如 `content/panorama/src/rune_weaver/generated/ui/**`
-  - 负责具体生成的 UI 组件与样式
+Already standing:
 
-因此：
+- Wizard / IntentSchema boundary
+- Blueprint boundary
+- Pattern Resolution
+- AssemblyPlan
+- lifecycle-safe write path
+- workspace state foundation
+- runtime validation foundation
+- maintenance command semantics tightening
 
-- `script.tsx` 是桥接入口，不是全部 UI 的唯一位置
-- 具体 UI surface 应落到 Rune Weaver 自己的命名空间目录
+In progress / Phase 1 completion work:
 
-## LLM 在架构中的位置
+- formal Host Realization integration
+- formal Generator Routing integration
+- `Dota2KVGenerator` v1
+- real Dota2 end-to-end validation
 
-当前不引入 `LangChain` / `LangGraph`。
+Not yet Phase 1 complete:
 
-当前推荐：
+- semantic incremental update
+- feature-internal semantic state
+- entity-aware update planning
 
-- 统一 `LLMClient`
-- Wizard 消费有限上下文
-- Blueprint Builder 消费结构化 `IntentSchema`
-- Pattern Resolution 优先走 catalog 和规则
+Those belong to Phase 2.
 
-## 当前最危险的退化方向
+## Summary
 
-### 1. Assembler 硬编码领域分支
+Rune Weaver is not a one-step natural-language-to-host-code system.
 
-例如：
+It is a controlled multi-layer `NL-to-Code` system whose current stable direction is:
 
-```ts
-if (domain === "talent") {
-  generateTalentModal();
-}
-```
-
-这是错误方向。
-
-### 2. Pattern 参数被领域词污染
-
-例如：
-
-- `isTalent`
-- `isCard`
-- `isForgeUpgrade`
-
-### 3. Host write 范围失控
-
-例如：
-
-- 散写宿主各处文件
-- 任意 patch 手写逻辑
-- 让生成器修改自己不拥有的区域
-
-## 当前架构结论
-
-Rune Weaver 当前不是“自然语言直接到宿主代码”的单跳系统。
-
-它是一个通过 `IntentSchema -> Blueprint -> AssemblyPlan` 保持可验证、可复用、可控宿主写入边界的 `NL-to-Code` 系统。
+`IntentSchema -> Blueprint -> Pattern Resolution -> AssemblyPlan -> Host Realization -> Generator Routing -> Generators -> Write / Validation / Workspace`
