@@ -104,7 +104,8 @@ It includes:
 - generator router
 - Dota2TSGenerator
 - Dota2UIGenerator
-- future `Dota2KVGenerator`
+- Dota2LuaGenerator (narrow scope, short_time_buff-style)
+- Dota2KVGenerator (v1 scope defined, KV config generation route established)
 - Write Plan
 - Write Executor
 
@@ -211,21 +212,42 @@ Already standing:
 - workspace state foundation
 - runtime validation foundation
 - maintenance command semantics tightening
+- **dota_ts_adapter repair** (mainlined via init/refresh)
+- **baseline migration** (XLSXContent -> DOTAAbilities, in refresh main path)
+- **lua entry production** (normal pipeline produces `contentType: "lua"` entries)
+- **lua write integration** (write executor writes `.lua` files to host)
+
+T121 verified (minimal real Dota2 E2E):
+
+- baseline 3 abilities appear correctly in host
+- fresh RW identity ability attaches to hero and is castable
+- ability has correct mana cost and cooldown
+- modifier creates successfully, buff appears and lasts ~6 seconds
+- visual/numeric effect quality remains minimal viable (not polished)
+
+T125 verified (lua path mainlined):
+
+- `dota2.short_time_buff` pattern produces lua entries through normal pipeline
+- generator emits same-file ability + modifier Lua code
+- write executor successfully writes `.lua` file to host path
+- old KV→lua bypass has exited formal execution path
+- **boundary**: lua metadata scope currently converges on `short_time_buff`-style cases only; this is NOT a general-purpose lua ability framework
 
 In progress / Phase 1 completion work:
 
-- formal Host Realization integration
 - formal Generator Routing integration
-- `Dota2KVGenerator` v1
-- real Dota2 end-to-end validation
+- broader lua ability pattern support beyond short_time_buff
+- richer visual/numeric effect quality
+- realization-aware validation/artifact/workspace refinement
 
 Not yet Phase 1 complete:
 
 - semantic incremental update
 - feature-internal semantic state
 - entity-aware update planning
+- general-purpose multi-pattern lua ability framework
 
-Those belong to Phase 2.
+Those belong to Phase 2 or later.
 
 ## Summary
 

@@ -40,6 +40,7 @@ The current recommended generator families are:
 - `Dota2KVGenerator`
 - `Dota2TSGenerator`
 - `Dota2UIGenerator`
+- `Dota2LuaGenerator` (narrow scope: short_time_buff-style cases; see DOTA2-KV-GENERATOR-SCOPE.md "Lua Generator Path Status")
 
 Optional thin support:
 
@@ -56,6 +57,7 @@ The current recommended first-pass routing is:
 | `kv` | `Dota2KVGenerator` |
 | `ts` | `Dota2TSGenerator` |
 | `ui` | `Dota2UIGenerator` |
+| `lua` | `Dota2LuaGenerator` (narrow scope) |
 | `shared-ts` | `Dota2TSGenerator` |
 | `bridge-only` | bridge refresh / bridge integration step |
 | `kv+ts` | split output across `Dota2KVGenerator` and `Dota2TSGenerator` |

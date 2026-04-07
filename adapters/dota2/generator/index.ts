@@ -1,4 +1,37 @@
 /**
+ * Generate Lua ability wrapper code for Dota2 ability_lua system.
+ *
+ * T125-R1: Mainline integration of generateAbilityLuaWrapper().
+ *
+ * Delegates to lua-ability generator with same-file modifier support.
+ * Extracts config from WritePlanEntry's metadata when available,
+ * or uses sensible defaults from patternId.
+ */
+function generateLuaAbilityCode(
+  patternId: string,
+  entry: WritePlanEntry,
+  featureId: string
+): GeneratedCode {
+  const abilityName = entry.metadata?.abilityName || patternId.replace(/[^a-zA-Z0-9_]/g, "_");
+  const modifierConfig = entry.metadata?.modifierConfig;
+
+  const config: AbilityLuaWrapperConfig = {
+    abilityName,
+    onSpellStart: entry.metadata?.onSpellStart,
+    additionalMethods: entry.metadata?.additionalMethods,
+    modifierConfig,
+  };
+
+  const content = generateAbilityLuaWrapper(config);
+
+  return {
+    content,
+    language: "lua",
+    exports: [abilityName, ...(modifierConfig ? [modifierConfig.name] : [])],
+  };
+}
+
+/**
  * Dota2 Adapter - Code Generator
  * 
  * 根据 WritePlanEntry 生成真实可执行的宿主代码
@@ -6,6 +39,7 @@
  */
 
 import { WritePlanEntry } from "../assembler/index.js";
+import { generateAbilityLuaWrapper, AbilityLuaWrapperConfig } from "./lua-ability/index.js";
 
 /**
  * 生成结果
@@ -14,7 +48,7 @@ export interface GeneratedCode {
   /** 完整代码内容 */
   content: string;
   /** 代码语言 */
-  language: "typescript" | "tsx" | "less" | "css" | "json";
+  language: "typescript" | "tsx" | "less" | "css" | "json" | "lua";
   /** 导出的符号名 */
   exports: string[];
 }
@@ -467,7 +501,7 @@ export function register${className}(): void {
  * 生成选择流程代码
  */
 function generateSelectionFlowCode(className: string, featureId: string, entry: WritePlanEntry): string {
-  return `import { ${className.replace("Flow", "Pool")} } from "./${className.replace("Flow", "Pool").toLowerCase()}";
+  return `// Pool import removed - only used if data.weighted_pool pattern is selected
 
 /**
  * ${className}
@@ -589,10 +623,14 @@ export class ${className} {
    * 从加权池生成选项
    */
   generateOptionsFromPool<T extends SelectionOption>(
-    pool: ${className.replace("Flow", "Pool")}<T>,
+    pool: any,
     count: number
   ): T[] {
-    return pool.drawMultiple(count);
+    if (pool && typeof pool.drawMultiple === "function") {
+      return pool.drawMultiple(count);
+    }
+    print(\`[Rune Weaver] Pool not available for \${className}, using default options\`);
+    return [];
   }
 }
 
@@ -959,7 +997,12 @@ export function generateCode(
   const patternId = entry.sourcePattern;
   const isUI = entry.targetPath.includes("panorama");
   const isLess = entry.targetPath.endsWith(".less");
-  
+  const isLua = entry.contentType === "lua" || entry.targetPath.endsWith(".lua");
+
+  if (isLua) {
+    return generateLuaAbilityCode(patternId, entry, featureId);
+  }
+
   let content: string;
   let language: "typescript" | "tsx" | "less" | "css" | "json";
   let exports: string[] = [];

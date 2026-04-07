@@ -144,23 +144,43 @@ Phase 3 may require:
 
 ## Current Project Status
 
-The project is currently between:
+The project has reached **late Phase 1** with the following milestones achieved:
 
-- late Phase 1 architecture definition
-- early Phase 1 realization integration
+- Phase 1 architecture definition: complete
+- Host Realization integration: functional (lua path mainlined)
+- Generator Routing: partial (lua route established; KV/TS routes need broader coverage)
+- **First real Dota2 E2E validation: achieved (T121)**
+- **Lua write path mainlined: achieved (T125)**
 
 It is not yet in Phase 2.
+
+### T121: Minimal Real Dota2 E2E — COMPLETED
+
+- baseline 3 abilities appear correctly
+- fresh RW ability attaches to hero, castable, with mana/cooldown
+- modifier creates, buff appears ~6s
+- quality level: minimal viable (not polished)
+- this satisfies Phase 1 DoD item #4 ("at least one feature completes a real Dota2 end-to-end validation path")
+
+### T125: Lua Path Mainlined — COMPLETED
+
+- `contentType: "lua"` entries produced by normal pipeline
+- same-file ability + modifier lua generation working
+- write executor writes `.lua` files successfully
+- old KV→lua bypass retired
+- scope boundary: short_time_buff-style cases only
 
 ## Immediate Priority
 
 The current immediate priority is:
 
-1. finish Host Realization integration
-2. finish Generator Routing integration
-3. add `Dota2KVGenerator` v1
-4. complete one real Dota2 end-to-end validation
-
-Only after that should the project actively move into semantic incremental update.
+1. ~~finish Host Realization integration~~ → functional for lua path (T125)
+2. ~~add lua generator path~~ → done (T125)
+3. ~~complete one real Dota2 end-to-end validation~~ → done (T121)
+4. **broaden lua pattern support** beyond short_time_buff
+5. **improve visual/numeric effect quality** beyond minimal viable
+6. formalize Generator Routing for KV/TS/lua multi-generator coordination
+7. refine realization-aware validation and review artifacts
 
 ## Roadmap Guardrail
 

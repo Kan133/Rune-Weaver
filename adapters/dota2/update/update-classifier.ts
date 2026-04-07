@@ -23,6 +23,16 @@
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
 
+const RW_OWNED_PREFIXES = [
+  "game/scripts/src/rune_weaver/",
+  "content/panorama/src/rune_weaver/",
+];
+
+function isRwOwnedPath(path: string): boolean {
+  const normalizedPath = path.replace(/\\/g, "/");
+  return RW_OWNED_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
+}
+
 export type UpdateClassification =
   | "unchanged"
   | "refresh-only"
@@ -83,13 +93,8 @@ function extractPatternIdFromPath(path: string): string | null {
 
 function isBridgeFile(path: string): boolean {
   const normalizedPath = normalizePath(path);
-  return normalizedPath.includes("/modules/index.ts") || 
+  return normalizedPath.includes("/modules/index.ts") ||
          normalizedPath.includes("/hud/script.tsx");
-}
-
-function isRwOwnedPath(path: string): boolean {
-  const normalizedPath = normalizePath(path);
-  return normalizedPath.includes("/rune_weaver/");
 }
 
 function classifyFileChange(

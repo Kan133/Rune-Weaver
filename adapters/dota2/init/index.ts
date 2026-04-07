@@ -10,6 +10,7 @@ import { join, resolve, basename } from "path";
 import { execSync } from "child_process";
 import { scanDota2Project } from "../scanner";
 import { createInterface } from "readline";
+import { repairDotaTsAdapter } from "../bridge/index.js";
 
 /**
  * 初始化结果
@@ -222,6 +223,11 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
 
   // 8. 创建桥接文件（空壳）
   createBridgeFiles(options.hostPath);
+
+  const adapterRepair = repairDotaTsAdapter(options.hostPath);
+  if (!adapterRepair.success) {
+    result.warnings.push(...adapterRepair.errors);
+  }
 
   result.success = true;
   result.initialized = true;

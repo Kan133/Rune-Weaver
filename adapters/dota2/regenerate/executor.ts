@@ -70,10 +70,6 @@ export async function executeRegenerate(
   const deleteResult = deleteFiles(cleanupPlan.filesToDelete, options.hostRoot);
   if (deleteResult.errors.length > 0) {
     result.errors.push(...deleteResult.errors);
-    if (deleteResult.aborted) {
-      result.errors.push("Deletion aborted due to errors. Some files may have been deleted.");
-      return result;
-    }
   }
   result.filesDeleted = deleteResult.deleted;
 
@@ -109,14 +105,12 @@ export async function executeRegenerate(
 interface DeleteResult {
   deleted: string[];
   errors: string[];
-  aborted: boolean;
 }
 
 function deleteFiles(filesToDelete: string[], hostRoot: string): DeleteResult {
   const result: DeleteResult = {
     deleted: [],
     errors: [],
-    aborted: false,
   };
 
   for (const filePath of filesToDelete) {
@@ -133,8 +127,6 @@ function deleteFiles(filesToDelete: string[], hostRoot: string): DeleteResult {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       result.errors.push(`Failed to delete '${filePath}': ${message}`);
-      result.aborted = true;
-      break;
     }
   }
 
@@ -199,10 +191,18 @@ function updateWorkspaceState(
   }
 
   const now = new Date().toISOString();
+  const executableEntries = writePlan.entries.filter((e) => !e.deferred);
+  const kvEntries = executableEntries.filter((e) => e.contentType === "kv");
+  const nonKvEntries = executableEntries.filter((e) => e.contentType !== "kv");
+  const kvTargetPaths = new Set(kvEntries.map((e) => e.targetPath));
+  const aggregatedKvFiles = Array.from(kvTargetPaths);
+  const nonKvFiles = nonKvEntries.map((e) => e.targetPath);
+  const generatedFiles = [...nonKvFiles, ...aggregatedKvFiles];
+
   const updatedFeature: RuneWeaverFeatureRecord = {
     ...existingFeature,
     revision: nextRevision,
-    generatedFiles: writePlan.entries.map((entry) => entry.targetPath),
+    generatedFiles,
     updatedAt: now,
   };
 
@@ -257,21 +257,21 @@ function refreshGeneratedIndexes(hostRoot: string): IndexRefreshResult {
 }
 
 function generateServerIndexContent(modules: string[]): string {
-  const exports = modules.map((m) => `export * from "./${m}";`).join("\n");
+  const moduleList = JSON.stringify(modules);
 
   return `/**
  * Rune Weaver Generated Server Modules
  * Auto-generated index file
  */
 
-${exports}
+// Dynamic module loading to avoid Lua local variable limit
+const moduleFileNames = ${moduleList};
+for (const fileName of moduleFileNames) {
+  require("rune_weaver.generated.server." + fileName);
+}
 
 export function activateRuneWeaverModules(): void {
   print("[Rune Weaver] Activating generated modules...");
-  
-  // Register all generated modules
-  // Note: Actual registration logic would be added here
-  
   print("[Rune Weaver] All modules activated");
 }
 `;

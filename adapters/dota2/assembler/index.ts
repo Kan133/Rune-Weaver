@@ -30,7 +30,7 @@ export interface WritePlanEntry {
   /** 目标文件路径（相对项目根目录） */
   targetPath: string;
   /** 内容类型 */
-  contentType: "typescript" | "tsx" | "less" | "css" | "json" | "kv";
+  contentType: "typescript" | "tsx" | "less" | "css" | "json" | "kv" | "lua";
   /** 内容摘要 */
   contentSummary: string;
   /** 来源 Pattern */
@@ -47,6 +47,15 @@ export interface WritePlanEntry {
   deferred?: boolean;
   /** T112-R2: Reason for deferral if applicable */
   deferredReason?: string;
+  /**
+   * T125-R1: Optional metadata for generator-specific config.
+   * For lua contentType, supports:
+   *   - abilityName: string
+   *   - modifierConfig: AbilityModifierConfig
+   *   - onSpellStart: string
+   *   - additionalMethods: string
+   */
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -110,6 +119,11 @@ function getNamespacePath(
   // T118: Special handling for KV content type
   if (contentType === "kv") {
     return `game/scripts/npc/npc_abilities_custom.txt`;
+  }
+
+  // T125-R1: Lua ability/modifier files go to vscripts directory
+  if (contentType === "lua") {
+    return `game/scripts/vscripts/rune_weaver/abilities/${featureId}.lua`;
   }
 
   switch (hostTarget) {
@@ -512,6 +526,36 @@ function generateEntriesForPattern(
       deferred: entryDeferred,
       deferredReason: entryDeferredReason,
     };
+
+    // T125-R3: Fill explicit metadata for lua entries
+    // T125-R4: SCOPE: This metadata is specialized for dota2.short_time_buff and
+    // closely related ability-buff patterns that produce movespeed/buff modifiers.
+    // It hardcodes: frost particle, MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT,
+    // and a default 80 movespeed bonus. It does NOT generalize to arbitrary
+    // ability types. For other lua patterns, metadata must be extended explicitly.
+    if (outputType === "lua") {
+      const abilityName = (binding.parameters?.abilityName as string)
+        || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
+      const modifierName = (binding.parameters?.modifierName as string)
+        || `modifier_${abilityName}`;
+      entry.metadata = {
+        abilityName,
+        modifierConfig: {
+          name: modifierName,
+          isHidden: false,
+          isDebuff: false,
+          isPurgable: true,
+          isBuff: true,
+          statusEffectName: (binding.parameters?.statusEffectParticle as string) || "particles/status_fx/status_effect_frost.vpcf",
+          declareFunctions: "MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT",
+          modifierFunctions: {
+            GetModifierMoveSpeedBonus_Constant:
+              "return self:GetAbility():GetSpecialValueFor('movespeed_bonus') or " +
+              String((binding.parameters?.movespeedBonus as number) || 80),
+          },
+        },
+      };
+    }
 
     // 检查是否需要额外文件
     if (patternMeta.dota2Params?.requiresAbility && outputType === "typescript") {

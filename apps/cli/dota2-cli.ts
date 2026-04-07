@@ -1125,6 +1125,8 @@ function getEntryExtension(entry: WritePlanEntry): string {
       return ".less";
     case "json":
       return ".json";
+    case "lua":
+      return ".lua";
     default:
       return ".ts";
   }
@@ -1178,7 +1180,16 @@ async function executeWrite(
 
     for (const [targetPath, entries] of kvEntriesByTarget) {
       // T118-R2: Generate unique ability names for each entry by adding index suffix
-      const combinedContent = entries.map((e, idx) => generateKVContentWithIndex(e, idx)).join("\n\n");
+      // T121-R6-R1: Also generate Lua wrapper for each ability_lua entry
+      // T125-R4: REMOVED - old KV-side lua wrapper generation removed.
+      // The normal pipeline now produces proper lua entries via Pattern.outputTypes.
+      // Lua abilities generated from normal pipeline carry full metadata and
+      // generate complete ability+modifier code (generateLuaAbilityCode).
+      // This old wrapper path is superseded and kept only as a compat fallback
+      // if any legacy code still references it. It does NOT use pattern metadata.
+      const combinedContent = entries.map((e, idx) => {
+        return generateKVContentWithIndex(e, idx);
+      }).join("\n\n");
       const aggregatedDescription = `KV aggregation: ${entries.length} abilities -> ${targetPath}`;
       console.log(`  [KV] Aggregated ${entries.length} entries into ${targetPath}`);
       kvActions.push({
@@ -1257,8 +1268,7 @@ async function executeWrite(
   return { result, review };
 }
 
-function generateKVContentWithIndex(entry: WritePlanEntry, index: number): string {
-  // T121-R3: Generate unique ability name by adding index suffix when multiple entries have same base name
+function computeAbilityName(entry: WritePlanEntry, index: number): string {
   const patternSegment = entry.sourcePattern.includes(".")
     ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
     : entry.sourcePattern;
@@ -1268,9 +1278,56 @@ function generateKVContentWithIndex(entry: WritePlanEntry, index: number): strin
     : entry.targetPath.includes("micro_feature_")
       ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
       : null;
-  const abilityName = featureSegment
+  return featureSegment
     ? `rw_${featureSegment}_${baseName}_${index}`
     : `rw_${baseName}_${index}`;
+}
+
+/**
+ * @deprecated T125-R4: This function is no longer used by the mainline lua path.
+ *   The normal pipeline now produces proper lua entries via Pattern.outputTypes,
+ *   which use generateLuaAbilityCode() with full metadata. This stub remains only
+ *   as a compat marker; it generates a hardcoded modifier_rw_buff wrapper that
+ *   is NOT driven by pattern metadata.
+ */
+function generateLuaWrapperContent(abilityName: string): string {
+  return `local ____lualib = require("lualib_bundle")
+local __TS__Class = ____lualib.__TS__Class
+local __TS__ClassExtends = ____lualib.__TS__ClassExtends
+local __TS__DecorateLegacy = ____lualib.__TS__DecorateLegacy
+local ____exports = {}
+local ____dota_ts_adapter = require("utils.dota_ts_adapter")
+local BaseAbility = ____dota_ts_adapter.BaseAbility
+local registerAbility = ____dota_ts_adapter.registerAbility
+
+____exports.${abilityName} = __TS__Class()
+local ${abilityName} = ____exports.${abilityName}
+${abilityName}.name = "${abilityName}"
+__TS__ClassExtends(${abilityName}, BaseAbility)
+
+function ${abilityName}.prototype.OnSpellStart(self)
+    local caster = self:GetCaster()
+    local duration = self:GetSpecialValueFor("duration") or 5.0
+    caster:AddNewModifier(caster, self, "modifier_rw_buff", {duration = duration})
+    self:PlayEffects()
+end
+
+function ${abilityName}.prototype.PlayEffects(self)
+    local particle = "particles/generic_gameplay/generic_slowed_cold.vpcf"
+    local sound = "Hero_Crystal.CrystalNova"
+    local effect = ParticleManager:CreateParticle(particle, ParticleAttachment.ABSORIGIN_FOLLOW, self:GetCaster())
+    ParticleManager:ReleaseParticleIndex(effect)
+    EmitSoundOn(sound, self:GetCaster())
+end
+
+${abilityName} = __TS__DecorateLegacy({registerAbility(nil)}, ${abilityName})
+____exports.${abilityName} = ${abilityName}
+return ____exports
+`;
+}
+
+function generateKVContentWithIndex(entry: WritePlanEntry, index: number): string {
+  const abilityName = computeAbilityName(entry, index);
 
   const kvInput: KVGeneratorInput = {
     routeId: `route_${entry.sourcePattern}_kv`,
@@ -1279,7 +1336,7 @@ function generateKVContentWithIndex(entry: WritePlanEntry, index: number): strin
     hostTarget: "ability_kv",
     abilityConfig: {
       abilityName,
-      baseClass: "ability_datadriven",
+      baseClass: "ability_lua",
       abilityType: "DOTA_ABILITY_TYPE_BASIC",
       behavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
       abilityCooldown: "8.0",
@@ -1289,11 +1346,12 @@ function generateKVContentWithIndex(entry: WritePlanEntry, index: number): strin
       maxLevel: "4",
       requiredLevel: "1",
       levelsBetweenUpgrades: "3",
+      scriptFile: `rune_weaver/abilities/${abilityName}`,
     },
     rationale: [
       `Generated from pattern: ${entry.sourcePattern}`,
       `Module: ${entry.sourceModule}`,
-      `Feature: ${featureSegment}`,
+      `Feature: ${abilityName}`,
     ],
     blockers: entry.deferred ? [entry.deferredReason || "Entry marked deferred"] : [],
   };
@@ -2638,8 +2696,13 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log("=".repeat(70));
 
   if (!options.dryRun) {
-    // T115-R2-FIX: Only include non-deferred entries in workspace generatedFiles
-    // T118-R2-FIX: Apply KV aggregation to avoid duplicate KV target files
+    // T122-FIX: Use diffResult to compute workspace generatedFiles consistency
+    // This ensures deleted files are removed from workspace even if not in writePlan
+    const deletedFiles = diffResult.deletedFiles.map(f => f.path);
+    const refreshAndCreateFiles = [
+      ...diffResult.refreshedFiles.map(f => f.path),
+      ...diffResult.createdFiles.map(f => f.path),
+    ];
     const executableEntries = writePlan.entries.filter((e) => !e.deferred);
     const kvEntriesForRegen = executableEntries.filter((e) => e.contentType === "kv");
     const nonKvEntriesForRegen = executableEntries.filter((e) => e.contentType !== "kv");
@@ -2647,11 +2710,12 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
     const aggregatedKvFilesForRegen = Array.from(kvTargetPathsForRegen);
     const nonKvFilesForRegen = nonKvEntriesForRegen.map((e) => e.targetPath);
     const generatedFilesForRegen = [...nonKvFilesForRegen, ...aggregatedKvFilesForRegen];
+    const generatedFilesForUpdate = generatedFilesForRegen.filter(f => !deletedFiles.includes(f));
 
     const updatedFeature: RuneWeaverFeatureRecord = {
       ...existingFeature,
       revision: existingFeature.revision + 1,
-      generatedFiles: generatedFilesForRegen,
+      generatedFiles: generatedFilesForUpdate,
       selectedPatterns: resolutionResult.patterns.map(p => p.patternId),
       updatedAt: new Date().toISOString(),
     };

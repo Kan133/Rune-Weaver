@@ -9,6 +9,7 @@ Its purpose is to guide the Host Realization layer in choosing whether a unit sh
 - `kv`
 - `ts`
 - `ui`
+- `lua`
 - `kv+ts`
 - `shared-ts`
 - `bridge-only`
@@ -145,6 +146,35 @@ The following may bias toward `shared-ts`:
 Some units may not generate feature-local files directly and may instead only require bridge refresh or registration behavior.
 
 These should be marked as `bridge-only` rather than being forced into KV or TS buckets.
+
+## Lua Cases (Narrow Scope — T125)
+
+The following may bias toward `lua`:
+
+- ability + modifier patterns where Dota2 VScript is the preferred runtime medium
+- short_time_buff-style mechanics with same-file ability and modifier layout
+- cases where lua metadata schema has been explicitly defined
+
+**Critical boundary**: `lua` realization is currently NOT a general-purpose route.
+
+Current verified scope (as of T126):
+
+- `dota2.short_time_buff` pattern and structurally similar cases
+- same-file ability + modifier code generation
+- buff/debuff style duration-based lifecycle
+- basic modifier properties
+
+Lua realization should only be used when:
+
+- a specific lua-targeting pattern has been selected
+- the generator has explicit metadata for the lua output shape
+- the case falls within the currently verified narrow scope
+
+This is distinct from `ts` realization:
+- `ts`: targets TypeScript → tstl → VScripts compilation path
+- `lua`: targets direct `.lua` VScript file output
+
+The lua route was established in T125 as a pragmatic path for narrow-scope ability generation. It should not be assumed available for arbitrary mechanic types until explicit pattern and metadata support is added.
 
 ## What This Policy Must Not Do
 

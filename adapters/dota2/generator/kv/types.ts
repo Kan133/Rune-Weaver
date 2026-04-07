@@ -52,6 +52,9 @@ export interface AbilityKVConfig {
   requiredLevel?: string;
   levelsBetweenUpgrades?: string;
 
+  scriptFile?: string;
+  precache?: string[];
+
   specials?: AbilitySpecial[];
 }
 

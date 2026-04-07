@@ -33,6 +33,10 @@ export function generateAbilityKV(input: KVGeneratorInput): KVGeneratorOutput {
   lines.push(`    "BaseClass"              "${abilityConfig.baseClass}"`);
   lines.push(`    "AbilityBehavior"        "${abilityConfig.behavior}"`);
 
+  if (abilityConfig.scriptFile) {
+    lines.push(`    "ScriptFile"            "${abilityConfig.scriptFile}"`);
+  }
+
   if (abilityConfig.abilityType) {
     lines.push(`    "AbilityType"           "${abilityConfig.abilityType}"`);
   }
@@ -118,6 +122,15 @@ export function generateAbilityKV(input: KVGeneratorInput): KVGeneratorOutput {
       lines.push(`            "var_type"      "${special.varType}"`);
       lines.push(`            "${special.key}" "${special.value}"`);
       lines.push(`        }`);
+    }
+    lines.push(`    }`);
+  }
+
+  if (abilityConfig.precache && abilityConfig.precache.length > 0) {
+    lines.push(`    "Precache"`);
+    lines.push(`    {`);
+    for (const precache of abilityConfig.precache) {
+      lines.push(`        "${precache}"`);
     }
     lines.push(`    }`);
   }

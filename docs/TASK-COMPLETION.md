@@ -13,28 +13,32 @@ It is intentionally shorter-lived than `ROADMAP.md`.
 
 ### Phase Status
 
-- Phase 1: in progress, roughly `70% - 78%`
+- Phase 1: in progress, roughly `80% - 85%`
 - Phase 2: defined but not implemented
 - Phase 3: not started
 
 ### What Phase 1 Already Has
 
 - runtime validation minimal foundation
-- server host import strategy repair
+- server host import strategy repair (**dota_ts_adapter mainlined**)
 - regenerate cleanup baseline
 - rollback baseline
 - update maintenance baseline
 - workspace state baseline
 - architecture and contract baseline
 - Host Realization / Generator Routing contracts documented
+- **baseline migration in refresh main path** (XLSXContent -> DOTAAbilities)
+- **lua entry production** (normal pipeline produces `contentType: "lua"` entries)
+- **lua write integration** (write executor writes `.lua` files)
+- **first real Dota2 E2E validation achieved** (T121)
 
 ### What Phase 1 Still Needs
 
-- `HostRealizationPlan` truly entering execution path
-- `GeneratorRoutingPlan` mainline integration
-- `Dota2KVGenerator v1`
+- broader lua pattern support beyond short_time_buff
+- richer visual/numeric effect quality beyond minimal viable
+- formal Generator Routing for KV/TS/lua multi-generator coordination
 - realization-aware artifact / validation / workspace refinement
-- first real Dota2 E2E
+- lifecycle safety end-to-end verification on real host
 
 ## Completed Work
 
@@ -45,6 +49,7 @@ It is intentionally shorter-lived than `ROADMAP.md`.
   - CLI integration for runtime validation
 - `T097-T099`
   - Dota2 server host import strategy repair
+  - **dota_ts_adapter repair mainlined via init/refresh**
   - server-side compile failure category significantly reduced
 - `T100-T103`
   - regenerate cleanup minimal foundation
@@ -56,6 +61,21 @@ It is intentionally shorter-lived than `ROADMAP.md`.
   - update semantics refinement
   - update now works as a conservative maintenance path
   - unsafe update correctly escalates to regenerate
+- `T121` — Minimal Real Dota2 E2E Validation
+  - baseline 3 abilities appear correctly in host
+  - fresh RW identity ability attaches to hero, is castable
+  - correct mana cost and cooldown behavior
+  - modifier creates successfully, buff appears ~6 seconds
+  - **quality boundary**: visual/numeric effects are minimal viable, NOT polished
+  - this satisfies Phase 1 DoD item #4 (real Dota2 end-to-end validation)
+  - **not a claim of complete or polished gameplay**
+- `T125` — Lua Write Path Mainlined
+  - normal pipeline produces `contentType: "lua"` entries
+  - generator emits same-file ability + modifier Lua code
+  - write executor writes `.lua` files to host path successfully
+  - old KV→lua bypass has exited formal execution path
+  - **scope boundary**: lua metadata converges on `short_time_buff`-style cases only
+  - this is NOT a general-purpose lua ability framework
 
 ### Documentation Baseline Completed
 
@@ -69,22 +89,27 @@ It is intentionally shorter-lived than `ROADMAP.md`.
 
 ### Active
 
-- `T112-R1`
-  - HostRealizationPlan execution-path tightening
-  - current goal:
-    - realization must stop being only a review stage
-    - generator/write path must explicitly depend on realization-aware input
-    - no router or KV generator yet
+- `T126` — Documentation Consolidation (this task)
+  - consolidating T121/T125 conclusions into all core docs
+  - ensuring docs accurately reflect mainlined capabilities AND current boundaries
+  - preventing overstatement of current abilities
+
+### Near-Term Recommended (Post-T126)
+
+- broaden lua pattern support beyond short_time_buff
+- improve visual/numeric effect quality toward playable (not just minimal viable)
+- formalize Generator Routing for KV/TS/lua coordination
+- realization-aware validation/artifact refinement
 
 ## Not Started Yet
 
-### Phase 1 Remaining Mainline Work
+### Phase 1 Remaining Work
 
-- `GeneratorRoutingPlan` mainline integration
-- `Dota2KVGenerator v1`
-- realization-aware generator routing outputs
-- realization-aware validation/artifact/workspace updates
-- first real Dota2 E2E
+- broader lua ability pattern support (beyond short_time_buff)
+- richer visual/numeric effect quality
+- formal multi-generator routing (KV + TS + lua coordination)
+- lifecycle safety end-to-end on real host (create → update → regenerate → rollback)
+- realization-aware validation and review artifact refinement
 
 ### Phase 2 Future Work
 
@@ -95,48 +120,50 @@ It is intentionally shorter-lived than `ROADMAP.md`.
 
 ## Recommended Next Sequence
 
-1. finish `T112-R1`
-2. integrate `GeneratorRoutingPlan`
-3. implement `Dota2KVGenerator v1`
-4. refine realization-aware validation and review artifacts
-5. run first real Dota2 E2E
+1. complete `T126` (documentation consolidation — in progress)
+2. broaden lua pattern support beyond short_time_buff
+3. improve visual/numeric effect quality toward playable
+4. formalize Generator Routing for multi-generator coordination
+5. refine realization-aware validation and review artifacts
+6. run lifecycle safety end-to-end verification on real host
 
 ## Parallelizable Work
 
-These can run in parallel with `T112-R1` if write scopes remain narrow and responsibility stays clear.
+These can run in parallel with documentation consolidation if scopes remain narrow.
 
 ### Parallel Track A
 
-`Generator Routing implementation prep`
+`Lua pattern expansion design`
 
 Suggested scope:
 
-- identify current `AssemblyPlan -> generator` coupling points
-- define minimal generator aggregate output types
-- prepare the handoff from `HostRealizationPlan` to future routing
-- do not fully implement router yet
+- identify next lua ability archetype beyond short_time_buff (e.g., damage-over-time, stun, heal)
+- define minimal metadata schema for the new archetype
+- prepare fixtures / test inputs
+- do not fully implement yet
 
 ### Parallel Track B
 
-`Dota2KVGenerator v1 design spike`
+`Effect quality improvement prep`
 
 Suggested scope:
 
-- define minimal KV generator input contract
-- define minimal output targets for ability shell/static config
-- map the smallest supported KV capability set
-- prepare fixtures / test inputs
-- do not fully integrate generator yet
+- survey current visual/numeric effect gaps for short_time_buff
+- identify minimal set of improvements toward "playable" quality
+- plan particle/sound/value tuning approach
+- do not do full gameplay polish pass yet
 
 ## Non-Goals Right Now
 
-- semantic incremental update
+- semantic incremental update (Phase 2)
 - second host
-- broader pattern expansion
+- broader pattern expansion beyond Dota2
 - further tuning of update thresholds
+- general-purpose lua ability framework (current scope is narrow)
 
 ## Review Notes
 
-- treat `update` as complete enough for Phase 1 maintenance
-- treat `HostRealizationPlan` as partially integrated until execution-path tightening is complete
-- do not start real Dota2 E2E before realization and KV path are clearer
+- treat T121 as "minimal E2E achieved, quality improvement needed" — NOT as "Phase 1 complete"
+- treat T125 as "lua path mainlined for narrow scope" — NOT as "general lua framework done"
+- treat `HostRealizationPlan` as functional for lua route; broader KV/TS routing still needs formalization
+- do not claim Phase 1 complete until lifecycle safety is verified end-to-end on real host

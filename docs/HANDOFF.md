@@ -106,7 +106,7 @@ These foundations are already standing:
 - `Blueprint -> Pattern Resolution`
 - `Pattern Resolution -> AssemblyPlan`
 - Host realization contracts and policy baseline
-- generator routing contracts and schema baseline
+- generator routing contracts and schema baseline (lua route added)
 - Dota2 host planning
 - UI adapter generation
 - server/shared generator generation
@@ -115,31 +115,47 @@ These foundations are already standing:
 - workspace state tracking
 - runtime validation foundation
 
+**T121–T126 mainlined additions:**
+
+- **dota_ts_adapter repair** — mainlined via init/refresh (no longer a temporary patch)
+- **baseline migration** — XLSXContent -> DOTAAbilities in refresh main path
+- **lua entry production** — normal pipeline produces `contentType: "lua"` entries
+- **lua code generation** — same-file ability + modifier Lua output
+- **lua write integration** — write executor writes `.lua` files to host
+- **first real Dota2 E2E validation** — baseline 3 abilities + RW ability castable with modifier/buff
+
 Accepted implemented chains:
 
 1. `AssemblyPlan -> UI Adapter`
 2. `AssemblyPlan -> Server/Shared Generator`
-3. `Write Executor Phase 1`
-4. end-to-end minimal run with guarded realism
+3. `AssemblyPlan -> Lua Generator -> Write Executor` (narrow scope: short_time_buff-style)
+4. `Write Executor Phase 1`
+5. end-to-end minimal run with guarded realism (T121 verified)
 
 ## Current Reality About the System
 
-What is true now:
+What is true now (as of T126/T127):
 
 - the project can produce real host files in `D:\test1`
 - the project can track generated features in `rune-weaver.workspace.json`
 - the project has a formal CLI entry
 - the project can run runtime validation
 - the project can distinguish safer runs from forced / partial runs
+- **the project has achieved minimal real Dota2 E2E** (T121): RW ability attaches, casts, shows buff ~6s
+- **lua write path is mainlined** (T125): pipeline → generate → write `.lua` files end-to-end
+- **old KV→lua bypass is retired**: formal execution path no longer uses it
 
-What is not yet true:
+What is NOT yet true:
 
 - the system is not yet a polished product
 - not every case is equally reliable
 - runtime validation is not yet fully scoped to only RW-owned outputs
-- Host Realization and Generator Routing are not yet fully integrated into the running implementation mainline
-- `Dota2KVGenerator` is not yet implemented
-- semantic incremental update is not yet implemented
+- lua pattern support is narrow: only `short_time_buff`-style cases work
+- visual/numeric effect quality is minimal viable, not polished
+- multi-ability composition is untested
+- lifecycle safety (create → update → regenerate → rollback) has not been verified end-to-end on real host
+- Generator Routing for KV/TS/lua coordination is partially established
+- semantic incremental update is not yet implemented (Phase 2)
 
 ## Current CLI Reality
 
@@ -201,24 +217,29 @@ Still true:
 
 ## Current Most Important Open Work
 
-Recommended next mainline step:
+### Completed (do not re-do)
 
-1. finish Phase 1 realization integration
-   - `HostRealizationPlan`
-   - `GeneratorRoutingPlan`
-   - `Dota2KVGenerator` v1
-   - one real Dota2 end-to-end validation
+- ~~Phase 1 realization integration (lua path)~~ → done (T125)
+- ~~one real Dota2 end-to-end validation~~ → done (T121)
+- ~~dota_ts_adapter repair~~ → mainlined (T097-T99 → T121)
+- ~~baseline migration~~ → in refresh main path (T121)
+- ~~lua write path mainlined~~ → done (T125)
+- ~~documentation consolidation~~ → done (T126)
 
-Recommended after that:
+### Tomorrow's natural next steps (in priority order)
 
-2. tighten runtime validation into RW-scoped validation
-3. only then move toward Phase 2 semantic incremental update
+1. **Second lua archetype** — extend lua pattern support beyond `short_time_buff` (e.g., DOT, stun, heal); define metadata schema for the new archetype
+2. **Lifecycle E2E verification** — run create → update → regenerate → rollback on real host; confirm workspace state stays consistent
+3. **Effect quality improvement** — move from minimal viable toward playable quality (particle, sound, value tuning for existing short_time_buff)
+4. **Formalize multi-generator routing** — coordinate KV + TS + lua generator routes through formal Generator Routing
 
-Not recommended as the next first step:
-- expanding patterns
+### Not recommended as the next first step
+
+- expanding patterns beyond Dota2
 - adding new hosts
 - broad UI expansion
 - arbitrary CLI feature surface growth
+- Phase 2 semantic incremental update
 
 ## Practical Resume Checklist
 

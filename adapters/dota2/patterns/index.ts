@@ -24,7 +24,7 @@ export interface Dota2PatternMeta extends PatternMeta {
   /** 宿主目标（向后兼容） */
   hostTarget: "dota2.server" | "dota2.panorama" | "dota2.shared" | "dota2.config";
   /** 输出文件类型（向后兼容） */
-  outputTypes: ("typescript" | "tsx" | "less" | "kv" | "json")[];
+  outputTypes: ("typescript" | "tsx" | "less" | "kv" | "json" | "lua")[];
   /** Dota2 特定参数 */
   dota2Params?: {
     /** 是否需要自定义 Ability */
@@ -228,7 +228,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.server",
     outputTypes: ["typescript"],
-    dota2Params: { requiresAbility: true },
+    dota2Params: { requiresAbility: false },
   }),
 
   // ============================================================================
@@ -568,8 +568,129 @@ export const dota2Patterns: Dota2PatternMeta[] = [
 ];
 
 /**
- * 获取 Pattern 元数据
+ * T125-R2: Short-Time Buff Ability Pattern
+ *
+ * T121 E2E verified: cast ability → apply short-duration buff modifier.
+ * Produces BOTH lua wrapper (ability + same-file modifier) AND KV definition.
+ *
+ * This is the first pattern that naturally emits "lua" contentType entries
+ * through the normal pipeline (no manual WritePlanEntry construction).
  */
+const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
+  id: "dota2.short_time_buff",
+  category: "ability",
+  summary: "施放后获得短时增益/减益效果",
+  description:
+    "创建一个无目标技能，施放后对自身施加一个有持续时间的 modifier。" +
+    "modifier 与 ability 定义在同一 Lua 文件中（same-file 策略）。" +
+    "T121 验证：rw_test_v2 成功实现此模式。",
+  responsibilities: [
+    { text: "提供可施放的技能按钮和效果", core: true },
+    { text: "管理技能冷却、法力消耗、持续时间", core: true },
+    { text: "通过 ScriptFile 将 Lua 代码挂载到 Dota2 引擎", core: false },
+  ],
+  nonGoals: [
+    { text: "不处理 Panorama 面板或 tooltip", alternative: "使用 ui.ability_tooltip" },
+    { text: "不处理物品或被动效果", alternative: "使用 item.passive_modifiers" },
+    { text: "不处理单位生成或 AI 行为", alternative: "使用 unit.spawn 或 unit.ai_behavior" },
+  ],
+  capabilities: [
+    "ability_lua_shell",
+    "modifier_same_file",
+    "kv_ability_definition",
+    "hero_attachment",
+  ],
+  inputs: [
+    { name: "abilityName", type: "string", required: true, description: "能力名称（如 rw_my_buff）" },
+    {
+      name: "modifierName",
+      type: "string",
+      required: false,
+      description: "modifier 名称（如 modifier_rw_my_buff），默认基于 abilityName 生成",
+    },
+    { name: "duration", type: "number", required: false, description: "buff 持续时间（秒）" },
+    {
+      name: "movespeedBonus",
+      type: "number",
+      required: false,
+      description: "移速加成数值",
+    },
+    { name: "manaCost", type: "number", required: false, description: "法力消耗" },
+    { name: "cooldown", type: "number", required: false, description: "冷却时间（秒）" },
+  ],
+  outputs: [
+    { name: "lua_ability", type: "lua", description: "Lua ability + modifier wrapper" },
+    { name: "kv_ability", type: "kv", description: "DOTAAbilities KV 条目" },
+  ],
+  parameters: [
+    {
+      name: "abilityName",
+      type: "string",
+      required: true,
+      description: "生成的 ability 名称标识",
+    },
+    {
+      name: "statusEffectParticle",
+      type: "string",
+      required: false,
+      description: "状态特效粒子路径",
+      defaultValue: "particles/status_fx/status_effect_frost.vpcf",
+    },
+  ],
+  constraints: [
+    "需要 x-template 或兼容 Dota2 addon 宿主",
+    "需要 vscripts 加载器支持 ability_lua BaseClass",
+  ],
+  dependencies: [
+    { patternId: "dota_ts_adapter", relation: "requires", reason: "_G registration for ability/modifier classes" },
+    { patternId: "npc_abilities_custom", relation: "requires", reason: "KV definition must be under DOTAAbilities root" },
+  ],
+  validationHints: [
+    {
+      stage: "host",
+      rule: "kv_in_dotaabilities",
+      message: "KV 必须写在 npc_abilities_custom.txt 的 DOTAAbilities 根下",
+      severity: "error",
+    },
+    {
+      stage: "host",
+      rule: "lua_same_file",
+      message: "modifier 类必须在同一 Lua 文件中定义",
+      severity: "error",
+    },
+    {
+      stage: "host",
+      rule: "use_addnewmodifier",
+      message: "OnSpellStart 使用 caster:AddNewModifier() 而非 .apply()",
+      severity: "error",
+    },
+    {
+      stage: "host",
+      rule: "pattch_constants",
+      message: "粒子播放使用 PATTACH_* 全局常量",
+      severity: "warning",
+    },
+  ],
+  examples: [
+    {
+      name: "基础移速 buff",
+      description: "生成 swift_buff.lua（含 modifier 同文件）+ KV 条目",
+      params: { abilityName: "swift_buff", duration: 5, movespeedBonus: 60 },
+      useCase: "施放后短时加速效果",
+    },
+  ],
+  hostTarget: "dota2.server",
+  // T125-R2: KEY — this enables lua contentType emission from normal pipeline
+  outputTypes: ["lua", "kv"],
+  dota2Params: {
+    requiresAbility: true,
+    requiresModifier: true,
+  },
+});
+
+// Push all patterns into registry
+dota2Patterns.push(PATTERN_SHORT_TIME_BUFF);
+
 export function getPatternMeta(patternId: string): Dota2PatternMeta | undefined {
   return dota2Patterns.find((p) => p.id === patternId);
 }

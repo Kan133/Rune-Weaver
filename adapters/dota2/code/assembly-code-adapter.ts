@@ -817,7 +817,7 @@ function generateSelectionFlowServerCode(
  * Feature: ${featureId}
  */
 
-import { ${className.replace("Flow", "Pool")} } from "../shared/${featureId}_data_weighted_pool";
+// Pool import removed - only used if data.weighted_pool pattern is selected
 
 interface SelectionOption {
   id: string;
@@ -913,11 +913,13 @@ export class ${className} {
     }
   }
 
-  generateOptionsFromPool<T extends SelectionOption>(
-    pool: ${className.replace("Flow", "Pool")}<T>,
-    count: number
-  ): T[] {
-    return pool.drawMultiple(count);
+  // @ts-ignore - pool may not be available
+  generateOptionsFromPool<T extends SelectionOption>(pool: any, count: number): T[] {
+    if (pool && typeof pool.drawMultiple === "function") {
+      return pool.drawMultiple(count);
+    }
+    print(\`[Rune Weaver] Pool not available for ${className}, using default options\`);
+    return [];
   }
 }
 

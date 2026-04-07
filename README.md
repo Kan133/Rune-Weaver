@@ -1,125 +1,181 @@
 # Rune Weaver
 
-Rune Weaver is a controlled **NL-to-Code** engine for game features.
+Rune Weaver 是一个面向游戏功能生成的、受控的 **自然语言到代码** 系统。
 
-The current first real host is **Dota2 x-template**. The main pipeline is:
+它不是“输入一句话自动生成整款游戏”的黑盒，也不追求任意宿主上的自由改写。当前目标更窄、更工程化：
 
-`Natural Language -> IntentSchema -> Blueprint -> Pattern Resolution -> AssemblyPlan -> Dota2 Adapter -> Host Write / Run`
+- 把受约束的玩法需求转成结构化规划对象
+- 复用可审查的 mechanic pattern，而不是到处写一次性模板
+- 通过宿主适配层生成可审查、可验证、可回滚的宿主代码产物
+- 将写入严格限制在 Rune Weaver 自有命名空间和显式允许的桥接点内
 
-The project is not trying to be a black-box "build any game from one prompt" system. The current goal is narrower and more practical:
+当前第一个真实宿主是 **Dota2 x-template / test1**。
 
-- turn constrained game feature requests into structured plans
-- reuse mechanic patterns instead of inventing domain-specific templates
-- generate reviewable host-oriented code artifacts
-- keep host writes inside strict ownership boundaries
+## 完整链路图
 
-## Current Status
+当前主链路不是“一步到位生成代码”，而是分层推进：
 
-The project currently has working foundations for:
+```text
+自然语言请求
+  -> Wizard
+  -> IntentSchema
+  -> Blueprint
+  -> Pattern Resolution
+  -> AssemblyPlan
+  -> HostRealizationPlan
+  -> GeneratorRoutingPlan
+  -> Generators
+     -> Dota2KVGenerator
+     -> Dota2TSGenerator
+     -> Dota2UIGenerator
+     -> Dota2LuaGenerator（窄范围）
+  -> Write Plan
+  -> Write Executor
+  -> Host Validation / Runtime Validation
+  -> Workspace State
+```
 
-- `IntentSchema`, `Blueprint`, and `AssemblyPlan`
-- pattern modeling, authoring, and admission workflow
-- Dota2 host planning and bridge planning
-- Dota2 UI adapter generation for:
-  - `ui.selection_modal`
-  - `ui.key_hint`
-  - `ui.resource_bar`
-- Dota2 server/shared generator skeletons for a small supported pattern set
+如果只看当前已经跑通的 Dota2 主路径，可以理解为：
 
-What is not done yet:
+```text
+Prompt
+  -> 结构化规划
+  -> Dota2 宿主实现决策
+  -> KV / TS / UI / Lua 代码生成
+  -> 受控写入 test1
+  -> 宿主修复 / bridge refresh
+  -> 真实 Dota2 游戏内验证
+```
 
-- full end-to-end host write execution
-- arbitrary host file editing
-- unconstrained code generation
-- a generalized second host
+## 当前已实现状态
 
-## Product Boundary
+当前已经成立的能力：
 
-Rune Weaver currently owns only:
+- `IntentSchema / Blueprint / AssemblyPlan` 主链路
+- `HostRealizationPlan / GeneratorRoutingPlan` 架构分层
+- Dota2 宿主写入与 workspace 基础闭环
+- Dota2 adapter repair 已 mainlined
+- baseline migration 已 mainlined：
+  - `XLSXContent -> DOTAAbilities`
+- lua path 已 mainlined 到 write 层：
+  - normal pipeline 会自然产出 `contentType: "lua"` entry
+  - generator 会生成 same-file ability + modifier Lua
+  - write executor 会实际写出 `.lua` 文件
+- 最小真实 Dota2 E2E 已验证：
+  - baseline 3 技能正常出现
+  - RW fresh identity 技能可挂载、可施放
+  - 有蓝耗和冷却
+  - modifier 创建成功
+  - buff 可见并持续约 6 秒
+
+## 当前边界
+
+当前明确 **不应** 误解为已完成的部分：
+
+- 这不是通用“任意游戏 -> 任意代码”的系统
+- 这不是通用 lua ability framework
+- 当前 lua metadata scope 仅明确覆盖 `short_time_buff` 及近似 case
+- 当前真实 Dota2 E2E 是 **minimal viable**，不是 polished gameplay quality
+- 多 archetype 的 lua 覆盖仍未完成
+- lifecycle 全链路（create / update / regenerate / rollback）真实宿主 E2E 仍可继续补强
+
+## 产品边界
+
+Rune Weaver 当前只拥有并可直接生成/修复：
 
 - `game/scripts/src/rune_weaver/**`
+- `game/scripts/vscripts/rune_weaver/**`
 - `content/panorama/src/rune_weaver/**`
-- a small set of explicitly allowed bridge points
+- 少量显式允许的 bridge / host repair 点
 
-Rune Weaver does **not** own user business code and does **not** perform arbitrary intelligent rewrites of host files.
+Rune Weaver **不** 直接拥有：
 
-UI is treated as a **code output surface**, not as a separate product line.
+- 用户业务代码的大范围任意改写
+- 任意宿主文件的智能重写
+- 未声明的宿主侧自由编辑权
 
-## Why Dota2 First
+## 为什么先做 Dota2
 
-Dota2 is a good first host because it has:
+Dota2 适合作为第一宿主，因为它具备：
 
-- strict APIs
-- clear host boundaries
-- a repeatable event-driven gameplay model
-- bounded UI surfaces
-- many reusable mechanic shapes
+- 清晰的宿主边界
+- 严格 API 和文件结构
+- 事件驱动的玩法模型
+- 边界明确的 UI 输出面
+- 大量可抽象为 pattern 的 mechanic 形状
 
-That makes it a better fit for:
+这让它适合：
 
+- 结构化规划
 - pattern-driven generation
-- schema/blueprint planning
 - adapter-based host binding
-- validation before writing
+- 写前验证与宿主修复
 
-## Repo Structure
+## 仓库结构
 
-- `core/` - planning layer and shared schema
-- `adapters/` - host adapters, currently Dota2
-- `apps/cli/` - CLI entrypoints
-- `docs/` - current source-of-truth docs
-- `knowledge/` - processed host knowledge
-- `references/` - raw references and upstream materials
-- `skills/` - local Codex skills used for controlled authoring flows
-- `archive/` - archived docs and completed task history
+- `core/`：规划层与共享 schema
+- `adapters/`：宿主适配层，当前以 Dota2 为主
+- `apps/cli/`：CLI 入口
+- `docs/`：当前 source-of-truth 文档
+- `knowledge/`：处理后的宿主知识
+- `references/`：原始参考资料
+- `skills/`：本地 Codex skill
+- `archive/`：归档文档与历史记录
+- `scripts/`：调试、验证、历史修复脚本
 
-## Read First
+## 建议阅读顺序
 
-If you want the current internal baseline, start with:
+如果你要快速理解当前基线，建议按这个顺序：
 
-1. [`docs/PRODUCT.md`](./docs/PRODUCT.md)
-2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
-3. [`docs/SCHEMA.md`](./docs/SCHEMA.md)
-4. [`docs/DEVELOPMENT-GUIDE.md`](./docs/DEVELOPMENT-GUIDE.md)
-5. [`INDEX.md`](./INDEX.md)
+1. [`INDEX.md`](./INDEX.md)
+2. [`docs/HANDOFF.md`](./docs/HANDOFF.md)
+3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+4. [`docs/HOST-INTEGRATION-DOTA2.md`](./docs/HOST-INTEGRATION-DOTA2.md)
+5. [`docs/TASK-COMPLETION.md`](./docs/TASK-COMPLETION.md)
+6. [`docs/ROADMAP.md`](./docs/ROADMAP.md)
+7. [`docs/QA.md`](./docs/QA.md)
 
-For feasibility and scope, see:
+## 开发
 
-- [`docs/QA.md`](./docs/QA.md)
-
-## Development
-
-Requirements:
+要求：
 
 - Node.js 18+
 
-Install:
+安装：
 
 ```bash
 npm install
 ```
 
-Useful commands:
+常用命令：
 
 ```bash
 npm run check-types
 npm run cli -- --help
 ```
 
-## Current Direction
+## 当前最自然的下一步
 
-The current recommended order of work is:
+当前更适合继续推进的方向是：
 
-1. controlled generators and adapters
-2. write integration under strict ownership boundaries
-3. end-to-end Dota2 host execution
-4. only then broader host expansion
+1. 增加第二个 lua archetype，验证 lua metadata schema 的可扩展性
+2. 在真实宿主中补强 lifecycle E2E：
+   - create
+   - update
+   - regenerate
+   - rollback
+3. 提升效果质量：
+   - particle
+   - sound
+   - 数值反馈
+4. 继续 formalize 多生成器路由的协调边界
 
-Roblox is a more realistic second-host direction than Unity or Unreal at the current stage.
+## 说明
 
-## Notes
-
-- This repository is under active design and implementation.
-- Internal docs are more complete than the public README.
-- The project intentionally prefers controlled planning and code generation over freeform generation.
-
+- 当前内部文档比 README 更完整
+- 历史 `run-t121-*` / `dry-run-t125-*` 脚本保留为调试与证据材料，不应被误解为当前主路径
+- Rune Weaver 的方向始终是：
+  - **受控规划**
+  - **受控生成**
+  - **受控写入**
+  而不是自由生成

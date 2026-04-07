@@ -119,11 +119,57 @@ UI 是代码输出面的一部分，不是独立于主产品的新主线。
 
 - Rune Weaver 只拥有：
   - `game/scripts/src/rune_weaver/**`
+  - `game/scripts/vscripts/rune_weaver/**` (lua 能力文件)
   - `content/panorama/src/rune_weaver/**`
   - 少量明确允许的桥接点
 - Rune Weaver 不负责用户原有业务代码
 - Rune Weaver 不做任意宿主旧文件智能改写
 - `script.tsx` 是 `UI entry root`，不是全部 UI 的唯一位置
+
+## 当前已验证能力（T121/T125/T126）
+
+### 已 Mainlined
+
+| 能力 | 状态 | 来源 |
+|---|---|---|
+| dota_ts_adapter repair | ✅ mainlined (init/refresh) | T097-T099 → T121 |
+| baseline migration (XLSX→DOTAAbilities) | ✅ refresh 主路径 | T121 |
+| lua entry production (contentType: "lua") | ✅ 正常 pipeline | T125 |
+| lua code generation (ability+modifier) | ✅ same-file 输出 | T125 |
+| lua write integration (.lua 文件写出) | ✅ write executor | T125 |
+| 最小真实 Dota2 E2E | ✅ baseline + RW ability 可施放 | T121 |
+
+### 当前边界
+
+| 维度 | 现状 | 说明 |
+|---|---|---|
+| lua pattern 覆盖 | 仅 short_time_buff 类 case | 不是通用 lua ability framework |
+| 视觉/数值效果 | minimal viable | 功能可用，未打磨 |
+| 多技能组合 | 未充分测试 | 单技能 E2E 已通过 |
+| KV generator v1 | 设计完成，待正式接入 | lua 路径先行 |
+| Generator Routing formal | partial (lua route done) | KV/TS 路由需协调 |
+
+## 明天建议优先级 (T127 Handoff)
+
+按自然顺序排列：
+
+| # | 方向 | 为什么优先 | 预计范围 |
+|---|---|---|---|
+| 1 | **第二个 lua archetype** | 当前只有 short_time_buff，需要证明 lua path 可扩展 | 选一个新 archetype（DOT / stun / heal），定义 metadata schema，不一定要完整实现 |
+| 2 | **生命周期 E2E 验证** | create → update → regenerate → rollback 在真实宿主上未跑通 | 跑一遍全流程，确认 workspace 状态一致 |
+| 3 | **效果质量提升** | T121 只是 minimal viable，向 playable 迈进 | particle / sound / value tuning，不做 full polish |
+| 4 | **多生成器路由形式化** | KV + TS + lua 协调机制需明确 | formalize routing layer |
+
+## 历史脚本边界
+
+以下脚本为 **T121/T125 迭代过程中的 repair/debug evidence**，不是当前 mainline：
+
+- `scripts/run-t121-*.ts`（8 个）— T121 E2E 迭代修复脚本
+- `scripts/dry-run-t125-*.ts`（4 个）— T125 lua mainlining 验证脚本
+
+详细说明见 [HANDOFF.md §Historical Script Boundary](/D:/Rune%20Weaver/docs/HANDOFF.md)。
+
+**规则**: 新工作应修改 `adapters/dota2/` 下的正式模块，不应修改这些历史脚本。
 
 ## 文档读取约束
 

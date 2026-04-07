@@ -155,3 +155,65 @@ Possible future extensions after v1 is stable:
 - narrower sub-generators if the single KV generator becomes too broad
 
 These are future upgrades, not current requirements.
+
+---
+
+## Lua Generator Path Status (T125 / T126 Consolidation)
+
+### Position In Pipeline (Actual)
+
+The lua path follows the same routing contract as KV/TS/UI:
+
+`AssemblyPlan -> HostRealizationPlan -> Generator Routing -> Lua Generator -> Write Plan -> Write Executor`
+
+### What Has Been Mainlined (T125)
+
+As of T125, the following are **in the formal mainline path**:
+
+1. **lua entry production**: The assembler produces `contentType: "lua"` write plan entries for patterns that target lua output
+2. **lua code generation**: The generator emits same-file ability + modifier Lua code from routed entries
+3. **lua write integration**: The write executor writes `.lua` files to `game/scripts/vscripts/rune_weaver/abilities/<abilityName>.lua`
+4. **old bypass retired**: The previous KV→lua side-channel has exited the formal execution path
+
+### Current Scope Boundary (Critical)
+
+**The lua generator path is NOT a general-purpose lua ability framework.**
+
+Current verified scope is limited to:
+
+- `dota2.short_time_buff` pattern and structurally similar cases
+- same-file ability + modifier layout
+- buff/debuff style mechanics with duration-based lifecycle
+- basic modifier properties (movespeed bonus, etc.)
+
+### Explicitly Out Of Scope (Current)
+
+- arbitrary ability archetype lua generation
+- complex multi-modifier chains or stacks
+- event-driven custom logic beyond simple OnCreated/OnDestroy
+- passive abilities with complex conditional logic
+- lua-based UI or HUD elements
+- generic lua template system for any Dota2 mechanic
+
+### Relationship To KV Generator
+
+The lua generator path and `Dota2KVGenerator` are **separate generator routes**:
+
+- KV generator: emits `.txt` KV config files (static host-native configuration)
+- Lua generator: emits `.lua` VScript files (runtime behavior)
+
+They may coexist for `kv+ts` hybrid realizations where:
+- KV side handles static ability shell/config
+- Lua side handles runtime behavior
+
+Currently the short_time_buff path uses lua as the primary output medium rather than a strict kv+ts split. This is an implementation convenience for the narrow current scope, not a statement about preferred architecture for all cases.
+
+### Quality Note
+
+Lua-generated abilities from the current pipeline produce **minimal viable** runtime behavior:
+
+- functional casting, mana cost, cooldown
+- modifier creation and duration-based buff
+- visual/numeric effects at minimal quality level
+
+This matches the T121 E2E verification boundary.

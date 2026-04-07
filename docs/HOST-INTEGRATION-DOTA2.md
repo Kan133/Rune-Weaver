@@ -490,8 +490,82 @@ rune-weaver dota2 update --host D:\test1 --feature rw_dash_q --run
 
 Rune Weaver 的第一版 Dota2 宿主接入应被定义为：
 
-`以 x-template 为唯一正式支持宿主，通过初始化 addon_name、受控写入 Rune Weaver 命名空间目录、桥接服务端与 HUD 入口、复用宿主 install/launch 脚本，为用户提供“生成后立即启动 Dota2 Tools 测试”的闭环体验。`
-## 宿主粒度原则
+`以 x-template 为唯一正式支持宿主，通过初始化 addon_name、受控写入 Rune Weaver 命名空间目录、桥接服务端与 HUD 入口、复用宿主 install/launch 脚本，为用户提供"生成后立即启动 Dota2 Tools 测试"的闭环体验。`
+
+---
+
+## 13. T121 E2E 验证状态（截至 T126 consolidation）
+
+### 13.1 已验证的能力
+
+T121 已确认达到**最小真实 Dota2 E2E**：
+
+- baseline 3 技能在宿主中正常出现
+- fresh identity RW ability 能挂到英雄
+- 可施放
+- 有蓝耗和冷却
+- modifier 创建成功
+- buff 出现并持续约 6 秒
+
+### 13.2 当前质量边界
+
+以下内容**已验证但属于 minimal viable 质量**，不应夸大为 polished：
+
+- 视觉效果：minimal
+- 数值效果：functional but minimal
+- 错误处理：basic
+- 多技能组合：未充分测试
+
+### 13.3 dota_ts_adapter 状态
+
+`dota_ts_adapter` repair 已 **mainlined**：
+
+- 通过正式入口接入 `init` / `refresh`
+- 不再是临时 patch 或旁路
+
+### 13.4 baseline migration 状态
+
+baseline migration 已进入正式 refresh 主路径：
+
+- `XLSXContent -> DOTAAbilities` 转换在主路径执行
+- 不再依赖旧的迁移旁路
+
+---
+
+## 14. Lua 写入路径状态（T125 结论）
+
+### 14.1 已 mainlined 的部分
+
+以下能力已进入正式主路径：
+
+- **lua entry production**: normal pipeline 自然产出 `contentType: "lua"` entry
+- **lua code generation**: generator 生成 same-file ability + modifier Lua 代码
+- **lua write integration**: write executor 能实际写出 `.lua` 文件到宿主路径
+- **旧旁路退出**: KV→lua 旁路已退出正式执行路径
+
+### 14.2 当前边界与限制
+
+**重要：当前 lua metadata 仅适用于 `dota2.short_time_buff` 及近似 case**
+
+这不是通用 lua ability framework。具体限制：
+
+- same-file modifier 目前是 short_time_buff 风格主线
+- 不支持任意 ability archetype 的 lua 生成
+- 不支持复杂多 modifier 链式结构
+- 不支持自定义事件驱动逻辑的通用 lua 模板
+- metadata schema 是为 buff 类 mechanic 定制的
+
+### 14.3 Lua 文件写入位置
+
+Lua 能力文件写入路径遵循受控命名空间：
+
+- `game/scripts/vscripts/rune_weaver/abilities/<abilityName>.lua`
+
+此路径在允许写入的服务端命名空间范围内。
+
+---
+
+## 15. 宿主粒度原则
 
 Rune Weaver 在宿主中只负责：
 
