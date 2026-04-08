@@ -153,12 +153,15 @@ UI 是代码输出面的一部分，不是独立于主产品的新主线。
 
 按自然顺序排列：
 
-| # | 方向 | 为什么优先 | 预计范围 |
-|---|---|---|---|
-| 1 | **第二个 lua archetype** | 当前只有 short_time_buff，需要证明 lua path 可扩展 | 选一个新 archetype（DOT / stun / heal），定义 metadata schema，不一定要完整实现 |
-| 2 | **生命周期 E2E 验证** | create → update → regenerate → rollback 在真实宿主上未跑通 | 跑一遍全流程，确认 workspace 状态一致 |
-| 3 | **效果质量提升** | T121 只是 minimal viable，向 playable 迈进 | particle / sound / value tuning，不做 full polish |
-| 4 | **多生成器路由形式化** | KV + TS + lua 协调机制需明确 | formalize routing layer |
+| # | 方向 | 状态 | 为什么优先 | 预计范围 |
+|---|---|---|---|---|
+| 1 | **第二个 lua archetype** | T128-R1 已验证 schema-extensibility（仅 metadata，非新 pattern admission） | 当前只有 short_time_buff，需要证明 lua path 可扩展 | 选一个新 archetype（DOT / stun / heal），定义 metadata schema，不一定要完整实现 |
+| 2 | **生命周期 E2E 验证** | ✅ T132-T134 已完成 | create → update → regenerate → rollback 在真实宿主上已跑通 | 确认 workspace 状态一致，requiresRegenerate 为安全语义 |
+| 3 | **效果质量提升** | 进行中 | T121 只是 minimal viable，向 playable 迈进 | particle / sound / value tuning，不做 full polish |
+| 4 | **多生成器路由形式化** | 待推进 | KV + TS + lua 协调机制需明确 | formalize routing layer |
+| 5 | **CLI remediation 阶段性收口** | T139-T141 已完成主要抽取，T142 reviewed/no-op | artifact/validation/workspace extraction done，maintenance flow reviewed | 当前 phase 收口，未来可重新评估 |
+
+> **注意**: 生命周期虽已贯通到 Phase 1 baseline，但并非 fully polished。update 可能返回 `requiresRegenerate`（安全 gate，非 bug）。
 
 ## 历史脚本边界
 

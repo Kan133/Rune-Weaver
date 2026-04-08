@@ -2,9 +2,13 @@
 
 ## Purpose
 
-This document describes the current Rune Weaver architecture baseline.
+This document describes the **current execution architecture baseline** of Rune Weaver.
 
-It is intended to reflect the real mainline architecture used by the project, not an older simplified pipeline.
+It is intended to reflect the real mainline execution pipeline used by the project, especially the Phase 1-proven chain, not the full future product architecture.
+
+For the higher-level final product/system architecture, see:
+
+- [SYSTEM-ARCHITECTURE-ZH.md](D:/Rune%20Weaver/docs/SYSTEM-ARCHITECTURE-ZH.md)
 
 ## Mainline Pipeline
 
@@ -86,6 +90,7 @@ For Dota2, this is where the system decides whether a unit should be realized as
 - `ts`
 - `ui`
 - `kv+ts`
+- `kv+lua`
 - `shared-ts`
 - `bridge-only`
 
@@ -93,6 +98,12 @@ This layer must remain distinct from:
 
 - Pattern Resolution
 - concrete generators
+
+Important:
+
+- current combination-enum realization types are transitional
+- future richer composite features may require explicit output-list realization rather than ever more enum combinations
+- see `COMPOSITE-FEATURE-ARCHITECTURE.md`
 
 ## 4. Generation And Host Execution
 
@@ -108,6 +119,10 @@ It includes:
 - Dota2KVGenerator (v1 scope defined, KV config generation route established)
 - Write Plan
 - Write Executor
+
+For Dota2, `dota2-ts` and `dota2-lua` should be understood as different authoring paths into the same Lua runtime, not as two independent runtime languages.
+
+See `COMPOSITE-FEATURE-ARCHITECTURE.md` for the preferred boundary.
 
 The expected sequence is:
 

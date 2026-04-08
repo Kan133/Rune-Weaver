@@ -9,6 +9,7 @@ import {
   Blueprint,
   AssemblyPlan,
   AssemblyModule,
+  HostRealizationOutput,
   ValidationIssue,
   SelectedPattern,
   WriteTarget,
@@ -339,11 +340,15 @@ export class AssemblyPlanBuilder {
       blueprintId: blueprint.id,
       selectedPatterns,
       modules: this.buildAssemblyModules(blueprint, resolutionResult),
+      // T154: Propagate connections from Blueprint for composite relationship hints
+      connections: blueprint.connections || [],
       writeTargets,
       bridgeUpdates,
       validations,
       readyForHostWrite: finalReadyForHostWrite,
       hostWriteReadiness,
+      // T138-R1: Pass through parameters from Blueprint
+      parameters: blueprint.parameters,
     };
   }
 
@@ -360,20 +365,34 @@ export class AssemblyPlanBuilder {
     // 如果 Blueprint 有模块，使用 Blueprint 模块结构
     if (blueprint.modules && blueprint.modules.length > 0) {
       for (const bpModule of blueprint.modules) {
-        // 收集该 Blueprint 模块关联的 patterns
-        const modulePatterns = resolutionResult.patterns
-          .filter((p) => {
-            // 基于 pattern category 或参数推断 module 归属
-            // 这里用简单启发式：trigger 模块关联 input.key_binding，effect 模块关联 effect.* 等
-            if (bpModule.category === "trigger" && p.patternId === "input.key_binding") return true;
-            if (bpModule.category === "effect" && p.patternId.startsWith("effect.")) return true;
-            if (bpModule.category === "resource" && p.patternId.startsWith("resource.")) return true;
-            if (bpModule.category === "data" && p.patternId.startsWith("data.")) return true;
-            if (bpModule.category === "rule" && p.patternId.startsWith("rule.")) return true;
-            if (bpModule.category === "ui" && p.patternId.startsWith("ui.")) return true;
-            return false;
-          })
-          .map((p) => p.patternId);
+        // T151: Collect patterns for this module
+        // Priority: 1) explicit patternIds[] from Blueprint, 2) category-based inference
+        let modulePatterns: string[];
+
+        if (bpModule.patternIds && bpModule.patternIds.length > 0) {
+          // T151: Use explicit patternIds[] if provided
+          const explicitPatternIds = new Set(bpModule.patternIds);
+          modulePatterns = resolutionResult.patterns
+            .filter(p => explicitPatternIds.has(p.patternId))
+            .map(p => p.patternId);
+        } else {
+          // Fall back to category-based inference
+          modulePatterns = resolutionResult.patterns
+            .filter((p) => {
+              // 基于 pattern category 或参数推断 module 归属
+              // 这里用简单启发式：trigger 模块关联 input.key_binding，effect 模块关联 effect.* 等
+              if (bpModule.category === "trigger" && p.patternId === "input.key_binding") return true;
+              if (bpModule.category === "effect" && p.patternId.startsWith("effect.")) return true;
+              // T150: Add dota2.* patterns - they are also effect-like gameplay patterns
+              if (bpModule.category === "effect" && p.patternId.startsWith("dota2.")) return true;
+              if (bpModule.category === "resource" && p.patternId.startsWith("resource.")) return true;
+              if (bpModule.category === "data" && p.patternId.startsWith("data.")) return true;
+              if (bpModule.category === "rule" && p.patternId.startsWith("rule.")) return true;
+              if (bpModule.category === "ui" && p.patternId.startsWith("ui.")) return true;
+              return false;
+            })
+            .map((p) => p.patternId);
+        }
 
         if (modulePatterns.length === 0) continue;
 
@@ -390,7 +409,10 @@ export class AssemblyPlanBuilder {
 
         // 推断 realizationHints
         const realizationHints: AssemblyModule["realizationHints"] = {};
-        if (bpModule.category === "effect" || modulePatterns.includes("effect.dash")) {
+        // T150: effect category includes both effect.* and dota2.* patterns
+        const isEffectPattern = modulePatterns.some(p => p.startsWith("effect.")) || 
+                               modulePatterns.some(p => p.startsWith("dota2."));
+        if (bpModule.category === "effect" || isEffectPattern) {
           realizationHints.kvCapable = true;
           realizationHints.runtimeHeavy = true;
         }
@@ -401,11 +423,16 @@ export class AssemblyPlanBuilder {
           realizationHints.uiRequired = true;
         }
 
+        // T149: Generate explicit outputs[] based on pattern analysis
+        const outputs = generateAssemblyOutputs(modulePatterns, outputKinds);
+
         modules.push({
           id: bpModule.id,
           role,
           selectedPatterns: modulePatterns,
           outputKinds,
+          outputs,
+          parameters: bpModule.parameters,
           realizationHints,
         });
       }
@@ -423,16 +450,21 @@ export class AssemblyPlanBuilder {
 
       // T112-R1: Fallback modules have lower confidence and explicit isFallback marker
       if (gameplayPatterns.length > 0) {
+        const outputKinds: ("server" | "shared" | "ui" | "bridge")[] = ["server"];
+        // T150: Check for dota2.* patterns which should also be kvCapable
+        const hasDota2Patterns = gameplayPatterns.some(p => p.startsWith("dota2."));
         modules.push({
           id: "gameplay-core",
           role: "gameplay-core",
           selectedPatterns: gameplayPatterns,
-          outputKinds: ["server"],
+          outputKinds,
+          outputs: generateAssemblyOutputs(gameplayPatterns, outputKinds),
           realizationHints: {
-            kvCapable: gameplayPatterns.some((p) => p.startsWith("effect.")),
+            // T150: dota2.* patterns are also kvCapable
+            kvCapable: gameplayPatterns.some((p) => p.startsWith("effect.")) || hasDota2Patterns,
             runtimeHeavy: gameplayPatterns.some(
               (p) => p === "input.key_binding" || p === "rule.selection_flow"
-            ),
+            ) || hasDota2Patterns,
             // T112-R1: Mark as fallback - this is not first-class realization
             isFallback: true,
           },
@@ -440,11 +472,13 @@ export class AssemblyPlanBuilder {
       }
 
       if (uiPatterns.length > 0) {
+        const outputKinds: ("server" | "shared" | "ui" | "bridge")[] = ["ui"];
         modules.push({
           id: "ui-surface",
           role: "ui-surface",
           selectedPatterns: uiPatterns,
-          outputKinds: ["ui"],
+          outputKinds,
+          outputs: generateAssemblyOutputs(uiPatterns, outputKinds),
           realizationHints: {
             uiRequired: true,
             // T112-R1: Mark as fallback
@@ -454,11 +488,13 @@ export class AssemblyPlanBuilder {
       }
 
       if (sharedPatterns.length > 0) {
+        const outputKinds: ("server" | "shared" | "ui" | "bridge")[] = ["shared"];
         modules.push({
           id: "shared-support",
           role: "shared-support",
           selectedPatterns: sharedPatterns,
-          outputKinds: ["shared"],
+          outputKinds,
+          outputs: generateAssemblyOutputs(sharedPatterns, outputKinds),
           // T112-R1: Mark as fallback
           realizationHints: { isFallback: true },
         });
@@ -709,11 +745,159 @@ export class AssemblyPlanBuilder {
   }
 
   /**
-   * 判断是否为配置 Pattern
-   */
+ * 判断是否为配置 Pattern
+ */
   private isConfigPattern(patternId: string): boolean {
     return patternId.includes("config") || patternId.includes("kv");
   }
+}
+
+// ============================================================================
+// T149: Assembly Output Generation
+// ============================================================================
+
+/**
+ * T149: Generate explicit outputs[] for AssemblyModule based on pattern analysis
+ * This enables finer-grained output expression while maintaining outputKinds compatibility
+ */
+function generateAssemblyOutputs(
+  modulePatterns: string[],
+  outputKinds: ("server" | "shared" | "ui" | "bridge")[]
+): HostRealizationOutput[] {
+  const outputs: HostRealizationOutput[] = [];
+
+  // Process each pattern to determine outputs
+  for (const pattern of modulePatterns) {
+    // Dota2-specific patterns map to specific outputs
+    if (pattern === "dota2.short_time_buff") {
+      // kv+lua: both lua ability and kv config
+      if (!outputs.some(o => o.target === "lua_ability")) {
+        outputs.push({
+          kind: "lua",
+          target: "lua_ability",
+          rationale: ["Dota2 short_time_buff pattern maps to lua ability output"],
+        });
+      }
+      if (!outputs.some(o => o.target === "ability_kv")) {
+        outputs.push({
+          kind: "kv",
+          target: "ability_kv",
+          rationale: ["Dota2 short_time_buff pattern requires kv config"],
+        });
+      }
+      continue;
+    }
+
+    // UI patterns
+    if (pattern.startsWith("ui.")) {
+      if (!outputs.some(o => o.target === "panorama_ui")) {
+        outputs.push({
+          kind: "ui",
+          target: "panorama_ui",
+          rationale: [`UI pattern ${pattern} maps to panorama UI output`],
+        });
+      }
+      continue;
+    }
+
+    // Data/Shared patterns
+    if (pattern.startsWith("data.")) {
+      if (!outputs.some(o => o.target === "shared_data")) {
+        outputs.push({
+          kind: "ts",
+          target: "shared_data",
+          rationale: [`Data pattern ${pattern} maps to shared data output`],
+        });
+      }
+      continue;
+    }
+
+    // Rule patterns - typically server-side
+    if (pattern.startsWith("rule.")) {
+      if (!outputs.some(o => o.target === "server_ts")) {
+        outputs.push({
+          kind: "ts",
+          target: "server_ts",
+          rationale: [`Rule pattern ${pattern} maps to server TS output`],
+        });
+      }
+      continue;
+    }
+
+    // Input patterns - typically server-side
+    if (pattern.startsWith("input.")) {
+      if (!outputs.some(o => o.target === "server_input")) {
+        outputs.push({
+          kind: "ts",
+          target: "server_input",
+          rationale: [`Input pattern ${pattern} maps to server input handling`],
+        });
+      }
+      continue;
+    }
+
+    // Effect patterns - could be kv+ts or kv depending on specifics
+    if (pattern.startsWith("effect.")) {
+      // Check for kv-capable effect patterns
+      if (pattern === "effect.dash" || pattern === "effect.modifier_applier") {
+        if (!outputs.some(o => o.target === "ability_kv")) {
+          outputs.push({
+            kind: "kv",
+            target: "ability_kv",
+            rationale: [`Effect pattern ${pattern} maps to ability KV`],
+          });
+        }
+        if (!outputs.some(o => o.target === "server_ts")) {
+          outputs.push({
+            kind: "ts",
+            target: "server_ts",
+            rationale: [`Effect pattern ${pattern} maps to server TS`],
+          });
+        }
+      }
+      continue;
+    }
+
+    // Resource patterns
+    if (pattern.startsWith("resource.")) {
+      if (!outputs.some(o => o.target === "server_resource")) {
+        outputs.push({
+          kind: "ts",
+          target: "server_resource",
+          rationale: [`Resource pattern ${pattern} maps to server resource`],
+        });
+      }
+      continue;
+    }
+  }
+
+  // If no outputs were generated from patterns, fall back to outputKinds
+  if (outputs.length === 0) {
+    for (const kind of outputKinds) {
+      let target: string;
+      switch (kind) {
+        case "ui":
+          target = "panorama_ui";
+          break;
+        case "shared":
+          target = "shared_data";
+          break;
+        case "bridge":
+          target = "bridge_update";
+          break;
+        case "server":
+        default:
+          target = "server_output";
+      }
+      outputs.push({
+        kind: kind === "shared" ? "ts" : kind === "bridge" ? "bridge" : kind as any,
+        target,
+        rationale: [`Fallback from outputKinds: ${kind}`],
+      });
+    }
+  }
+
+  return outputs;
 }
 
 // ============================================================================

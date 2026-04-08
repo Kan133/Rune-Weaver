@@ -10,6 +10,7 @@ Its purpose is to guide the Host Realization layer in choosing whether a unit sh
 - `ts`
 - `ui`
 - `lua`
+- `kv+lua`
 - `kv+ts`
 - `shared-ts`
 - `bridge-only`
@@ -175,6 +176,21 @@ This is distinct from `ts` realization:
 - `lua`: targets direct `.lua` VScript file output
 
 The lua route was established in T125 as a pragmatic path for narrow-scope ability generation. It should not be assumed available for arbitrary mechanic types until explicit pattern and metadata support is added.
+
+Authoring-path boundary:
+
+- `ts`: TS authoring path -> TypeScriptToLua/toolchain -> Lua runtime
+- `lua`: direct `.lua` authoring path -> Lua runtime
+
+For lua-backed ability cases that still need a static shell, the current transitional realization shape is `kv+lua`.
+
+This should be understood as:
+
+- one realization unit
+- two routed outputs
+- direct Lua runtime side plus KV static-shell side
+
+See `COMPOSITE-FEATURE-ARCHITECTURE.md` for the longer-term direction beyond enum-combination realization types.
 
 ## What This Policy Must Not Do
 

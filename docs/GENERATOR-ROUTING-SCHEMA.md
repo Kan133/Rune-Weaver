@@ -46,9 +46,10 @@ interface GeneratorRoutingPlan {
 interface GeneratorRoute {
   id: string;
   sourceUnitId: string;
-  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "bridge-support";
-  routeKind: "kv" | "ts" | "ui" | "bridge";
+  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
+  routeKind: "kv" | "ts" | "ui" | "lua" | "bridge";
   hostTarget: string;
+  sourcePatternIds: string[];
   rationale: string[];
   blockers?: string[];
 }
@@ -101,6 +102,7 @@ Current expected values:
 - `dota2-kv`
 - `dota2-ts`
 - `dota2-ui`
+- `dota2-lua`
 - `bridge-support`
 
 ### `routeKind`
@@ -112,6 +114,7 @@ Current expected values:
 - `kv`
 - `ts`
 - `ui`
+- `lua`
 - `bridge`
 
 ### `hostTarget`
@@ -145,6 +148,8 @@ The current expected first-pass mapping is:
 | `kv` | one `dota2-kv` route |
 | `ts` | one `dota2-ts` route |
 | `ui` | one `dota2-ui` route |
+| `lua` | one `dota2-lua` route |
+| `kv+lua` | at least one `dota2-kv` route and one `dota2-lua` route |
 | `shared-ts` | one `dota2-ts` route |
 | `bridge-only` | one `bridge-support` route |
 | `kv+ts` | at least one `dota2-kv` route and one `dota2-ts` route |
@@ -222,3 +227,11 @@ These may be refined later:
 - whether routes should carry stronger provenance
 - how aggregated generator output should be formally represented
 - whether bridge support should eventually become a thinner non-generator write phase
+
+Current architectural direction:
+
+- keep current routed combinations explicit for the working narrow baseline
+- avoid turning realization evolution into endless enum-combination growth
+- move toward explicit multi-output realization when richer composite features justify it
+
+See `COMPOSITE-FEATURE-ARCHITECTURE.md`.

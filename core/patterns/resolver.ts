@@ -71,6 +71,8 @@ const AVAILABLE_PATTERNS = new Set([
   "ui.selection_modal",
   "ui.key_hint",
   "ui.resource_bar",
+  // Dota2-specific patterns
+  "dota2.short_time_buff",
 ]);
 
 /**
@@ -175,6 +177,17 @@ export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
   }
   unresolved.push(...mechanicResult.unresolved);
 
+  // T156: Deduplication - prefer specialized dota2.* patterns over generic effect.modifier_applier
+  // If both exist, remove the generic one
+  const hasDota2Effect = patterns.some(p => p.patternId.startsWith("dota2."));
+  if (hasDota2Effect) {
+    const genericIdx = patterns.findIndex(p => p.patternId === "effect.modifier_applier");
+    if (genericIdx !== -1) {
+      patterns.splice(genericIdx, 1);
+      patternIds.delete("effect.modifier_applier");
+    }
+  }
+
   // 检查是否为空
   if (patterns.length === 0) {
     issues.push({
@@ -197,7 +210,7 @@ export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
 
   // 检查关键 pattern
   const hasTrigger = patterns.some((p) => p.patternId.startsWith("input."));
-  const hasEffect = patterns.some((p) => p.patternId.startsWith("effect."));
+  const hasEffect = patterns.some((p) => p.patternId.startsWith("effect.") || p.patternId.startsWith("dota2."));
 
   if (!hasTrigger && !hasEffect) {
     issues.push({
@@ -301,6 +314,38 @@ function resolveEffectPattern(module: BlueprintModule): {
     return {
       pattern: {
         patternId: "effect.dash",
+        role: module.role,
+        parameters: module.parameters,
+        priority: "required",
+        source: "category",
+      },
+      unresolved: null,
+    };
+  }
+
+  // 1.5. 短时增益/移速增益/BUFF 语义 -> dota2.short_time_buff
+  // 在通用 modifier_applier 之前检测，因为 "buff" 关键词也会被 modifier 检测捕获
+  const buffKeywords = [
+    "增益", "buff", "加速", "移速", "movespeed", "speed", "speed bonus", 
+    "移动速度", "速度提升", "短期", "持续", "duration", "秒", "6秒", "5秒",
+    "正面效果", "positive", "增强", "强化", "正向"
+  ];
+  const isBuffRelated = buffKeywords.some(k => contextLower.includes(k));
+
+  // T146-R1: 负面/减益关键词 - 如果存在这些关键词，即使有 buff 关键词也应该排除
+  // 因为 short_time_buff 是正向 buff，不是 debuff/dot
+  const debuffNegativeKeywords = [
+    "减益", "debuff", "负面", "负面效果", "对敌人", "敌人", "enemy", 
+    "伤害", "damage", "dot", "持续伤害", "中毒", "冰冻", "眩晕", 
+    "stun", "沉默", "silence", "脆弱", "weak", "减速", "slow"
+  ];
+  const hasDebuffNegativeSignal = debuffNegativeKeywords.some(k => contextLower.includes(k));
+
+  // 只有正向 buff 信号且没有负面减益信号时才命中 short_time_buff
+  if (isBuffRelated && !hasDebuffNegativeSignal) {
+    return {
+      pattern: {
+        patternId: "dota2.short_time_buff",
         role: module.role,
         parameters: module.parameters,
         priority: "required",
@@ -421,6 +466,12 @@ function extractParametersFromBlueprint(
     if (dataModule?.parameters) {
       Object.assign(params, dataModule.parameters);
     }
+  }
+
+  // T138-R1: If no parameters found from modules, use blueprint-level parameters
+  // This provides a fallback for ability parameters like cooldown, mana, range
+  if (Object.keys(params).length === 0 && blueprint.parameters) {
+    Object.assign(params, blueprint.parameters);
   }
 
   return params;

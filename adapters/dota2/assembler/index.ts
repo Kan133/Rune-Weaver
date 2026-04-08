@@ -14,7 +14,7 @@ import { getPatternMeta } from "../patterns";
  * T112-R2: Generator family hint for transitional routing
  * Indicates which generator family should handle this entry
  */
-export type GeneratorFamilyHint = "dota2-ts" | "dota2-ui" | "dota2-kv" | "bridge-support";
+export type GeneratorFamilyHint = "dota2-ts" | "dota2-ui" | "dota2-kv" | "dota2-lua" | "bridge-support";
 
 /**
  * 写入操作类型
@@ -47,6 +47,8 @@ export interface WritePlanEntry {
   deferred?: boolean;
   /** T112-R2: Reason for deferral if applicable */
   deferredReason?: string;
+  /** T172-R1: Parameters from source module for case-specific fill */
+  parameters?: Record<string, unknown>;
   /**
    * T125-R1: Optional metadata for generator-specific config.
    * For lua contentType, supports:
@@ -175,6 +177,9 @@ export function createWritePlan(
     ? createRealizationContext(hostRealizationPlan)
     : undefined;
 
+  // T138-R1: Extract ability parameters from AssemblyPlan for KV generation
+  const abilityParams = plan.parameters || {};
+
   for (const binding of plan.selectedPatterns) {
     const patternMeta = getPatternMeta(binding.patternId);
     if (!patternMeta) continue;
@@ -184,7 +189,8 @@ export function createWritePlan(
       patternMeta,
       generatedFeatureId,
       routeContext,
-      realizationContext
+      realizationContext,
+      abilityParams
     );
     entries.push(...patternEntries);
   }
@@ -244,10 +250,13 @@ export interface RouteContext {
 export interface RouteContextUnit {
   id: string;
   sourceUnitId: string;
-  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "bridge-support";
-  routeKind: "kv" | "ts" | "ui" | "bridge";
+  // T143: Added dota2-lua for formal lua routing
+  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
+  routeKind: "kv" | "ts" | "ui" | "lua" | "bridge";
   hostTarget: string;
   sourcePatternIds: string[];
+  /** T172-R1: Parameters from source module for case-specific fill */
+  parameters?: Record<string, unknown>;
   blocked: boolean;
 }
 
@@ -278,6 +287,7 @@ function createRouteContext(
       routeKind: r.routeKind,
       hostTarget: r.hostTarget,
       sourcePatternIds: unitToPatterns.get(r.sourceUnitId) || [],
+      parameters: r.parameters,
       blocked: !!(r.blockers && r.blockers.length > 0),
     })),
   };
@@ -341,14 +351,38 @@ function findMatchingRealizationUnit(
 
 /**
  * T115: Find the route that matches this binding's pattern
- * Uses real sourcePatternIds from RouteContextUnit for accurate matching
+ * T143-R2: Now uses outputType for multi-output patterns (kv+lua, kv+ts)
+ * to match the correct route side instead of first pattern match
  */
 function findMatchingRoute(
   binding: SelectedPattern,
-  routeContext: RouteContext
+  routeContext: RouteContext,
+  outputType?: string
 ): RouteContextUnit | undefined {
-  // T115-R1: Now uses real sourcePatternIds from routeContext.routes
-  // First try exact pattern match
+  // T143-R2: First try pattern + outputType match for multi-output patterns
+  if (outputType) {
+    const outputTypeToRouteKind: Record<string, string> = {
+      "typescript": "ts",
+      "kv": "kv",
+      "lua": "lua",
+      "ui": "ui",
+      "tsx": "ui",
+      "less": "ui",
+      "json": "kv",
+    };
+    const targetRouteKind = outputTypeToRouteKind[outputType];
+    
+    if (targetRouteKind) {
+      const matchByOutputType = routeContext.routes.find(r =>
+        r.sourcePatternIds.includes(binding.patternId) && r.routeKind === targetRouteKind
+      );
+      if (matchByOutputType) {
+        return matchByOutputType;
+      }
+    }
+  }
+
+  // T115-R1: Fallback to exact pattern match
   const exactMatch = routeContext.routes.find(r =>
     r.sourcePatternIds.includes(binding.patternId)
   );
@@ -391,6 +425,23 @@ function determineGeneratorFamilyHint(
     return "dota2-ui";
   }
 
+  // T143: If realization says lua, use dota2-lua
+  if (unit.realizationType === "lua") {
+    return "dota2-lua";
+  }
+
+  // T143-R1: If realization says kv+lua, determine based on pattern outputTypes
+  if (unit.realizationType === "kv+lua") {
+    // If pattern outputs lua type, it's lua side
+    if (patternMeta?.outputTypes.includes("lua")) {
+      return "dota2-lua";
+    }
+    // If pattern outputs KV type, it's KV side
+    if (patternMeta?.outputTypes.includes("kv")) {
+      return "dota2-kv";
+    }
+  }
+
   // If realization says kv or kv+ts
   if (unit.realizationType === "kv" || unit.realizationType === "kv+ts") {
     // If pattern outputs KV type, it should go to dota2-kv
@@ -400,6 +451,10 @@ function determineGeneratorFamilyHint(
     // If pattern outputs TS, it's TS side
     if (patternMeta?.outputTypes.includes("typescript")) {
       return "dota2-ts";
+    }
+    // T143: If pattern outputs lua type, it should go to dota2-lua
+    if (patternMeta?.outputTypes.includes("lua")) {
+      return "dota2-lua";
     }
   }
 
@@ -453,37 +508,18 @@ function generateEntriesForPattern(
   patternMeta: ReturnType<typeof getPatternMeta>,
   featureId: string,
   routeContext?: RouteContext,
-  realizationContext?: RealizationContext
+  realizationContext?: RealizationContext,
+  abilityParams?: Record<string, unknown>
 ): WritePlanEntry[] {
   const entries: WritePlanEntry[] = [];
 
   if (!patternMeta) return entries;
 
-  // T115: Find matching route for this binding
-  // Route context is primary, realization context is fallback
-  const matchingRoute = routeContext
-    ? findMatchingRoute(binding, routeContext)
-    : undefined;
-
   // T112-R2: Find matching realization unit for this binding (fallback if no route context)
-  const matchingUnit = !matchingRoute
-    ? findMatchingRealizationUnit(binding, realizationContext)
-    : undefined;
-
-  // T115: Use route information if available
-  // If route is blocked, mark entry as deferred
-  const isBlocked = matchingRoute?.blocked || false;
-  const routeFamilyHint = matchingRoute?.generatorFamily;
-
-  // T112-R2: Determine if this pattern's outputs should be deferred based on realization
-  // This is the key decision: if realization expects KV but we can't provide it, defer
-  const kvDeferral = shouldDeferKVRelated(
-    matchingUnit,
-    patternMeta.outputTypes[0] || "typescript"
-  );
+  // Note: For multi-output patterns, we find route inside the loop per outputType
+  const matchingUnit = findMatchingRealizationUnit(binding, realizationContext);
 
   // 确定基础路径（使用命名空间）
-  // 仅使用 role 会让同一 case 内多个 effect/data/rule 模块落到同一路径。
   const roleSegment = sanitizeSegment(binding.role.replace(/^mod_/, ""));
   const patternSegment = sanitizeSegment(binding.patternId.replace(/\./g, "_"));
   const baseName =
@@ -492,25 +528,33 @@ function generateEntriesForPattern(
       : `${roleSegment}_${patternSegment}`;
   const targetId = `${featureId}_${baseName}`;
 
-  // T115: Use route family hint as primary if available, fallback to realization-based hint
-  const generatorFamilyHint = routeFamilyHint || determineGeneratorFamilyHint(matchingUnit, patternMeta);
-
   // 为每种输出类型生成条目
   for (const outputType of patternMeta.outputTypes) {
+    // T143-R2: Find matching route per outputType for multi-output patterns
+    const matchingRoute = routeContext
+      ? findMatchingRoute(binding, routeContext, outputType)
+      : undefined;
+
+    const isBlocked = matchingRoute?.blocked || false;
+    const routeFamilyHint = matchingRoute?.generatorFamily;
+
+    // T112-R2: Determine if this specific output should be deferred
+    const outputDeferral = shouldDeferKVRelated(matchingUnit, outputType);
+
+    // T115: If route is blocked, that takes precedence
+    const entryDeferred = isBlocked || outputDeferral.deferred;
+    const entryDeferredReason = isBlocked
+      ? `Route ${matchingRoute?.id} is blocked`
+      : outputDeferral.reason;
+
     const targetPath = getNamespacePath(
       patternMeta.hostTarget,
       targetId,
       outputType
     );
 
-    // T112-R2: Check if this specific output should be deferred
-    const outputDeferral = shouldDeferKVRelated(matchingUnit, outputType);
-
-    // T115: If route is blocked, that takes precedence
-    const entryDeferred = isBlocked || outputDeferral.deferred || kvDeferral.deferred;
-    const entryDeferredReason = isBlocked
-      ? `Route ${matchingRoute?.id} is blocked`
-      : outputDeferral.reason || kvDeferral.reason;
+    // T115: Use route family hint as primary if available, fallback to realization-based hint
+    const generatorFamilyHint = routeFamilyHint || determineGeneratorFamilyHint(matchingUnit, patternMeta);
 
     const entry: WritePlanEntry = {
       operation: "create",
@@ -525,36 +569,86 @@ function generateEntriesForPattern(
       // T115: Mark as deferred if route blocked or KV side not implementable
       deferred: entryDeferred,
       deferredReason: entryDeferredReason,
+      // T172-R1: Attach parameters from route for case-specific fill
+      parameters: matchingRoute?.parameters,
     };
 
+    // T138-R1: Attach ability parameters to KV entries for proper generation
+    if (outputType === "kv" && abilityParams && Object.keys(abilityParams).length > 0) {
+      entry.metadata = abilityParams;
+    }
+
+    // T125-R3: Fill explicit metadata for lua entries
+    // T128: Extended with archetype discriminator ("buff" | "dot")
     // T125-R3: Fill explicit metadata for lua entries
     // T125-R4: SCOPE: This metadata is specialized for dota2.short_time_buff and
     // closely related ability-buff patterns that produce movespeed/buff modifiers.
     // It hardcodes: frost particle, MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT,
     // and a default 80 movespeed bonus. It does NOT generalize to arbitrary
-    // ability types. For other lua patterns, metadata must be extended explicitly.
+    // ability types.
+    // T128: archetype discriminator added — when binding.parameters.archetype is
+    // explicitly set to "dot", the assembler produces DOT-specific metadata
+    // (OnIntervalThink, dotDamage, dotInterval). This discriminator lives in
+    // binding.parameters, NOT in patternId. Pattern catalog is NOT modified.
     if (outputType === "lua") {
       const abilityName = (binding.parameters?.abilityName as string)
         || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
       const modifierName = (binding.parameters?.modifierName as string)
         || `modifier_${abilityName}`;
-      entry.metadata = {
-        abilityName,
-        modifierConfig: {
-          name: modifierName,
-          isHidden: false,
-          isDebuff: false,
-          isPurgable: true,
-          isBuff: true,
-          statusEffectName: (binding.parameters?.statusEffectParticle as string) || "particles/status_fx/status_effect_frost.vpcf",
-          declareFunctions: "MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT",
-          modifierFunctions: {
-            GetModifierMoveSpeedBonus_Constant:
-              "return self:GetAbility():GetSpecialValueFor('movespeed_bonus') or " +
-              String((binding.parameters?.movespeedBonus as number) || 80),
+      const archetype = (binding.parameters?.archetype as string) || "buff";
+
+      // T128: When binding.parameters.archetype is explicitly "dot", the DOT branch fires.
+      // This is discriminator-from-parameters, NOT from patternId.
+      // No new pattern added; pattern catalog is unchanged.
+      if (archetype === "dot") {
+        const dotDamage = (binding.parameters?.dotDamage as number) || 50;
+        const dotInterval = (binding.parameters?.dotInterval as number) || 1.0;
+        const movespeedSlow = (binding.parameters?.movespeedSlow as number) || 50;
+        entry.metadata = {
+          abilityName,
+          archetype: "dot",
+          modifierConfig: {
+            name: modifierName,
+            archetype: "dot",
+            isHidden: false,
+            isDebuff: true,
+            isPurgable: true,
+            isBuff: false,
+            statusEffectName: (binding.parameters?.statusEffectParticle as string)
+              || "particles/status_fx/status_effect_poison.vpcf",
+            declareFunctions: "MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT",
+            modifierFunctions: {
+              GetModifierMoveSpeedBonus_Constant:
+                "return -(self:GetAbility():GetSpecialValueFor('movespeed_slow') or " +
+                String(movespeedSlow),
+            },
+            dotDamage,
+            dotInterval,
           },
-        },
-      };
+        };
+      } else {
+        // default: "buff" archetype — identical to T125-R3 baseline
+        entry.metadata = {
+          abilityName,
+          archetype: "buff",
+          modifierConfig: {
+            name: modifierName,
+            archetype: "buff",
+            isHidden: false,
+            isDebuff: false,
+            isPurgable: true,
+            isBuff: true,
+            statusEffectName: (binding.parameters?.statusEffectParticle as string)
+              || "particles/status_fx/status_effect_frost.vpcf",
+            declareFunctions: "MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT",
+            modifierFunctions: {
+              GetModifierMoveSpeedBonus_Constant:
+                "return self:GetAbility():GetSpecialValueFor('movespeed_bonus') or " +
+                String((binding.parameters?.movespeedBonus as number) || 80),
+            },
+          },
+        };
+      }
     }
 
     // 检查是否需要额外文件

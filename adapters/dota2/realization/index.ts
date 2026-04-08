@@ -12,6 +12,7 @@ import {
   AssemblyModule,
   HostRealizationPlan,
   HostRealizationUnit,
+  HostRealizationOutput,
   RealizationType,
   RealizationRole,
 } from "../../../core/schema/types";
@@ -33,6 +34,28 @@ interface Dota2RealizationRule {
  * Default rules following docs/DOTA2-HOST-REALIZATION-POLICY.md mapping table
  */
 const DOTA2_REALIZATION_RULES: Dota2RealizationRule[] = [
+  // T143-R1: Lua-backed ability patterns -> kv+lua (produces both lua runtime and kv static shell)
+  {
+    patterns: ["dota2.short_time_buff"],
+    role: "gameplay-core",
+    realizationType: "kv+lua",
+    confidence: "high",
+    hostTargets: ["lua_ability", "ability_kv"],
+    rationale: [
+      "ability_lua system uses Lua for ability + same-file modifier",
+      "KV provides static ability definition shell",
+      "Produces two routed outputs: lua runtime + kv config",
+    ],
+  },
+  // T143: Keep standalone lua for pure lua cases (no kv output needed)
+  {
+    patterns: [],
+    role: "gameplay-core",
+    realizationType: "lua",
+    confidence: "low",
+    hostTargets: ["lua_ability"],
+    rationale: ["pure lua output without kv static shell"],
+  },
   // UI patterns -> ui
   {
     patterns: ["ui.selection_modal"],
@@ -224,6 +247,12 @@ function getHostTargets(realizationType: RealizationType): string[] {
       return ["server_ts"];
     case "ui":
       return ["panorama_tsx", "panorama_less"];
+    // T143: Added lua host target
+    case "lua":
+      return ["lua_ability"];
+    // T143-R1: Added kv+lua host targets
+    case "kv+lua":
+      return ["lua_ability", "ability_kv"];
     case "kv+ts":
       return ["ability_kv", "server_ts"];
     case "shared-ts":
@@ -233,6 +262,46 @@ function getHostTargets(realizationType: RealizationType): string[] {
     default:
       return ["server_ts"];
   }
+}
+
+/**
+ * T148: Generate explicit outputs[] from realizationType and hostTargets
+ * This maintains backward compatibility while enabling the new outputs[] model
+ */
+function generateOutputs(
+  realizationType: RealizationType,
+  hostTargets: string[],
+  rationale: string[]
+): HostRealizationOutput[] {
+  const outputs: HostRealizationOutput[] = [];
+
+  // Map hostTargets to output kinds
+  for (const target of hostTargets) {
+    let kind: HostRealizationOutput["kind"];
+
+    if (target.startsWith("lua_")) {
+      kind = "lua";
+    } else if (target.startsWith("ability_kv") || target.endsWith("_kv")) {
+      kind = "kv";
+    } else if (target.startsWith("server_ts") || target.startsWith("shared_ts")) {
+      kind = "ts";
+    } else if (target.startsWith("panorama_")) {
+      kind = "ui";
+    } else if (target.startsWith("bridge_")) {
+      kind = "bridge";
+    } else {
+      // Default fallback - treat as ts
+      kind = "ts";
+    }
+
+    outputs.push({
+      kind,
+      target,
+      rationale,
+    });
+  }
+
+  return outputs;
 }
 
 /**
@@ -269,6 +338,12 @@ function buildRationale(
     rationale.push("runtime logic requires TypeScript implementation");
   } else if (realizationType === "ui") {
     rationale.push("UI surface requires Panorama output");
+  // T143: Added lua rationale
+  } else if (realizationType === "lua") {
+    rationale.push("ability_lua system requires Lua implementation");
+  // T143-R1: Added kv+lua rationale
+  } else if (realizationType === "kv+lua") {
+    rationale.push("ability_lua runtime + kv static shell produces two routed outputs");
   } else if (realizationType === "kv+ts") {
     rationale.push("ability shell fits static config, behavior requires runtime script");
   } else if (realizationType === "shared-ts") {
@@ -375,6 +450,10 @@ export function realizeDota2Host(
         rationale = buildRationale(module, realizationType);
       }
 
+      // T148: Generate explicit outputs[] for multi-output realization
+      // This populates the new field while maintaining backward compatibility
+      const outputs = generateOutputs(realizationType, hostTargets, rationale);
+
       // Check for blockers
       const unitBlockers: string[] = [];
       if (realizationType === "kv+ts" && !module.outputKinds.includes("server")) {
@@ -388,6 +467,8 @@ export function realizeDota2Host(
         role,
         realizationType,
         hostTargets,
+        outputs,
+        parameters: module.parameters,
         rationale,
         confidence,
         blockers: unitBlockers.length > 0 ? unitBlockers : undefined,

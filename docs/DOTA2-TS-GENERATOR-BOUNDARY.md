@@ -11,6 +11,7 @@ Important:
 - `Dota2TSGenerator` is one generator family among several
 - it is not the default or primary generator for all Dota2 outputs
 - KV and UI generator paths are first-class parts of the intended architecture
+- TS vs Lua should be understood as authoring-path boundary, not runtime-language boundary; see `DOTA2-TS-LUA-AUTHORING-PATHS.md`
 
 ## Current Architectural Decision
 

@@ -40,7 +40,7 @@ interface HostRealizationUnit {
   sourceModuleId: string;
   sourcePatternIds: string[];
   role: "gameplay-core" | "ui-surface" | "shared-support" | "bridge-support";
-  realizationType: "kv" | "ts" | "ui" | "kv+ts" | "shared-ts" | "bridge-only";
+  realizationType: "kv" | "ts" | "ui" | "lua" | "kv+lua" | "kv+ts" | "shared-ts" | "bridge-only";
   hostTargets: string[];
   rationale: string[];
   confidence: "high" | "medium" | "low";
@@ -118,6 +118,8 @@ Current allowed values:
 - `kv`
 - `ts`
 - `ui`
+- `lua`
+- `kv+lua`
 - `kv+ts`
 - `shared-ts`
 - `bridge-only`
@@ -233,3 +235,11 @@ These may be refined later:
 - whether `confidence` should be plan-level as well as unit-level
 - whether some realization classes should split into more specific subclasses
 - whether `role` should later become a richer typed taxonomy
+
+Current architectural direction:
+
+- keep current enum-based realization types working for the established narrow baseline
+- avoid growing many more combination enums if richer composite cases arrive
+- evolve toward explicit multi-output realization when real cases justify it
+
+See `COMPOSITE-FEATURE-ARCHITECTURE.md`.

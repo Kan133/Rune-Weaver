@@ -104,6 +104,9 @@ export class OpenAICompatibleClient implements LLMClient {
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
     let httpResponse: Response;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     try {
       httpResponse = await fetch(url, {
         method: "POST",
@@ -112,11 +115,18 @@ export class OpenAICompatibleClient implements LLMClient {
           authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new LLMRequestError("LLM request timed out after 10 seconds");
+      }
       throw new LLMRequestError(
         `LLM request failed: ${error instanceof Error ? error.message : String(error)}`
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     let json: OpenAICompatibleResponse;

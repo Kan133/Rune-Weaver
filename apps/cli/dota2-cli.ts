@@ -19,8 +19,8 @@ import { IntentSchema, Blueprint, AssemblyPlan } from "../../core/schema/types.j
 import { BlueprintBuilder } from "../../core/blueprint/builder.js";
 import { resolvePatterns, PatternResolutionResult } from "../../core/patterns/resolver.js";
 import { AssemblyPlanBuilder, AssemblyPlanConfig } from "../../core/pipeline/assembly-plan.js";
-import { createLLMClientFromEnv } from "../../core/llm/factory.js";
-import { runWizardToIntentSchema } from "../../core/wizard/intent-schema.js";
+import { createLLMClientFromEnv, isLLMConfigured } from "../../core/llm/factory.js";
+import { runWizardToIntentSchema, extractNumericParameters } from "../../core/wizard/index.js";
 import {
   initializeWorkspace,
   saveWorkspace,
@@ -51,8 +51,8 @@ import {
 import {
   validateHostRuntime,
 } from "../../adapters/dota2/validator/runtime-validator.js";
-import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage } from "./helpers/index.js";
-import type { VerdictInput } from "./helpers/index.js";
+import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateKVContentWithIndex, generateCodeContent, alignWritePlanWithExistingFeature, validateHost, buildRuntimeValidationResult, performUpdateHostValidation, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
+import type { VerdictInput, HostValidationResult, RuntimeValidationResult, WorkspaceUpdateResult } from "./helpers/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
 import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
 import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } from "../../adapters/dota2/routing/index.js";
@@ -81,6 +81,7 @@ import type { UpdateDiffResult, SelectiveUpdateResult } from "../../adapters/dot
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 
 export interface Dota2CLIOptions {
   command: "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback";
@@ -479,12 +480,14 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     const tsRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ts");
     const uiRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ui");
     const kvRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "kv");
+    const luaRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "lua");
     const bridgeRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "bridge");
     
     console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
     console.log(`    - TS routes: ${tsRoutes.length} (${tsRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
     console.log(`    - UI routes: ${uiRoutes.length} (${uiRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
     console.log(`    - KV routes: ${kvRoutes.length} (${kvRoutes.filter(r => !r.blockers?.length).length} unblocked, ${kvRoutes.filter(r => r.blockers?.length).length} blocked)`);
+    console.log(`    - Lua routes: ${luaRoutes.length} (${luaRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
     console.log(`    - Bridge routes: ${bridgeRoutes.length}`);
     
     if (generatorRoutingPlan.warnings.length > 0) {
@@ -580,40 +583,18 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   };
 
   // Stage 8: Runtime Validation
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 8: Runtime Validation");
-  console.log("=".repeat(70));
-
-  let runtimeValidationResult: { success: boolean; serverPassed: boolean; uiPassed: boolean; serverErrors: number; uiErrors: number; limitations: string[] } = 
-    { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [] };
+  let runtimeValidationResult: RuntimeValidationResult = 
+    { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [], skipped: true };
 
   if (!options.dryRun && result.success) {
     try {
       const runtimeArtifact = await validateHostRuntime(options.hostRoot);
-      
-      runtimeValidationResult = {
-        success: runtimeArtifact.overall.success,
-        serverPassed: runtimeArtifact.overall.serverPassed,
-        uiPassed: runtimeArtifact.overall.uiPassed,
-        serverErrors: runtimeArtifact.server.errorCount,
-        uiErrors: runtimeArtifact.ui.errorCount,
-        limitations: runtimeArtifact.overall.limitations,
-      };
-
-      console.log(`  Server: ${runtimeArtifact.server.success ? "✅ Passed" : "❌ Failed"}`);
-      console.log(`    - Errors: ${runtimeArtifact.server.errorCount}`);
-      console.log(`    - Checked: ${runtimeArtifact.server.checked}`);
-      
-      console.log(`  UI: ${runtimeArtifact.ui.success ? "✅ Passed" : "❌ Failed"}`);
-      console.log(`    - Errors: ${runtimeArtifact.ui.errorCount}`);
-      console.log(`    - Checked: ${runtimeArtifact.ui.checked}`);
-
-      if (runtimeArtifact.overall.limitations.length > 0) {
-        console.log(`  Limitations:`);
-        for (const limitation of runtimeArtifact.overall.limitations) {
-          console.log(`    - ${limitation}`);
-        }
-      }
+      runtimeValidationResult = buildRuntimeValidationResult(
+        options.dryRun,
+        result.success,
+        runtimeArtifact
+      );
+      formatRuntimeValidationOutput(runtimeValidationResult);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.log(`  ❌ Runtime validation failed: ${errorMessage}`);
@@ -627,8 +608,11 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       };
     }
   } else {
-    console.log("  ⏭️  Skipped (dry-run mode or write failed)");
-    runtimeValidationResult.limitations = ["Skipped due to dry-run mode or write failure"];
+    runtimeValidationResult = buildRuntimeValidationResult(
+      options.dryRun,
+      result.success
+    );
+    formatRuntimeValidationOutput(runtimeValidationResult);
   }
 
   artifact.stages.runtimeValidation = runtimeValidationResult;
@@ -716,6 +700,17 @@ async function createIntentSchema(prompt: string, hostRoot: string): Promise<{ s
   console.log("Stage 1: IntentSchema");
   console.log("=".repeat(70));
 
+  // Check if LLM is configured before trying to use it
+  if (!isLLMConfigured(process.cwd())) {
+    console.log(`  ⚠️  LLM not configured, using fallback`);
+    const schema = createFallbackIntentSchema(prompt, hostRoot);
+    console.log(`  ℹ️  IntentSchema created via fallback (prompt analysis)`);
+    console.log(`     Goal: ${schema.request.goal}`);
+    console.log(`     Intent Kind: ${schema.classification.intentKind}`);
+    console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
+    return { schema, usedFallback: true };
+  }
+
   // Try to use real Wizard with LLM
   try {
     const client = createLLMClientFromEnv(process.cwd());
@@ -774,6 +769,9 @@ async function createIntentSchema(prompt: string, hostRoot: string): Promise<{ s
 function createFallbackIntentSchema(prompt: string, hostRoot: string): IntentSchema {
   const lowerPrompt = prompt.toLowerCase();
 
+  // T138-R1: Extract numeric parameters from prompt
+  const extractedParams = extractNumericParameters(prompt);
+
   // Infer intent kind - be conservative
   let intentKind: "micro-feature" | "standalone-system" = "micro-feature";
   if (lowerPrompt.includes("系统") || lowerPrompt.includes("天赋")) {
@@ -830,6 +828,12 @@ function createFallbackIntentSchema(prompt: string, hostRoot: string): IntentSch
     resolvedAssumptions: ["Using fallback intent analysis"],
     isReadyForBlueprint: true,
   };
+
+  // T138-R1: Attach extracted parameters to the schema
+  // These will flow through Blueprint -> AssemblyPlan -> WritePlanEntry -> KV Generator
+  if (Object.keys(extractedParams).length > 0) {
+    (schema as any).parameters = extractedParams;
+  }
 
   return schema;
 }
@@ -1019,129 +1023,6 @@ function createWritePlan(
   }
 }
 
-function alignWritePlanWithExistingFeature(
-  writePlan: WritePlan,
-  existingFeature: RuneWeaverFeatureRecord,
-  mode: FeatureMode
-): { ok: true } | { ok: false; issues: string[] } {
-  const consumedExistingPaths = new Set<string>();
-
-  writePlan.entries = writePlan.entries.map((entry) => {
-    if (existingFeature.generatedFiles.includes(entry.targetPath)) {
-      consumedExistingPaths.add(entry.targetPath);
-      return { ...entry, operation: "update" };
-    }
-
-    const remappedTarget = findCompatibleExistingTarget(entry, existingFeature.generatedFiles, consumedExistingPaths);
-    if (remappedTarget) {
-      consumedExistingPaths.add(remappedTarget);
-      return {
-        ...entry,
-        targetPath: remappedTarget,
-        operation: "update",
-      };
-    }
-
-    return { ...entry, operation: "create" };
-  });
-
-  const plannedPaths = new Set(writePlan.entries.map((entry) => entry.targetPath));
-  const orphanedPaths = existingFeature.generatedFiles.filter((path) => !plannedPaths.has(path));
-
-  if (orphanedPaths.length > 0 && mode === "create") {
-    return {
-      ok: false,
-      issues: [
-        `${mode} would orphan existing generated files for feature '${existingFeature.featureId}': ${orphanedPaths.join(", ")}`,
-        "Use 'dota2 update --feature <id>' or 'dota2 regenerate --feature <id>' to handle file changes.",
-      ],
-    };
-  }
-
-  writePlan.stats = {
-    total: writePlan.entries.length,
-    create: writePlan.entries.filter((entry) => entry.operation === "create").length,
-    update: writePlan.entries.filter((entry) => entry.operation === "update").length,
-    conflicts: writePlan.entries.filter(
-      (entry) => !entry.safe || (entry.conflicts && entry.conflicts.length > 0)
-    ).length,
-    deferred: writePlan.entries.filter((entry) => entry.deferred).length,
-  };
-
-  return { ok: true };
-}
-
-function findCompatibleExistingTarget(
-  entry: WritePlanEntry,
-  existingPaths: string[],
-  consumedExistingPaths: Set<string>
-): string | null {
-  const patternSegment = entry.sourcePattern.replace(/\./g, "_");
-  const extension = getEntryExtension(entry);
-  const qualifier = getEntryQualifier(entry);
-
-  const entryIsServer = entry.targetPath.includes("/server/") || entry.targetPath.includes("\\server\\");
-  const entryIsUI = entry.targetPath.includes("/ui/") || entry.targetPath.includes("\\ui\\");
-  const entryIsShared = entry.targetPath.includes("/shared/") || entry.targetPath.includes("\\shared\\");
-
-  const candidates = existingPaths.filter((path) => {
-    if (consumedExistingPaths.has(path)) {
-      return false;
-    }
-    if (!path.includes(patternSegment) || !path.endsWith(extension)) {
-      return false;
-    }
-
-    const pathIsServer = path.includes("/server/") || path.includes("\\server\\");
-    const pathIsUI = path.includes("/ui/") || path.includes("\\ui\\");
-    const pathIsShared = path.includes("/shared/") || path.includes("\\shared\\");
-
-    if (entryIsServer !== pathIsServer || entryIsUI !== pathIsUI || entryIsShared !== pathIsShared) {
-      return false;
-    }
-
-    if (qualifier === "ability") {
-      return path.endsWith("_ability.ts");
-    }
-    if (qualifier === "modifier") {
-      return path.endsWith("_modifier.ts");
-    }
-    if (extension === ".ts") {
-      return !path.endsWith("_ability.ts") && !path.endsWith("_modifier.ts");
-    }
-
-    return true;
-  });
-
-  return candidates.length === 1 ? candidates[0] : null;
-}
-
-function getEntryExtension(entry: WritePlanEntry): string {
-  switch (entry.contentType) {
-    case "tsx":
-      return ".tsx";
-    case "less":
-    case "css":
-      return ".less";
-    case "json":
-      return ".json";
-    case "lua":
-      return ".lua";
-    default:
-      return ".ts";
-  }
-}
-
-function getEntryQualifier(entry: WritePlanEntry): "ability" | "modifier" | "main" {
-  if (entry.targetPath.endsWith("_ability.ts") || entry.contentSummary.includes("Ability")) {
-    return "ability";
-  }
-  if (entry.targetPath.endsWith("_modifier.ts") || entry.contentSummary.includes("Modifier")) {
-    return "modifier";
-  }
-  return "main";
-}
-
 async function executeWrite(
   writePlan: WritePlan,
   options: Dota2CLIOptions,
@@ -1266,457 +1147,6 @@ async function executeWrite(
   }
 
   return { result, review };
-}
-
-function computeAbilityName(entry: WritePlanEntry, index: number): string {
-  const patternSegment = entry.sourcePattern.includes(".")
-    ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
-    : entry.sourcePattern;
-  const baseName = patternSegment;
-  const featureSegment = entry.targetPath.includes("feature_")
-    ? entry.targetPath.match(/feature_([^/]+)/)?.[1]
-    : entry.targetPath.includes("micro_feature_")
-      ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
-      : null;
-  return featureSegment
-    ? `rw_${featureSegment}_${baseName}_${index}`
-    : `rw_${baseName}_${index}`;
-}
-
-/**
- * @deprecated T125-R4: This function is no longer used by the mainline lua path.
- *   The normal pipeline now produces proper lua entries via Pattern.outputTypes,
- *   which use generateLuaAbilityCode() with full metadata. This stub remains only
- *   as a compat marker; it generates a hardcoded modifier_rw_buff wrapper that
- *   is NOT driven by pattern metadata.
- */
-function generateLuaWrapperContent(abilityName: string): string {
-  return `local ____lualib = require("lualib_bundle")
-local __TS__Class = ____lualib.__TS__Class
-local __TS__ClassExtends = ____lualib.__TS__ClassExtends
-local __TS__DecorateLegacy = ____lualib.__TS__DecorateLegacy
-local ____exports = {}
-local ____dota_ts_adapter = require("utils.dota_ts_adapter")
-local BaseAbility = ____dota_ts_adapter.BaseAbility
-local registerAbility = ____dota_ts_adapter.registerAbility
-
-____exports.${abilityName} = __TS__Class()
-local ${abilityName} = ____exports.${abilityName}
-${abilityName}.name = "${abilityName}"
-__TS__ClassExtends(${abilityName}, BaseAbility)
-
-function ${abilityName}.prototype.OnSpellStart(self)
-    local caster = self:GetCaster()
-    local duration = self:GetSpecialValueFor("duration") or 5.0
-    caster:AddNewModifier(caster, self, "modifier_rw_buff", {duration = duration})
-    self:PlayEffects()
-end
-
-function ${abilityName}.prototype.PlayEffects(self)
-    local particle = "particles/generic_gameplay/generic_slowed_cold.vpcf"
-    local sound = "Hero_Crystal.CrystalNova"
-    local effect = ParticleManager:CreateParticle(particle, ParticleAttachment.ABSORIGIN_FOLLOW, self:GetCaster())
-    ParticleManager:ReleaseParticleIndex(effect)
-    EmitSoundOn(sound, self:GetCaster())
-end
-
-${abilityName} = __TS__DecorateLegacy({registerAbility(nil)}, ${abilityName})
-____exports.${abilityName} = ${abilityName}
-return ____exports
-`;
-}
-
-function generateKVContentWithIndex(entry: WritePlanEntry, index: number): string {
-  const abilityName = computeAbilityName(entry, index);
-
-  const kvInput: KVGeneratorInput = {
-    routeId: `route_${entry.sourcePattern}_kv`,
-    sourceUnitId: entry.sourceModule,
-    generatorFamily: "dota2-kv",
-    hostTarget: "ability_kv",
-    abilityConfig: {
-      abilityName,
-      baseClass: "ability_lua",
-      abilityType: "DOTA_ABILITY_TYPE_BASIC",
-      behavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-      abilityCooldown: "8.0",
-      abilityManaCost: "50",
-      abilityCastRange: "0",
-      abilityCastPoint: "0.1",
-      maxLevel: "4",
-      requiredLevel: "1",
-      levelsBetweenUpgrades: "3",
-      scriptFile: `rune_weaver/abilities/${abilityName}`,
-    },
-    rationale: [
-      `Generated from pattern: ${entry.sourcePattern}`,
-      `Module: ${entry.sourceModule}`,
-      `Feature: ${abilityName}`,
-    ],
-    blockers: entry.deferred ? [entry.deferredReason || "Entry marked deferred"] : [],
-  };
-
-  try {
-    const kvOutput = generateAbilityKV(kvInput);
-    console.log(`  [KV] Generated ability: ${kvOutput.abilityName} -> ${entry.targetPath}`);
-    return kvOutput.kvBlock;
-  } catch (error) {
-    console.log(`  [KV] Error generating KV: ${error}`);
-    return `// KV generation failed: ${error}\n`;
-  }
-}
-
-function generateKVContent(entry: WritePlanEntry): string {
-  // T118-R1: Build KVGeneratorInput from WritePlanEntry
-  // T118-R1: Use semantic naming from sourceModule + sourcePattern, NOT target file basename
-  // Extract meaningful segment from pattern (e.g., "modifier_applier" from "effect.modifier_applier")
-  const patternSegment = entry.sourcePattern.includes(".")
-    ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
-    : entry.sourcePattern;
-  // Use patternSegment as baseName - sourceModule may be generic (e.g., "effect")
-  const baseName = patternSegment;
-  // Try to extract feature ID from targetPath if present
-  const featureSegment = entry.targetPath.includes("feature_")
-    ? entry.targetPath.match(/feature_([^/]+)/)?.[1]
-    : entry.targetPath.includes("micro_feature_")
-      ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
-      : null;
-  const abilityName = featureSegment
-    ? `rw_${featureSegment}_${baseName}`
-    : `rw_${baseName}`;
-
-  const kvInput: KVGeneratorInput = {
-    routeId: `route_${entry.sourcePattern}_kv`,
-    sourceUnitId: entry.sourceModule,
-    generatorFamily: "dota2-kv",
-    hostTarget: "ability_kv",
-    abilityConfig: {
-      abilityName,
-      baseClass: "ability_datadriven",
-      abilityType: "DOTA_ABILITY_TYPE_BASIC",
-      behavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-      abilityCooldown: "8.0",
-      abilityManaCost: "50",
-      abilityCastRange: "0",
-      abilityCastPoint: "0.1",
-      maxLevel: "4",
-      requiredLevel: "1",
-      levelsBetweenUpgrades: "3",
-    },
-    rationale: [
-      `Generated from pattern: ${entry.sourcePattern}`,
-      `Module: ${entry.sourceModule}`,
-      `Feature: ${featureSegment}`,
-    ],
-    blockers: entry.deferred ? [entry.deferredReason || "Entry marked deferred"] : [],
-  };
-
-  try {
-    const kvOutput = generateAbilityKV(kvInput);
-    console.log(`  [KV] Generated ability: ${kvOutput.abilityName} -> ${entry.targetPath}`);
-    return kvOutput.kvBlock;
-  } catch (error) {
-    console.log(`  [KV] Error generating KV: ${error}`);
-    return `// KV generation failed: ${error}\n`;
-  }
-}
-
-function generateCodeContent(entry: WritePlanEntry): string {
-  // T115-R1/R2: Implement minimal generator-family dispatch
-  const familyHint = entry.generatorFamilyHint;
-
-  // T115-R2: Deferred entries are already filtered before this function is called
-  // This check is a safety net for any edge cases
-  if (entry.deferred) {
-    return `// Deferred: ${entry.deferredReason || "Generator not yet implemented"}\n`;
-  }
-
-  // Family-specific dispatch
-  switch (familyHint) {
-    case "dota2-ui":
-      // T115-R2: Option A - Transitional UI Path
-      // UI family is transitional: it works via generic TS generation
-      // but is NOT a dedicated dota2-ui generator family
-      // This is intentional until dota2-ui generator is implemented
-      console.log(`  [TRANSITIONAL] UI family entry using generic generation: ${entry.sourcePattern}`);
-      break;
-
-    case "dota2-kv":
-      // T118: KV family now implemented - call KV generator
-      // Build minimal KVGeneratorInput from entry
-      return generateKVContent(entry);
-
-    case "bridge-support":
-      // T115-R1: Bridge support is separate path
-      return `// Bridge support: handled via bridge adapter\n`;
-
-    case "dota2-ts":
-    default:
-      // T115-R1: TS family dispatch (default)
-      break;
-  }
-
-  const generated = generateCode(entry, entry.sourcePattern);
-  return generated.content;
-}
-
-function validateHost(
-  hostRoot: string,
-  writePlan: WritePlan,
-  writeResult: WriteResult,
-  stableFeatureId: string,
-  deferredEntries?: Array<{ pattern: string; reason: string }>
-): { success: boolean; checks: string[]; issues: string[]; details: Record<string, unknown> } {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 7: Host Validation");
-  console.log("=".repeat(70));
-
-  const checks: string[] = [];
-  const issues: string[] = [];
-  const details: Record<string, unknown> = {};
-
-  // 1. Check namespace directories
-  const serverNsPath = join(hostRoot, "game/scripts/src/rune_weaver");
-  const uiNsPath = join(hostRoot, "content/panorama/src/rune_weaver");
-
-  if (existsSync(serverNsPath)) {
-    checks.push("✅ Server namespace exists");
-  } else {
-    checks.push("❌ Server namespace missing");
-    issues.push("Server namespace directory not found");
-  }
-
-  if (existsSync(uiNsPath)) {
-    checks.push("✅ UI namespace exists");
-  } else {
-    checks.push("❌ UI namespace missing");
-    issues.push("UI namespace directory not found");
-  }
-
-  // 2. Check bridge files
-  const serverBridgePath = join(hostRoot, "game/scripts/src/modules/index.ts");
-  const uiBridgePath = join(hostRoot, "content/panorama/src/hud/script.tsx");
-
-  if (existsSync(serverBridgePath)) {
-    checks.push("✅ Server bridge file exists");
-    
-    // Check bridge content
-    const bridgeContent = readFileSync(serverBridgePath, "utf-8");
-    const hasActivateCall = bridgeContent.includes("activateRuneWeaverModules");
-    const callCount = (bridgeContent.match(/activateRuneWeaverModules\(\)/g) || []).length;
-    
-    if (hasActivateCall && callCount === 1) {
-      checks.push("✅ Server bridge correctly injected (1 call)");
-    } else if (callCount > 1) {
-      checks.push("❌ Server bridge has duplicate calls");
-      issues.push(`Server bridge has ${callCount} activateRuneWeaverModules calls (expected 1)`);
-    } else {
-      checks.push("⚠️  Server bridge missing activation call");
-    }
-    
-    details.serverBridgeCalls = callCount;
-  } else {
-    checks.push("❌ Server bridge file missing");
-    issues.push("Server bridge file not found");
-  }
-
-  if (existsSync(uiBridgePath)) {
-    checks.push("✅ UI bridge file exists");
-    
-    const uiBridgeContent = readFileSync(uiBridgePath, "utf-8");
-    const hasUIBridge = uiBridgeContent.includes("rune_weaver");
-    
-    if (hasUIBridge) {
-      checks.push("✅ UI bridge correctly connected");
-    } else {
-      checks.push("⚠️  UI bridge missing rune_weaver reference");
-    }
-    
-    details.uiBridgeConnected = hasUIBridge;
-  } else {
-    checks.push("❌ UI bridge file missing");
-    issues.push("UI bridge file not found");
-  }
-
-  // 3. Check generated directories
-  const generatedServerPath = join(hostRoot, "game/scripts/src/rune_weaver/generated/server");
-  const generatedUIPath = join(hostRoot, "content/panorama/src/rune_weaver/generated/ui");
-
-  if (existsSync(generatedServerPath)) {
-    checks.push("✅ Generated server directory exists");
-  } else {
-    checks.push("⚠️  Generated server directory missing");
-  }
-
-  if (existsSync(generatedUIPath)) {
-    checks.push("✅ Generated UI directory exists");
-  } else {
-    checks.push("⚠️  Generated UI directory missing");
-  }
-
-  // 4. Check write plan vs write result consistency
-  // T115-R2: Exclude deferred entries from planned files check
-  // Deferred entries are intentionally not executed
-  const nonDeferredEntries = writePlan.entries.filter((e) => !e.deferred);
-  const plannedFiles = nonDeferredEntries.map((e) => e.targetPath);
-  const realizedFiles = [
-    ...writeResult.createdFiles,
-    ...writeResult.modifiedFiles.filter((file) => file.startsWith("game/scripts/src/rune_weaver/") || file.startsWith("content/panorama/src/rune_weaver/")),
-  ];
-
-  const missingFiles = plannedFiles.filter((f) => !realizedFiles.includes(f));
-  const extraFiles = realizedFiles.filter((f) => !plannedFiles.includes(f));
-
-  if (missingFiles.length === 0) {
-    checks.push("✅ All planned files were created");
-  } else {
-    checks.push(`❌ ${missingFiles.length} planned files not created`);
-    issues.push(`Missing files: ${missingFiles.slice(0, 3).join(", ")}${missingFiles.length > 3 ? "..." : ""}`);
-  }
-
-  // T115-R2: Report deferred entries as informational, not as missing files
-  if (deferredEntries && deferredEntries.length > 0) {
-    checks.push(`ℹ️  ${deferredEntries.length} deferred entries not executed (expected - KV generator not implemented)`);
-  }
-
-  details.plannedFilesCount = plannedFiles.length;
-  details.createdFilesCount = realizedFiles.length;
-  details.missingFiles = missingFiles;
-  details.extraFiles = extraFiles;
-
-  // 5. Check feature-specific generated files exist
-  // writePlan.id format: writeplan_<feature_type>_<feature_id>_<timestamp>
-  // file name format: <feature_type>_<feature_id>_...
-  // So we need to extract <feature_type>_<feature_id> from writePlan.id
-  const featureFiles = realizedFiles.filter((f) => f.includes(stableFeatureId));
-  
-  if (featureFiles.length > 0) {
-    checks.push(`✅ Feature files created (${featureFiles.length})`);
-  } else {
-    checks.push("❌ No feature-specific files found");
-    issues.push("Cannot identify feature-specific files from write result");
-  }
-  
-  details.featureFilesCount = featureFiles.length;
-
-  console.log(`  Validation Checks:`);
-  for (const check of checks) {
-    console.log(`    ${check}`);
-  }
-
-  const success = issues.length === 0;
-  console.log(`\n  Overall: ${success ? "✅ PASSED" : "❌ FAILED"}`);
-
-  return { success, checks, issues, details };
-}
-
-function updateWorkspaceState(
-  hostRoot: string,
-  blueprint: Blueprint,
-  assemblyPlan: AssemblyPlan,
-  writePlan: WritePlan,
-  mode: FeatureMode,
-  featureId: string,
-  existingFeature: RuneWeaverFeatureRecord | null
-): { success: boolean; featureId: string; totalFeatures: number; error?: string } {
-  // Initialize workspace if not exists
-  const initResult = initializeWorkspace(hostRoot);
-  if (!initResult.success) {
-    return {
-      success: false,
-      featureId,
-      totalFeatures: 0,
-      error: "Failed to initialize workspace",
-    };
-  }
-
-  const workspace = initResult.workspace!;
-
-  // Persist normalized workspace shape before applying new updates.
-  const normalizedSave = saveWorkspace(hostRoot, workspace);
-  if (!normalizedSave.success) {
-    return {
-      success: false,
-      featureId,
-      totalFeatures: workspace.features.length,
-      error: "Failed to normalize existing workspace state",
-    };
-  }
-
-  if (mode === "create") {
-    const duplicatePolicy = checkDuplicateFeature(workspace, featureId);
-    if (duplicatePolicy.action === "reject") {
-      const existing = workspace.features.find((f) => f.featureId === featureId);
-      if (existing) {
-        return {
-          success: false,
-          featureId,
-          totalFeatures: workspace.features.length,
-          error: duplicatePolicy.message,
-        };
-      }
-    }
-  } else if (!existingFeature) {
-    return {
-      success: false,
-      featureId,
-      totalFeatures: workspace.features.length,
-      error: `Feature '${featureId}' does not exist for ${mode}`,
-    };
-  }
-
-  // Extract entry bindings
-  const entryBindings = extractEntryBindings(assemblyPlan.bridgeUpdates);
-  // T115-R2-FIX: Only include non-deferred entries in generatedFiles
-  // T118-R2: Apply KV aggregation to generatedFiles for workspace state
-  const executableEntries = writePlan.entries.filter((e) => !e.deferred);
-  const kvEntriesForWs = executableEntries.filter((e) => e.contentType === "kv");
-  const nonKvEntriesForWs = executableEntries.filter((e) => e.contentType !== "kv");
-  const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e) => e.targetPath));
-  const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
-  const nonKvFilesForWs = nonKvEntriesForWs.map((e) => e.targetPath);
-  const generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
-
-  // Create feature write result
-  const featureResult: FeatureWriteResult = {
-    featureId,
-    blueprintId: blueprint.id,
-    selectedPatterns: assemblyPlan.selectedPatterns.map((p) => p.patternId),
-    generatedFiles,
-    entryBindings,
-  };
-
-  const intentKind = blueprint.sourceIntent.intentKind;
-  const updatedWorkspace =
-    mode === "create"
-      ? addFeatureToWorkspace(workspace, featureResult, intentKind)
-      : updateFeatureInWorkspace(workspace, featureId, featureResult, intentKind);
-
-  const saveResult = saveWorkspace(hostRoot, updatedWorkspace);
-  if (!saveResult.success) {
-    return {
-      success: false,
-      featureId,
-      totalFeatures: workspace.features.length,
-      error: "Failed to save workspace state",
-    };
-  }
-
-  const bridgeRefresh = refreshBridge(hostRoot, updatedWorkspace);
-  if (!bridgeRefresh.success) {
-    return {
-      success: false,
-      featureId,
-      totalFeatures: updatedWorkspace.features.length,
-      error: `Failed to refresh generated bridge indexes: ${bridgeRefresh.errors.join(", ")}`,
-    };
-  }
-
-  return {
-    success: true,
-    featureId,
-    totalFeatures: updatedWorkspace.features.length,
-  };
 }
 
 async function runRegenerateCommand(options: Dota2CLIOptions): Promise<boolean> {
@@ -1879,6 +1309,54 @@ async function runRegenerateCommand(options: Dota2CLIOptions): Promise<boolean> 
 
   const outputDir = join(process.cwd(), "tmp", "cli-review");
   const outputPath = saveReviewArtifact(artifact, outputDir);
+
+  // T134-FIX: Ensure workspace state is persisted after regenerate
+  // runPipeline skips workspace state update for regenerate mode, so we need to manually update it
+  if (!options.dryRun && artifact.stages.workspaceState?.skipped && artifact.stages.generator?.generatedFiles) {
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 9: Workspace State Update (Post-Regenerate)");
+    console.log("=".repeat(70));
+
+    const initResult = initializeWorkspace(options.hostRoot);
+    if (!initResult.success) {
+      console.error("  ❌ Failed to initialize workspace");
+    } else {
+      const workspace = initResult.workspace!;
+      const featureIdToUpdate = options.featureId;
+      const existingFeature = findFeatureById(workspace, featureIdToUpdate);
+      
+      if (existingFeature) {
+        const generatedFiles = artifact.stages.generator.generatedFiles as string[];
+        const updatedFeature: RuneWeaverFeatureRecord = {
+          ...existingFeature,
+          revision: existingFeature.revision + 1,
+          generatedFiles,
+          blueprintId: artifact.stages.blueprint?.summary || existingFeature.blueprintId,
+          selectedPatterns: artifact.stages.patternResolution?.resolvedPatterns || existingFeature.selectedPatterns,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const updatedFeatures = workspace.features.map(f =>
+          f.featureId === featureIdToUpdate ? updatedFeature : f
+        );
+
+        const updatedWorkspace = {
+          ...workspace,
+          features: updatedFeatures,
+        };
+
+        const saveResult = saveWorkspace(options.hostRoot, updatedWorkspace);
+        if (saveResult.success) {
+          console.log("  ✅ Workspace state updated");
+          console.log(`     Feature ID: ${featureIdToUpdate}`);
+          console.log(`     Revision: ${existingFeature.revision} -> ${updatedFeature.revision}`);
+          console.log(`     Generated Files: ${generatedFiles.length}`);
+        } else {
+          console.error(`  ❌ Failed to save workspace: ${saveResult.issues.join(", ")}`);
+        }
+      }
+    }
+  }
 
   console.log("\n" + "=".repeat(70));
   console.log("Final Verdict");
@@ -2916,131 +2394,4 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log(`\n📄 Review artifact saved: ${outputPath}`);
 
   return pipelineComplete;
-}
-
-function performUpdateHostValidation(
-  hostRoot: string,
-  diffResult: UpdateDiffResult,
-  updateResult: SelectiveUpdateResult
-): { success: boolean; checks: string[]; issues: string[] } {
-  const checks: string[] = [];
-  const issues: string[] = [];
-
-  const serverNsPath = join(hostRoot, "game/scripts/src/rune_weaver");
-  const uiNsPath = join(hostRoot, "content/panorama/src/rune_weaver");
-
-  if (existsSync(serverNsPath)) {
-    checks.push("✅ Server namespace exists");
-  } else {
-    checks.push("❌ Server namespace missing");
-    issues.push("Server namespace directory not found");
-  }
-
-  if (existsSync(uiNsPath)) {
-    checks.push("✅ UI namespace exists");
-  } else {
-    checks.push("❌ UI namespace missing");
-    issues.push("UI namespace directory not found");
-  }
-
-  if (updateResult.refreshedCount > 0) {
-    checks.push(`✅ Refreshed ${updateResult.refreshedCount} files`);
-  }
-
-  if (updateResult.createdCount > 0) {
-    checks.push(`✅ Created ${updateResult.createdCount} files`);
-  }
-
-  if (updateResult.deletedCount > 0) {
-    checks.push(`✅ Deleted ${updateResult.deletedCount} files`);
-  }
-
-  if (updateResult.failedFiles.length > 0) {
-    checks.push(`❌ ${updateResult.failedFiles.length} files failed`);
-    for (const file of updateResult.failedFiles) {
-      issues.push(`Failed: ${file.path} - ${file.error}`);
-    }
-  }
-
-  if (updateResult.bridgeRefreshResult) {
-    if (updateResult.bridgeRefreshResult.success) {
-      checks.push("✅ Bridge indexes refreshed");
-    } else {
-      checks.push("❌ Bridge refresh failed");
-      issues.push("Bridge index refresh failed");
-    }
-  }
-
-  const success = issues.length === 0;
-  return { success, checks, issues };
-}
-
-function performRollbackHostValidation(
-  hostRoot: string,
-  rollbackPlan: RollbackPlan,
-  rollbackResult: RollbackExecutionResult
-): { success: boolean; checks: string[]; issues: string[]; details: Record<string, unknown> } {
-  const checks: string[] = [];
-  const issues: string[] = [];
-  const details: Record<string, unknown> = {};
-
-  const serverNsPath = join(hostRoot, "game/scripts/src/rune_weaver");
-  const uiNsPath = join(hostRoot, "content/panorama/src/rune_weaver");
-
-  if (existsSync(serverNsPath)) {
-    checks.push("✅ Server namespace exists");
-  } else {
-    checks.push("❌ Server namespace missing");
-    issues.push("Server namespace directory not found");
-  }
-
-  if (existsSync(uiNsPath)) {
-    checks.push("✅ UI namespace exists");
-  } else {
-    checks.push("❌ UI namespace missing");
-    issues.push("UI namespace directory not found");
-  }
-
-  const serverIndexPath = join(hostRoot, "game/scripts/src/modules/index.ts");
-  if (existsSync(serverIndexPath)) {
-    checks.push("✅ Server bridge index exists");
-  } else {
-    checks.push("❌ Server bridge index missing");
-    issues.push("Server bridge index not found");
-  }
-
-  const uiScriptPath = join(hostRoot, "content/panorama/src/hud/script.tsx");
-  if (existsSync(uiScriptPath)) {
-    checks.push("✅ UI bridge script exists");
-  } else {
-    checks.push("❌ UI bridge script missing");
-    issues.push("UI bridge script not found");
-  }
-
-  if (rollbackResult.deleted.length > 0) {
-    checks.push(`✅ Deleted ${rollbackResult.deleted.length} files`);
-  }
-  if (rollbackResult.failed.length > 0) {
-    checks.push(`❌ ${rollbackResult.failed.length} file deletions failed`);
-    issues.push(`${rollbackResult.failed.length} file deletions failed`);
-  }
-  if (rollbackResult.skipped.length > 0) {
-    checks.push(`⏭️  Skipped ${rollbackResult.skipped.length} files (dry-run or not found)`);
-  }
-
-  if (rollbackResult.indexRefreshSuccess) {
-    checks.push("✅ Bridge indexes refreshed");
-  } else {
-    checks.push("❌ Bridge index refresh failed");
-    issues.push("Bridge index refresh failed");
-  }
-
-  details.deletedFiles = rollbackResult.deleted;
-  details.failedFiles = rollbackResult.failed;
-  details.skippedFiles = rollbackResult.skipped;
-  details.indexRefreshSuccess = rollbackResult.indexRefreshSuccess;
-
-  const success = issues.length === 0;
-
-  return { success, checks, issues, details };
 }

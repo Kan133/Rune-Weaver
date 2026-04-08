@@ -80,6 +80,8 @@ Examples of host realization classes:
 - `kv`
 - `ts`
 - `ui`
+- `lua`
+- `kv+lua`
 - `kv+ts`
 - `shared-ts`
 - `bridge-only`
@@ -129,11 +131,19 @@ The current expected minimal realization types are:
 - `kv`
 - `ts`
 - `ui`
+- `lua`
+- `kv+lua`
 - `kv+ts`
 - `shared-ts`
 - `bridge-only`
 
 These may evolve later, but they must remain host realization classes, not new pattern ids.
+
+Important:
+
+- `kv+ts` and `kv+lua` are acceptable transitional realization classes
+- they should not be mistaken for the final long-term model if composite features require many output combinations
+- see `COMPOSITE-FEATURE-ARCHITECTURE.md` for the next-stage direction
 
 ## Decision Rules
 

@@ -4,6 +4,11 @@
 
 This document defines the current phased roadmap for Rune Weaver.
 
+For a Chinese phase interpretation and product-facing phase guidance, see:
+
+- [PHASE-ROADMAP-ZH.md](/D:/Rune%20Weaver/docs/PHASE-ROADMAP-ZH.md)
+- [HOST-EXTENSION-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/HOST-EXTENSION-GUARDRAILS-ZH.md)
+
 Its purpose is to keep the project from mixing:
 
 - single-feature baseline work
@@ -151,6 +156,13 @@ The project has reached **late Phase 1** with the following milestones achieved:
 - Generator Routing: partial (lua route established; KV/TS routes need broader coverage)
 - **First real Dota2 E2E validation: achieved (T121)**
 - **Lua write path mainlined: achieved (T125)**
+- **Composite backbone and data-inclusive composite: verified**
+- **Minimal talent-drafting-like case closure: achieved**
+- **Placeholder talent-drafting case through formal pipeline: achieved**
+- **Case-specific parameter flow (T172-R1) and five-module backbone (T173-R1): verified**
+- **Code-level formal-pipeline closure (V174): confirmed**
+
+Current Phase 1 assessment: architecture and case-construction goals are effectively complete. Remaining gaps are primarily toolchain/environment and Phase 2 productization capabilities, not system backbone.
 
 It is not yet in Phase 2.
 

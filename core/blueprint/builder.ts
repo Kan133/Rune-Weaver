@@ -117,6 +117,8 @@ export class BlueprintBuilder {
       assumptions,
       validations,
       readyForAssembly: modules.length > 0,
+      // T138-R1: Pass through parameters from IntentSchema
+      parameters: (schema as any).parameters,
     };
   }
 
@@ -126,8 +128,79 @@ export class BlueprintBuilder {
   private buildModules(schema: IntentSchema): BlueprintModule[] {
     const modules: BlueprintModule[] = [];
     const prefix = this.config.modulePrefix;
+    const schemaParams = (schema as any).parameters || {};
 
-    // 1. 从 functional requirements 构建核心模块
+    const choiceCount = schemaParams.choiceCount as number | undefined;
+    const talentEntries = schemaParams.entries as Array<{ id: string; label: string; description: string; weight: number; tier: string }> | undefined;
+
+    if (choiceCount !== undefined || talentEntries !== undefined || Object.keys(schemaParams).length > 0) {
+      const triggerModule: BlueprintModule = {
+        id: `${prefix}trigger_0`,
+        role: 'talent_trigger',
+        category: 'trigger',
+        patternIds: ['input.key_binding'],
+        responsibilities: ['Trigger talent draw on key press'],
+        parameters: {
+          key: 'F4',
+          triggerAction: 'open_talent_modal',
+        },
+      };
+      modules.push(triggerModule);
+
+      const poolModule: BlueprintModule = {
+        id: `${prefix}pool_0`,
+        role: 'talent_pool',
+        category: 'data',
+        patternIds: ['data.weighted_pool'],
+        responsibilities: ['Manage talent pool'],
+        parameters: talentEntries ? { entries: talentEntries } : undefined,
+      };
+      modules.push(poolModule);
+
+      const ruleModule: BlueprintModule = {
+        id: `${prefix}rule_0`,
+        role: 'selection_rule',
+        category: 'rule',
+        patternIds: ['rule.selection_flow'],
+        responsibilities: ['Manage selection flow'],
+        parameters: {
+          choiceCount: choiceCount || 3,
+          selectionPolicy: 'single',
+        },
+      };
+      modules.push(ruleModule);
+
+      const uiModule: BlueprintModule = {
+        id: `${prefix}ui_0`,
+        role: 'selection_ui',
+        category: 'ui',
+        patternIds: ['ui.selection_modal'],
+        responsibilities: ['Display selection UI'],
+        parameters: {
+          title: 'Choose Your Talent',
+          description: 'Select one of the following talents',
+        },
+      };
+      modules.push(uiModule);
+
+      const effectModule: BlueprintModule = {
+        id: `${prefix}effect_0`,
+        role: 'talent_buff',
+        category: 'effect',
+        patternIds: ['dota2.short_time_buff'],
+        responsibilities: ['Apply buff effect'],
+        parameters: {
+          duration: schemaParams.abilityDuration || 10,
+          movespeedBonus: 50,
+          manaCost: 0,
+          cooldown: schemaParams.abilityCooldown || 30,
+        },
+      };
+      modules.push(effectModule);
+
+      return modules;
+    }
+
     for (let i = 0; i < schema.requirements.functional.length; i++) {
       const req = schema.requirements.functional[i];
       const module = this.createFunctionalModule(req, i, prefix);
@@ -136,7 +209,6 @@ export class BlueprintBuilder {
       }
     }
 
-    // 2. 从 interactions 构建输入模块
     if (schema.requirements.interactions) {
       for (let i = 0; i < schema.requirements.interactions.length; i++) {
         const interaction = schema.requirements.interactions[i];
@@ -147,7 +219,6 @@ export class BlueprintBuilder {
       }
     }
 
-    // 3. 从 UI requirements 构建 UI 模块
     if (schema.uiRequirements?.needed && schema.uiRequirements.surfaces) {
       for (let i = 0; i < schema.uiRequirements.surfaces.length; i++) {
         const surface = schema.uiRequirements.surfaces[i];
@@ -170,11 +241,13 @@ export class BlueprintBuilder {
     prefix: string
   ): BlueprintModule | null {
     const category = this.inferCategoryFromRequirement(req);
+    const patternIds = this.getCanonicalPatternIds(category);
     
     return {
       id: `${prefix}func_${index}`,
       role: req,
       category,
+      patternIds,
       responsibilities: [req],
     };
   }
@@ -208,6 +281,32 @@ export class BlueprintBuilder {
   }
 
   /**
+   * T152-R1: Map category to canonical pattern IDs for explicit grouping
+   * Only stable single-path categories get explicit patternIds[].
+   * Polymorphic categories (effect, resource) should rely on resolver + fallback.
+   */
+  private getCanonicalPatternIds(category: BlueprintModule["category"]): string[] {
+    switch (category) {
+      case "trigger":
+        return ["input.key_binding"];
+      case "data":
+        return ["data.weighted_pool"];
+      case "rule":
+        return ["rule.selection_flow"];
+      case "ui":
+        return ["ui.selection_modal"];
+      case "effect":
+        return [];
+      case "resource":
+        return [];
+      case "integration":
+        return [];
+      default:
+        return [];
+    }
+  }
+
+  /**
    * 创建交互模块（输入绑定）
    */
   private createInteractionModule(
@@ -219,6 +318,7 @@ export class BlueprintBuilder {
       id: `${prefix}input_${index}`,
       role: interaction,
       category: "trigger",
+      patternIds: this.getCanonicalPatternIds("trigger"),
       responsibilities: [`处理交互: ${interaction}`],
     };
   }
@@ -235,6 +335,7 @@ export class BlueprintBuilder {
       id: `${prefix}ui_${index}`,
       role: surface,
       category: "ui",
+      patternIds: this.getCanonicalPatternIds("ui"),
       responsibilities: [`渲染 UI: ${surface}`],
     };
   }

@@ -178,7 +178,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       },
     ],
     hostTarget: "dota2.server",
-    outputTypes: ["typescript", "kv"],
+    outputTypes: ["typescript"],
   }),
 
   // ============================================================================

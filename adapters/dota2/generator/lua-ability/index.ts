@@ -8,11 +8,24 @@
  * - T14: Use PATTACH_* Lua globals, NOT ParticleAttachment.* (TS-only API)
  * - T19: Modifier class MUST be in SAME FILE as ability (engine only loads ScriptFile)
  * - T20: Use native AddNewModifier(), NOT BaseModifier.apply() (static method not in _G)
+ *
+ * T128: Extended with archetype discriminator.
+ *   "buff" (default): short-duration stat modifier — no periodic logic
+ *   "dot": damage-over-time modifier — requires OnIntervalThink
+ *
+ * Extensibility model (T128 findings):
+ *   Shared: abilityName, modifierName, isHidden/IsDebuff/IsPurgable/IsBuff, statusEffectName,
+ *           statusEffectPriority, onCreated, onDestroy, declareFunctions, modifierFunctions
+ *   Archetype-specific: archetype discriminator + optional dotDamage + dotInterval
  */
+
+export type ModifierArchetype = "buff" | "dot";
 
 export interface AbilityLuaWrapperConfig {
   /** Ability name (e.g., "rw_test_v2") */
   abilityName: string;
+  /** Discriminator: "buff" = stat modifier, "dot" = damage-over-time (default: "buff") */
+  archetype?: ModifierArchetype;
   /** OnSpellStart logic */
   onSpellStart?: string;
   /** Additional methods on the ability */
@@ -31,6 +44,8 @@ export interface AbilityLuaWrapperConfig {
 export interface AbilityModifierConfig {
   /** Modifier name (e.g., "modifier_rw_test_v2") */
   name: string;
+  /** Discriminator: "buff" | "dot" (default: "buff") */
+  archetype?: ModifierArchetype;
   /** IsHidden default */
   isHidden?: boolean;
   /** IsDebuff default */
@@ -51,13 +66,28 @@ export interface AbilityModifierConfig {
   onCreated?: string;
   /** OnDestroy body (after 'function OnDestroy(self)') */
   onDestroy?: string;
+  /** T128: DOT archetype — damage per tick (absolute value, e.g. 50) */
+  dotDamage?: number;
+  /** T128: DOT archetype — interval between ticks in seconds (default: 1.0) */
+  dotInterval?: number;
 }
 
 /** Placeholder used in template strings before substitution */
 const PLACEHOLDER_ABILITY = "__ABILITY_NAME_PLACEHOLDER__";
 
-const DEFAULT_PLAY_EFFECTS = `function ${PLACEHOLDER_ABILITY}.prototype.PlayEffects(self)
-    local sound = "Hero_Invoker.Quas.Spirit"
+const DEFAULT_PLAY_EFFECTS_BUFF = `function ${PLACEHOLDER_ABILITY}.prototype.PlayEffects(self)
+    local particle = "particles/units/heroes/hero_ogre_magi/ogre_magi_bloodlust_target.vpcf"
+    local sound = "Hero_OgreMagi.Bloodlust.Target"
+    local effect = ParticleManager:CreateParticle(particle, PATTACH_ABSORIGIN_FOLLOW, self:GetCaster())
+    ParticleManager:ReleaseParticleIndex(effect)
+    EmitSoundOn(sound, self:GetCaster())
+end`;
+
+const DEFAULT_PLAY_EFFECTS_DEBUFF = `function ${PLACEHOLDER_ABILITY}.prototype.PlayEffects(self)
+    local particle = "particles/generic_gameplay/generic_slowed_cold.vpcf"
+    local sound = "Hero_Crystal.CrystalNova"
+    local effect = ParticleManager:CreateParticle(particle, PATTACH_ABSORIGIN_FOLLOW, self:GetCaster())
+    ParticleManager:ReleaseParticleIndex(effect)
     EmitSoundOn(sound, self:GetCaster())
 end`;
 
@@ -88,11 +118,15 @@ function generateModifierClass(
   abilityName: string,
 ): string {
   const modName = config.name;
+  const archetype = config.archetype || "buff";
   const hidden = config.isHidden !== undefined ? config.isHidden : false;
-  const debuff = config.isDebuff !== undefined ? config.isDebuff : false;
+  const debuff = config.isDebuff !== undefined ? config.isDebuff : archetype === "dot";
   const purgable = config.isPurgable !== undefined ? config.isPurgable : true;
-  const isBuff = config.isBuff !== undefined ? config.isBuff : true;
-  const statusEffect = config.statusEffectName || "particles/status_fx/status_effect_frost.vpcf";
+  const isBuff = config.isBuff !== undefined ? config.isBuff : archetype === "buff";
+
+  const statusEffect = config.statusEffectName || (archetype === "dot"
+    ? "particles/status_fx/status_effect_poison.vpcf"
+    : "particles/status_fx/status_effect_frost.vpcf");
   const statusPriority = config.statusEffectPriority || 10;
 
   const funcBodies: string[] = [];
@@ -107,9 +141,13 @@ end`);
   const onCreatedBody = config.onCreated || `    print("[${modName}] OnCreated")`;
   const onDestroyBody = config.onDestroy || `    print("[${modName}] OnDestroy")`;
 
+  const interval = archetype === "dot" ? (config.dotInterval ?? 1.0) : null;
+  const damage = archetype === "dot" ? (config.dotDamage ?? 50) : null;
+
   return `
 -- ============================================================
 -- MODIFIER: ${modName} (same file as ability — T19 pattern)
+-- Archetype: ${archetype}
 -- Engine only loads ScriptFile; separate modifier files are never loaded.
 -- ============================================================
 ____exports.${modName} = __TS__Class()
@@ -145,10 +183,32 @@ ${config.declareFunctions ? `function ${modName}.prototype:DeclareFunctions(self
     return ${config.declareFunctions}
 end` : ""}
 
+${archetype === "dot" && interval !== null && damage !== null ? `
+function ${modName}.prototype:OnIntervalThink(self)
+    -- T128 fix: victim = self:GetParent() (the unit the modifier is attached to),
+    -- NOT self:GetCaster() (who cast the ability).
+    -- For no-target self-DOT: parent = caster (correct self-damage).
+    -- For targeted DOT: parent = target (correct enemy damage).
+    local target = self:GetParent()
+    local ability = self:GetAbility()
+    if not target or target:IsNull() then return end
+    if not ability or ability:IsNull() then return end
+    local damage_table = {
+        victim = target,
+        attacker = self:GetCaster(),
+        ability = ability,
+        damage = ${damage},
+        damage_type = DAMAGE_TYPE_MAGICAL,
+    }
+    ApplyDamage(damage_table)
+    print("[${modName}] tick damage on " .. target:GetUnitName() .. ": " .. ${damage})
+end` : ""}
+
 ${funcBodies.join("\n\n")}
 
 function ${modName}.prototype:OnCreated(self)
 ${onCreatedBody}
+    ${archetype === "dot" && interval !== null ? `self:StartIntervalThink(${interval})` : ""}
 end
 
 function ${modName}.prototype:OnDestroy(self)
@@ -167,16 +227,19 @@ _G.${modName} = ${modName}`;
  * If modifierConfig is provided, includes modifier class in same file (T19 pattern).
  */
 export function generateAbilityLuaWrapper(config: AbilityLuaWrapperConfig): string {
-  const { abilityName, onSpellStart, additionalMethods, modifierConfig } = config;
+  const { abilityName, archetype, onSpellStart, additionalMethods, modifierConfig } = config;
   const hasModifier = !!modifierConfig;
   const modifierName = modifierConfig?.name || null;
-
-  const playEffectsCode = DEFAULT_PLAY_EFFECTS.replace(PLACEHOLDER_ABILITY, abilityName);
+  const effectiveArchetype = modifierConfig?.archetype ?? archetype ?? "buff";
+  
+  const playEffectsTemplate = effectiveArchetype === "dot" ? DEFAULT_PLAY_EFFECTS_DEBUFF : DEFAULT_PLAY_EFFECTS_BUFF;
+  const playEffectsCode = playEffectsTemplate.replace(PLACEHOLDER_ABILITY, abilityName);
   const onSpellStartCode = onSpellStart || DEFAULT_ON_SPELL_START(abilityName, modifierName);
 
   let modifierBlock = "";
   if (hasModifier && modifierConfig) {
-    modifierBlock = generateModifierClass(modifierConfig, abilityName);
+    const effectiveArchetype = modifierConfig.archetype ?? archetype ?? "buff";
+    modifierBlock = generateModifierClass({ ...modifierConfig, archetype: effectiveArchetype }, abilityName);
   }
 
   return `local ____lualib = require("lualib_bundle")

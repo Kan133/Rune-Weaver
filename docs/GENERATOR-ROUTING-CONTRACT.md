@@ -12,6 +12,8 @@ Its purpose is to pin down one architectural rule:
 
 This contract keeps realization decisions separate from concrete code emission.
 
+For the next-stage evolution of composite features and explicit multi-output realization, see `COMPOSITE-FEATURE-ARCHITECTURE.md`.
+
 ## Position In Pipeline
 
 The intended sequence is:
@@ -58,6 +60,7 @@ The current recommended first-pass routing is:
 | `ts` | `Dota2TSGenerator` |
 | `ui` | `Dota2UIGenerator` |
 | `lua` | `Dota2LuaGenerator` (narrow scope) |
+| `kv+lua` | split output across `Dota2KVGenerator` and `Dota2LuaGenerator` |
 | `shared-ts` | `Dota2TSGenerator` |
 | `bridge-only` | bridge refresh / bridge integration step |
 | `kv+ts` | split output across `Dota2KVGenerator` and `Dota2TSGenerator` |
@@ -139,6 +142,8 @@ but the current architectural decision is already fixed:
 - realization class belongs to Host Realization
 - generator selection belongs to routing
 - concrete artifact emission belongs to generators
+
+The next likely direction is to make those richer routed outputs explicit enough that the system no longer depends on an ever-growing set of combination-enum realization types.
 
 ## Why Multiple Generators Are Required
 

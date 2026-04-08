@@ -30,6 +30,24 @@ export function createLLMClientFromEnv(projectRoot: string = process.cwd()): LLM
   }
 }
 
+export function isLLMConfigured(projectRoot: string = process.cwd()): boolean {
+  try {
+    const env = loadEnv(projectRoot);
+    if (!env.LLM_PROVIDER) {
+      return false;
+    }
+    if (env.LLM_PROVIDER === "openai-compatible") {
+      return !!(env.OPENAI_BASE_URL && env.OPENAI_API_KEY && env.OPENAI_MODEL);
+    }
+    if (env.LLM_PROVIDER === "anthropic") {
+      return !!(env.ANTHROPIC_API_KEY && env.ANTHROPIC_MODEL);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function readOpenAICompatibleConfig(
   env: Record<string, string>
 ): OpenAICompatibleConfig {

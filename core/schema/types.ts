@@ -109,6 +109,8 @@ export interface Blueprint {
   assumptions: string[];
   validations: ValidationContract[];
   readyForAssembly: boolean;
+  /** T138-R1: Parameters extracted from prompt (cooldown, mana, range, etc.) */
+  parameters?: Record<string, unknown>;
 }
 
 export interface BlueprintSourceIntent {
@@ -128,6 +130,8 @@ export interface BlueprintModule {
     | "ui"
     | "resource"
     | "integration";
+  /** T151: Explicit pattern grouping - if provided, Assembly will use this instead of category-based inference */
+  patternIds?: string[];
   responsibilities: string[];
   inputs?: string[];
   outputs?: string[];
@@ -203,12 +207,16 @@ export interface AssemblyPlan {
   blueprintId: string;
   selectedPatterns: SelectedPattern[];
   modules?: AssemblyModule[];
+  /** T154: Propagated from Blueprint for composite relationship hints */
+  connections?: BlueprintConnection[];
   writeTargets: WriteTarget[];
   bridgeUpdates?: BridgeUpdate[];
   validations: ValidationContract[];
   readyForHostWrite: boolean;
   /** Host Write Readiness Gate 详情 (T065) */
   hostWriteReadiness?: HostWriteReadiness;
+  /** T138-R1: Parameters extracted from prompt (cooldown, mana, range, etc.) */
+  parameters?: Record<string, unknown>;
 }
 
 /**
@@ -220,6 +228,10 @@ export interface AssemblyModule {
   role: RealizationRole;
   selectedPatterns: string[];
   outputKinds: ("server" | "shared" | "ui" | "bridge")[];
+  /** T172-R1: Propagate module-specific parameters from Blueprint for case-specific fill */
+  parameters?: Record<string, unknown>;
+  /** T149: Explicit outputs for finer-grained output expression (optional, for future composite features) */
+  outputs?: HostRealizationOutput[];
   realizationHints?: {
     kvCapable?: boolean;
     runtimeHeavy?: boolean;
@@ -277,8 +289,24 @@ export interface BridgeUpdate {
 /**
  * Dota2 Host  realization 类型
  * 与 docs/DOTA2-HOST-REALIZATION-POLICY.md 对齐
+ * T143: Added "lua" for formal routing of lua ability patterns
+ * T143-R1: Added "kv+lua" to represent lua-backed abilities with kv static shell
  */
-export type RealizationType = "kv" | "ts" | "ui" | "kv+ts" | "shared-ts" | "bridge-only";
+export type RealizationType = "kv" | "ts" | "ui" | "lua" | "kv+lua" | "kv+ts" | "shared-ts" | "bridge-only";
+
+/**
+ * Host Realization Output - T148
+ * Explicit output representation for multi-output realization.
+ * Used alongside realizationType for backward compatibility.
+ */
+export interface HostRealizationOutput {
+  /** Kind of output (kv/ts/ui/lua/bridge) */
+  kind: "kv" | "ts" | "ui" | "lua" | "bridge";
+  /** Target path in the host */
+  target: string;
+  /** Why this output was chosen */
+  rationale?: string[];
+}
 
 /**
  * Host Realization 单位角色
@@ -323,6 +351,10 @@ export interface HostRealizationUnit {
   realizationType: RealizationType;
   /** Target paths/endpoints in the host */
   hostTargets: string[];
+  /** T148: Explicit outputs for multi-output realization (optional, for migration) */
+  outputs?: HostRealizationOutput[];
+  /** T172-R1: Propagate module parameters for case-specific fill */
+  parameters?: Record<string, unknown>;
   /** Why this realization type was chosen */
   rationale: string[];
   /** Confidence in the realization decision */
@@ -362,11 +394,15 @@ export interface GeneratorRoute {
   /** Source realization unit this route is derived from */
   sourceUnitId: string;
   /** Target generator family for this route */
-  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "bridge-support";
+  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
   /** Kind of output this route produces */
-  routeKind: "kv" | "ts" | "ui" | "bridge";
+  routeKind: "kv" | "ts" | "ui" | "lua" | "bridge";
   /** Target path in the host */
   hostTarget: string;
+  /** T143-R2: Source pattern IDs this route is derived from */
+  sourcePatternIds: string[];
+  /** T172-R1: Parameters from source module for case-specific fill */
+  parameters?: Record<string, unknown>;
   /** Why this route was chosen */
   rationale: string[];
   /** Issues blocking this route */
@@ -403,9 +439,9 @@ export interface GeneratorRouteOutput {
   /** Source realization unit this output is derived from */
   sourceUnitId: string;
   /** Generator family that produced this output */
-  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "bridge-support";
+  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
   /** Kind of output this represents */
-  routeKind: "kv" | "ts" | "ui" | "bridge";
+  routeKind: "kv" | "ts" | "ui" | "lua" | "bridge";
   /** Target path in the host */
   hostTarget: string;
   /** Generated content (if not blocked) */
@@ -472,7 +508,7 @@ export interface RouteLevelValidationResult {
  */
 export interface GeneratorOutputValidationResult {
   stage: "generator-output";
-  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "bridge-support";
+  generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
   routeId: string;
   valid: boolean;
   issues: ValidationIssue[];
