@@ -1,139 +1,244 @@
 # Rune Weaver
 
-Rune Weaver 是一个面向游戏功能生成的、受控的 **自然语言到代码** 系统。
+Rune Weaver 不是一个“更重的 vibe coding 工具”。
 
-它不是“输入一句话自动生成整款游戏”的黑盒，也不追求任意宿主上的自由改写。当前目标更窄、更工程化：
+它的目标是：
 
-- 把受约束的玩法需求转成结构化规划对象
-- 复用可审查的 mechanic pattern，而不是到处写一次性模板
-- 通过宿主适配层生成可审查、可验证、可回滚的宿主代码产物
-- 将写入严格限制在 Rune Weaver 自有命名空间和显式允许的桥接点内
+**在一个已经活着的真实项目里，安全地构建、更新、审阅、回退和组合 feature。**
 
-当前第一个真实宿主是 **Dota2 x-template / test1**。
+更准确地说，Rune Weaver 是一个面向真实项目的、受约束的 **Feature Construction Platform**。
 
-## 完整链路图
+---
 
-当前主链路不是“一步到位生成代码”，而是分层推进：
+## 它解决什么问题
+
+Rune Weaver 不试图在所有场景都替代 Cursor / Cline。
+
+它真正要解决的是这类问题：
+
+- 项目已经存在，不是一次性 demo
+- 功能在持续叠加
+- 多个 feature 需要共存
+- 改一个功能可能影响别的功能
+- 结果需要可审阅、可回退、可继续演进
+
+换句话说，Rune Weaver 不是为了“5 分钟吐一个 MVP”，而是为了：
+
+- 向一个活项目持续加功能
+- 更新已有功能，而不是每次重写一版
+- 在多 feature 共存时尽量不把项目搞坏
+
+---
+
+## 它不是什么
+
+Rune Weaver 不应被理解为：
+
+- 通用聊天式代码生成器
+- 任意宿主上的自由改写工具
+- 一个单纯的 MCP server
+- 一个“让 LLM 搭积木拼代码块”的产品
+
+MCP 可以是接入方式之一，但不是产品本体。
+
+Rune Weaver 的本体是一条正式、受约束、可审阅的 feature 构建链路。
+
+---
+
+## 最适合的宿主区间
+
+Rune Weaver 当前最适合的不是所有软件项目，而是这类宿主：
+
+- 中等复杂度
+- feature 持续叠加
+- 规则和约束很多
+- 单个功能不一定难，但组合很容易失控
+- 后期维护痛感明显
+- 宿主有相对稳定的结构、入口和 ownership boundary
+
+当前第一真实宿主是：
+
+- **Dota2 Custom Game / x-template / test1**
+
+但 Dota2 不是产品本体，只是第一套 host pack。
+
+未来更合理的相邻宿主区间包括：
+
+- Warcraft 3 地图
+- 部分 Roblox 玩法项目
+- 其他规则密集、功能持续叠加、host 边界较稳定的内容型宿主
+
+---
+
+## Rune Weaver 的真正优势
+
+Rune Weaver 的优势不在“模型更聪明”，而在下面这些能力的组合：
+
+- **Feature Lifecycle**
+  - create
+  - update
+  - regenerate
+  - rollback
+- **Host-aware Construction**
+  - 知道该写到哪里
+  - 知道哪些路径/桥接点被允许
+  - 知道哪些输出必须协同
+- **Feature Review**
+  - 不是只看代码片段
+  - 而是看这个 feature 会改什么、影响什么、风险是什么
+- **Feature Composition Governance**
+  - 在写入前发现一部分真实冲突
+  - 而不是等代码写完后让用户自己 debug
+
+Rune Weaver 的目标不是“比 vibe coding 更会说术语”，而是：
+
+**当项目进入持续 feature 演进阶段时，比普通 vibe coding 更不容易把项目搞坏。**
+
+---
+
+## 当前系统状态
+
+当前项目状态应被理解为：
+
+- **Phase 1 的 architecture goals 与 case-construction goals 已基本完成**
+- 但 **runtime / client / toolchain closure** 仍未全部完成
+
+当前已经成立的关键能力包括：
+
+- 正式主链路：
+  - `Natural Language -> IntentSchema -> Blueprint -> Pattern Resolution -> Assembly -> Realization -> Routing -> Generation -> Write`
+- composite backbone 已建立并验证：
+  - `trigger`
+  - `data`
+  - `rule`
+  - `ui`
+  - `effect`
+- 最小 talent-drafting-like case 已在正式 pipeline 中闭环
+- case-specific parameter flow 已打通
+- parameterized talent-drafting path 已恢复到 5-module backbone
+- code-level formal-pipeline closure 已确认
+
+当前仍不应被过度宣称为已完成的部分：
+
+- 完整 runtime / client playability closure
+- 全部 toolchain/environment 闭环
+- 小白产品已完成
+- Phase 2 的 Wizard / Blueprint LLM / conflict governance / scene reference 已实现
+
+---
+
+## 当前与未来的分层
+
+Rune Weaver 的长期结构不应是“一个 Dota2 专用生成器”，而应是三层：
+
+- **Product Universal Layer**
+  - 产品入口
+  - Wizard / Review / Governance
+  - feature lifecycle
+- **Host Contract Layer**
+  - host capability
+  - realization policy
+  - routing / ownership / validation policy
+- **Host Pack Layer**
+  - Dota2 generators
+  - Dota2 paths
+  - Dota2 write / validation specifics
+
+这也是后续避免“加一个宿主要改半个产品”的关键。
+
+---
+
+## 当前高层链路
+
+### 产品与规划主流
 
 ```text
-自然语言请求
-  -> Wizard
+User Request
+  -> Workbench
+  -> Main Wizard
+  -> optional UI Wizard / optional scene reference intake
   -> IntentSchema
-  -> Blueprint
+  -> Blueprint Proposal
+  -> Contract / Governance / Host Checks
+  -> Final Blueprint
+```
+
+### 执行主流
+
+```text
+Final Blueprint
   -> Pattern Resolution
   -> AssemblyPlan
   -> HostRealizationPlan
   -> GeneratorRoutingPlan
   -> Generators
-     -> Dota2KVGenerator
-     -> Dota2TSGenerator
-     -> Dota2UIGenerator
-     -> Dota2LuaGenerator（窄范围）
-  -> Write Plan
+  -> WritePlan
   -> Write Executor
-  -> Host Validation / Runtime Validation
-  -> Workspace State
+  -> Validation Report
+  -> Workspace State / Feature Record
 ```
 
-如果只看当前已经跑通的 Dota2 主路径，可以理解为：
+---
 
-```text
-Prompt
-  -> 结构化规划
-  -> Dota2 宿主实现决策
-  -> KV / TS / UI / Lua 代码生成
-  -> 受控写入 test1
-  -> 宿主修复 / bridge refresh
-  -> 真实 Dota2 游戏内验证
-```
+## Phase 2 方向
 
-## 当前已实现状态
+Phase 2 不是“让 Rune Weaver 更像自由生成器”，而是让它从工程底座进入受控产品化。
 
-当前已经成立的能力：
+核心方向包括：
 
-- `IntentSchema / Blueprint / AssemblyPlan` 主链路
-- `HostRealizationPlan / GeneratorRoutingPlan` 架构分层
-- Dota2 宿主写入与 workspace 基础闭环
-- Dota2 adapter repair 已 mainlined
-- baseline migration 已 mainlined：
-  - `XLSXContent -> DOTAAbilities`
-- lua path 已 mainlined 到 write 层：
-  - normal pipeline 会自然产出 `contentType: "lua"` entry
-  - generator 会生成 same-file ability + modifier Lua
-  - write executor 会实际写出 `.lua` 文件
-- 最小真实 Dota2 E2E 已验证：
-  - baseline 3 技能正常出现
-  - RW fresh identity 技能可挂载、可施放
-  - 有蓝耗和冷却
-  - modifier 创建成功
-  - buff 可见并持续约 6 秒
+- Workbench / Main Wizard v1
+- UI Wizard v1
+- Feature Governance Foundation
+- Feature Conflict Governance v1
+- Feature Review v1
+- Blueprint LLM Proposal v1
+- Structured Experience Layer v1
+- Gap Fill v1
+- Scene / Map Reference v1
 
-## 当前边界
+Phase 2 的原则是：
 
-当前明确 **不应** 误解为已完成的部分：
+- **先治理层，再智能层**
+- **构建优先，治理是保护层**
+- **Dota2 是第一宿主，不是产品本体**
 
-- 这不是通用“任意游戏 -> 任意代码”的系统
-- 这不是通用 lua ability framework
-- 当前 lua metadata scope 仅明确覆盖 `short_time_buff` 及近似 case
-- 当前真实 Dota2 E2E 是 **minimal viable**，不是 polished gameplay quality
-- 多 archetype 的 lua 覆盖仍未完成
-- lifecycle 全链路（create / update / regenerate / rollback）真实宿主 E2E 仍可继续补强
-
-## 产品边界
-
-Rune Weaver 当前只拥有并可直接生成/修复：
-
-- `game/scripts/src/rune_weaver/**`
-- `game/scripts/vscripts/rune_weaver/**`
-- `content/panorama/src/rune_weaver/**`
-- 少量显式允许的 bridge / host repair 点
-
-Rune Weaver **不** 直接拥有：
-
-- 用户业务代码的大范围任意改写
-- 任意宿主文件的智能重写
-- 未声明的宿主侧自由编辑权
-
-## 为什么先做 Dota2
-
-Dota2 适合作为第一宿主，因为它具备：
-
-- 清晰的宿主边界
-- 严格 API 和文件结构
-- 事件驱动的玩法模型
-- 边界明确的 UI 输出面
-- 大量可抽象为 pattern 的 mechanic 形状
-
-这让它适合：
-
-- 结构化规划
-- pattern-driven generation
-- adapter-based host binding
-- 写前验证与宿主修复
+---
 
 ## 仓库结构
 
-- `core/`：规划层与共享 schema
-- `adapters/`：宿主适配层，当前以 Dota2 为主
-- `apps/cli/`：CLI 入口
-- `docs/`：当前 source-of-truth 文档
-- `knowledge/`：处理后的宿主知识
-- `references/`：原始参考资料
-- `skills/`：本地 Codex skill
-- `archive/`：归档文档与历史记录
-- `scripts/`：调试、验证、历史修复脚本
+- `core/`
+  - 通用 schema、planning、pipeline、wizard、llm
+- `adapters/`
+  - 宿主实现层，当前以 Dota2 为主
+- `apps/cli/`
+  - 当前 CLI 入口
+- `docs/`
+  - source-of-truth 文档
+- `references/`
+  - 宿主参考资料
+- `skills/`
+  - 本地 Codex skill
+- `archive/`
+  - 归档内容
+
+---
 
 ## 建议阅读顺序
 
-如果你要快速理解当前基线，建议按这个顺序：
+如果你第一次进入这个仓库，建议按下面顺序阅读：
 
-1. [`INDEX.md`](./INDEX.md)
-2. [`docs/HANDOFF.md`](./docs/HANDOFF.md)
-3. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
-4. [`docs/HOST-INTEGRATION-DOTA2.md`](./docs/HOST-INTEGRATION-DOTA2.md)
-5. [`docs/TASK-COMPLETION.md`](./docs/TASK-COMPLETION.md)
-6. [`docs/ROADMAP.md`](./docs/ROADMAP.md)
-7. [`docs/QA.md`](./docs/QA.md)
+1. [docs/HANDOFF.md](./docs/HANDOFF.md)
+2. [docs/PRODUCT.md](./docs/PRODUCT.md)
+3. [docs/SYSTEM-ARCHITECTURE-ZH.md](./docs/SYSTEM-ARCHITECTURE-ZH.md)
+4. [docs/PHASE-ROADMAP-ZH.md](./docs/PHASE-ROADMAP-ZH.md)
+5. [docs/PHASE2-PLAN-ZH.md](./docs/PHASE2-PLAN-ZH.md)
+6. [docs/PHASE2-EXECUTION-CHECKLIST-ZH.md](./docs/PHASE2-EXECUTION-CHECKLIST-ZH.md)
+
+如果你要看当前已验证的执行链，再看：
+
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+
+---
 
 ## 开发
 
@@ -154,28 +259,26 @@ npm run check-types
 npm run cli -- --help
 ```
 
+---
+
 ## 当前最自然的下一步
 
-当前更适合继续推进的方向是：
+如果按当前路线继续推进，最自然的方向不是“再加更多 Dota2 特例”，而是：
 
-1. 增加第二个 lua archetype，验证 lua metadata schema 的可扩展性
-2. 在真实宿主中补强 lifecycle E2E：
-   - create
-   - update
-   - regenerate
-   - rollback
-3. 提升效果质量：
-   - particle
-   - sound
-   - 数值反馈
-4. 继续 formalize 多生成器路由的协调边界
+- 按 `PHASE2-PLAN-ZH` 与 `PHASE2-EXECUTION-CHECKLIST-ZH` 推进 Phase 2
+- 优先建立受控产品入口、治理层和 review 面
+- 再引入 Blueprint LLM proposal、structured experience、gap-fill、scene reference
+
+---
 
 ## 说明
 
-- 当前内部文档比 README 更完整
-- 历史 `run-t121-*` / `dry-run-t125-*` 脚本保留为调试与证据材料，不应被误解为当前主路径
+- 当前 README 是入口摘要，不是完整设计文档
+- 更完整的判断、边界与计划，都在 `docs/` 下
 - Rune Weaver 的方向始终是：
-  - **受控规划**
-  - **受控生成**
+  - **受控构建**
+  - **受控治理**
   - **受控写入**
-  而不是自由生成
+  - **受控演进**
+
+而不是自由生成。
