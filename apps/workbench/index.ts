@@ -52,13 +52,13 @@ import {
   createGovernanceRelease,
   createConfirmationAction,
 } from "./governance.js";
+import { detectSharedIntegrationPointConflict } from "./conflict-detection.js";
 import { generateFeatureReview, printFeatureReview } from "./feature-review.js";
 import { identifyGapsAndFill, identifyGapsAndFillAsync } from "./gap-fill.js";
 import {
   createFeatureIdentity,
   createFeatureOwnership,
   createIntegrationPointRegistry,
-  extractIntegrationPoints,
   generateSessionId,
 } from "./intake-analysis.js";
 import { generateBlueprintProposal } from "./proposal.js";
@@ -130,85 +130,11 @@ import type {
   UIDetectionResult,
   UIIntakeResult,
   ConflictKind,
-  ConflictSeverity,
-  ConflictStatus,
-  RecommendedAction,
-  IntegrationPointConflict,
   ConflictCheckResult,
   BlueprintProposal,
   FailureCorpus,
   ActualWriteResult,
 } from "./types.js";
-
-function detectSharedIntegrationPointConflict(
-  featureId: string,
-  featureLabel: string,
-  integrationPoints: IntegrationPointRegistry,
-  workspace: { features: RuneWeaverFeatureRecord[] } | null
-): ConflictCheckResult {
-  const currentPointKinds = integrationPoints.points.map(p => p.kind);
-  const conflicts: IntegrationPointConflict[] = [];
-
-  // Query real workspace for existing features
-  if (workspace && workspace.features) {
-    const existingFeatures = workspace.features.filter((f: RuneWeaverFeatureRecord) => 
-      f.featureId !== featureId && f.status === "active"
-    );
-
-    for (const existingFeature of existingFeatures) {
-      // Extract integration points from existing feature
-      const existingPoints = extractIntegrationPoints(existingFeature);
-      
-      for (const existingPoint of existingPoints) {
-        if (currentPointKinds.includes(existingPoint)) {
-          const severity: ConflictSeverity = 
-            existingPoint === "ability_slot" || existingPoint === "data_pool"
-              ? "error" 
-              : "warning";
-
-          conflicts.push({
-            kind: "shared_integration_point",
-            severity,
-            conflictingPoint: existingPoint,
-            existingFeatureId: existingFeature.featureId,
-            existingFeatureLabel: existingFeature.featureName || existingFeature.intentKind || existingFeature.featureId,
-            explanation: `Both this feature and existing feature '${existingFeature.featureId}' require '${existingPoint}' integration point.`,
-          });
-        }
-      }
-    }
-  }
-
-  let status: ConflictStatus;
-  let recommendedAction: RecommendedAction;
-  let summary: string;
-
-  if (conflicts.length === 0) {
-    status = "safe";
-    recommendedAction = "proceed";
-    summary = "No integration point conflicts detected with existing features.";
-  } else {
-    const hasError = conflicts.some(c => c.severity === "error");
-    if (hasError) {
-      status = "blocked";
-      recommendedAction = "block";
-      summary = `Detected ${conflicts.length} conflict(s) including critical shared integration point(s). Review required before proceeding.`;
-    } else {
-      status = "needs_confirmation";
-      recommendedAction = "confirm";
-      summary = `Detected ${conflicts.length} conflict(s) with existing features. Please confirm to proceed.`;
-    }
-  }
-
-  return {
-    featureId,
-    hasConflict: conflicts.length > 0,
-    conflicts,
-    status,
-    recommendedAction,
-    summary,
-  };
-}
 
 export async function runWorkbench(
   userRequest: string,
