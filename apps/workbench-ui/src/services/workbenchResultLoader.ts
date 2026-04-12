@@ -13,7 +13,7 @@
 // - Type transformation (handled by adapter layer)
 // - UI state management (handled by App.tsx)
 
-import type { WorkbenchResult } from "../../../workbench/types";
+import type { WorkbenchResult } from "../../../workbench/contract";
 
 // F005-R1: Import local backend results from separate source layer
 import {

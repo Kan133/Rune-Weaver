@@ -2,7 +2,7 @@
 // Bridges backend WorkbenchResult to frontend Feature type
 // Allows UI to consume real structured data from workbench layer
 
-import type { WorkbenchResult } from "../../../workbench/types";
+import type { WorkbenchResult } from "../../../workbench/contract";
 import type { Feature, Group, FeatureStatus } from "@/types/feature";
 
 // F007: Convert backend FeatureCard status to frontend FeatureStatus

@@ -12,7 +12,7 @@
 // - UI state management
 // - Type transformation (handled by adapter)
 
-import type { WorkbenchResult } from "../../../workbench/types";
+import type { WorkbenchResult } from "../../../workbench/contract";
 
 // F006: Realistic create result - mirrors what backend would return after processing
 export const bridgeCreateResult: WorkbenchResult = {

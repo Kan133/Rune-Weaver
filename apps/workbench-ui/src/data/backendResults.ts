@@ -2,7 +2,7 @@
 // Extracted from workbenchResultLoader.ts to separate data definition from loading logic
 // This file acts as a replaceable local source layer - in production, this would be replaced by actual API calls
 
-import type { WorkbenchResult } from "../../../workbench/types";
+import type { WorkbenchResult } from "../../../workbench/contract";
 
 // F005-R1: Create feature result - simulates backend response after processing "create dash ability"
 export const createDashResult: WorkbenchResult = {

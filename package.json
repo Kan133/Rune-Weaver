@@ -14,7 +14,7 @@
     "cli:micro": "tsx apps/cli/index.ts --input \"做一个按Q键的冲刺技能\" --type micro-feature --trigger Q",
     "cli:system": "tsx apps/cli/index.ts --input \"做一个按F4触发的三选一天赋抽取系统\" --type standalone-system --ui",
     "workbench": "tsx apps/workbench/index.ts",
-    "test": "tsx core/validation/schema-validator.test.ts",
+    "test": "tsx core/validation/schema-validator.test.ts && tsx apps/workbench/workbench-smoke.test.ts",
     "examples": "tsx examples/index.ts",
     "verify:p0": "npm run check-types && npm run test && npm run examples && npm run cli:micro"
   },

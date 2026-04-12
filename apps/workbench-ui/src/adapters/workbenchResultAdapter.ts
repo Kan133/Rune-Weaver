@@ -17,7 +17,7 @@ import type {
   GovernanceRelease as BackendGovernanceRelease,
   ConfirmationAction as BackendConfirmationAction,
   UpdateWriteResult as BackendUpdateWriteResult,
-} from "../../../workbench/types";
+} from "../../../workbench/contract";
 
 // F004-R1: Adapter input is now a direct Pick from shared WorkbenchResult
 // This eliminates type duplication and makes the integration path clearer
