@@ -15,12 +15,6 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { IntentSchema, Blueprint, AssemblyPlan } from "../../core/schema/types.js";
-import { BlueprintBuilder } from "../../core/blueprint/builder.js";
-import { resolvePatterns, PatternResolutionResult } from "../../core/patterns/resolver.js";
-import { AssemblyPlanBuilder, AssemblyPlanConfig } from "../../core/pipeline/assembly-plan.js";
-import { createLLMClientFromEnv, isLLMConfigured } from "../../core/llm/factory.js";
-import { runWizardToIntentSchema, extractNumericParameters } from "../../core/wizard/index.js";
 import {
   initializeWorkspace,
   saveWorkspace,
@@ -28,13 +22,10 @@ import {
   addFeatureToWorkspace,
   updateFeatureInWorkspace,
   extractEntryBindings,
-  RuneWeaverWorkspace,
-  RuneWeaverFeatureRecord,
   FeatureWriteResult,
-  findFeatureById,
 } from "../../core/workspace/index.js";
 
-import { createWritePlan as assemblerCreateWritePlan, WritePlan, WritePlanEntry } from "../../adapters/dota2/assembler/index.js";
+import { WritePlan, WritePlanEntry } from "../../adapters/dota2/assembler/index.js";
 import { generateCode } from "../../adapters/dota2/generator/index.js";
 import { generateAbilityKV } from "../../adapters/dota2/generator/kv/index.js";
 import { KVGeneratorInput } from "../../adapters/dota2/generator/kv/types.js";
@@ -47,11 +38,10 @@ import {
   WriteReviewArtifact,
   WriteResult,
 } from "../../adapters/dota2/executor/index.js";
-import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateKVContentWithIndex, generateCodeContent, alignWritePlanWithExistingFeature, validateHost, buildRuntimeValidationResult, performUpdateHostValidation, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
+import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateKVContentWithIndex, generateCodeContent, validateHost, buildRuntimeValidationResult, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
 import type { VerdictInput, HostValidationResult, RuntimeValidationResult, WorkspaceUpdateResult } from "./helpers/index.js";
 import { checkWriteConflicts } from "./helpers/governance-check.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
-import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
 import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } from "../../adapters/dota2/routing/index.js";
 import { isHostFullyReady } from "../../adapters/dota2/scanner/host-status.js";
 import {
@@ -62,21 +52,21 @@ import {
 } from "../../adapters/dota2/regenerate/index.js";
 import type { CleanupPlan, CleanupExecutionResult } from "../../adapters/dota2/regenerate/index.js";
 import type { RollbackPlan, RollbackExecutionResult } from "../../adapters/dota2/rollback/index.js";
-import {
-  classifyUpdateDiff,
-  executeSelectiveUpdate,
-  formatUpdateDiffResult,
-  formatSelectiveUpdateResult,
-} from "../../adapters/dota2/update/index.js";
-import type { UpdateDiffResult, SelectiveUpdateResult } from "../../adapters/dota2/update/index.js";
 import { getDefaultReviewArtifactOutputDir, saveDefaultReviewArtifact, saveReviewArtifact } from "./dota2/review-artifacts.js";
-import { createDeleteReviewArtifact } from "./dota2/delete-artifact.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
-import { createUpdateReviewArtifact } from "./dota2/update-artifact.js";
 import { runDeleteCommand } from "./dota2/commands/delete.js";
 import { runRollbackCommand } from "./dota2/commands/rollback.js";
 import { runRegenerateCommand } from "./dota2/commands/regenerate.js";
 import { runUpdateCommand } from "./dota2/commands/update.js";
+import {
+  buildAssemblyPlan,
+  buildBlueprint,
+  createIntentSchema,
+  createWritePlan,
+  getFeatureMode,
+  resolveExistingFeatureContext,
+  resolvePatternsFromBlueprint,
+} from "./dota2/planning.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -787,341 +777,6 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   artifact.finalVerdict = verdict;
 
   return artifact;
-}
-
-async function createIntentSchema(prompt: string, hostRoot: string): Promise<{ schema: IntentSchema | null; usedFallback: boolean }> {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 1: IntentSchema");
-  console.log("=".repeat(70));
-
-  // Check if LLM is configured before trying to use it
-  if (!isLLMConfigured(process.cwd())) {
-    console.log(`  ⚠️  LLM not configured, using fallback`);
-    const schema = createFallbackIntentSchema(prompt, hostRoot);
-    console.log(`  ℹ️  IntentSchema created via fallback (prompt analysis)`);
-    console.log(`     Goal: ${schema.request.goal}`);
-    console.log(`     Intent Kind: ${schema.classification.intentKind}`);
-    console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
-    return { schema, usedFallback: true };
-  }
-
-  // Try to use real Wizard with LLM
-  try {
-    const client = createLLMClientFromEnv(process.cwd());
-    
-    const result = await runWizardToIntentSchema({
-      client,
-      input: {
-        rawText: prompt,
-        temperature: 1,
-        providerOptions: { thinking: { type: "enabled" } },
-      },
-    });
-
-    if (result.valid && result.schema) {
-      const extractedParams = extractNumericParameters(prompt);
-      
-      const schema = {
-        ...result.schema,
-        host: {
-          kind: "dota2-x-template" as const,
-          projectRoot: hostRoot,
-        },
-        isReadyForBlueprint: true,
-        normalizedMechanics: result.schema.normalizedMechanics ?? {
-          trigger: false,
-          candidatePool: false,
-          weightedSelection: false,
-          playerChoice: false,
-          uiModal: false,
-          outcomeApplication: false,
-          resourceConsumption: false,
-        },
-      };
-
-      if (Object.keys(extractedParams).length > 0) {
-        (schema as any).parameters = extractedParams;
-      }
-
-      console.log(`  ✅ IntentSchema created via LLM Wizard`);
-      console.log(`     Goal: ${schema.request.goal}`);
-      console.log(`     Intent Kind: ${schema.classification.intentKind}`);
-      console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
-
-      return { schema, usedFallback: false };
-    } else {
-      console.log(`  ⚠️  LLM Wizard returned invalid schema, using fallback`);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(`  ⚠️  LLM not available (${message}), using fallback`);
-  }
-
-  // Fallback: Analyze prompt to infer intent
-  const schema = createFallbackIntentSchema(prompt, hostRoot);
-  console.log(`  ℹ️  IntentSchema created via fallback (prompt analysis)`);
-  console.log(`     Goal: ${schema.request.goal}`);
-  console.log(`     Intent Kind: ${schema.classification.intentKind}`);
-  console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
-
-  return { schema, usedFallback: true };
-}
-
-function createFallbackIntentSchema(prompt: string, hostRoot: string): IntentSchema {
-  const lowerPrompt = prompt.toLowerCase();
-
-  // T138-R1: Extract numeric parameters from prompt
-  const extractedParams = extractNumericParameters(prompt);
-
-  // Infer intent kind - be conservative
-  let intentKind: "micro-feature" | "standalone-system" = "micro-feature";
-  if (lowerPrompt.includes("系统") || lowerPrompt.includes("天赋")) {
-    intentKind = "standalone-system";
-  }
-
-  // Infer UI requirements - be conservative
-  const uiKeywords = ["ui", "界面", "显示", "天赋", "modal", "窗口"];
-  const uiNeeded = uiKeywords.some(kw => lowerPrompt.includes(kw));
-
-  // Infer normalized mechanics - only use mechanics that can be resolved by existing patterns
-  // Available patterns: input.key_binding, effect.dash, effect.modifier_applier, 
-  //                    effect.resource_consume, data.weighted_pool, rule.selection_flow,
-  //                    ui.selection_modal, resource.basic_pool
-  const normalizedMechanics = {
-    trigger: lowerPrompt.includes("按") || lowerPrompt.includes("键") || lowerPrompt.includes("触发"),
-    candidatePool: lowerPrompt.includes("选择") && lowerPrompt.includes("天赋"),
-    weightedSelection: lowerPrompt.includes("权重") || lowerPrompt.includes("随机"),
-    playerChoice: lowerPrompt.includes("选择") && !lowerPrompt.includes("天赋"),
-    uiModal: lowerPrompt.includes("天赋") || lowerPrompt.includes("窗口"),
-    outcomeApplication: lowerPrompt.includes("冲刺") || lowerPrompt.includes("效果") || lowerPrompt.includes("应用"),
-    resourceConsumption: lowerPrompt.includes("消耗") || lowerPrompt.includes("资源"),
-  };
-
-  const schema: IntentSchema = {
-    version: "1.0",
-    host: {
-      kind: "dota2-x-template",
-      projectRoot: hostRoot,
-    },
-    request: {
-      rawPrompt: prompt,
-      goal: prompt,
-      nameHint: prompt.replace(/\s+/g, "_").toLowerCase().substring(0, 20),
-    },
-    classification: {
-      intentKind,
-      confidence: "medium",
-    },
-    requirements: {
-      functional: [prompt],
-      interactions: uiNeeded ? ["UI交互"] : [],
-      outputs: [],
-    },
-    constraints: {
-      hostConstraints: ["Dota2 x-template"],
-    },
-    uiRequirements: {
-      needed: uiNeeded,
-      surfaces: uiNeeded ? ["selection_modal"] : [],
-    },
-    normalizedMechanics,
-    openQuestions: [],
-    resolvedAssumptions: ["Using fallback intent analysis"],
-    isReadyForBlueprint: true,
-  };
-
-  // T138-R1: Attach extracted parameters to the schema
-  // These will flow through Blueprint -> AssemblyPlan -> WritePlanEntry -> KV Generator
-  if (Object.keys(extractedParams).length > 0) {
-    (schema as any).parameters = extractedParams;
-  }
-
-  return schema;
-}
-
-function buildBlueprint(schema: IntentSchema): { blueprint: Blueprint | null; issues: string[] } {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 2: Blueprint");
-  console.log("=".repeat(70));
-
-  const builder = new BlueprintBuilder();
-  const result = builder.build(schema);
-
-  if (!result.success || !result.blueprint) {
-    console.log(`  ❌ Blueprint build failed`);
-    for (const issue of result.issues) {
-      console.log(`     - ${issue.code}: ${issue.message}`);
-    }
-    return { blueprint: null, issues: result.issues.map((i) => i.message) };
-  }
-
-  const blueprint = result.blueprint;
-  console.log(`  ✅ Blueprint created`);
-  console.log(`     ID: ${blueprint.id}`);
-  console.log(`     Modules: ${blueprint.modules.length}`);
-  console.log(`     Pattern Hints: ${blueprint.patternHints.length}`);
-
-  return { blueprint, issues: [] };
-}
-
-function resolvePatternsFromBlueprint(blueprint: Blueprint): PatternResolutionResult {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 3: Pattern Resolution");
-  console.log("=".repeat(70));
-
-  const result = resolvePatterns(blueprint);
-
-  console.log(`  Patterns resolved: ${result.patterns.length}`);
-  for (const p of result.patterns) {
-    console.log(`    ✅ ${p.patternId}`);
-  }
-
-  if (result.unresolved.length > 0) {
-    console.log(`  Unresolved patterns: ${result.unresolved.length}`);
-    for (const u of result.unresolved) {
-      console.log(`    ⚠️  ${u.requestedId}`);
-    }
-  }
-
-  console.log(`  Complete: ${result.complete}`);
-  return result;
-}
-
-function buildAssemblyPlan(
-  blueprint: Blueprint,
-  resolutionResult: PatternResolutionResult,
-  hostRoot: string
-): { plan: AssemblyPlan | null; blockers: string[] } {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4: AssemblyPlan");
-  console.log("=".repeat(70));
-
-  const config: AssemblyPlanConfig = {
-    allowFallback: true,
-    allowUnresolved: false,
-    hostRoot: hostRoot,
-  };
-
-  const builder = new AssemblyPlanBuilder(config);
-
-  try {
-    const plan = builder.build(blueprint, resolutionResult);
-
-    console.log(`  ✅ AssemblyPlan created`);
-    console.log(`     Blueprint ID: ${plan.blueprintId}`);
-    console.log(`     Selected Patterns: ${plan.selectedPatterns.length}`);
-    console.log(`     Ready for Host Write: ${plan.readyForHostWrite}`);
-
-    const blockers = plan.hostWriteReadiness?.blockers || [];
-    return { plan, blockers };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(`  ❌ AssemblyPlan build failed: ${message}`);
-    return { plan: null, blockers: [message] };
-  }
-}
-
-type FeatureMode = "create" | "update" | "regenerate";
-
-function getFeatureMode(command: Dota2CLIOptions["command"]): FeatureMode {
-  if (command === "update") return "update";
-  if (command === "regenerate") return "regenerate";
-  return "create";
-}
-
-function resolveExistingFeatureContext(
-  hostRoot: string,
-  featureId: string | undefined,
-  mode: FeatureMode
-): { success: true; workspace: RuneWeaverWorkspace | null; feature: RuneWeaverFeatureRecord | null } | { success: false; error: string } {
-  if (mode === "create") {
-    return { success: true, workspace: null, feature: null };
-  }
-
-  if (!featureId) {
-    return { success: false, error: `${mode} requires --feature <featureId>` };
-  }
-
-  const workspaceResult = initializeWorkspace(hostRoot);
-  if (!workspaceResult.success || !workspaceResult.workspace) {
-    return { success: false, error: `Failed to load workspace for ${mode}: ${workspaceResult.issues.join(", ")}` };
-  }
-
-  const feature = findFeatureById(workspaceResult.workspace, featureId);
-  if (!feature) {
-    return { success: false, error: `Feature '${featureId}' does not exist in workspace` };
-  }
-
-  if (feature.status !== "active") {
-    return { success: false, error: `Feature '${featureId}' has status '${feature.status}' and cannot be ${mode}d` };
-  }
-
-  return { success: true, workspace: workspaceResult.workspace, feature };
-}
-
-function createWritePlan(
-  assemblyPlan: AssemblyPlan,
-  hostRoot: string,
-  existingFeature: RuneWeaverFeatureRecord | null,
-  mode: FeatureMode,
-  hostRealizationPlan?: HostRealizationPlan,
-  generatorRoutingPlan?: GeneratorRoutingPlan
-): { writePlan: WritePlan | null; issues: string[] } {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 5: Generator");
-  console.log("=".repeat(70));
-
-  try {
-    // T115: Pass routing plan as primary input, realization plan as fallback
-    const writePlan = assemblerCreateWritePlan(
-      assemblyPlan,
-      hostRoot,
-      existingFeature?.featureId,
-      generatorRoutingPlan ?? undefined,
-      hostRealizationPlan ?? undefined
-    );
-
-    if (existingFeature) {
-      const alignment = alignWritePlanWithExistingFeature(writePlan, existingFeature, mode);
-      if (!alignment.ok) {
-        return { writePlan: null, issues: alignment.issues };
-      }
-    }
-
-    console.log(`  ✅ WritePlan created`);
-    console.log(`     ID: ${writePlan.id}`);
-    console.log(`     Entries: ${writePlan.entries.length}`);
-
-    // T112-R2: Show deferred status and generator family hints
-    if (writePlan.stats.deferred > 0) {
-      console.log(`     ⚠️  Deferred entries: ${writePlan.stats.deferred} (KV side not yet implemented)`);
-    }
-
-    // T112-R2: Show generator family hint distribution
-    const familyHints = writePlan.entries.reduce((acc: Record<string, number>, e: WritePlanEntry) => {
-      if (e.generatorFamilyHint) {
-        acc[e.generatorFamilyHint] = (acc[e.generatorFamilyHint] || 0) + 1;
-      }
-      return acc;
-    }, {} as Record<string, number>);
-    if (Object.keys(familyHints).length > 0) {
-      console.log(`     Generator hints: ${Object.entries(familyHints).map(([k, v]) => `${k}:${v}`).join(", ")}`);
-    }
-
-    // T112-R2: Show deferred warnings
-    if (writePlan.deferredWarnings && writePlan.deferredWarnings.length > 0) {
-      console.log(`     Deferred warnings:`);
-      for (const warning of writePlan.deferredWarnings) {
-        console.log(`       - ${warning}`);
-      }
-    }
-
-    return { writePlan, issues: [] };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(`  ❌ Generator failed: ${message}`);
-    return { writePlan: null, issues: [message] };
-  }
 }
 
 async function executeWrite(
