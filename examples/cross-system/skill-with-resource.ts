@@ -306,39 +306,44 @@ export const skillSystemAssemblyPlan: AssemblyPlan = {
   version: "0.1",
   blueprintId: "skill_system_fire_burst",
   host: { id: "dota2", mode: "mvp" },
-  resolvedPatterns: [
+  selectedPatterns: [
     {
       moduleId: "mod_input_e",
       patternId: "input.key_binding",
-      params: { key: "E", eventName: "OnFireBurstCast" },
+      role: "E_key_trigger",
+      parameters: { key: "E", eventName: "OnFireBurstCast" },
       priority: "required",
     },
     {
       moduleId: "mod_mana_pool",
       patternId: "resource.basic_pool",
-      params: { max: 500, regenRate: 2, castCost: 100 },
+      role: "mana_pool_tracker",
+      parameters: { max: 500, regenRate: 2, castCost: 100 },
       priority: "required",
     },
     {
       moduleId: "mod_mana_consumer",
       patternId: "effect.resource_consume",
-      params: { amount: 100 },
+      role: "mana_consumer",
+      parameters: { amount: 100 },
       priority: "required",
     },
     {
       moduleId: "mod_mana_bar",
       patternId: "ui.resource_bar",
-      params: { color: "#4d8cff", lowColor: "#ff4d4f" },
+      role: "mana_bar_display",
+      parameters: { color: "#4d8cff", lowColor: "#ff4d4f" },
       priority: "required",
     },
     {
       moduleId: "mod_cast_bar",
       patternId: "ui.key_hint",
-      params: { key: "E", showCooldown: true },
+      role: "cast_bar_hint",
+      parameters: { key: "E", showCooldown: true },
       priority: "required",
     },
   ],
-  generatedTargets: [
+  writeTargets: [
     {
       kind: "code",
       targetId: "dota2.server.skill_system",
@@ -401,8 +406,8 @@ export function runExample(): ExampleResult {
   }
 
   console.log("\n📦 AssemblyPlan:");
-  console.log(`   Pattern 绑定数: ${skillSystemAssemblyPlan.resolvedPatterns.length}`);
-  console.log(`   生成目标数: ${skillSystemAssemblyPlan.generatedTargets.length}`);
+  console.log(`   Pattern 绑定数: ${skillSystemAssemblyPlan.selectedPatterns.length}`);
+  console.log(`   生成目标数: ${skillSystemAssemblyPlan.writeTargets.length}`);
 
   console.log("\n🔍 Dota2 宿主验证:");
   const validation = validateDota2AssemblyPlan(skillSystemAssemblyPlan);

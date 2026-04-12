@@ -1,5 +1,9 @@
 # Generator Routing Contract
 
+> Status Note
+> This document is an active technical reference for generator-family boundaries and routing responsibility.
+> It should not be read as proof that all routing paths are already fully integrated or product-grade in the current MVP.
+
 ## Purpose
 
 This document defines how `HostRealizationPlan` should route work into downstream generators.

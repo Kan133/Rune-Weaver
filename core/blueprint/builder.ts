@@ -18,22 +18,10 @@ import {
   UISurfaceSpec,
 } from "../schema/types";
 import { BlueprintBuilderConfig, BlueprintBuildResult } from "./types";
-
-const AVAILABLE_PATTERNS = new Set([
-  "input.key_binding",
-  "data.weighted_pool",
-  "rule.selection_flow",
-  "effect.dash",
-  "effect.modifier_applier",
-  "effect.resource_consume",
-  "resource.basic_pool",
-  "ui.selection_modal",
-  "ui.key_hint",
-  "ui.resource_bar",
-]);
+import { isCanonicalPatternAvailable, CORE_PATTERN_IDS } from "../patterns/canonical-patterns";
 
 function isPatternAvailable(patternId: string): boolean {
-  return AVAILABLE_PATTERNS.has(patternId);
+  return isCanonicalPatternAvailable(patternId);
 }
 
 /**
@@ -288,13 +276,13 @@ export class BlueprintBuilder {
   private getCanonicalPatternIds(category: BlueprintModule["category"]): string[] {
     switch (category) {
       case "trigger":
-        return ["input.key_binding"];
+        return [CORE_PATTERN_IDS.INPUT_KEY_BINDING];
       case "data":
-        return ["data.weighted_pool"];
+        return [CORE_PATTERN_IDS.DATA_WEIGHTED_POOL];
       case "rule":
-        return ["rule.selection_flow"];
+        return [CORE_PATTERN_IDS.RULE_SELECTION_FLOW];
       case "ui":
-        return ["ui.selection_modal"];
+        return [CORE_PATTERN_IDS.UI_SELECTION_MODAL];
       case "effect":
         return [];
       case "resource":
@@ -421,7 +409,7 @@ export class BlueprintBuilder {
     const hints: PatternHint[] = [];
 
     if (schema.normalizedMechanics.trigger) {
-      const patterns = ["input.key_binding"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.INPUT_KEY_BINDING].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "input",
@@ -432,7 +420,7 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.candidatePool) {
-      const patterns = ["data.weighted_pool"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.DATA_WEIGHTED_POOL].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "data",
@@ -443,7 +431,7 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.weightedSelection) {
-      const patterns = ["rule.selection_flow"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.RULE_SELECTION_FLOW].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "rule",
@@ -454,7 +442,7 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.playerChoice) {
-      const patterns = ["rule.selection_flow"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.RULE_SELECTION_FLOW].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "rule",
@@ -465,7 +453,7 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.uiModal) {
-      const patterns = ["ui.selection_modal"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.UI_SELECTION_MODAL].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "ui",
@@ -476,7 +464,7 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.outcomeApplication) {
-      const patterns = ["effect.modifier_applier", "effect.resource_consume"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER, CORE_PATTERN_IDS.EFFECT_RESOURCE_CONSUME].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "effect",
@@ -487,7 +475,7 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.resourceConsumption) {
-      const patterns = ["resource.basic_pool", "effect.resource_consume"].filter(isPatternAvailable);
+      const patterns = [CORE_PATTERN_IDS.RESOURCE_BASIC_POOL, CORE_PATTERN_IDS.EFFECT_RESOURCE_CONSUME].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
           category: "resource",

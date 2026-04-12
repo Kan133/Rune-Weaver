@@ -14,6 +14,7 @@
 
 import type { Blueprint, AssemblyPlan } from "../../../core/schema/types.js";
 import type { WritePlan, WritePlanEntry } from "../../../adapters/dota2/assembler/index.js";
+import type { WriteResult } from "../../../adapters/dota2/executor/write-executor.js";
 import {
   initializeWorkspace,
   saveWorkspace,
@@ -43,7 +44,8 @@ export function updateWorkspaceState(
   writePlan: WritePlan,
   mode: FeatureMode,
   featureId: string,
-  existingFeature: RuneWeaverFeatureRecord | null
+  existingFeature: RuneWeaverFeatureRecord | null,
+  writeResult?: WriteResult
 ): WorkspaceUpdateResult {
   const initResult = initializeWorkspace(hostRoot);
   if (!initResult.success) {
@@ -90,13 +92,19 @@ export function updateWorkspaceState(
   }
 
   const entryBindings = extractEntryBindings(assemblyPlan.bridgeUpdates);
-  const executableEntries = writePlan.entries.filter((e: WritePlanEntry) => !e.deferred);
-  const kvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType === "kv");
-  const nonKvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType !== "kv");
-  const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e: WritePlanEntry) => e.targetPath));
-  const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
-  const nonKvFilesForWs = nonKvEntriesForWs.map((e: WritePlanEntry) => e.targetPath);
-  const generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
+
+  let generatedFiles: string[];
+  if (writeResult && writeResult.success) {
+    generatedFiles = [...writeResult.createdFiles, ...writeResult.modifiedFiles];
+  } else {
+    const executableEntries = writePlan.entries.filter((e: WritePlanEntry) => !e.deferred);
+    const kvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType === "kv");
+    const nonKvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType !== "kv");
+    const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e: WritePlanEntry) => e.targetPath));
+    const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
+    const nonKvFilesForWs = nonKvEntriesForWs.map((e: WritePlanEntry) => e.targetPath);
+    generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
+  }
 
   const featureResult: FeatureWriteResult = {
     featureId,

@@ -1,284 +1,225 @@
 # Rune Weaver
 
-Rune Weaver 不是一个“更重的 vibe coding 工具”。
+## 一句话
 
-它的目标是：
+**Rune Weaver 是一个"用自然语言描述功能 → 自动生成代码 → 统一管理功能"的工具。**
 
-**在一个已经活着的真实项目里，安全地构建、更新、审阅、回退和组合 feature。**
+你告诉它"我想做一个三选一天赋系统"，它会帮你生成 Dota2 所需的 Lua 代码、KV 配置、UI 界面，并且记住你创建了这个功能，方便后续维护和修改。
 
-更准确地说，Rune Weaver 是一个面向真实项目的、受约束的 **Feature Construction Platform**。
+## 当前状态说明
 
----
+上面的描述是 Rune Weaver 的**目标产品结果**。
 
-## 它解决什么问题
+当前面向实现与 agent 协作时，请额外遵循：
 
-Rune Weaver 不试图在所有场景都替代 Cursor / Cline。
+- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)：当前 MVP 边界与能力口径
+- [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)：当前操作入口与下一步优先级
 
-它真正要解决的是这类问题：
+当前正在收口的核心能力是：
 
-- 项目已经存在，不是一次性 demo
-- 功能在持续叠加
-- 多个 feature 需要共存
-- 改一个功能可能影响别的功能
-- 结果需要可审阅、可回退、可继续演进
+- host 分离
+- feature registry / workspace
+- `create`
+- `update`
+- `delete`
+- 最低限度的跨 feature 冲突治理
 
-换句话说，Rune Weaver 不是为了“5 分钟吐一个 MVP”，而是为了：
+`regenerate` 和 `rollback` 暂不作为当前 MVP 的必达项。
 
-- 向一个活项目持续加功能
-- 更新已有功能，而不是每次重写一版
-- 在多 feature 共存时尽量不把项目搞坏
+***
 
----
+## 这个工具的流程是什么？
 
-## 它不是什么
+### 用户视角的完整流程
 
-Rune Weaver 不应被理解为：
-
-- 通用聊天式代码生成器
-- 任意宿主上的自由改写工具
-- 一个单纯的 MCP server
-- 一个“让 LLM 搭积木拼代码块”的产品
-
-MCP 可以是接入方式之一，但不是产品本体。
-
-Rune Weaver 的本体是一条正式、受约束、可审阅的 feature 构建链路。
-
----
-
-## 最适合的宿主区间
-
-Rune Weaver 当前最适合的不是所有软件项目，而是这类宿主：
-
-- 中等复杂度
-- feature 持续叠加
-- 规则和约束很多
-- 单个功能不一定难，但组合很容易失控
-- 后期维护痛感明显
-- 宿主有相对稳定的结构、入口和 ownership boundary
-
-当前第一真实宿主是：
-
-- **Dota2 Custom Game / x-template / test1**
-
-但 Dota2 不是产品本体，只是第一套 host pack。
-
-未来更合理的相邻宿主区间包括：
-
-- Warcraft 3 地图
-- 部分 Roblox 玩法项目
-- 其他规则密集、功能持续叠加、host 边界较稳定的内容型宿主
-
----
-
-## Rune Weaver 的真正优势
-
-Rune Weaver 的优势不在“模型更聪明”，而在下面这些能力的组合：
-
-- **Feature Lifecycle**
-  - create
-  - update
-  - regenerate
-  - rollback
-- **Host-aware Construction**
-  - 知道该写到哪里
-  - 知道哪些路径/桥接点被允许
-  - 知道哪些输出必须协同
-- **Feature Review**
-  - 不是只看代码片段
-  - 而是看这个 feature 会改什么、影响什么、风险是什么
-- **Feature Composition Governance**
-  - 在写入前发现一部分真实冲突
-  - 而不是等代码写完后让用户自己 debug
-
-Rune Weaver 的目标不是“比 vibe coding 更会说术语”，而是：
-
-**当项目进入持续 feature 演进阶段时，比普通 vibe coding 更不容易把项目搞坏。**
-
----
-
-## 当前系统状态
-
-当前项目状态应被理解为：
-
-- **Phase 1 的 architecture goals 与 case-construction goals 已基本完成**
-- 但 **runtime / client / toolchain closure** 仍未全部完成
-
-当前已经成立的关键能力包括：
-
-- 正式主链路：
-  - `Natural Language -> IntentSchema -> Blueprint -> Pattern Resolution -> Assembly -> Realization -> Routing -> Generation -> Write`
-- composite backbone 已建立并验证：
-  - `trigger`
-  - `data`
-  - `rule`
-  - `ui`
-  - `effect`
-- 最小 talent-drafting-like case 已在正式 pipeline 中闭环
-- case-specific parameter flow 已打通
-- parameterized talent-drafting path 已恢复到 5-module backbone
-- code-level formal-pipeline closure 已确认
-
-当前仍不应被过度宣称为已完成的部分：
-
-- 完整 runtime / client playability closure
-- 全部 toolchain/environment 闭环
-- 小白产品已完成
-- Phase 2 的 Wizard / Blueprint LLM / conflict governance / scene reference 已实现
-
----
-
-## 当前与未来的分层
-
-Rune Weaver 的长期结构不应是“一个 Dota2 专用生成器”，而应是三层：
-
-- **Product Universal Layer**
-  - 产品入口
-  - Wizard / Review / Governance
-  - feature lifecycle
-- **Host Contract Layer**
-  - host capability
-  - realization policy
-  - routing / ownership / validation policy
-- **Host Pack Layer**
-  - Dota2 generators
-  - Dota2 paths
-  - Dota2 write / validation specifics
-
-这也是后续避免“加一个宿主要改半个产品”的关键。
-
----
-
-## 当前高层链路
-
-### 产品与规划主流
-
-```text
-User Request
-  -> Workbench
-  -> Main Wizard
-  -> optional UI Wizard / optional scene reference intake
-  -> IntentSchema
-  -> Blueprint Proposal
-  -> Contract / Governance / Host Checks
-  -> Final Blueprint
+```
+1️⃣ 描述你的想法
+   ↓
+   "我想做一个三选一天赋系统，每个玩家可以选一个增益"
+   ↓
+2️⃣ Wizard 帮你理清细节
+   ↓
+   系统问："天赋池有多少个选项？选择策略是什么？"
+   你回答后，系统生成 IntentSchema（结构化的需求）
+   ↓
+3️⃣ 提案审查
+   ↓
+   你可以看到系统理解了你要什么：哪些 Pattern 会用到，
+   会生成哪些文件，有什么冲突风险
+   你确认或修改
+   ↓
+4️⃣ 代码生成
+   ↓
+   系统根据 Blueprint 生成 Dota2 的：
+   - Lua 技能代码
+   - KV 技能配置
+   - UI 界面代码
+   ↓
+5️⃣ 写入与追踪
+   ↓
+   功能被保存到 Feature Registry（功能注册表）
+   你可以查看、修改、重新生成、删除某个功能
 ```
 
-### 执行主流
+***
 
-```text
-Final Blueprint
-  -> Pattern Resolution
-  -> AssemblyPlan
-  -> HostRealizationPlan
-  -> GeneratorRoutingPlan
-  -> Generators
-  -> WritePlan
-  -> Write Executor
-  -> Validation Report
-  -> Workspace State / Feature Record
+## 什么是 Gap Fill？
+
+**Gap Fill = 系统在细节不确定时，用规则填充，而不是胡乱猜测。**
+
+### 问题
+
+用户说"做一个加速技能"，但没说加速多少、持续多久。
+
+### 传统方式
+
+LLM 自由发挥，可能生成一个不合理的数值。
+
+### Rune Weaver 方式
+
+Gap Fill 会根据 Dota2 的游戏规则自动推断合理默认值：
+
+- 如果没说持续时间 → 用同类技能的常见值
+- 如果没说冷却 → 用同类技能的常见值
+- **但不会自己发明"这个技能应该有击退效果"**
+
+Gap Fill 的原则是：**只能填充细节，不能发明机制。**
+
+***
+
+## 和传统模板代码生成器的区别？
+
+| <br />   | 传统模板生成器    | Rune Weaver             |
+| -------- | ---------- | ----------------------- |
+| **输入**   | 选模板 + 填参数  | 自然语言描述需求                |
+| **灵活性**  | 参数可调，但结构固定 | Wizard 帮你确定结构           |
+| **代码风格** | 模板决定，你改不了  | 基于 Pattern，风格统一         |
+| **维护性**  | 生成完就不管了    | Feature Registry 追踪所有功能 |
+
+### 举个例子
+
+**传统方式：**
+
+```
+1. 选择"技能模板"
+2. 填写：名称=冲刺, 速度=400, 冷却=10
+3. 生成代码，结束
 ```
 
----
+**Rune Weaver 方式：**
 
-## Phase 2 方向
+```
+1. 说"我想做一个冲刺技能，位移300距离"
+2. Wizard 问："冲刺是朝鼠标方向还是固定方向？"
+3. 你回答后，系统生成：
+   - 技能代码（Lua）
+   - 技能配置（KV）
+   - 特效配置
+4. 功能被保存，你可以修改、重新生成
+```
 
-Phase 2 不是“让 Rune Weaver 更像自由生成器”，而是让它从工程底座进入受控产品化。
+***
 
-核心方向包括：
+## 和 Vibe Coding 的区别？
 
-- Workbench / Main Wizard v1
-- UI Wizard v1
-- Feature Governance Foundation
-- Feature Conflict Governance v1
-- Feature Review v1
-- Blueprint LLM Proposal v1
-- Structured Experience Layer v1
-- Gap Fill v1
-- Scene / Map Reference v1
+| <br />     | Vibe Coding               | Rune Weaver                  |
+| ---------- | ------------------------- | ---------------------------- |
+| **LLM 角色** | LLM 直接生成代码，**想生成什么就生成什么** | LLM 只做**提案**，系统**规则决定**最终代码  |
+| **可预测性**   | 每次生成可能不一样                 | 同样的需求，永远生成同类的结构              |
+| **冲突处理**   | 不知道会不会和已有代码冲突             | 写入前会检查是否和已有功能冲突              |
+| **产物**     | 一堆代码文件，不知道谁是谁             | **Feature** 是一等公民，你知道每个功能是什么 |
+| **维护**     | 时间久了不知道改了什么               | Feature Registry 让你清楚有哪些功能   |
 
-Phase 2 的原则是：
+### 核心区别
 
-- **先治理层，再智能层**
-- **构建优先，治理是保护层**
-- **Dota2 是第一宿主，不是产品本体**
+**Vibe Coding = LLM 自由发挥**
+**Rune Weaver = LLM 提案 + 规则约束 + 结构化管理**
 
----
+***
 
-## 仓库结构
+## Rune Weaver 的核心优势
 
-- `core/`
-  - 通用 schema、planning、pipeline、wizard、llm
-- `adapters/`
-  - 宿主实现层，当前以 Dota2 为主
-- `apps/cli/`
-  - 当前 CLI 入口
-- `docs/`
-  - source-of-truth 文档
-- `references/`
-  - 宿主参考资料
-- `skills/`
-  - 本地 Codex skill
-- `archive/`
-  - 归档内容
+### 1. Feature 是一等公民，不是代码碎片
 
----
+你面对的是**功能**：
 
-## 建议阅读顺序
+- "天赋选择系统"
+- "冲刺技能"
+- "护盾效果"
 
-如果你第一次进入这个仓库，建议按下面顺序阅读：
+而不是：
 
-1. [docs/HANDOFF.md](./docs/HANDOFF.md)
-2. [docs/PRODUCT.md](./docs/PRODUCT.md)
-3. [docs/SYSTEM-ARCHITECTURE-ZH.md](./docs/SYSTEM-ARCHITECTURE-ZH.md)
-4. [docs/PHASE-ROADMAP-ZH.md](./docs/PHASE-ROADMAP-ZH.md)
-5. [docs/PHASE2-PLAN-ZH.md](./docs/PHASE2-PLAN-ZH.md)
-6. [docs/PHASE2-EXECUTION-CHECKLIST-ZH.md](./docs/PHASE2-EXECUTION-CHECKLIST-ZH.md)
+- `ability_kv.txt`
+- `modifier_shield.lua`
+- `panel_shop.js`
 
-如果你要看当前已验证的执行链，再看：
+**好处**：你能用业务语言思考，而不是用文件路径思考。
 
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+### 2. 写入前就知道影响
 
----
+当你创建或修改一个功能时，系统会告诉你：
 
-## 开发
+- 这个功能会生成/修改哪些文件
+- 会和哪些已有功能冲突
+- 有什么风险需要确认
 
-要求：
+**好处**：不是生成完代码才发现问题，而是生成前就清楚。
 
-- Node.js 18+
+### 3. 同一类功能，结构永远一致
 
-安装：
+不管你哪天心情好还是心情差，不管你用了什么提示词，同一个 Pattern 生成的结构是一样的。
+
+**好处**：团队协作容易，代码风格统一，不会出现"同样的功能不同的写法"。
+
+### 4. 宿主无关的抽象层
+
+Dota2 只是第一个实验宿主。核心是：
+
+- Pattern（什么功能）
+- Blueprint（怎么组合）
+- Host Adapter（怎么落地到具体游戏）
+
+如果未来支持 Warcraft3，同样的 Blueprint 会生成 JASS + Lua 代码，而不是重新设计。
+
+***
+
+## Rune Weaver 不是什么
+
+- ❌ 不是"给个需求就能生成任何代码"的万能工具
+- ❌ 不是纯 LLM 自由发挥的聊天工具
+- ❌ 不是只针对 Dota2 的硬编码生成器
+- ❌ 不是假装智能但实际是模板替换的套娃
+
+***
+
+## 代码库结构
+
+- `core/` — 核心引擎：Schema、Pipeline、LLM、Pattern 逻辑
+- `adapters/` — 宿主适配器：Dota2 是第一个，后面可以扩展到其他游戏
+- `apps/workbench/` — 命令行入口：输入需求，触发完整流程
+- `apps/workbench-ui/` — 图形界面：可视化地管理 Feature
+- `docs/` — 产品设计文档、架构说明、开发规划
+
+***
+
+## 快速开始
 
 ```bash
+# 安装
 npm install
+
+# 运行
+npm run workbench -- "做一个简单的冲刺技能"
+
+
 ```
 
-常用命令：
+***
 
-```bash
-npm run check-types
-npm run cli -- --help
-```
+## 总结
 
----
+Rune Weaver 想做的是：
 
-## 当前最自然的下一步
+**"让开发者用业务语言描述功能，用结构化的方式生成代码，用功能注册的思路管理项目。"**
 
-如果按当前路线继续推进，最自然的方向不是“再加更多 Dota2 特例”，而是：
-
-- 按 `PHASE2-PLAN-ZH` 与 `PHASE2-EXECUTION-CHECKLIST-ZH` 推进 Phase 2
-- 优先建立受控产品入口、治理层和 review 面
-- 再引入 Blueprint LLM proposal、structured experience、gap-fill、scene reference
-
----
-
-## 说明
-
-- 当前 README 是入口摘要，不是完整设计文档
-- 更完整的判断、边界与计划，都在 `docs/` 下
-- Rune Weaver 的方向始终是：
-  - **受控构建**
-  - **受控治理**
-  - **受控写入**
-  - **受控演进**
-
-而不是自由生成。
+不是替代程序员，而是让小白开发者的日常工作更高效、更少出错、更容易维护。

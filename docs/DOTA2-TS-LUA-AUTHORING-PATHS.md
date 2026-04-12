@@ -1,5 +1,9 @@
 # Dota2 TS And Lua Authoring Paths
 
+> Status Note
+> This document is an active technical reference for the TS/Lua authoring-path distinction in Dota2.
+> It is a boundary explanation, not a lifecycle-status or delivery-status document.
+
 ## Purpose
 
 This document explains why Rune Weaver keeps both `dota2-ts` and `dota2-lua` generator families for Dota2.

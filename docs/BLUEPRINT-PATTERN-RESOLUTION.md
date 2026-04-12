@@ -1,5 +1,10 @@
 # Blueprint Pattern Resolution
 
+> Status Note
+> This document is an active technical reference for Blueprint-to-pattern resolution behavior.
+> It is useful for understanding resolver intent and boundary vocabulary, but it is not the single source of truth for current product status.
+> When implementation and this document diverge, prefer current code plus [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md).
+
 ## 目的
 
 定义从 `Blueprint` 到 `SelectedPattern[]` 的解析规则，建立编排设计到 Pattern 选型的最小链路。

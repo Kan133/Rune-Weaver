@@ -1,5 +1,9 @@
 # Dota2 TS Generator Boundary
 
+> Status Note
+> This document is an active technical reference for the TS generator boundary.
+> It exists to constrain ownership and prevent TS from becoming a catch-all path again.
+
 ## Purpose
 
 This document defines the intended role of the current Dota2 TypeScript generator path.

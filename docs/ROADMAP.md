@@ -2,228 +2,150 @@
 
 ## Purpose
 
-This document defines the current phased roadmap for Rune Weaver.
+This document defines phase sequencing.
 
-For a Chinese phase interpretation and product-facing phase guidance, see:
+It is intentionally different from:
 
-- [PHASE-ROADMAP-ZH.md](/D:/Rune%20Weaver/docs/PHASE-ROADMAP-ZH.md)
-- [HOST-EXTENSION-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/HOST-EXTENSION-GUARDRAILS-ZH.md)
+- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), which defines current executable scope
+- [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), which defines current operational next steps
 
-Its purpose is to keep the project from mixing:
-
-- single-feature baseline work
-- host realization work
-- true semantic incremental update
-
-before the required lower layers are stable.
+If this file conflicts with current implementation reality, do not force reality to match the roadmap sentence. Fix the roadmap or defer the capability.
 
 ## Current Planning Principle
 
-Rune Weaver should progress in phases.
+Rune Weaver should now be sequenced around the README-target MVP, not around every lifecycle feature at once.
 
-The current project should not treat complex semantic incremental update as already available.
+The near-term priority is:
 
-The correct near-term priority is:
+1. strict host separation
+2. workspace-backed feature registry
+3. product-grade `create`
+4. product-grade `update`
+5. product-grade `delete`
+6. minimum cross-feature governance
 
-- finish the single-feature realization baseline
-- complete a real Dota2 end-to-end validation
-- only then move into semantic incremental update
+Deferred:
 
-## Phase 1: Single-Feature Realization Baseline
+- `regenerate`
+- `rollback`
+- semantic incremental update
+- second host
+- broad platformization
+
+## Phase 1: Host-Separated Construction Baseline
 
 ### Goal
 
-Establish a trustworthy single-feature pipeline from natural language to real Dota2 host output.
+Establish a trustworthy host-aware construction pipeline from natural language to Rune Weaver-owned host output.
 
 ### Scope
 
-Phase 1 should include:
+Phase 1 includes:
 
 - Wizard -> IntentSchema
 - Blueprint orchestration
-- Pattern Resolution
+- Pattern resolution
 - AssemblyPlan
-- HostRealizationPlan
-- GeneratorRoutingPlan
-- Dota2TSGenerator
-- Dota2UIGenerator
-- Dota2KVGenerator v1
-- Write / Validation / Workspace / Lifecycle safety
+- Host realization
+- Generator routing
+- Generators
+- Write plan / write executor
+- validation / workspace baseline
 
-### Phase 1 Target
+### Definition Of Done
 
-At least one conservative, reviewable feature should complete the full path and be tested in a real Dota2 host workflow.
+Phase 1 is complete when:
 
-### Phase 1 Definition Of Done
+1. the mainline architecture is stable
+2. at least one real host output path works end to end
+3. workspace exists as persisted state
+4. new cases no longer require frequent architecture rewrites
 
-Phase 1 is considered complete only when all of the following are true:
-
-1. Host Realization is part of the formal mainline architecture.
-2. Generator Routing is part of the formal mainline architecture.
-3. `Dota2KVGenerator` v1 exists and can participate in real generation.
-4. At least one feature completes a real Dota2 end-to-end validation path.
-5. The feature is still lifecycle-safe:
-   - create
-   - update
-   - regenerate
-   - rollback
-6. Review artifacts remain truthful and unified.
-
-### Phase 1 Non-Goals
-
-Phase 1 should not claim:
-
-- semantic entity-level incremental update
-- rich system evolution inside an existing complex feature
-- automatic multi-entity refactoring
-
-Those belong to later phases.
-
-## Phase 2: Semantic Incremental Update
+## Phase 2: README-Target MVP
 
 ### Goal
 
-Support structured evolution of an existing feature, not just file-level maintenance.
+Turn the construction baseline into a usable feature-management MVP that matches the README story at minimum depth.
 
-Typical examples:
-
-- add one more talent to an existing talent system
-- add a new talent inventory UI surface
-- add a new synthesis rule between existing talents
-
-### Why This Is Phase 2
-
-These requests are not just file diffs.
-
-They require the system to understand:
-
-- what semantic entities already exist inside the feature
-- where the new requirement attaches
-- whether the change is additive, structural, or regenerative
-
-### Required New Foundations
+### Required Capabilities
 
 Phase 2 requires:
 
-- `Feature Semantic State`
-- `Update Intent Contract`
-- entity-aware update planning
+- host separation as a hard boundary
+- feature registry / workspace as source of truth
+- `create`
+- `update` as owned-scope feature rewrite
+- `delete` as real unload
+- minimum cross-feature conflict governance
+- write-preview / impact / evidence visibility
 
-Without these, the project only has:
+### Explicit Boundary
 
-- lifecycle maintenance
-- file-level or module-level update semantics
+Phase 2 `update` means:
 
-not true semantic incremental evolution.
+- target an existing persisted feature
+- keep the same `featureId`
+- rewrite only that feature's owned outputs and allowed bridge bindings
 
-### Phase 2 Definition Of Done
+It does **not** mean:
 
-Phase 2 should only be considered established when the system can conservatively and reviewably handle at least one real additive update to an existing structured feature.
+- semantic entity-aware evolution inside arbitrary existing systems
+- whole-codebase intelligent merge
 
-Example:
+### Definition Of Done
 
-- add one talent entry to an existing talent system
+Phase 2 is established only when:
 
-without silently degrading into whole-feature rewrite unless that rewrite is explicitly required.
+1. `create` produces a persisted feature with truthful patterns/files/bindings
+2. `update` rewrites owned artifacts rather than only writing metadata
+3. `delete` unloads the feature from workspace, owned files, and bridge exposure
+4. minimum conflict checks run before write
+5. agents can use workspace and review artifacts to manage multiple features safely
 
-## Phase 3: System Evolution And Complex Composition
+## Phase 3: Extended Lifecycle And Platformization
 
 ### Goal
 
-Support more advanced evolution across richer systems and cross-entity behavior.
+Expand beyond the README-target MVP into richer lifecycle and platform governance.
 
-Typical examples:
+### Typical Later Capabilities
 
-- rule composition across multiple existing talents
-- cross-surface update between gameplay and multiple UI surfaces
-- larger-scale system refactoring with reviewable semantic intent
+- `regenerate`
+- `rollback`
+- semantic incremental update
+- richer relationship/dependency graphs
+- broader governance/productization
+- multi-host extension
 
-### Expected Capabilities
+## Current Status
 
-Phase 3 may require:
+Current status should be read as:
 
-- richer semantic state
-- stronger update planning
-- more expressive realization routing
-- stronger validation and review surfaces
+- Phase 1 baseline: substantially standing
+- Phase 2 README-target MVP: **in progress**
+- Phase 3: not started as a product milestone
 
-## Current Project Status
+The project should no longer claim:
 
-The project has reached **late Phase 1** with the following milestones achieved:
+- Phase 2 complete
+- Phase 3 started
 
-- Phase 1 architecture definition: complete
-- Host Realization integration: functional (lua path mainlined)
-- Generator Routing: partial (lua route established; KV/TS routes need broader coverage)
-- **First real Dota2 E2E validation: achieved (T121)**
-- **Lua write path mainlined: achieved (T125)**
-- **Composite backbone and data-inclusive composite: verified**
-- **Minimal talent-drafting-like case closure: achieved**
-- **Placeholder talent-drafting case through formal pipeline: achieved**
-- **Case-specific parameter flow (T172-R1) and five-module backbone (T173-R1): verified**
-- **Code-level formal-pipeline closure (V174): confirmed**
-
-Current Phase 1 assessment: architecture and case-construction goals are effectively complete. Remaining gaps are primarily toolchain/environment and Phase 2 productization capabilities, not system backbone.
-
-It is not yet in Phase 2.
-
-### T121: Minimal Real Dota2 E2E — COMPLETED
-
-- baseline 3 abilities appear correctly
-- fresh RW ability attaches to hero, castable, with mana/cooldown
-- modifier creates, buff appears ~6s
-- quality level: minimal viable (not polished)
-- this satisfies Phase 1 DoD item #4 ("at least one feature completes a real Dota2 end-to-end validation path")
-
-### T125: Lua Path Mainlined — COMPLETED
-
-- `contentType: "lua"` entries produced by normal pipeline
-- same-file ability + modifier lua generation working
-- write executor writes `.lua` files successfully
-- old KV→lua bypass retired
-- scope boundary: short_time_buff-style cases only
+unless `create/update/delete/governance` are all product-grade.
 
 ## Immediate Priority
 
-The current immediate priority is:
+1. align workspace docs and code
+2. finish product-grade `create`
+3. finish product-grade `update`
+4. finish product-grade `delete`
+5. move conflict checks from mock/demo logic to workspace-backed checks
+6. keep workbench/UI focused on feature registry, detail, and evidence
 
-1. ~~finish Host Realization integration~~ → functional for lua path (T125)
-2. ~~add lua generator path~~ → done (T125)
-3. ~~complete one real Dota2 end-to-end validation~~ → done (T121)
-4. **broaden lua pattern support** beyond short_time_buff
-5. **improve visual/numeric effect quality** beyond minimal viable
-6. formalize Generator Routing for KV/TS/lua multi-generator coordination
-7. refine realization-aware validation and review artifacts
+## Not Recommended As The Next First Step
 
-## Roadmap Guardrail
-
-When evaluating a proposed task, the project should ask:
-
-- is this still Phase 1 baseline work?
-- or is this really a Phase 2 semantic increment request?
-
-If it is Phase 2, the project should not pretend it is already supported by the current baseline.
-
-## Relationship To Existing Lifecycle Commands
-
-Current lifecycle commands:
-
-- create
-- update
-- regenerate
-- rollback
-
-are important and useful, but they do not by themselves prove Phase 2 capability.
-
-They currently establish:
-
-- feature lifecycle maintenance
-
-not:
-
-- semantic entity-level feature evolution
-
-## Documentation Guidance
-
-Project documents should be read in phase context.
-
-Near-term implementation work should bias toward Phase 1 completion, while Phase 2 documents should define future contracts without overstating current support.
+- semantic incremental update
+- `regenerate` / `rollback` productization
+- adding a second host
+- broad UI expansion
+- large graph/governance systems
+- broad pattern expansion unrelated to the README MVP

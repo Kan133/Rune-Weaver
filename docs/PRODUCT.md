@@ -12,6 +12,11 @@
 - 它在 Host-aware 路线下是否还能规模化
 - 当模型持续变强时，它是否仍然成立
 
+> Status Note
+>
+> `PRODUCT.md` 同时包含长期产品目标与阶段性判断。
+> 当前 agent 执行时，若本文件与 [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) 或 [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md) 在“当前已交付能力”上冲突，请以后两者为准。
+
 如需查看阶段路线，请同时参考：
 
 - [PHASE-ROADMAP-ZH.md](/D:/Rune%20Weaver/docs/PHASE-ROADMAP-ZH.md)

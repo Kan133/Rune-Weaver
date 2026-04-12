@@ -198,6 +198,7 @@ async function runWizard(options: BlueprintCLIOptions): Promise<{ success: boole
         rawText: options.rawText!,
         temperature: options.temperature ?? 0.6,
         model: options.model,
+        providerOptions: { thinking: { type: "disabled" } },
       },
     });
 

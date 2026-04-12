@@ -1,5 +1,10 @@
 # Dota2 KV Generator Scope
 
+> Status Note
+> This document is an active technical reference for the KV generator boundary.
+> It is primarily a scope and responsibility document, not a lifecycle-status document.
+> Historical T125/T126 notes should be treated as context only, not current acceptance.
+
 ## Purpose
 
 This document defines the initial scope of `Dota2KVGenerator`.

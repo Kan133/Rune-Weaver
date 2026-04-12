@@ -1,5 +1,10 @@
 # Dota2 Host Realization Policy
 
+> Status Note
+> This document is an active host-specific policy reference for Dota2 realization decisions.
+> It defines routing bias and host-fit rules, not current end-to-end delivery status.
+> Historical narrow-scope notes, especially around `short_time_buff`, should be treated as boundary reminders rather than milestone claims.
+
 ## Purpose
 
 This document defines the first-pass realization policy for the Dota2 host.

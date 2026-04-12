@@ -220,7 +220,7 @@ index.ts
 - 明确 assembler 第一阶段到底负责什么，不负责什么
 
 已完成：
-- ✅ 输出文档：`docs/DOTA2-ASSEMBLER-SCOPE.md`
+- ✅ 输出文档：`archive/docs/2026-04-mvp-reset/DOTA2-ASSEMBLER-SCOPE.md`
 - ✅ 明确第一阶段只负责：server/shared/ui 骨架生成
 - ✅ 明确不负责：任意旧文件 merge、自由代码生成、任意宿主文件改写
 
@@ -234,7 +234,7 @@ index.ts
 已完成：
 - ✅ 明确只支持 3 个 Pattern：`ui.selection_modal`, `ui.key_hint`, `ui.resource_bar`
 - ✅ 每个 Pattern 的最小输出形态、宿主目录、依赖 bridge 已定义
-- ✅ 输出文档：`docs/DOTA2-UI-ADAPTER-SCOPE.md`
+- ✅ 输出文档：`archive/docs/2026-04-mvp-reset/DOTA2-UI-ADAPTER-SCOPE.md`
 
 ---
 
@@ -244,7 +244,7 @@ index.ts
 - 先把 Phase 1 应做什么固定下来
 
 已完成：
-- ✅ 输出文档：`docs/DOTA2-WRITE-EXECUTOR-PHASE1.md`
+- ✅ 输出文档：`archive/docs/2026-04-mvp-reset/DOTA2-WRITE-EXECUTOR-PHASE1.md`
 - ✅ 明确 Phase 1 允许：RW 自有文件写入、索引刷新、`inject_once`
 - ✅ 明确 Phase 1 不支持：任意宿主旧文件智能改写、任意 merge、全项目重构
 

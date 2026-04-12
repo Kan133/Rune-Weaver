@@ -633,7 +633,8 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       writePlan,
       featureMode,
       stableFeatureId,
-      existingFeatureContext.feature
+      existingFeatureContext.feature,
+      result
     );
 
     workspaceStateResult = {
@@ -720,6 +721,7 @@ async function createIntentSchema(prompt: string, hostRoot: string): Promise<{ s
       input: {
         rawText: prompt,
         temperature: 1,
+        providerOptions: { thinking: { type: "enabled" } },
       },
     });
 
@@ -1885,6 +1887,39 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log(`   Revision: ${existingFeature.revision}`);
   console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
   console.log(`   Status: ${existingFeature.status}`);
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 0: Host Readiness Preflight");
+  console.log("=".repeat(70));
+
+  const CRITICAL_HOST_FILES = [
+    { path: "game/scripts/npc/abilities.txt", reason: "Required for baseline ability migration during bridge refresh" },
+  ];
+
+  let preflightPassed = true;
+  for (const file of CRITICAL_HOST_FILES) {
+    const fullPath = join(options.hostRoot, file.path);
+    if (existsSync(fullPath)) {
+      console.log(`  ✅ ${file.path}`);
+    } else {
+      console.error(`  ❌ ${file.path} - missing`);
+      console.error(`     Reason: ${file.reason}`);
+      preflightPassed = false;
+    }
+  }
+
+  if (!preflightPassed) {
+    console.error("\n⚠️  Host readiness check failed - critical files are missing");
+    console.error("   The update can continue in dry-run mode,");
+    console.error("   but write mode will fail at bridge refresh stage.");
+    artifact.finalVerdict.remainingRisks.push("Missing critical host files");
+    if (!options.dryRun) {
+      console.error("\n   Recommendation: Run with --dry-run first to verify the update plan,");
+      console.error("   or initialize the host properly before running write mode.");
+    }
+  } else {
+    console.log("  ✅ Host readiness check passed");
+  }
 
   console.log("\n" + "=".repeat(70));
   console.log("Stage 1: IntentSchema");

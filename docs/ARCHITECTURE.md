@@ -1,5 +1,10 @@
 # ARCHITECTURE
 
+> Status Note
+> This document is an active technical reference for the current execution pipeline.
+> It defines architectural layering and boundary rules, not current product completion status.
+> For current MVP truth, execution priority, and acceptance scope, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), and [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md).
+
 ## Purpose
 
 This document describes the **current execution architecture baseline** of Rune Weaver.
@@ -214,6 +219,18 @@ The project must avoid these regressions:
 3. letting Blueprint decide final host realization
 4. letting generators silently re-decide realization policy
 5. letting maintenance commands drift into parallel execution systems
+
+Before reading the status notes below:
+
+- treat them as historical engineering context
+- not as the current product Definition of Done
+- not as the current execution priority list
+
+For current MVP truth and next-step sequencing, prefer:
+
+- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
+- [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
+- [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md)
 
 ## Current Architectural Status
 

@@ -1,5 +1,9 @@
 # Generator Routing Schema
 
+> Status Note
+> This document is an active technical reference for generator-routing data shape.
+> It should be read together with [GENERATOR-ROUTING-CONTRACT.md](/D:/Rune%20Weaver/docs/GENERATOR-ROUTING-CONTRACT.md), and not as proof that all routing schema details are already fully integrated in the current MVP.
+
 ## Purpose
 
 This document defines the minimal schema for generator routing in Rune Weaver.

@@ -685,3 +685,13 @@ function toPascalCase(value: string): string {
     .replace(/_([a-z])/g, (_match, char: string) => char.toUpperCase())
     .replace(/-([a-z])/g, (_match, char: string) => char.toUpperCase());
 }
+
+// F011: Re-export bridge export functions for CLI → UI bridge
+export {
+  exportWorkspaceToBridge,
+  exportHostToBridge,
+  getBridgeFilePath,
+  BRIDGE_DEFAULTS,
+  type BridgeExportConfig,
+  type BridgeExportResult,
+} from "./export.js";

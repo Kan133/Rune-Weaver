@@ -13,6 +13,8 @@
 - [PATTERN-GAPS.md](/D:/Rune%20Weaver/archive/PATTERN-GAPS.md)
 - [MVP-BOUNDARY.md](/D:/Rune%20Weaver/archive/MVP-BOUNDARY.md)
 - [AGENT-BOOTSTRAP.md](/D:/Rune%20Weaver/archive/AGENT-BOOTSTRAP.md)
+- [PHASE1-TASK-HISTORY.md](/D:/Rune%20Weaver/archive/PHASE1-TASK-HISTORY.md)
+- [docs/2026-04-mvp-reset/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-mvp-reset/README.md)
 
 ## 规则
 

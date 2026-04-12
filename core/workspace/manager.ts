@@ -21,8 +21,11 @@ import {
 const WORKSPACE_FILE_NAME = "rune-weaver.workspace.json";
 const CURRENT_VERSION = "0.1";
 
+// F011: Workspace file is located in game/scripts/src/rune_weaver/
+const WORKSPACE_RELATIVE_PATH = "game/scripts/src/rune_weaver";
+
 export function getWorkspaceFilePath(hostRoot: string): string {
-  return join(hostRoot, WORKSPACE_FILE_NAME);
+  return join(hostRoot, WORKSPACE_RELATIVE_PATH, WORKSPACE_FILE_NAME);
 }
 
 export function workspaceExists(hostRoot: string): boolean {
@@ -209,6 +212,25 @@ export function updateFeatureInWorkspace(
     features: workspace.features.map((feature) =>
       feature.featureId === featureId ? updatedFeature : feature
     ),
+  };
+}
+
+export function deleteFeature(
+  workspace: RuneWeaverWorkspace,
+  featureId: string
+): { success: boolean; issues: string[]; workspace?: RuneWeaverWorkspace } {
+  const existing = findFeatureById(workspace, featureId);
+  if (!existing) {
+    return { success: false, issues: [`Feature '${featureId}' does not exist in workspace`] };
+  }
+
+  return {
+    success: true,
+    issues: [],
+    workspace: {
+      ...workspace,
+      features: workspace.features.filter((f) => f.featureId !== featureId),
+    },
   };
 }
 

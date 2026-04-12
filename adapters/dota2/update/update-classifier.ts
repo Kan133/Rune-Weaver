@@ -25,6 +25,7 @@ import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
 
 const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
+  "game/scripts/vscripts/rune_weaver/",
   "content/panorama/src/rune_weaver/",
 ];
 

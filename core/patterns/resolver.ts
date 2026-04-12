@@ -12,6 +12,7 @@ import {
   SelectedPattern as BaseSelectedPattern,
   NormalizedMechanics,
 } from "../schema/types";
+import { isCanonicalPatternAvailable, CORE_PATTERN_IDS } from "./canonical-patterns";
 
 /**
  * 扩展的 SelectedPattern，包含解析元数据
@@ -58,28 +59,14 @@ export interface ResolutionIssue {
 
 // ============================================================================
 // 当前 Catalog 中真实存在的 Pattern 集合
-// 来源: adapters/dota2/patterns/index.ts
+// 来源: adapters/dota2/patterns/index.ts (通过 canonical-patterns.ts)
 // ============================================================================
-const AVAILABLE_PATTERNS = new Set([
-  "input.key_binding",
-  "data.weighted_pool",
-  "rule.selection_flow",
-  "effect.dash",
-  "effect.modifier_applier",
-  "effect.resource_consume",
-  "resource.basic_pool",
-  "ui.selection_modal",
-  "ui.key_hint",
-  "ui.resource_bar",
-  // Dota2-specific patterns
-  "dota2.short_time_buff",
-]);
 
 /**
  * 检查 pattern 是否在 catalog 中
  */
 function isPatternAvailable(patternId: string): boolean {
-  return AVAILABLE_PATTERNS.has(patternId);
+  return isCanonicalPatternAvailable(patternId);
 }
 
 /**
@@ -93,13 +80,13 @@ const CATEGORY_PATTERN_MAP: Record<
   BlueprintModule["category"],
   { patternId: string; priority: ResolvedPattern["priority"] } | null
 > = {
-  trigger: { patternId: "input.key_binding", priority: "required" },
-  data: { patternId: "data.weighted_pool", priority: "required" },
-  rule: { patternId: "rule.selection_flow", priority: "required" },
+  trigger: { patternId: CORE_PATTERN_IDS.INPUT_KEY_BINDING, priority: "required" },
+  data: { patternId: CORE_PATTERN_IDS.DATA_WEIGHTED_POOL, priority: "required" },
+  rule: { patternId: CORE_PATTERN_IDS.RULE_SELECTION_FLOW, priority: "required" },
   // effect 类别不再一刀切映射，见 resolveEffectPattern 函数
   effect: null,
-  resource: { patternId: "resource.basic_pool", priority: "required" },
-  ui: { patternId: "ui.selection_modal", priority: "preferred" },
+  resource: { patternId: CORE_PATTERN_IDS.RESOURCE_BASIC_POOL, priority: "required" },
+  ui: { patternId: CORE_PATTERN_IDS.UI_SELECTION_MODAL, priority: "preferred" },
   // integration 类别在 catalog 中没有对应 pattern
   integration: null,
 };
@@ -112,19 +99,19 @@ const MECHANIC_PATTERN_MAP: Partial<
   Record<keyof NormalizedMechanics, { patternId: string; priority: ResolvedPattern["priority"] }>
 > = {
   // trigger -> input.key_binding (available)
-  trigger: { patternId: "input.key_binding", priority: "required" },
+  trigger: { patternId: CORE_PATTERN_IDS.INPUT_KEY_BINDING, priority: "required" },
   // candidatePool -> data.weighted_pool (available)
-  candidatePool: { patternId: "data.weighted_pool", priority: "required" },
+  candidatePool: { patternId: CORE_PATTERN_IDS.DATA_WEIGHTED_POOL, priority: "required" },
   // weightedSelection -> data.weighted_pool (same as candidatePool)
-  weightedSelection: { patternId: "data.weighted_pool", priority: "required" },
+  weightedSelection: { patternId: CORE_PATTERN_IDS.DATA_WEIGHTED_POOL, priority: "required" },
   // playerChoice -> rule.selection_flow (player selection is part of selection flow)
-  playerChoice: { patternId: "rule.selection_flow", priority: "required" },
+  playerChoice: { patternId: CORE_PATTERN_IDS.RULE_SELECTION_FLOW, priority: "required" },
   // uiModal -> ui.selection_modal (available)
-  uiModal: { patternId: "ui.selection_modal", priority: "required" },
+  uiModal: { patternId: CORE_PATTERN_IDS.UI_SELECTION_MODAL, priority: "required" },
   // outcomeApplication -> effect.modifier_applier (now available)
-  outcomeApplication: { patternId: "effect.modifier_applier", priority: "required" },
+  outcomeApplication: { patternId: CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER, priority: "required" },
   // resourceConsumption -> resource.basic_pool (available)
-  resourceConsumption: { patternId: "resource.basic_pool", priority: "required" },
+  resourceConsumption: { patternId: CORE_PATTERN_IDS.RESOURCE_BASIC_POOL, priority: "required" },
 };
 
 /**
@@ -181,10 +168,10 @@ export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
   // If both exist, remove the generic one
   const hasDota2Effect = patterns.some(p => p.patternId.startsWith("dota2."));
   if (hasDota2Effect) {
-    const genericIdx = patterns.findIndex(p => p.patternId === "effect.modifier_applier");
+    const genericIdx = patterns.findIndex(p => p.patternId === CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER);
     if (genericIdx !== -1) {
       patterns.splice(genericIdx, 1);
-      patternIds.delete("effect.modifier_applier");
+      patternIds.delete(CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER);
     }
   }
 
@@ -296,8 +283,67 @@ function resolveFromCategory(module: BlueprintModule): {
 }
 
 /**
+ * F173: Extract effect parameters from semantic description
+ * Maps high-frequency effect semantics into pattern parameters
+ */
+function extractEffectParameters(role: string, responsibilities: string[]): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  const context = (role + " " + responsibilities.join(" ")).toLowerCase();
+
+  // F173-R1: Dash distance extraction
+  // Matches: "500 units", "500 distance", "500 距离", "向前冲刺500"
+  const distanceMatch = context.match(/(\d+)\s*(?:units?|distance|距离|码|米)/i) ||
+                        context.match(/(?:向前|向后|向\w+)?\s*(?:冲刺|位移|dash|move)\s*(\d+)/i);
+  if (distanceMatch) {
+    params.dashDistance = parseInt(distanceMatch[1]);
+  }
+
+  // F173-R2: Heal/regen magnitude extraction
+  // Matches: "10 HP per second", "每秒恢复10点生命值", "10 health per second"
+  const healMatch = context.match(/(\d+)\s*(?:hp|health|生命值|生命)/i) ||
+                    context.match(/(?:恢复|回复|regen|heal)\s*(\d+)/i);
+  if (healMatch) {
+    params.healAmount = parseInt(healMatch[1]);
+  }
+
+  // F173-R3: Periodic interval extraction
+  // Matches: "per second", "每秒", "every 1 second", "interval"
+  const intervalMatch = context.match(/(\d+(?:\.\d+)?)\s*(?:second|秒)/i) ||
+                        context.match(/(?:per|every|每)\s*(\d+(?:\.\d+)?)\s*(?:second|秒)/i);
+  if (intervalMatch) {
+    params.tickInterval = parseFloat(intervalMatch[1] || intervalMatch[2] || "1");
+  }
+
+  // F173-R4: Duration extraction
+  // Matches: "for 5 seconds", "持续5秒", "duration 5"
+  const durationMatch = context.match(/(?:for|持续|duration)\s*(\d+(?:\.\d+)?)\s*(?:second|秒)/i) ||
+                        context.match(/(\d+)\s*(?:second|秒)\s*(?:duration|持续)/i);
+  if (durationMatch) {
+    params.duration = parseFloat(durationMatch[1]);
+  }
+
+  // F173-R5: Cooldown extraction (if mentioned in effect context)
+  const cooldownMatch = context.match(/cooldown\s*(\d+(?:\.\d+)?)/i) ||
+                        context.match(/(?:冷却|cd)\s*(\d+(?:\.\d+)?)/i);
+  if (cooldownMatch) {
+    params.cooldown = parseFloat(cooldownMatch[1]);
+  }
+
+  // F173-R6: Mana cost extraction (if mentioned in effect context)
+  const manaMatch = context.match(/mana\s*(\d+)/i) ||
+                    context.match(/(?:法力|蓝量)\s*(\d+)/i) ||
+                    context.match(/(\d+)\s*(?:mana|法力)/i);
+  if (manaMatch) {
+    params.manaCost = parseInt(manaMatch[1] || manaMatch[2]);
+  }
+
+  return params;
+}
+
+/**
  * 解析 effect 类别模块到具体 pattern
  * 根据语义智能选择，不再一刀切映射到 effect.dash
+ * F173: Now extracts parameters from effect semantics
  */
 function resolveEffectPattern(module: BlueprintModule): {
   pattern: ResolvedPattern | null;
@@ -307,15 +353,19 @@ function resolveEffectPattern(module: BlueprintModule): {
   const responsibilitiesLower = module.responsibilities.map(r => r.toLowerCase()).join(" ");
   const contextLower = roleLower + " " + responsibilitiesLower;
 
+  // F173: Extract effect parameters from semantic description
+  const extractedParams = extractEffectParameters(module.role, module.responsibilities);
+  const mergedParams = { ...module.parameters, ...extractedParams };
+
   // 1. 位移/冲刺语义 -> effect.dash
   const dashKeywords = ["冲刺", "位移", "dash", "blink", "jump", "leap", "突进", "move", "rapid", "speed", "快速移动", "向前"];
   const isDashRelated = dashKeywords.some(k => contextLower.includes(k));
   if (isDashRelated) {
     return {
       pattern: {
-        patternId: "effect.dash",
+        patternId: CORE_PATTERN_IDS.EFFECT_DASH,
         role: module.role,
-        parameters: module.parameters,
+        parameters: mergedParams,
         priority: "required",
         source: "category",
       },
@@ -345,9 +395,9 @@ function resolveEffectPattern(module: BlueprintModule): {
   if (isBuffRelated && !hasDebuffNegativeSignal) {
     return {
       pattern: {
-        patternId: "dota2.short_time_buff",
+        patternId: CORE_PATTERN_IDS.DOTA2_SHORT_TIME_BUFF,
         role: module.role,
-        parameters: module.parameters,
+        parameters: mergedParams,
         priority: "required",
         source: "category",
       },
@@ -361,9 +411,9 @@ function resolveEffectPattern(module: BlueprintModule): {
   if (isResourceRelated) {
     return {
       pattern: {
-        patternId: "effect.resource_consume",
+        patternId: CORE_PATTERN_IDS.EFFECT_RESOURCE_CONSUME,
         role: module.role,
-        parameters: module.parameters,
+        parameters: mergedParams,
         priority: "required",
         source: "category",
       },
@@ -377,9 +427,9 @@ function resolveEffectPattern(module: BlueprintModule): {
   if (isModifierRelated) {
     return {
       pattern: {
-        patternId: "effect.modifier_applier",
+        patternId: CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER,
         role: module.role,
-        parameters: module.parameters,
+        parameters: mergedParams,
         priority: "required",
         source: "category",
       },
@@ -390,11 +440,12 @@ function resolveEffectPattern(module: BlueprintModule): {
   // 4. 无法识别语义 -> 标记为 weak match / fallback
   // 默认尝试 effect.modifier_applier 作为通用效果应用器
   // 但标记为 fallback 提示可能需要人工确认
+  // F173: 即使 fallback 也携带提取的参数，可能有助于后续处理
   return {
     pattern: {
-      patternId: "effect.modifier_applier",
+      patternId: CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER,
       role: module.role,
-      parameters: module.parameters,
+      parameters: mergedParams,
       priority: "fallback",
       source: "category",
     },

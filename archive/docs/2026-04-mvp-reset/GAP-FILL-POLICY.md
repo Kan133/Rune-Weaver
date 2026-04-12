@@ -1,5 +1,17 @@
 # Gap Fill Policy
 
+## Document Status
+
+This file is retained as an earlier future-policy / historical-reference document.
+
+Current source of truth for active gap-fill boundary definition is:
+
+- [GAP-FILL-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/GAP-FILL-GUARDRAILS-ZH.md)
+
+Use this file as supplemental background only.
+
+If this file conflicts with the current v0 boundary described in `GAP-FILL-GUARDRAILS-ZH.md`, follow the guardrails document.
+
 ## Status
 
 Phase 2+ future extension only.

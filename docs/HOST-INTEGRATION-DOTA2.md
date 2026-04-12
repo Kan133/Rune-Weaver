@@ -1,5 +1,10 @@
 # Dota2 Host Integration
 
+> Status Note
+> This document is an active Dota2 host reference, but it mixes current boundary rules with environment-specific and historical notes.
+> For current MVP ownership, workspace truth, and lifecycle acceptance, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md), and [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md).
+> Concrete example paths such as `D:\\test1` should be treated as reference examples, not required product assumptions.
+
 ## 1. 文档目的
 
 本文档定义 Rune Weaver 与 Dota2 宿主工程的接入方式。

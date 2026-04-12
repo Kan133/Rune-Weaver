@@ -2,63 +2,40 @@
 
 ## Status
 
-Implemented baseline:
+This document defines the workspace model agents should use for the current README-target MVP.
 
-- workspace state file
-- create
-- update
-- regenerate
-- rollback
+Current required lifecycle surface:
 
-Not yet implemented:
+- `create`
+- `update`
+- `delete`
 
-- feature semantic state
-- entity-aware update planning
+Deferred:
+
+- `regenerate`
+- `rollback`
 - semantic incremental update
 
-## 1. 文档目的
+## 1. Purpose
 
-本文档定义 Rune Weaver 在宿主工程中的工作区模型。
+The workspace model exists to answer:
 
-它要解决的问题是：
+- how Rune Weaver persists feature identity
+- how Rune Weaver knows what it owns
+- how create/update/delete stay inside host boundaries
+- how multiple features coexist without silent collisions
 
-- 如何支持新建 feature
-- 如何支持更新已有 feature
-- 如何支持重生成而不污染宿主
-- 多次运行后文件如何保持可控
-- 多个 feature 如何在宿主中组合
+## 2. Canonical Workspace File
 
----
+The current canonical workspace file path is:
 
-## 2. 基本原则
+- `game/scripts/src/rune_weaver/rune-weaver.workspace.json`
 
-Rune Weaver 必须先管理“工作区状态”，再管理“代码写入”。
+Agents must treat this file as the authoritative persisted registry for Rune Weaver-managed features inside a host.
 
-也就是说：
+Do not document or implement another source of truth for feature state without explicitly changing the code and this document together.
 
-- 不能只根据本次 prompt 盲写文件
-- 不能只靠文件名猜测之前生成过什么
-- 不能把“增量更新”理解成任意修改宿主已有代码
-
-Rune Weaver 必须维护自己的工作区记录。
-
----
-
-## 3. 工作区文件
-
-建议在宿主根目录维护：
-
-- `rune-weaver.workspace.json`
-
-它是 Rune Weaver 在该宿主中的唯一权威状态文件。
-
-MVP 阶段建议采用最小版本，不要在初始化时写入过多状态。
-
----
-
-## 4. 工作区对象
-
-### 4.1 Workspace
+## 3. Workspace Structure
 
 ```ts
 interface RuneWeaverWorkspace {
@@ -69,62 +46,22 @@ interface RuneWeaverWorkspace {
   initializedAt: string;
   features: RuneWeaverFeatureRecord[];
 }
-```
 
-MVP 阶段建议的初始文件内容：
-
-```json
-{
-  "version": "0.1",
-  "hostType": "dota2-x-template",
-  "hostRoot": "D:\\test1",
-  "addonName": "test1",
-  "initializedAt": "2026-04-05T12:00:00.000Z",
-  "features": []
-}
-```
-
-MVP 阶段不建议在初始化时加入：
-
-- revision history
-- archivedFeatures
-- backups
-- build cache
-- host capability snapshots
-
-原因：
-
-- 这些字段会增加 `init` 的复杂度
-- 但当前并不直接推进主链路
-- 先稳定宿主身份、addonName 和空工作区更重要
-
-### 4.2 Feature Record
-
-```ts
 interface RuneWeaverFeatureRecord {
   featureId: string;
   featureName?: string;
   intentKind: string;
-  status: "active" | "disabled" | "archived";
+  status: "active" | "disabled" | "archived" | "rolled_back";
   revision: number;
   blueprintId: string;
+  selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
   dependsOn?: string[];
   createdAt: string;
   updatedAt: string;
 }
-```
 
-字段说明：
-
-- `active`：当前参与桥接、参与运行的 feature
-- `disabled`：记录和文件保留，但当前不挂载到宿主入口
-- `archived`：逻辑上已退出当前活跃集合，默认不参与运行，也不应作为后续普通 update 的默认目标
-
-### 4.3 Entry Binding
-
-```ts
 interface EntryBinding {
   target: "server" | "ui" | "config";
   file: string;
@@ -133,395 +70,149 @@ interface EntryBinding {
 }
 ```
 
----
-
-## 5. Feature 身份
-
-每个 Rune Weaver 生成对象都必须有稳定身份：
+For the current MVP, the minimum truthful fields are:
 
 - `featureId`
+- `blueprintId`
+- `selectedPatterns`
+- `generatedFiles`
+- `entryBindings`
+- `revision`
+- timestamps
 
-要求：
+## 4. Feature Identity
 
-- 在宿主内唯一
-- 不随 revision 改变
-- 由 Rune Weaver 分配，不依赖用户临时命名
+Each feature must have a stable `featureId`.
 
-建议格式：
+Requirements:
 
-- `rw_dash_q`
-- `rw_talent_draw`
-- `rw_fire_burst`
+- unique within the host
+- does not change across normal updates
+- is not inferred from a transient prompt
 
----
+Agents must not treat one new prompt as automatically one new feature.
 
-## 6. 三种操作模式
+Routing must distinguish:
 
-Rune Weaver 必须把生成动作分为三种模式。
+- create new feature
+- update existing feature
+- possible existing feature match
 
-### 6.1 create
+## 5. Ownership Model
 
-含义：
+The workspace exists to support ownership.
 
-- 新建一个此前不存在的 Rune Weaver feature
+### 5.1 File Ownership
 
-适用：
+Every generated file must belong to exactly one feature.
 
-- “做一个按 Q 的冲刺技能”
-- “加一个三选一天赋系统”
+Rune Weaver-owned implementation files must stay inside Rune Weaver-owned directories.
 
-行为：
+### 5.2 Bridge Ownership
 
-- 分配新 `featureId`
-- 生成新 `blueprintId`
-- 新建该 feature 的受控文件
-- 更新 `workspace`
-- 更新桥接索引
+Features may use bridge points, but only through the allowed shared bridge files:
 
-### 6.2 update
+- `game/scripts/src/modules/index.ts`
+- `content/panorama/src/hud/script.tsx`
 
-含义：
+No feature should directly claim arbitrary host entry ownership outside these allowed bridge points.
 
-- 修改一个已有 feature 的配置、参数或结构
+### 5.3 Ownership Exclusivity
 
-适用：
+The system must prevent:
 
-- “把冲刺距离改成 500”
-- “让天赋抽取改成五选一”
+- two features claiming the same owned implementation file
+- two features silently writing the same business surface
+- delete/update operations crossing into another feature's owned scope without explicit governance
 
-行为：
+## 6. Required Operations
 
-- 定位已有 `featureId`
-- 读取其当前记录
-- 重新生成该 feature 的相关文件
-- 保持 `featureId` 不变
-- `revision += 1`
-- 仅更新该 feature 拥有的文件和桥接信息
+### 6.1 Create
 
-### 6.3 regenerate
+`create` means:
 
-含义：
+- create a new persisted feature
+- assign stable `featureId`
+- write Rune Weaver-owned artifacts
+- write truthful `selectedPatterns`
+- write truthful `generatedFiles`
+- write truthful `entryBindings`
+- update workspace
 
-- 保持同一个 feature 身份，但按新的思路重做其生成结果
+If the operation does not persist truthful patterns/files/bindings, it is not yet product-grade `create`.
 
-适用：
+### 6.2 Update
 
-- “把这个技能按新方案重做”
-- “重新生成这个系统”
+`update` means:
 
-行为：
+- target an existing persisted feature
+- keep the same `featureId`
+- rewrite only that feature's owned artifacts and allowed bridge bindings
+- update `revision`
+- refresh workspace fields so they remain truthful
 
-- 保持 `featureId`
-- 替换该 feature 拥有的全部生成文件
-- 刷新该 feature 对应的桥接信息
-- `revision += 1`
+For the current MVP, `update` is:
 
----
+- owned-scope lifecycle update
+- not semantic incremental update
 
-## 7. 文件所有权
+Writing only metadata such as `.update.json` does not count as finished product-grade `update`.
 
-防污染的核心是文件 ownership。
+### 6.3 Delete
 
-每个生成文件必须属于一个明确的 feature。
+`delete` means:
 
-### 7.1 每个 feature 只拥有自己的文件
+- remove or deactivate the feature from active workspace state
+- remove its Rune Weaver-owned artifacts
+- refresh bridge exposure so the host no longer mounts it
+- check dependency/conflict risk before execution
 
-例如：
+Deleting only the workspace record does not count as finished product-grade `delete`.
 
-- `game/scripts/src/rune_weaver/generated/server/rw_dash_q.ts`
-- `content/panorama/src/rune_weaver/generated/ui/rw_dash_q.tsx`
+## 7. Deferred Operations
 
-### 7.2 不允许多个 feature 共享同一个“主实现文件”
+### 7.1 Regenerate
 
-可以共享：
+Deferred.
 
-- 索引文件
-- 桥接文件
-- 公共运行时文件
+Do not require `regenerate` for the current MVP.
 
-不可以共享：
+### 7.2 Rollback
 
-- 单个 feature 的主逻辑文件
+Deferred.
 
-### 7.3 文件头标记
+Do not require `rollback` for the current MVP.
 
-每个生成文件应带统一头标记，例如：
+## 8. Minimum Cross-Feature Model
 
-```ts
-// Generated by Rune Weaver
-// featureId: rw_dash_q
-// revision: 3
-// blueprintId: micro_feature_ab12
-```
+The minimum relationship vocabulary for the current MVP is:
 
-这样 scanner 才能做归属识别。
+- `depends_on`
+- `extends`
+- `conflicts_with`
 
----
+These relationships may first appear in review/governance output before they become richer persisted structures.
 
-## 8. 写入策略
+The minimum pre-write checks are:
 
-### 8.1 只写受控目录
+1. is the target feature clear
+2. does the write cross another feature's owned files
+3. does the write occupy an already-used bridge/integration point
+4. does delete break a dependent feature
+5. does the write escape Rune Weaver-owned host boundaries
 
-Rune Weaver 只写：
+## 9. Current Reality Note
 
-- `game/scripts/src/rune_weaver/**`
-- `content/panorama/src/rune_weaver/**`
-- `rune-weaver.workspace.json`
+Current code already provides:
 
-### 8.2 只通过桥接文件连接宿主
+- workspace file
+- feature records
+- update/delete helpers
 
-不直接把业务逻辑散写进：
+But agents must be explicit about the gap between current code and target semantics:
 
-- `modules/index.ts`
-- `hud/script.tsx`
+- some create paths are still partial
+- current update path is narrower than the target definition above
+- current delete path is narrower than the target definition above
 
-而是：
-
-- feature 自己写自己的文件
-- Rune Weaver 刷新桥接索引
-- 宿主只接桥接层
-
-### 8.3 原子替换
-
-`update/regenerate` 时应尽量采用：
-
-- 先生成新内容
-- 再替换旧文件
-
-避免在失败时把宿主弄成半更新状态。
-
----
-
-## 9. 桥接与组合
-
-多个 feature 如何连接在一起，不能靠“文件碰巧 import 到一起”，必须显式组合。
-
-### 9.1 服务端组合
-
-建议使用：
-
-- `game/scripts/src/rune_weaver/index.ts`
-- `game/scripts/src/rune_weaver/generated/server/index.ts`
-
-例如：
-
-```ts
-import { registerRwDashQ } from "./generated/server/rw_dash_q";
-import { registerRwTalentDraw } from "./generated/server/rw_talent_draw";
-
-export function activateRuneWeaverModules() {
-  registerRwDashQ();
-  registerRwTalentDraw();
-}
-```
-
-推荐更薄的一层：
-
-```ts
-import { activateRwGeneratedServer } from "./generated/server";
-
-export function activateRuneWeaverModules(): void {
-  activateRwGeneratedServer();
-}
-```
-
-### 9.2 UI 组合
-
-建议使用：
-
-- `content/panorama/src/rune_weaver/index.tsx`
-- `content/panorama/src/rune_weaver/generated/ui/index.tsx`
-
-例如：
-
-```tsx
-export function RuneWeaverHUDRoot() {
-  return (
-    <>
-      <RwDashQHint />
-      <RwTalentDrawModal />
-    </>
-  );
-}
-```
-
-推荐更薄的一层：
-
-```tsx
-import React from "react";
-import { RuneWeaverGeneratedUIRoot } from "./generated/ui";
-
-export function RuneWeaverHUDRoot() {
-  return <RuneWeaverGeneratedUIRoot />;
-}
-```
-
-### 9.3 索引由 Rune Weaver 刷新
-
-索引文件属于 Rune Weaver 自己管理，可以整体重写。
-
-这样：
-
-- 添加 feature 时简单
-- 删除 feature 时简单
-- regenerate 时不会污染其他 feature
-
-这里的关键约束是：
-
-- 业务逻辑文件归具体 feature 所有
-- bridge 和 generated index 归 Rune Weaver 自己管理
-- 宿主现有入口只做一次稳定接线
-
----
-
-## 10. 增量修改的边界
-
-当前阶段 Rune Weaver 只支持两类增量：
-
-1. 修改 Rune Weaver 自己生成过的 feature
-2. 通过明确注册点挂接到宿主
-
-当前阶段不支持：
-
-- 任意修改宿主已有手写业务逻辑
-- 自动 merge 用户改过的生成文件
-- 对未知文件进行智能 patch
-
-简化说：
-
-`Rune Weaver 只对自己负责。`
-
----
-
-## 11. 删除与禁用
-
-P1 前不强制支持完整删除流程，但工作区模型必须预留：
-
-- `disabled`
-- `archived`
-
-### 11.1 `disabled` 的语义
-
-`disabled` 表示：
-
-- feature 仍然存在于 workspace
-- feature 的生成文件和历史记录仍保留
-- 但 bridge 刷新时不再挂载它
-
-适合场景：
-
-- 临时关闭一个技能或系统
-- 做对比测试
-- 某个生成结果有问题，先停用而不是直接删掉
-
-### 11.2 `archived` 的语义
-
-`archived` 表示：
-
-- feature 已退出当前活跃集合
-- 记录保留用于追溯
-- 默认不再参与运行和桥接
-
-它不是“立刻物理删除文件”的同义词，而是更接近：
-
-- 已退役
-- 仍保留历史
-
-### 11.3 短期建议
-
-短期可先实现：
-
-- 在 workspace 中标记 `disabled`
-- 刷新桥接索引时不再挂载该 feature
-
-建议顺序：
-
-1. 先正式支持 `disabled`
-2. 在数据模型中保留 `archived`
-3. 等 bridge 和 workspace 稳定后，再决定是否支持完整 archive 流程
-
-这样比直接删文件更安全。
-
----
-
-## 12. 与宿主初始化的关系
-
-在 `init` 完成之前，不允许执行：
-
-- `create`
-- `update`
-- `regenerate`
-
-因为在未初始化宿主中：
-
-- `addon_name` 可能无效
-- 宿主目录可能未就绪
-- Rune Weaver 命名空间和 workspace 文件可能不存在
-
----
-
-## 13. 推荐 CLI 形态
-
-```bash
-rune-weaver dota2 init --host D:\test1
-rune-weaver dota2 create --host D:\test1
-rune-weaver dota2 update --host D:\test1 --feature rw_dash_q
-rune-weaver dota2 regenerate --host D:\test1 --feature rw_dash_q
-rune-weaver dota2 test --host D:\test1
-```
-
-其中：
-
-- `init` 负责宿主初始化
-- `create/update/regenerate` 负责工作区变更
-- `test` 负责触发宿主运行
-
----
-
-## 14. 当前结论
-
-Rune Weaver 后续要支持增量、重生成和多次运行不污染，关键不在"生成代码更聪明"，而在：
-
-- 引入稳定的 workspace manifest
-- 给每个 feature 分配稳定身份
-- 明确文件 ownership
-- 用桥接索引而不是散写宿主
-- 把 `create/update/regenerate` 明确区分
-
-只有这样，Rune Weaver 才能在 `D:\test1` 这样的真实宿主里稳定工作。
-
----
-
-## 15. T132-T134 Lifecycle 修复说明
-
-以下语义已在 T132-T134 中验证并修正：
-
-### 15.1 requiresRegenerate 是预期安全语义
-
-`update` 命令在变更比例过高时可能返回 `requiresRegenerate`。这是安全 gate，不是 bug。
-
-- 含义：update 拒绝不安全的部分更新，建议用户执行 regenerate
-- 预期行为：用户应执行 regenerate 来完成变更
-
-### 15.2 regenerate 后 workspace 会正确持久化
-
-`regenerate` 成功后，当前 revision 的 `generatedFiles` 会正确写回 workspace。
-
-- 这是 workspace 作为 source of truth 的核心语义
-- 多次 regenerate 不会丢失文件归属信息
-
-### 15.3 rollback 基于 workspace 做受控删除
-
-`rollback` 命令不再依赖磁盘兜底删除。
-
-- rollback 读取 workspace 中 current revision 的 `feature.generatedFiles`
-- 只删除 workspace 记录的文件
-- workspace 是 rollback 的 source of truth
-
-### 15.4 workspace 是 lifecycle source of truth
-
-整个 lifecycle（create → update → regenerate → rollback）应以 workspace 为唯一权威状态：
-
-- 不要依赖磁盘文件状态做决策
-- 不要把磁盘兜底删除描述为正确主语义
-- 所有变更都应先更新 workspace，再写入磁盘
+This document defines the contract the project should converge to for the README-target MVP.

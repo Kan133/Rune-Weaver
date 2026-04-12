@@ -20,7 +20,7 @@
 如需查看阶段路线，请参考：
 
 - [PHASE-ROADMAP-ZH.md](D:/Rune%20Weaver/docs/PHASE-ROADMAP-ZH.md)
-- [PHASE2-PLAN-ZH.md](D:/Rune%20Weaver/docs/PHASE2-PLAN-ZH.md)
+- [ROADMAP.md](D:/Rune%20Weaver/docs/ROADMAP.md)
 
 如需查看产品定位，请参考：
 
@@ -421,4 +421,3 @@ Gap Fill 应位于：
 
 - 更会说术语的代码生成器
 - 或更重的宿主专用工程系统
-

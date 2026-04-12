@@ -168,6 +168,11 @@ function showHelp(command?: string, subcommand?: string): void {
   wizard <text>         运行 Wizard 生成 IntentSchema
   blueprint <text>      运行 Wizard -> Blueprint 完整链路
   dota2 run <prompt>    运行完整 Dota2 主链路
+  export-bridge         导出 workspace 到 UI bridge
+
+export-bridge 命令:
+  npm run cli -- export-bridge --host <path>
+  npm run cli -- export-bridge --host <path> --output <dir>
 
 dota2 命令:
   npm run cli -- dota2 run "<需求文本>" --host D:\\test1
@@ -273,6 +278,69 @@ async function runAssemblyCommand(options: CLIOptions): Promise<boolean> {
   };
   
   return await runAssemblyCLI(assemblyOptions);
+}
+
+// F011: Export bridge command - CLI → UI bridge
+async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
+  const args = process.argv.slice(2);
+  let hostRoot: string | undefined;
+  let outputDir: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--host") {
+      hostRoot = args[i + 1];
+    }
+    if (args[i] === "--output" || args[i] === "-o") {
+      outputDir = args[i + 1];
+    }
+  }
+
+  if (!hostRoot) {
+    hostRoot = options.host;
+  }
+  if (!outputDir) {
+    outputDir = options.output;
+  }
+
+  if (!hostRoot) {
+    console.error("❌ Missing --host. Usage: npm run cli -- export-bridge --host <path>");
+    return false;
+  }
+
+  console.log("=".repeat(60));
+  console.log("🌉 Rune Weaver - Export Bridge for UI");
+  console.log("=".repeat(60));
+  console.log(`\n📁 Host: ${hostRoot}`);
+  if (outputDir) {
+    console.log(`📤 Output: ${outputDir}`);
+  } else {
+    console.log(`📤 Output: apps/workbench-ui/public (default)`);
+  }
+
+  const { exportHostToBridge } = await import("../../adapters/dota2/bridge/export.js");
+  const result = await exportHostToBridge(hostRoot, outputDir);
+
+  console.log("\n" + "=".repeat(60));
+  console.log("Export Result");
+  console.log("=".repeat(60));
+  console.log(`Status: ${result.success ? "✅ Success" : "❌ Failed"}`);
+  console.log(`Output Path: ${result.outputPath}`);
+
+  if (result.workspace) {
+    console.log(`Features: ${result.workspace.features.length}`);
+    console.log(`Host: ${result.workspace.addonName}`);
+  }
+
+  if (result.issues.length > 0) {
+    console.log("\nIssues:");
+    for (const issue of result.issues) {
+      console.log(`  - ${issue}`);
+    }
+  }
+
+  console.log("\n💡 Tip: Run workbench-ui and select 'Local Bridge' source to view this workspace");
+
+  return result.success;
 }
 
 async function runDota2Command(options: CLIOptions): Promise<boolean> {
@@ -462,6 +530,9 @@ async function main() {
       exitCode = success ? 0 : 1;
     } else if (options.command === "dota2") {
       const success = await runDota2Command(options);
+      exitCode = success ? 0 : 1;
+    } else if (options.command === "export-bridge") {
+      const success = await runExportBridgeCommand(options);
       exitCode = success ? 0 : 1;
     } else if (options.input) {
       const success = await runBlueprintCommand(options);

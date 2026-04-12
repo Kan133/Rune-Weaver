@@ -1,5 +1,10 @@
 # Host Realization Contract
 
+> Status Note
+> This document is an active technical reference for the Host Realization layer.
+> It defines realization-layer responsibility and boundaries, not a claim that the full realization contract is already fully productized.
+> For current MVP acceptance and immediate implementation priority, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) and [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md).
+
 ## Purpose
 
 This document defines the contract for the Host Realization layer in Rune Weaver.

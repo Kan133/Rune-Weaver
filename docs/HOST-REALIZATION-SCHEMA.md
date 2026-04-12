@@ -1,5 +1,9 @@
 # HostRealizationPlan Schema
 
+> Status Note
+> This document is an active technical reference for `HostRealizationPlan` shape.
+> It defines schema intent and layer boundaries, not a guarantee that every field is already fully populated in the current MVP implementation.
+
 ## Purpose
 
 This document defines the initial schema shape for `HostRealizationPlan`.
