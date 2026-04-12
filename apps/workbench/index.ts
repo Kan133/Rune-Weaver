@@ -69,6 +69,7 @@ import {
   extractKnownInputs,
 } from "./request-analysis.js";
 import { detectSceneAnchors } from "./scene-anchors.js";
+import { printWizardDegradation, runWorkbenchWizard } from "./wizard-runner.js";
 import { runDelete, runInspect, runList } from "./workbench-commands.js";
 
 import type {
@@ -122,7 +123,6 @@ import type {
   IntegrationPoint,
   IntegrationPointKind,
   IntakeSession,
-  WizardDegradationStatus,
   WizardDegradationInfo,
   FeatureReview,
   KnownInputs,
@@ -241,146 +241,7 @@ export async function runWorkbench(
     input: wizardInput,
   };
 
-  console.log("\n[Main Wizard] Running wizard to generate IntentSchema...");
-
-  let wizardResult: Awaited<ReturnType<typeof runWizardToIntentSchema>>;
-  let wizardDegradation: WizardDegradationInfo | undefined;
-
-  const forceDegrade = process.env.RW_FORCE_WIZARD_DEGRADE === "1";
-
-  if (forceDegrade) {
-    const forcedError = new Error("FORCED_WIZARD_DEGRADATION: Debug validation hook triggered");
-    console.log(`\n⚠️ [Main Wizard] Forced degradation triggered by RW_FORCE_WIZARD_DEGRADE=1`);
-
-    const fallbackSchema: IntentSchema = {
-      version: "1.0",
-      host: {
-        kind: "dota2-x-template",
-      },
-      request: {
-        rawPrompt: userRequest,
-        goal: `Partial feature based on: "${userRequest.substring(0, 50)}..."`,
-      },
-      classification: {
-        intentKind: "unknown",
-        confidence: "low",
-      },
-      requirements: {
-        functional: [],
-      },
-      constraints: {
-        nonFunctional: [],
-      },
-      uiRequirements: {
-        needed: false,
-      },
-      normalizedMechanics: {},
-      openQuestions: [],
-      resolvedAssumptions: [],
-      isReadyForBlueprint: false,
-    };
-
-    wizardResult = {
-      valid: false,
-      schema: fallbackSchema,
-      issues: [{
-        severity: "error" as const,
-        code: "WIZARD_FORCED_DEGRADATION",
-        scope: "schema" as const,
-        message: forcedError.message,
-      }],
-    };
-
-    wizardDegradation = {
-      status: "partial",
-      reason: "Forced degradation for local validation (RW_FORCE_WIZARD_DEGRADE=1)",
-      availableObjects: [
-        "featureIdentity",
-        "featureOwnership",
-        "integrationPoints", 
-        "conflictResult",
-        "knownInputs",
-        "featureCard",
-        "featureDetail",
-        "lifecycleActions",
-        "actionRoute",
-      ],
-    };
-  } else {
-    try {
-      wizardResult = await runWizardToIntentSchema(wizardOptions);
-      wizardDegradation = {
-        status: "none",
-        reason: "Wizard completed successfully",
-        availableObjects: ["schema", "issues"],
-      };
-    } catch (wizardError) {
-    const errorMessage = wizardError instanceof Error ? wizardError.message : String(wizardError);
-    const isOverload = errorMessage.includes("429") || 
-                       errorMessage.includes("overload") || 
-                       errorMessage.includes("Overloaded");
-
-    console.log(`\n⚠️ [Main Wizard] Wizard failed: ${errorMessage}`);
-
-   const fallbackSchema: IntentSchema = {
-    version: "1.0",
-    host: {
-      kind: "dota2-x-template",
-    },
-    request: {
-      rawPrompt: userRequest,
-      goal: `Partial feature based on: "${userRequest.substring(0, 50)}..."`,
-    },
-    classification: {
-      intentKind: "unknown",
-      confidence: "low",
-    },
-    requirements: {
-      functional: [],
-    },
-    constraints: {
-      nonFunctional: [],
-    },
-    uiRequirements: {
-      needed: false,
-    },
-    normalizedMechanics: {},
-    openQuestions: [],
-    resolvedAssumptions: [],
-    isReadyForBlueprint: false,
-  };
-
-
-    wizardResult = {
-      valid: false,
-      schema: fallbackSchema,
-      issues: [{
-        severity: "error" as const,
-        code: isOverload ? "WIZARD_OVERLOAD" : "WIZARD_ERROR",
-        scope: "schema" as const,
-        message: errorMessage,
-      }],
-    };
-
-    wizardDegradation = {
-      status: "partial",
-      reason: isOverload 
-        ? `Wizard overloaded (429), lifecycle objects may still render` 
-        : `Wizard failed: ${errorMessage}, lifecycle objects may still render`,
-      availableObjects: [
-        "featureIdentity",
-        "featureOwnership",
-        "integrationPoints", 
-        "conflictResult",
-        "knownInputs",
-        "featureCard",
-        "featureDetail",
-        "lifecycleActions",
-        "actionRoute",
-      ],
-    };
-  }
-  }
+  const { wizardResult, wizardDegradation } = await runWorkbenchWizard(userRequest, wizardOptions);
 
   session.wizardResult = {
     schema: wizardResult.schema,
@@ -389,20 +250,7 @@ export async function runWorkbench(
   };
   session.status = "wizard_completed";
 
-  if (wizardDegradation && wizardDegradation.status !== "none") {
-    console.log("\n" + "=".repeat(60));
-    console.log("⚠️ WIZARD DEGRADATION STATUS");
-    console.log("=".repeat(60));
-    console.log(`   Status: ${wizardDegradation.status.toUpperCase()}`);
-    console.log(`   Reason: ${wizardDegradation.reason}`);
-    console.log(`   Available Objects: ${(wizardDegradation.availableObjects ?? []).join(", ") || "(none)"}`);
-    console.log("=".repeat(60));
-  } else if (!wizardResult.valid) {
-    console.log("\n[Main Wizard] Wizard generated issues:");
-    for (const issue of wizardResult.issues || []) {
-      console.log(`  - ${issue.severity}: ${issue.message}`);
-    }
-  }
+  printWizardDegradation(wizardResult, wizardDegradation);
 
   const knownInputs = extractKnownInputs(userRequest);
   const review = generateFeatureReview(
