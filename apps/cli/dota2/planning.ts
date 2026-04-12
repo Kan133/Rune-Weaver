@@ -274,8 +274,8 @@ export function buildAssemblyPlan(
 export function createWritePlan(
   assemblyPlan: AssemblyPlan,
   hostRoot: string,
-  existingFeature: RuneWeaverFeatureRecord | null,
-  mode: FeatureMode,
+  existingFeature?: RuneWeaverFeatureRecord | null,
+  mode: FeatureMode = "create",
   hostRealizationPlan?: HostRealizationPlan,
   generatorRoutingPlan?: GeneratorRoutingPlan,
 ): { writePlan: WritePlan | null; issues: string[] } {

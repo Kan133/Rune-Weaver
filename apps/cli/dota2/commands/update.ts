@@ -13,6 +13,7 @@ import { performUpdateHostValidation } from "../../helpers/index.js";
 import { saveReviewArtifact } from "../review-artifacts.js";
 import { createUpdateReviewArtifact } from "../update-artifact.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
+import type { FeatureMode } from "../planning.js";
 
 export interface UpdateCommandDeps {
   createIntentSchema: (prompt: string, hostRoot: string) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
@@ -26,8 +27,8 @@ export interface UpdateCommandDeps {
   createWritePlan: (
     plan: AssemblyPlan,
     hostRoot: string,
-    existingFeature?: RuneWeaverFeatureRecord,
-    mode?: "create" | "update" | "regenerate",
+    existingFeature?: RuneWeaverFeatureRecord | null,
+    mode?: FeatureMode,
     hostRealizationPlan?: HostRealizationPlan,
     generatorRoutingPlan?: GeneratorRoutingPlan,
   ) => { writePlan: any; issues: string[] };

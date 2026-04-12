@@ -10,6 +10,7 @@ import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import type { AssemblyPlan, Blueprint, IntentSchema } from "../../../../core/schema/types.js";
 import type { PatternResolutionResult } from "../../../../core/patterns/resolver.js";
 import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../../../core/schema/types.js";
+import type { FeatureMode } from "../planning.js";
 
 export interface RegenerateCommandDeps {
   createIntentSchema: (prompt: string, hostRoot: string) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
@@ -23,8 +24,8 @@ export interface RegenerateCommandDeps {
   createWritePlan: (
     plan: AssemblyPlan,
     hostRoot: string,
-    existingFeature?: RuneWeaverFeatureRecord,
-    mode?: "create" | "update" | "regenerate",
+    existingFeature?: RuneWeaverFeatureRecord | null,
+    mode?: FeatureMode,
     hostRealizationPlan?: HostRealizationPlan,
     generatorRoutingPlan?: GeneratorRoutingPlan,
   ) => { writePlan: unknown; issues: string[] };

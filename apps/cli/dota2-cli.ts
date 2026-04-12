@@ -29,11 +29,13 @@ import { WritePlan } from "../../adapters/dota2/assembler/index.js";
 import { generateCode } from "../../adapters/dota2/generator/index.js";
 import { generateAbilityKV } from "../../adapters/dota2/generator/kv/index.js";
 import { KVGeneratorInput } from "../../adapters/dota2/generator/kv/types.js";
+import { validateHostRuntime } from "../../adapters/dota2/validator/runtime-validator.js";
 import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateCodeContent, validateHost, buildRuntimeValidationResult, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
 import type { VerdictInput, HostValidationResult, RuntimeValidationResult, WorkspaceUpdateResult } from "./helpers/index.js";
 import { checkWriteConflicts } from "./helpers/governance-check.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
 import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } from "../../adapters/dota2/routing/index.js";
+import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
 import { isHostFullyReady } from "../../adapters/dota2/scanner/host-status.js";
 import {
   generateCleanupPlan,
@@ -604,7 +606,6 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     };
     artifact.finalVerdict.weakestStage = "governanceCheck";
     artifact.finalVerdict.remainingRisks = governanceCheck.conflicts.map(c => c.explanation);
-    artifact.finalVerdict.overallSuccess = false;
 
     console.log("\n[Governance Check] BLOCKED");
     console.log(governanceCheck.summary);
