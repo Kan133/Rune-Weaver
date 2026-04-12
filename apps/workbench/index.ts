@@ -69,6 +69,7 @@ import {
   detectUIRequirements,
   extractKnownInputs,
 } from "./request-analysis.js";
+import { printBlueprintProposalReport } from "./proposal-report.js";
 import { detectSceneAnchors } from "./scene-anchors.js";
 import { printWizardDegradation, runWorkbenchWizard } from "./wizard-runner.js";
 import { runDelete, runInspect, runList } from "./workbench-commands.js";
@@ -285,72 +286,9 @@ export async function runWorkbench(
     featureOwnership,
     client
   );
-  
-  console.log(`   Proposal ID: ${blueprintProposal.id}`);
-  console.log(`   Source: ${blueprintProposal.source.toUpperCase()}`);
-  if (blueprintProposal.source === "fallback") {
-    console.log(`   ⚠️ LLM was unavailable, using fallback proposal`);
-  }
-  console.log(`   Status: ${blueprintProposal.status.toUpperCase()}`);
-  console.log(`   Confidence: ${blueprintProposal.confidence}`);
-  console.log(`   Proposed Modules: ${blueprintProposal.proposedModules.length}`);
-  for (const mod of blueprintProposal.proposedModules) {
-    console.log(`      - ${mod.role}: ${mod.proposedPatternIds.join(", ")}`);
-  }
-  if (blueprintProposal.notes.length > 0) {
-    console.log(`   Notes: ${blueprintProposal.notes.join("; ")}`);
-  }
-  if (blueprintProposal.issues.length > 0) {
-    console.log(`   Issues: ${blueprintProposal.issues.join("; ")}`);
-  }
-  if (blueprintProposal.referencedExperiences && blueprintProposal.referencedExperiences.length > 0) {
-    console.log(`   Referenced Experiences: ${blueprintProposal.referencedExperiences.length}`);
-    for (const expRef of blueprintProposal.referencedExperiences) {
-      console.log(`      - ${expRef.experienceId} (${expRef.reason})`);
-    }
-    console.log(`   📌 Experience layer is for reference only - NOT a final rule`);
-  }
-  
   const gapFillResult = await identifyGapsAndFillAsync(blueprintProposal, client);
-  if (gapFillResult.identifiedGaps.length > 0) {
-    console.log(`   Gap-Fill: ${gapFillResult.filledGaps.length}/${gapFillResult.identifiedGaps.length} gaps identified and filled`);
-    const llmFilled = gapFillResult.filledGaps.filter(g => g.fillSource === "llm");
-    const ruleFilled = gapFillResult.filledGaps.filter(g => g.fillSource === "rule");
-    if (llmFilled.length > 0) {
-      console.log(`      🔮 LLM-filled (Category B): ${llmFilled.length}`);
-      for (const filled of llmFilled) {
-        console.log(`         - ${filled.gapKind} for ${filled.targetModuleId}: "${filled.suggestedValue}"`);
-      }
-    }
-    if (ruleFilled.length > 0) {
-      console.log(`      📋 Rule-filled (Category A): ${ruleFilled.length}`);
-      for (const filled of ruleFilled) {
-        console.log(`         - ${filled.gapKind} for ${filled.targetModuleId}: ${filled.suggestedValue}`);
-      }
-    }
-    if (gapFillResult.categoryEGaps.length > 0) {
-      console.log(`   ⚠️  Category E Clarification Needed: ${gapFillResult.categoryEGaps.length} gaps`);
-      for (const eg of gapFillResult.categoryEGaps) {
-        console.log(`      - [${eg.gapKind}] ${eg.targetModuleId}: ${eg.notes?.[0] || "requires clarification"}`);
-      }
-    }
-    if (gapFillResult.unfilledGaps.length > 0) {
-      console.log(`   Unfilled gaps: ${gapFillResult.unfilledGaps.length}`);
-    }
-    console.log(`   📌 Gap-fill is for reference only - NOT a final parameter`);
-  }
-  
   const sceneReferences = detectSceneAnchors(userRequest, "dota2");
-  if (sceneReferences.length > 0) {
-    console.log(`   Scene/Map References: ${sceneReferences.length} anchor(s) detected`);
-    for (const ref of sceneReferences) {
-      console.log(`      - ${ref.anchorName} (${ref.anchorKind})`);
-    }
-    console.log(`   📌 Scene references are READ-ONLY - no map editing performed`);
-  }
-  
-  console.log(`   ⚠️ NOTE: This is a PROPOSAL only, not a final blueprint.`);
-  console.log(`   System still retains final authority for blueprint decisions.`);
+  printBlueprintProposalReport(blueprintProposal, gapFillResult, sceneReferences);
 
   console.log("\n" + "=".repeat(60));
   console.log("SESSION & IDENTITY STATUS");
