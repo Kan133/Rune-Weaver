@@ -74,6 +74,7 @@ import { createDeleteReviewArtifact } from "./dota2/delete-artifact.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
 import { runDeleteCommand } from "./dota2/commands/delete.js";
 import { runRollbackCommand } from "./dota2/commands/rollback.js";
+import { runRegenerateCommand } from "./dota2/commands/regenerate.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -240,7 +241,14 @@ export function showDota2Help(): void {
 
 export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
   if (options.command === "regenerate") {
-    return await runRegenerateCommand(options);
+    return await runRegenerateCommand(options, {
+      createIntentSchema,
+      buildBlueprint,
+      resolvePatternsFromBlueprint,
+      buildAssemblyPlan,
+      createWritePlan,
+      runPipeline,
+    });
   }
 
   if (options.command === "rollback") {
@@ -1231,243 +1239,6 @@ async function executeWrite(
   }
 
   return { result, review };
-}
-
-async function runRegenerateCommand(options: Dota2CLIOptions): Promise<boolean> {
-  console.log("=".repeat(70));
-  console.log("🧙 Rune Weaver - Regenerate Feature");
-  console.log("=".repeat(70));
-  console.log(`\n📁 Host: ${options.hostRoot}`);
-  console.log(`📝 Feature: ${options.featureId || "(not specified)"}`);
-  console.log(`⚙️  Mode: ${options.dryRun ? "dry-run" : "write"}`);
-
-  if (!options.featureId) {
-    console.error("\n❌ Error: --feature <featureId> is required for regenerate");
-    return false;
-  }
-
-  const workspaceResult = initializeWorkspace(options.hostRoot);
-  if (!workspaceResult.success || !workspaceResult.workspace) {
-    console.error(`\n❌ Failed to load workspace: ${workspaceResult.issues.join(", ")}`);
-    return false;
-  }
-
-  const existingFeature = findFeatureById(workspaceResult.workspace, options.featureId);
-  if (!existingFeature) {
-    console.error(`\n❌ Feature '${options.featureId}' not found in workspace`);
-    return false;
-  }
-
-  if (existingFeature.status !== "active") {
-    console.error(`\n❌ Feature '${options.featureId}' has status '${existingFeature.status}' and cannot be regenerated`);
-    return false;
-  }
-
-  console.log(`\n📋 Existing Feature:`);
-  console.log(`   Feature ID: ${existingFeature.featureId}`);
-  console.log(`   Revision: ${existingFeature.revision}`);
-  console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
-  console.log(`   Status: ${existingFeature.status}`);
-
-  const { schema, usedFallback } = await createIntentSchema(options.prompt, options.hostRoot);
-  if (!schema) {
-    console.error("\n❌ Failed to create IntentSchema");
-    return false;
-  }
-
-  const { blueprint, issues: blueprintIssues } = buildBlueprint(schema);
-  if (!blueprint) {
-    console.error(`\n❌ Failed to build Blueprint: ${blueprintIssues.join(", ")}`);
-    return false;
-  }
-
-  const resolutionResult = resolvePatternsFromBlueprint(blueprint);
-  if (resolutionResult.patterns.length === 0) {
-    console.error("\n❌ No patterns resolved");
-    return false;
-  }
-
-  const { plan, blockers } = buildAssemblyPlan(blueprint, resolutionResult, options.hostRoot);
-  if (!plan) {
-    console.error(`\n❌ Failed to build AssemblyPlan: ${blockers.join(", ")}`);
-    return false;
-  }
-
-  // T112-R1: Build HostRealizationPlan for generator awareness
-  const hostRealizationPlan = realizeDota2Host(plan);
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4.5: Host Realization (for regenerate)");
-  console.log("=".repeat(70));
-  console.log(summarizeRealization(hostRealizationPlan));
-
-  // T115: Build GeneratorRoutingPlan for route-aware generation
-  const generatorRoutingPlan = generateGeneratorRoutingPlan(hostRealizationPlan);
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4.6: Generator Routing (for regenerate)");
-  console.log("=".repeat(70));
-  const tsRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ts");
-  const uiRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ui");
-  const kvRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "kv");
-  console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
-  console.log(`    - TS: ${tsRoutes.length}, UI: ${uiRoutes.length}, KV: ${kvRoutes.length} (${kvRoutes.filter(r => r.blockers?.length).length} blocked)`);
-
-  const { writePlan, issues: generatorIssues } = createWritePlan(
-    plan,
-    options.hostRoot,
-    existingFeature,
-    "regenerate",
-    hostRealizationPlan,
-    generatorRoutingPlan
-  );
-  if (!writePlan) {
-    console.error(`\n❌ Failed to create WritePlan: ${generatorIssues.join(", ")}`);
-    return false;
-  }
-
-  const cleanupPlan = generateCleanupPlan(
-    existingFeature,
-    writePlan,
-    options.hostRoot
-  );
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Cleanup Plan");
-  console.log("=".repeat(70));
-  console.log(formatCleanupPlan(cleanupPlan));
-
-  if (!cleanupPlan.canExecute) {
-    console.error("\n❌ Cleanup plan cannot be executed due to safety issues:");
-    for (const issue of cleanupPlan.safetyIssues) {
-      console.error(`   - ${issue}`);
-    }
-    return false;
-  }
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Executing Cleanup");
-  console.log("=".repeat(70));
-
-  const cleanupResult = executeCleanup(cleanupPlan, options.hostRoot, options.dryRun);
-  console.log(formatCleanupResult(cleanupResult));
-
-  if (!cleanupResult.success) {
-    console.error("\n❌ Cleanup execution failed");
-    return false;
-  }
-
-  const regenerateOptions: Dota2CLIOptions = {
-    ...options,
-    command: "regenerate",
-    featureId: existingFeature.featureId,
-  };
-
-  const artifact = await runPipeline(regenerateOptions);
-
-  artifact.commandKind = "maintenance";
-  artifact.applicableStages = [
-    "cleanupPlan",
-    "intentSchema",
-    "blueprint",
-    "patternResolution",
-    "assemblyPlan",
-    "hostRealization",
-    "generator",
-    "writeExecutor",
-    "hostValidation",
-    "runtimeValidation",
-    "workspaceState"
-  ];
-
-  (artifact.stages as Record<string, unknown>).cleanupPlan = {
-    filesToDelete: cleanupPlan.filesToDelete,
-    filesToCreate: cleanupPlan.filesToCreate,
-    filesToRefresh: cleanupPlan.filesToRefresh,
-    filesUnchanged: cleanupPlan.filesUnchanged,
-    previousRevision: cleanupPlan.previousRevision,
-    nextRevision: cleanupPlan.nextRevision,
-    canExecute: cleanupPlan.canExecute,
-    executedDeletes: cleanupResult.deleted,
-    deleteFailures: cleanupResult.failed,
-    skippedDeletes: cleanupResult.skipped,
-  };
-
-  const outputDir = join(process.cwd(), "tmp", "cli-review");
-  const outputPath = saveReviewArtifact(artifact, outputDir);
-
-  // T134-FIX: Ensure workspace state is persisted after regenerate
-  // runPipeline skips workspace state update for regenerate mode, so we need to manually update it
-  if (!options.dryRun && artifact.stages.workspaceState?.skipped && artifact.stages.generator?.generatedFiles) {
-    console.log("\n" + "=".repeat(70));
-    console.log("Stage 9: Workspace State Update (Post-Regenerate)");
-    console.log("=".repeat(70));
-
-    const initResult = initializeWorkspace(options.hostRoot);
-    if (!initResult.success) {
-      console.error("  ❌ Failed to initialize workspace");
-    } else {
-      const workspace = initResult.workspace!;
-      const featureIdToUpdate = options.featureId;
-      const existingFeature = findFeatureById(workspace, featureIdToUpdate);
-      
-      if (existingFeature) {
-        const generatedFiles = artifact.stages.generator.generatedFiles as string[];
-        const updatedFeature: RuneWeaverFeatureRecord = {
-          ...existingFeature,
-          revision: existingFeature.revision + 1,
-          generatedFiles,
-          blueprintId: artifact.stages.blueprint?.summary || existingFeature.blueprintId,
-          selectedPatterns: artifact.stages.patternResolution?.resolvedPatterns || existingFeature.selectedPatterns,
-          updatedAt: new Date().toISOString(),
-        };
-
-        const updatedFeatures = workspace.features.map(f =>
-          f.featureId === featureIdToUpdate ? updatedFeature : f
-        );
-
-        const updatedWorkspace = {
-          ...workspace,
-          features: updatedFeatures,
-        };
-
-        const saveResult = saveWorkspace(options.hostRoot, updatedWorkspace);
-        if (saveResult.success) {
-          console.log("  ✅ Workspace state updated");
-          console.log(`     Feature ID: ${featureIdToUpdate}`);
-          console.log(`     Revision: ${existingFeature.revision} -> ${updatedFeature.revision}`);
-          console.log(`     Generated Files: ${generatedFiles.length}`);
-        } else {
-          console.error(`  ❌ Failed to save workspace: ${saveResult.issues.join(", ")}`);
-        }
-      }
-    }
-  }
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Final Verdict");
-  console.log("=".repeat(70));
-  console.log(`  Pipeline Complete: ${artifact.finalVerdict.pipelineComplete ? "✅" : "❌"}`);
-  console.log(`  Completion Kind: ${artifact.finalVerdict.completionKind}`);
-  console.log(`  Sufficient for Demo: ${artifact.finalVerdict.sufficientForDemo ? "✅" : "❌"}`);
-  console.log(`  Has Unresolved Patterns: ${artifact.finalVerdict.hasUnresolvedPatterns ? "⚠️" : "✅"}`);
-  console.log(`  Was Force Override: ${artifact.finalVerdict.wasForceOverride ? "⚠️" : "✅"}`);
-
-  if (artifact.finalVerdict.remainingRisks.length > 0) {
-    console.log("\n  Remaining Risks:");
-    for (const risk of artifact.finalVerdict.remainingRisks) {
-      console.log(`    - ${risk}`);
-    }
-  }
-
-  if (artifact.finalVerdict.nextSteps.length > 0) {
-    console.log("\n  Next Steps:");
-    for (const step of artifact.finalVerdict.nextSteps) {
-      console.log(`    → ${step}`);
-    }
-  }
-
-  console.log(`\n📄 Review artifact saved: ${outputPath}`);
-
-  return artifact.finalVerdict.pipelineComplete;
 }
 
 async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
