@@ -318,20 +318,6 @@ export async function runWorkbench(
     review
   );
 
-  console.log("\n" + "=".repeat(60));
-  console.log("FEATURE CARD");
-  console.log("=".repeat(60));
-  console.log(`   ID: ${featureCard.id}`);
-  console.log(`   Display Label: ${featureCard.displayLabel}`);
-  console.log(`   System Label: ${featureCard.systemLabel}`);
-  console.log(`   Summary: ${featureCard.summary.substring(0, 60)}${featureCard.summary.length > 60 ? "..." : ""}`);
-  console.log(`   Host: ${featureCard.host}`);
-  console.log(`   Status: ${featureCard.status}`);
-  console.log(`   Risk Level: ${featureCard.riskLevel}`);
-  console.log(`   Needs Confirmation: ${featureCard.needsConfirmation}`);
-  console.log(`   Created: ${featureCard.createdAt.toISOString()}`);
-  console.log(`   Updated: ${featureCard.updatedAt.toISOString()}`);
-
   const featureDetail = createFeatureDetail(
     featureCard,
     featureIdentity,
