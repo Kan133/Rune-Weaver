@@ -175,6 +175,12 @@ export-bridge 命令:
   npm run cli -- export-bridge --host <path> --output <dir>
 
 dota2 命令:
+  npm run cli -- dota2 init --host <path>
+                        初始化宿主，创建 workspace 和命名空间
+  npm run cli -- dota2 check-host --host <path>
+                        检查宿主状态
+  npm run cli -- dota2 launch --host <path>
+                        启动 Dota2 Tools 进行测试
   npm run cli -- dota2 run "<需求文本>" --host D:\\test1
   npm run cli -- dota2 run "<需求文本>" --host D:\\test1 --dry-run
   npm run cli -- dota2 run "<需求文本>" --host D:\\test1 --write
@@ -360,7 +366,9 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       args[i] !== "review" &&
       args[i] !== "update" &&
       args[i] !== "regenerate" &&
-      args[i] !== "rollback"
+      args[i] !== "rollback" &&
+      args[i] !== "init" &&
+      args[i] !== "check-host"
     ) {
       if (!prompt && !args[i - 1]?.startsWith("-")) {
         prompt = args[i];
@@ -378,6 +386,54 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
 
   const subcommand = options.subcommand || "run";
   
+  // T149: Handle init subcommand
+  if (subcommand === "init") {
+    if (!hostRoot) {
+      console.error("❌ Missing --host. Usage: npm run cli -- dota2 init --host <path>");
+      return false;
+    }
+    
+    // Check for --addon-name parameter
+    let addonName: string | undefined;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === "--addon-name" && args[i + 1]) {
+        addonName = args[i + 1];
+        break;
+      }
+    }
+    
+    const { initDota2Host, printInitResult } = await import("../../adapters/dota2/init/index.js");
+    const result = await initDota2Host({ hostPath: hostRoot, addonName });
+    printInitResult(result);
+    return result.success;
+  }
+  
+  // T149: Handle check-host subcommand
+  if (subcommand === "check-host") {
+    if (!hostRoot) {
+      console.error("❌ Missing --host. Usage: npm run cli -- dota2 check-host --host <path>");
+      return false;
+    }
+
+    const { checkHostStatus, getHostStatusSummary } = await import("../../adapters/dota2/scanner/host-status.js");
+    const result = checkHostStatus(hostRoot);
+    console.log(getHostStatusSummary(result));
+    return result.rwStatus.ready;
+  }
+
+  // Handle launch subcommand
+  if (subcommand === "launch") {
+    if (!hostRoot) {
+      console.error("❌ Missing --host. Usage: npm run cli -- dota2 launch --host <path>");
+      return false;
+    }
+
+    const { runLaunchCommand, printLaunchResult } = await import("../../adapters/dota2/launch/index.js");
+    const result = await runLaunchCommand({ hostRoot });
+    printLaunchResult(result);
+    return result.dispatched;
+  }
+
   if (subcommand === "rollback") {
     if (!hostRoot) {
       console.error("❌ Missing --host. Usage: npm run cli -- dota2 rollback --host <path> --feature <id>");

@@ -15,6 +15,7 @@ For current scope truth, always pair this file with:
 - [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
 - [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
 - [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md)
+- [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 
 ## Read Order
 
@@ -23,51 +24,52 @@ For current scope truth, always pair this file with:
 3. [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
 4. [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md)
 5. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
-6. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
-7. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
+6. [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
+7. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+8. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
 
 ## Current Mission
 
-The current mission is not “finish every lifecycle feature”.
+The current mission is not "finish the old packet queue again."
 
 It is:
 
-**reach the README-target MVP with host separation, feature management, and minimum governance.**
+**turn the standing CLI lifecycle spine into a release-grade product entry and repeatable walkthrough.**
 
-Required for this milestone:
+Current execution priorities:
 
-- host separation
-- workspace-backed feature registry
-- product-grade `create`
-- product-grade `update`
-- product-grade `delete`
-- minimum cross-feature conflict checks
+- close evidence gaps for standing lifecycle claims
+- connect the onboarding/UI shell to authoritative CLI paths
+- finish x-template onboarding flow details
+- lock one canonical create/update/delete/governance walkthrough
 
-Deferred for this milestone:
+Still deferred:
 
 - `regenerate`
 - `rollback`
-- semantic incremental update
+- structure-level update
 - second host
-- broad UI/workbench expansion
+- broad workbench productization beyond entry/orchestration
 
 ## Current Reality
 
 What already exists:
 
-- formal planning/execution architecture
+- authoritative CLI `create`
+- authoritative CLI `update`
+- authoritative CLI `delete`
+- minimum governance baseline
 - host ownership boundary
 - workspace state file
-- Dota2 host write baseline
 - bridge export for UI consumption
-- workspace-driven UI shell
+- workspace-driven preview/onboarding UI shell
 
 What is still incomplete:
 
-- `create` is not yet consistently recording final patterns/files/bindings through the product path
-- `update` is not yet a true owned-artifact rewrite
-- `delete` is still closer to unmanaging a feature than unloading it
-- conflict checks are still narrower than the target MVP
+- evidence quality still needs to stay release-grade and repeatable
+- UI is not yet the authoritative execution surface
+- x-template onboarding still lacks full map / launch wiring
+- canonical walkthrough and demo gate still need to be fully locked down
 - workbench remains narrower than the README story
 
 ## Working Mode
@@ -83,8 +85,8 @@ Do:
 
 Do not:
 
-- let worker agents redefine phase status
-- let worker agents expand host ownership boundary
+- let worker agents redefine scope truth
+- let worker agents widen host ownership
 - let worker agents overclaim lifecycle maturity
 - let worker agents turn demo fixtures into product truth
 
@@ -113,12 +115,10 @@ For the active milestone:
 
 - `create`
   - must create a persisted feature with artifacts, bindings, and workspace record
-
 - `update`
   - must keep the same `featureId`
   - must only touch that feature's owned files and allowed bridge updates
-  - is **not** semantic incremental update
-
+  - is not semantic incremental update
 - `delete`
   - must unload the feature from workspace, owned files, and bridge exposure
 
@@ -134,9 +134,9 @@ as accepted finished behavior.
 The governance baseline only needs to answer:
 
 1. which feature is the target
-2. which files/surfaces are owned
+2. which files and surfaces are owned
 3. whether another feature already owns the touched area
-4. whether a bridge/integration point is already occupied
+4. whether a bridge or integration point is already occupied
 5. whether delete would break a dependent feature
 6. whether the write should proceed, block, or ask for confirmation
 
@@ -145,21 +145,42 @@ The governance baseline only needs to answer:
 Current workbench/UI should be treated as:
 
 - feature/workspace visualization
+- onboarding shell
 - host/workspace evidence surface
-- not the primary product truth
+- not the primary lifecycle truth
 
-The current UI should follow workspace-backed feature management, not a large panel/demo roadmap.
+The current UI should follow workspace-backed feature management, not invent a second execution system.
+
+## Authoritative Lifecycle Path
+
+The authoritative lifecycle path remains the CLI surface in `apps/cli/dota2-cli.ts`.
+
+This currently includes:
+
+- `dota2 init`
+- `dota2 run`
+- `dota2 update`
+- `dota2 delete`
+
+`dota2 init` is the formal host-readiness prerequisite before lifecycle operations on a new host.
+
+The workbench path remains:
+
+- preview / visualization
+- onboarding shell
+- evidence surface
+- non-authoritative for lifecycle acceptance
+
+Do not use workbench as proof of product-grade lifecycle behavior.
 
 ## Next Implementation Order
 
-1. align docs and implementation on the workspace source of truth
-2. finish product-grade `create`
-3. replace metadata-only `update` with owned-scope rewrite
-4. replace record-only `delete` with true unload
-5. make conflict checks workspace-backed
-6. keep UI focused on feature registry, detail, change preview, and evidence
+1. keep lifecycle evidence repeatable and easy to re-run
+2. connect product entry/onboarding to the authoritative CLI path
+3. finish x-template onboarding and launch prep
+4. lock one canonical walkthrough / demo gate
 
-Use [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md) for the concrete worker-task queue.
+Use [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md) for the active worker-task queue.
 
 ## Reference Docs
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines how agents should work autonomously in Rune Weaver during the current README-target MVP stage.
+This document defines how agents should work autonomously during the current post-ABCD execution phase.
 
 Its goal is to minimize unnecessary user clarification while keeping product boundaries, host safety, and acceptance criteria intact.
 
@@ -11,7 +11,7 @@ Read this after:
 1. [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
 2. [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
 3. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
-4. [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md)
+4. [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 
 ## Default Working Rule
 
@@ -20,29 +20,27 @@ Agents should assume the user wants end-to-end progress unless the user explicit
 Default behavior:
 
 - inspect current code and docs
-- make reasonable MVP-scoped assumptions
+- make reasonable scope-safe assumptions
 - implement the next critical-path improvement
 - verify what can be verified
 - report remaining gaps clearly
 
-Agents should not stop just to ask for confirmation when the decision is already bounded by the current MVP contract.
+Agents should not stop just to ask for confirmation when the decision is already bounded by the current execution contract.
 
 ## What Agents May Assume Without Asking
 
-For the current milestone, agents may assume all of the following:
+For the current phase, agents may assume all of the following:
 
 ### 1. Product Scope
 
-The active goal is always:
+The active goal is:
 
-- host separation
-- workspace-backed feature management
-- product-grade `create`
-- product-grade `update`
-- product-grade `delete`
-- minimum cross-feature governance
+- release-grade evidence for the standing CLI lifecycle spine
+- product entry integration into the authoritative CLI path
+- x-template onboarding completion
+- one repeatable walkthrough for create/update/delete/governance
 
-Agents must not ask whether they should work on `regenerate`, `rollback`, second-host support, semantic incremental update, or broad workbench productization unless the user explicitly reopens those scopes.
+Agents must not ask whether they should reopen `regenerate`, `rollback`, second-host support, structure-level update, or broad workbench productization unless the user explicitly reopens those scopes.
 
 ### 2. Source Of Truth
 
@@ -51,6 +49,7 @@ Agents may assume:
 - workspace state is the canonical truth
 - fixture data is weaker than real workspace state
 - mock workbench outputs are weaker than real persisted feature state
+- CLI lifecycle paths are stronger than preview UI surfaces
 
 ### 3. Host Safety
 
@@ -64,12 +63,10 @@ Agents may assume:
 
 Agents may assume the default priority order is:
 
-1. workspace truth
-2. product-grade `create`
-3. owned-scope `update`
-4. real `delete`
-5. minimum governance
-6. canonical verification flow
+1. evidence closure for standing lifecycle claims
+2. product entry integration into the authoritative CLI path
+3. x-template onboarding completion
+4. canonical walkthrough / demo gate
 
 ## What Agents Must Decide Themselves
 
@@ -78,7 +75,7 @@ Agents are expected to decide, without asking the user:
 - the smallest critical-path implementation slice
 - whether a doc is authoritative, reference, planning, or archive
 - which technical-reference docs are needed for a task
-- whether a proposal is out of MVP scope
+- whether a proposal is out of current scope
 - whether current code and current docs disagree
 - whether a task should be split into smaller worker packets
 
@@ -91,6 +88,7 @@ Agents must verify, from code or artifacts, before claiming a capability is stan
 - update keeps the same `featureId`
 - delete truly unloads owned artifacts and bridge exposure
 - governance checks are workspace-backed rather than fixture-backed
+- UI integration claims are backed by real CLI wiring, not preview-only state
 
 Agents must not convert design intent into delivered status without code or verification evidence.
 
@@ -112,8 +110,8 @@ When a detail is missing, agents should prefer this order:
 
 1. infer from code
 2. infer from authoritative docs
-3. infer from the current MVP queue
-4. use the most conservative assumption that preserves host safety and MVP scope
+3. infer from the current execution plan
+4. use the most conservative assumption that preserves host safety and current scope
 
 Agents should document the assumption after acting, not stop before acting, unless the assumption would create hidden product risk.
 
@@ -137,12 +135,11 @@ Workers should not be asked to:
 
 A change is acceptable only if it improves at least one of these:
 
-1. truthful workspace persistence
-2. product-grade `create`
-3. owned-scope `update`
-4. real `delete`
-5. minimum governance
-6. repeatable verification
+1. repeatable lifecycle evidence
+2. truthful workspace persistence
+3. product entry integration
+4. x-template onboarding completion
+5. canonical walkthrough quality
 
 If a change improves none of these, it is probably not on the current critical path.
 
@@ -161,5 +158,5 @@ When autonomy-related docs disagree:
 
 1. prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
 2. then [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
-3. then [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md)
+3. then [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 4. then [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)

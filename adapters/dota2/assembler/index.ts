@@ -72,6 +72,7 @@ export interface WritePlan {
     panorama: string;
   };
   entries: WritePlanEntry[];
+  integrationPoints?: string[];  // 集成点标识，如 ["input.key_binding:Q"]
   stats: {
     total: number;
     create: number;
@@ -210,6 +211,15 @@ export function createWritePlan(
     deferred: entries.filter((e) => e.deferred).length,
   };
 
+  // 提取集成点
+  const integrationPoints: string[] = [];
+  for (const binding of plan.selectedPatterns) {
+    // 从 key_binding pattern 中提取 triggerKey
+    if (binding.patternId === "input.key_binding" && binding.parameters?.triggerKey) {
+      integrationPoints.push(`input.key_binding:${binding.parameters.triggerKey}`);
+    }
+  }
+
   return {
     id: `writeplan_${plan.blueprintId}_${Date.now()}`,
     targetProject: projectPath,
@@ -219,6 +229,7 @@ export function createWritePlan(
       panorama: RUNE_WEAVER_NAMESPACE.panorama.root,
     },
     entries,
+    integrationPoints,
     stats,
     executionOrder,
     readyForHostWrite: plan.readyForHostWrite,

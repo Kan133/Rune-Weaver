@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document groups the technical reference docs that remain active after the README-target MVP doc-governance reset.
+This document groups the technical reference docs that remain active after the post-ABCD execution reset.
 
-Use this layer when an agent already understands the MVP boundary and needs deeper implementation context for planning, realization, routing, generation, or host integration.
+Use this layer when an agent already understands the current boundary and needs deeper implementation context for planning, realization, routing, generation, or host integration.
 
 Read this only after:
 
@@ -13,7 +13,7 @@ Read this only after:
 3. [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
 4. [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md)
 5. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
-6. [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md)
+6. [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 
 ## Layer Roles
 
@@ -90,4 +90,4 @@ When these docs disagree with execution-baseline docs:
 
 1. keep the technical boundary
 2. drop the stale status claim
-3. prefer current code and the MVP baseline
+3. prefer current code and the execution baseline

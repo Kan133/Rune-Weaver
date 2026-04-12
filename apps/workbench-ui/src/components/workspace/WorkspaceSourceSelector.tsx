@@ -17,7 +17,7 @@ import type { WorkspaceSourceConfig } from "@/data/workspaceSource";
 export function WorkspaceSourceSelector() {
   const workspaceSource = useFeatureStore((state) => state.workspaceSource);
   const workspaceIssues = useFeatureStore((state) => state.workspaceIssues);
-  const availableSources = useFeatureStore((state) => state.getAvailableSources());
+  const availableSources = useFeatureStore((state) => state.availableSources);
   const switchSource = useFeatureStore((state) => state.switchWorkspaceSource);
   const reloadSource = useFeatureStore((state) => state.reloadCurrentSource);
 

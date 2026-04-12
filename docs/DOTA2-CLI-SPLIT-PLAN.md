@@ -1,5 +1,10 @@
 # Dota2 CLI Split Plan
 
+> Status Note
+> This is a planning document for future CLI refactoring.
+> For current CLI authoritative path, see [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md).
+> The current CLI implementation is working and should not be rewritten based on this plan alone.
+
 ## Purpose
 
 This document defines how `apps/cli/dota2-cli.ts` should be split over time.
@@ -146,6 +151,104 @@ Once Host Realization and Generator Routing are integrated, prioritize splitting
 1. artifact / verdict builders
 2. validation orchestration
 3. maintenance command flow shells
+
+## Concrete Low-Risk Split Sequence
+
+This section maps the current large functions to extraction targets. Each step should be moved and verified independently. The first pass should be mechanical: move existing functions, preserve signatures, update imports, and run the same CLI smoke checks.
+
+### Step 0. Keep The Public Surface Stable
+
+Keep `apps/cli/dota2-cli.ts` exporting:
+
+- `Dota2CLIOptions`
+- `Dota2ReviewArtifact`
+- `showDota2Help`
+- `runDota2CLI`
+
+Do not change caller behavior from `apps/cli/index.ts` during early splitting.
+
+### Step 1. Extract Maintenance Command Files
+
+Move these functions into `apps/cli/dota2/commands/`:
+
+| Function | Target file | Notes |
+| --- | --- | --- |
+| `runUpdateCommand` | `commands/update.ts` | Depends on update classifier/executor, host validation, workspace state, and artifact save helper. |
+| `runDeleteCommand` | `commands/delete.ts` | Depends on workspace ownership, delete governance, bridge refresh, and artifact save helper. |
+| `runRollbackCommand` | `commands/rollback.ts` | Keep deferred/maintenance behavior intact; do not merge with delete. |
+| `runRegenerateCommand` | `commands/regenerate.ts` | Keep separate from update; it has cleanup semantics. |
+
+After this step, `runDota2CLI` should only dispatch command kind and call the command module.
+
+### Step 2. Extract The Create Pipeline As A Single Module
+
+Move the current creation path into `apps/cli/dota2/create-pipeline.ts`:
+
+| Function | Target role |
+| --- | --- |
+| `runPipeline` | top-level create/review/dry-run pipeline |
+| `createIntentSchema` | intent stage |
+| `createFallbackIntentSchema` | fallback intent stage |
+| `buildBlueprint` | blueprint stage |
+| `resolvePatternsFromBlueprint` | pattern stage |
+| `buildAssemblyPlan` | assembly stage |
+| `createWritePlan` | create write-plan stage |
+| `executeWrite` | create write execution stage |
+
+This step should not split stage internals yet. The first win is removing the create pipeline from the command shell without changing behavior.
+
+### Step 3. Extract Shared Artifact IO
+
+Move artifact writing into `apps/cli/dota2/review-artifacts.ts`:
+
+- save default review artifacts under `tmp/cli-review`
+- save explicit `--output` paths exactly as today
+- keep JSON formatting unchanged
+
+This avoids each command creating its own artifact save behavior.
+
+### Step 4. Extract Shared Command Context
+
+Only after commands are separate, introduce a small context object:
+
+- `options`
+- `hostRoot`
+- `workspace`
+- `existingFeature`
+- `artifact`
+
+Do this after mechanical moves, not before. Creating a context object too early would make the first split harder to review.
+
+### Step 5. Add Command Smoke Checks
+
+Before and after each extraction, run:
+
+- `npm run check-types`
+- `npm run test`
+- one dry-run create command
+- one update dry-run command when a host fixture is available
+- one delete dry-run command when a host fixture is available
+
+The rule is simple: one moved command, one verification pass.
+
+## Workbench Entry Split Recommendation
+
+`apps/workbench/index.ts` should be split separately from `dota2-cli.ts`. It has different responsibilities and should not become a second CLI executor.
+
+Recommended first-pass targets:
+
+| Current functions/constants | Target file | Purpose |
+| --- | --- | --- |
+| `SCENE_ANCHOR_KEYWORDS`, `detectSceneAnchors`, `extractAnchorName` | `scene-anchors.ts` | Request text to scene reference extraction. |
+| `BUILTIN_EXPERIENCES`, `findRelevantExperiences` | `experience-library.ts` | Reusable experience presets and matching. |
+| `identifyGapsAndFill`, `identifyGapsAndFillAsync`, `detectModuleGaps`, `fillSingleGap`, `fillSingleGapWithLLM` | `gap-fill.ts` | Proposal gap detection and LLM/rule filling. |
+| `generateFeatureId`, `extractFeatureLabel`, `generateSessionId`, `createFeatureIdentity`, `createFeatureOwnership` | `feature-intake.ts` | Intake identity and ownership construction. |
+| `buildProposalMessages`, `generateBlueprintProposal`, `PROPOSAL_SCHEMA` | `proposal.ts` | Blueprint proposal generation. |
+| `createIntegrationPointRegistry`, `extractIntegrationPoints`, `detectSharedIntegrationPointConflict` | `integration-points.ts` | Integration point extraction and conflict checks. |
+| `createFeatureCard`, `createFeatureDetail`, `generateFeatureReview`, `printFeatureReview` | `feature-review.ts` | Presentation models and console review output. |
+| `runList`, `runDelete`, `runInspect`, `main` | `cli.ts` | Workbench command-line entry only. |
+
+Keep `runWorkbench` in `index.ts` until the helper modules are extracted. Then `index.ts` can become a thin public API that exports `runWorkbench`.
 
 ## Review Rule
 

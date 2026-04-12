@@ -37,6 +37,30 @@ export interface WorkspaceUpdateResult {
   error?: string;
 }
 
+/**
+ * Extract integration points from WritePlan
+ * Integration points are identifiers for shared resources like key bindings
+ */
+function extractIntegrationPointsFromWritePlan(writePlan: WritePlan): string[] {
+  const points: string[] = [];
+  
+  // Add explicit integration points from writePlan
+  if (writePlan.integrationPoints) {
+    points.push(...writePlan.integrationPoints);
+  }
+  
+  // Extract triggerKey from writePlan.entries for key_binding patterns
+  for (const entry of writePlan.entries) {
+    const triggerKey = entry.parameters?.triggerKey || entry.metadata?.triggerKey;
+    if (triggerKey && entry.sourcePattern === "input.key_binding") {
+      points.push(`input.key_binding:${triggerKey}`);
+    }
+  }
+  
+  // Deduplicate
+  return [...new Set(points)];
+}
+
 export function updateWorkspaceState(
   hostRoot: string,
   blueprint: Blueprint,
@@ -115,10 +139,14 @@ export function updateWorkspaceState(
   };
 
   const intentKind = blueprint.sourceIntent.intentKind;
+  
+  // Extract integration points for conflict detection
+  const integrationPoints = extractIntegrationPointsFromWritePlan(writePlan);
+  
   const updatedWorkspace =
     mode === "create"
-      ? addFeatureToWorkspace(workspace, featureResult, intentKind)
-      : updateFeatureInWorkspace(workspace, featureId, featureResult, intentKind);
+      ? addFeatureToWorkspace(workspace, featureResult, intentKind, integrationPoints)
+      : updateFeatureInWorkspace(workspace, featureId, featureResult, intentKind, integrationPoints);
 
   const saveResult = saveWorkspace(hostRoot, updatedWorkspace);
   if (!saveResult.success) {

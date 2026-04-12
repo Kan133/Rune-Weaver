@@ -55,9 +55,9 @@ What is true now:
 What is **not** yet product-grade:
 
 - `create` is only partially persisted in the workbench path
-- `update` is currently closer to metadata write than owned-file rewrite
-- `delete` currently removes workspace record but does not fully unload the feature from disk/bridge
-- conflict governance is still minimal and partly mock-driven
+- `update` performs owned-scope artifact rewrite (not semantic incremental update)
+- `delete` removes workspace record and unloads feature artifacts (rollback remains deferred)
+- conflict governance is minimum workspace-backed governance (not broad graph governance)
 - workbench runtime flow is still narrower than the README story
 
 Agents must not overclaim these as finished product capabilities.
@@ -189,6 +189,26 @@ The minimum UI object set for this milestone is:
 
 Do not make broader workbench panelization the first priority.
 
+## Authoritative Create Path
+
+The **authoritative create path for Packet A is `apps/cli/dota2-cli.ts`** (via `dota2 run`).
+
+**Host Readiness Prerequisite (T149):** `dota2 init` 是 CLI authoritative create 的正式前置条件。未完成 init 的 host 不应直接进入 create。
+
+The CLI path:
+- Executes real file writes via `executeWritePlan`
+- Produces truthful `generatedFiles` from `WriteResult.createdFiles` / `WriteResult.modifiedFiles`
+- Calls `updateWorkspaceState` with actual execution results
+- Is the only path that can produce a complete, truthful workspace record
+
+The **workbench path (`apps/workbench/`)** is:
+- A Phase 3 Week-1 demo/preview tool
+- NOT the authoritative create path for Packet A acceptance
+- Does NOT execute real file writes (only calls `createWritePlan`, not `executeWritePlan`)
+- Produces `generatedFiles` from plan entries, not actual execution results
+
+For Packet A acceptance, only the CLI path is authoritative. Do not use workbench as evidence of product-grade create.
+
 ## Required Read Order For Agents
 
 1. [README.md](/D:/Rune%20Weaver/README.md)
@@ -214,11 +234,15 @@ Planning-only / non-authoritative for current shipped behavior:
 - regenerate/rollback-heavy lifecycle claims
 - phase-history acceptance logs
 
-## Immediate Priority Order
+## Completed Milestone Items
 
-1. make workspace model and implementation agree
-2. make `create` persist real patterns/files/bindings
-3. replace metadata-only `update` with owned-scope artifact rewrite
-4. replace `delete = unmanage` with `delete = unload`
-5. move conflict checks from mock baseline to workspace-backed checks
+1. ✅ make workspace model and implementation agree
+2. ✅ make `create` persist real patterns/files/bindings
+3. ✅ replace metadata-only `update` with owned-scope artifact rewrite
+4. ✅ replace `delete = unmanage` with `delete = unload`
+5. ✅ move conflict checks from mock baseline to workspace-backed checks
 6. keep workbench/UI aligned to workspace-backed feature management rather than demo-only lifecycle panels
+
+## Current Focus
+
+Refer to [CURRENT-EXECUTION-PLAN.md](./CURRENT-EXECUTION-PLAN.md) for current priorities.

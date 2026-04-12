@@ -25,6 +25,7 @@ export interface RuneWeaverFeatureRecord {
   generatedFiles: string[];
   entryBindings: EntryBinding[];
   dependsOn?: string[];
+  integrationPoints?: string[];  // 存储集成点标识，如 ["input.key_binding:Q"]
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +35,7 @@ export interface RuneWeaverWorkspace {
   hostType: "dota2-x-template";
   hostRoot: string;
   addonName: string;
+  mapName?: string;  // 可选：默认启动的地图名称
   initializedAt: string;
   features: RuneWeaverFeatureRecord[];
 }

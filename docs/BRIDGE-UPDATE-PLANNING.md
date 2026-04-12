@@ -1,5 +1,9 @@
 # Bridge Update Planning
 
+> Status Note
+> This is a planning/design document for bridge update mechanics.
+> For current implementation baseline, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) and [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md).
+
 ## 1. 文档目的
 
 本文档定义 `bridgeUpdates` 从抽象动作到真实宿主桥接计划的映射。

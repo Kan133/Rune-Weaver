@@ -2,22 +2,21 @@
   "workspace": {
     "version": "0.1",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:/Rune Weaver/tmp/test-host",
-    "addonName": "test-bridge-addon",
-    "initializedAt": "2026-04-10T10:00:00.000Z",
+    "hostRoot": "D:\\test1",
+    "addonName": "test1",
+    "initializedAt": "2026-04-10T20:21:25.635Z",
     "features": [
       {
-        "featureId": "feat_test_bridge_001",
-        "intentKind": "ability_active",
+        "featureId": "micro_feature_test_depends",
+        "intentKind": "micro-feature",
         "status": "active",
         "revision": 1,
-        "blueprintId": "blueprint_bridge_001",
+        "blueprintId": "micro_feature_test_depends",
         "selectedPatterns": [
-          "effect.dash",
-          "input.key_binding"
+          "effect.damage"
         ],
         "generatedFiles": [
-          "game/scripts/src/rune_weaver/abilities/bridge_test.lua"
+          "game/scripts/src/rune_weaver/generated/server/micro_feature_test_depends_effect_damage.ts"
         ],
         "entryBindings": [
           {
@@ -26,15 +25,16 @@
             "kind": "import"
           }
         ],
-        "createdAt": "2026-04-10T10:00:00.000Z",
-        "updatedAt": "2026-04-10T10:00:00.000Z"
+        "integrationPoints": [],
+        "createdAt": "2026-04-10T21:10:00.000Z",
+        "updatedAt": "2026-04-10T21:10:00.000Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-10T11:35:52.602Z",
+    "exportedAt": "2026-04-11T03:49:28.117Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\Rune Weaver\\tmp\\test-host",
+    "sourceHostRoot": "D:\\test1",
     "version": "0.1"
   }
 }

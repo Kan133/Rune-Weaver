@@ -6,18 +6,19 @@
 - name: `Weighted Pool`
 - category: `data_pool`
 - host: `dota2`
-- version: `0.1`
+- version: `0.2`
 - backlog-fit: `strong`
 
 ## Summary
 
-This Pattern provides a reusable weighted selection pool that can produce one or more candidates from a structured collection, optionally grouped by rarity or tier, for use in Rune Weaver data-driven gameplay flows.
+This Pattern provides a reusable weighted selection pool that can produce one or more candidates from a structured collection, optionally grouped by rarity or tier, with optional current-session pool state tracking for use in Rune Weaver data-driven gameplay flows.
 
 ## Responsibilities
 
 - Hold a candidate collection that can be sampled by weight.
 - Support weighted random selection for draw-like systems.
 - Support tier-aware or rarity-aware organization when needed.
+- Optionally track current-session pool state (remaining/owned/currentChoice).
 - Expose a stable output contract for downstream rule or selection modules.
 - Serve as the data-side backbone for systems such as talent draws, card draws, loot selection, or reward pools.
 
@@ -26,8 +27,10 @@ This Pattern provides a reusable weighted selection pool that can produce one or
 - Do not render UI for the selected candidates.
 - Do not own the final player selection step; that belongs to a selection flow Pattern.
 - Do not directly apply selected results to heroes, inventories, or progression systems.
-- Do not implement a full economy or persistence layer.
-- Do not attempt to model every possible advanced drop-table behavior in the first MVP.
+- Do not implement a full economy or cross-session persistence layer.
+- Do not handle selection-confirmed commit behavior; that belongs to `rule.selection_flow`.
+- Do not delete static talent definitions; only track session state mutations.
+- Do not implement cross-match persistence; MVP only requires current-match/session persistence.
 
 ## Parameters
 
@@ -60,6 +63,12 @@ This Pattern provides a reusable weighted selection pool that can produce one or
   - description: How duplicate selections are handled in a multi-draw flow.
   - enumValues: `allow`, `avoid_when_possible`, `forbid`
   - default: `allow`
+- `poolStateTracking`
+  - type: `enum`
+  - required: `false`
+  - description: Mutable pool tracking scope. When set to `session`, the pattern exposes current-session state outputs.
+  - enumValues: `none`, `session`
+  - default: `none`
 
 ## Inputs
 
@@ -86,17 +95,28 @@ This Pattern provides a reusable weighted selection pool that can produce one or
   - kind: `data`
   - type: `object`
   - description: Optional metadata such as tier, weight source, or draw mode.
-- `pool_state`
+- `remainingTalentIds`
   - kind: `state`
-  - type: `object`
-  - description: Optional current pool state if the implementation tracks mutation.
+  - type: `string[]`
+  - description: Current-session remaining eligible ids (only when poolStateTracking=session).
+- `ownedTalentIds`
+  - kind: `state`
+  - type: `string[]`
+  - description: Current-session owned/selected ids (only when poolStateTracking=session).
+- `currentChoiceIds`
+  - kind: `state`
+  - type: `string[]`
+  - description: Current draw candidates (only when poolStateTracking=session).
 
 ## Constraints
 
 - The pool must contain at least one valid entry.
 - `choiceCount` must be greater than zero.
 - If `duplicatePolicy=forbid`, the available entry count must be compatible with the requested draw mode.
+- If `duplicatePolicy=forbid`, the draw implementation must not produce duplicate candidates within one draw.
 - If tiers are declared, every relevant entry should map cleanly to a tier.
+- If `poolStateTracking=session`, generated code must create current-session mutable state.
+- Static entry definitions must remain immutable during runtime.
 - The first MVP should prefer deterministic data contracts over highly dynamic custom pool mutation behavior.
 
 ## Dependencies
@@ -120,6 +140,7 @@ This Pattern provides a reusable weighted selection pool that can produce one or
 - Server-side TypeScript module for pool state and weighted selection
 - Optional config or generated data fragment for pool definitions
 - Optional event bridge for triggering draw requests
+- When `poolStateTracking=session`: CustomNetTables for state synchronization
 
 ### Expected output forms
 
@@ -130,21 +151,33 @@ This Pattern provides a reusable weighted selection pool that can produce one or
 
 - The current Dota2 MVP should keep the implementation server-oriented.
 - Tier metadata should stay semantic and not hardcode UI rarity display logic.
+- Session state tracking uses CustomNetTables for current-match persistence.
 - Advanced pity systems, rerolls, and progression-aware balancing should remain outside the first Pattern revision unless promoted into explicit parameters or sibling Patterns.
+- **IMPORTANT**: "Permanent removal" in Talent Draw means removing from session `remainingTalentIds` and adding to `ownedTalentIds` after player selection, NOT at draw time. The commit happens in `rule.selection_flow`, not here.
 
 ## Example
 
-### Standard case
+### Standard case (Talent Draw MVP)
 
-Use `data.weighted_pool` to store a talent pool with tiers `R`, `SR`, `SSR`, `UR`, draw three weighted candidates, and feed them into `rule.selection_flow`.
+Use `data.weighted_pool` to store a talent pool with tiers `R`, `SR`, `SSR`, `UR`, draw three weighted candidates without replacement, forbid duplicates within draw, and enable session state tracking:
+
+```
+entries: [R001-R010, SR001-SR010, SSR001-SSR010, UR001-UR010]
+weights: { R: 40, SR: 30, SSR: 20, UR: 10 }
+tiers: [R, SR, SSR, UR]
+choiceCount: 3
+drawMode: multiple_without_replacement
+duplicatePolicy: forbid
+poolStateTracking: session
+```
 
 ### Another valid case
 
-Use `data.weighted_pool` as a loot candidate source where one or more rewards are drawn from a weighted list after a trigger event.
+Use `data.weighted_pool` as a loot candidate source where one or more rewards are drawn from a weighted list after a trigger event, without session state tracking.
 
 ### Not suitable for
 
-Do not use this Pattern as a replacement for a full progression economy system with pity counters, persistence, seasonal rules, and cross-session balancing.
+Do not use this Pattern as a replacement for a full progression economy system with pity counters, cross-session persistence, seasonal rules, and cross-session balancing.
 
 ## Validation
 
@@ -154,18 +187,22 @@ Do not use this Pattern as a replacement for a full progression economy system w
 - Ensure `choiceCount` is valid.
 - Ensure the selected draw mode is compatible with duplicate policy and entry count.
 - Ensure weight definitions, if present, are structurally valid.
+- If `duplicatePolicy=forbid`, verify draw implementation prevents duplicates.
+- If `poolStateTracking=session`, verify session state outputs are generated.
 
 ### Host checks
 
 - Verify the generated Dota2 server target is present.
 - Verify the pool can be consumed by downstream rule modules without manual reshaping.
 - Verify tier metadata is available where later systems expect it.
+- If `poolStateTracking=session`, verify CustomNetTables integration.
 
 ### Smoke hints
 
 - A simple test should confirm a single draw returns a valid candidate.
 - A multi-draw test should confirm `choiceCount=3` can produce three candidates under the selected duplicate policy.
 - A tier-aware test should confirm metadata survives the draw result.
+- A session-state test should confirm `remainingTalentIds` is correctly initialized and mutable.
 
 ## Notes For Next Revision
 

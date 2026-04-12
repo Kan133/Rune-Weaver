@@ -193,10 +193,10 @@ export function classifyUpdateDiff(
   const newFiles = new Map<string, WritePlanEntry>();
   
   for (const file of existingFeature.generatedFiles) {
-    const relativePath = file.replace(hostRoot.replace(/\\/g, "/"), "").replace(/^\//, "");
-    oldFiles.set(normalizePath(relativePath), {
+    const normalizedRelativePath = normalizePath(file);
+    oldFiles.set(normalizedRelativePath, {
       operation: "create",
-      targetPath: file,
+      targetPath: normalizedRelativePath,
       contentType: file.endsWith(".tsx") ? "tsx" : file.endsWith(".less") ? "less" : "typescript",
       contentSummary: "",
       sourcePattern: "",
@@ -206,8 +206,8 @@ export function classifyUpdateDiff(
   }
   
   for (const entry of newWritePlan.entries) {
-    const relativePath = entry.targetPath.replace(hostRoot.replace(/\\/g, "/"), "").replace(/^\//, "");
-    newFiles.set(normalizePath(relativePath), entry);
+    const normalizedRelativePath = normalizePath(entry.targetPath);
+    newFiles.set(normalizedRelativePath, entry);
   }
   
   const classifications: FileUpdateClassification[] = [];
@@ -270,10 +270,12 @@ export function classifyUpdateDiff(
     safetyIssues.push(`Large number of new files (${createdFiles.length}), consider regenerate`);
   }
   
-  const totalChanges = refreshedFiles.length + createdFiles.length + deletedFiles.length;
+  // refreshedFiles 是正常的 update 行为，不算"破坏性变化"
+  // 只有 createdFiles 和 deletedFiles 才是"破坏性变化"
+  const destructiveChanges = createdFiles.length + deletedFiles.length;
   const totalFiles = oldFiles.size;
-  if (totalFiles > 0 && totalChanges / totalFiles > 0.8) {
-    regenerateReasons.push(`High change ratio (${Math.round(totalChanges / totalFiles * 100)}%), consider regenerate`);
+  if (totalFiles > 0 && destructiveChanges / totalFiles > 0.8) {
+    regenerateReasons.push(`High destructive change ratio (${Math.round(destructiveChanges / totalFiles * 100)}%), consider regenerate`);
   }
   
   const requiresRegenerate = regenerateReasons.length > 0;

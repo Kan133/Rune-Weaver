@@ -26,7 +26,8 @@ export function executeRollback(
   rollbackPlan: RollbackPlan,
   workspace: RuneWeaverWorkspace,
   hostRoot: string,
-  dryRun: boolean
+  dryRun: boolean,
+  skipBridgeRefresh?: boolean
 ): RollbackExecutionResult {
   const result: RollbackExecutionResult = {
     success: true,
@@ -67,7 +68,7 @@ export function executeRollback(
     }
   }
 
-  if (!dryRun && result.success) {
+  if (!dryRun && result.success && skipBridgeRefresh !== true) {
     const bridgeResult = refreshBridge(hostRoot, workspace);
     result.indexRefreshSuccess = bridgeResult.success;
 

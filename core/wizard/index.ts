@@ -16,9 +16,28 @@ interface TalentEntry {
 export function extractNumericParameters(prompt: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
-  const cooldownMatch = prompt.match(/cooldown\s*(\d+)/i);
-  if (cooldownMatch) {
-    result.abilityCooldown = parseFloat(cooldownMatch[1]);
+  // 提取按键绑定
+  const keyMatch = prompt.match(/按([QWERDF]|F\d+|[1-6])键|按键([QWERDF]|F\d+|[1-6])/i);
+  if (keyMatch) {
+    result.triggerKey = (keyMatch[1] || keyMatch[2]).toUpperCase();
+  }
+
+  // 优先匹配"改成/改为/修改为/调整到/更改为/设为/变为"模式（提取目标值）
+  const changeMatch = prompt.match(
+    /修改为\s*(\d+)|[改修][成变为]\s*(\d+)|调整到\s*(\d+)|更改为\s*(\d+)|设为\s*(\d+)|变为\s*(\d+)/
+  );
+  if (changeMatch) {
+    result.abilityCooldown = parseFloat(
+      changeMatch[1] || changeMatch[2] || changeMatch[3] || changeMatch[4] || changeMatch[5] || changeMatch[6]
+    );
+  } else {
+    // 回退逻辑：优先匹配"到/为"后的数字（新值），避免匹配"从"后的数字（旧值）
+    const cooldownMatch = prompt.match(
+      /cooldown\s*(\d+)|冷却[时间]?\s*(?:到|为)\s*(\d+)/i
+    );
+    if (cooldownMatch) {
+      result.abilityCooldown = parseFloat(cooldownMatch[1] || cooldownMatch[2]);
+    }
   }
 
   const manaMatch = prompt.match(/蓝耗[：为]?\s*(\d+)|mana\s*cost?\s*(\d+)/i);

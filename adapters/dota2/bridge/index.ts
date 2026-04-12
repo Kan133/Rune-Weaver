@@ -343,7 +343,14 @@ export function refreshBridge(
 
   const migrationResult = migrateBaselineAbilities({ hostRoot: projectPath });
   result.baselineMigrated = migrationResult.success;
-  if (!migrationResult.success) {
+  // T148-FIX: Treat "file not found" as a non-fatal warning, not a blocking error.
+  // During initial host setup, game/scripts/npc/abilities.txt may not exist yet.
+  // migrateBaselineAbilities returns false for missing file (nothing to migrate),
+  // but this should not block bridge index refresh from completing.
+  const hasFileNotFoundError = migrationResult.errors.some(e =>
+    e.includes("Source file not found") || e.includes("not found")
+  );
+  if (!migrationResult.success && !hasFileNotFoundError) {
     result.errors.push(...migrationResult.errors);
   }
 
@@ -368,11 +375,12 @@ export function activateRuneWeaverModules(): void {
 
   const serverIndexPath = join(projectPath, BRIDGE_PATHS.serverGeneratedIndex);
   try {
+    // T148-FIX: If index doesn't exist during create, generate it rather than failing.
+    // refreshBridge is called after workspace update, so workspace data is available
+    // for generating meaningful index content even on first create.
     if (!existsSync(serverIndexPath)) {
-      result.errors.push("Missing server generated index. Initialize the host first.");
-      return result;
+      console.warn("[Bridge] Server generated index not found, creating initial index...");
     }
-
     writeFileSync(serverIndexPath, generateServerIndexContent(workspace.features, projectPath), "utf-8");
     result.serverRefreshed = true;
   } catch (error) {
@@ -385,11 +393,10 @@ export function activateRuneWeaverModules(): void {
 
   const uiIndexPath = join(projectPath, BRIDGE_PATHS.uiGeneratedIndex);
   try {
+    // T148-FIX: If index doesn't exist during create, generate it rather than failing.
     if (!existsSync(uiIndexPath)) {
-      result.errors.push("Missing UI generated index. Initialize the host first.");
-      return result;
+      console.warn("[Bridge] UI generated index not found, creating initial index...");
     }
-
     writeFileSync(uiIndexPath, generateUIIndexContent(workspace.features), "utf-8");
     result.uiRefreshed = true;
   } catch (error) {

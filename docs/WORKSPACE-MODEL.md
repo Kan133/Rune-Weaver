@@ -43,6 +43,7 @@ interface RuneWeaverWorkspace {
   hostType: "dota2-x-template";
   hostRoot: string;
   addonName: string;
+  mapName?: string;  // 可选：默认启动的地图名称（init 时写入，launch 读取待接通）
   initializedAt: string;
   features: RuneWeaverFeatureRecord[];
 }
@@ -203,16 +204,22 @@ The minimum pre-write checks are:
 
 ## 9. Current Reality Note
 
-Current code already provides:
+Current code provides product-grade lifecycle operations:
 
-- workspace file
-- feature records
-- update/delete helpers
+- `create` persists real patterns/files/bindings via CLI authoritative path
+- `update` performs owned-scope artifact rewrite (not metadata-only)
+- `delete` unloads feature artifacts and refreshes bridge exposure (not record-only)
+- governance is workspace-backed (not mock-driven)
 
-But agents must be explicit about the gap between current code and target semantics:
+Agents should treat the definitions above as the current contract, not a future target.
 
-- some create paths are still partial
-- current update path is narrower than the target definition above
-- current delete path is narrower than the target definition above
+## 10. Authoritative Execution Path
 
-This document defines the contract the project should converge to for the README-target MVP.
+The authoritative execution path for lifecycle operations is the CLI surface in `apps/cli/dota2-cli.ts`.
+
+Workbench/UI paths are:
+- preview / visualization surfaces
+- onboarding orchestration shells
+- NOT authoritative for lifecycle acceptance
+
+Agents must not treat workbench demo outputs as proof of product-grade lifecycle behavior.

@@ -116,91 +116,22 @@ export class BlueprintBuilder {
   private buildModules(schema: IntentSchema): BlueprintModule[] {
     const modules: BlueprintModule[] = [];
     const prefix = this.config.modulePrefix;
-    const schemaParams = (schema as any).parameters || {};
-
-    const choiceCount = schemaParams.choiceCount as number | undefined;
-    const talentEntries = schemaParams.entries as Array<{ id: string; label: string; description: string; weight: number; tier: string }> | undefined;
-
-    if (choiceCount !== undefined || talentEntries !== undefined || Object.keys(schemaParams).length > 0) {
-      const triggerModule: BlueprintModule = {
-        id: `${prefix}trigger_0`,
-        role: 'talent_trigger',
-        category: 'trigger',
-        patternIds: ['input.key_binding'],
-        responsibilities: ['Trigger talent draw on key press'],
-        parameters: {
-          key: 'F4',
-          triggerAction: 'open_talent_modal',
-        },
-      };
-      modules.push(triggerModule);
-
-      const poolModule: BlueprintModule = {
-        id: `${prefix}pool_0`,
-        role: 'talent_pool',
-        category: 'data',
-        patternIds: ['data.weighted_pool'],
-        responsibilities: ['Manage talent pool'],
-        parameters: talentEntries ? { entries: talentEntries } : undefined,
-      };
-      modules.push(poolModule);
-
-      const ruleModule: BlueprintModule = {
-        id: `${prefix}rule_0`,
-        role: 'selection_rule',
-        category: 'rule',
-        patternIds: ['rule.selection_flow'],
-        responsibilities: ['Manage selection flow'],
-        parameters: {
-          choiceCount: choiceCount || 3,
-          selectionPolicy: 'single',
-        },
-      };
-      modules.push(ruleModule);
-
-      const uiModule: BlueprintModule = {
-        id: `${prefix}ui_0`,
-        role: 'selection_ui',
-        category: 'ui',
-        patternIds: ['ui.selection_modal'],
-        responsibilities: ['Display selection UI'],
-        parameters: {
-          title: 'Choose Your Talent',
-          description: 'Select one of the following talents',
-        },
-      };
-      modules.push(uiModule);
-
-      const effectModule: BlueprintModule = {
-        id: `${prefix}effect_0`,
-        role: 'talent_buff',
-        category: 'effect',
-        patternIds: ['dota2.short_time_buff'],
-        responsibilities: ['Apply buff effect'],
-        parameters: {
-          duration: schemaParams.abilityDuration || 10,
-          movespeedBonus: 50,
-          manaCost: 0,
-          cooldown: schemaParams.abilityCooldown || 30,
-        },
-      };
-      modules.push(effectModule);
-
-      return modules;
-    }
+    const schemaParams = this.getSchemaParameters(schema);
 
     for (let i = 0; i < schema.requirements.functional.length; i++) {
       const req = schema.requirements.functional[i];
-      const module = this.createFunctionalModule(req, i, prefix);
+      const module = this.createFunctionalModule(req, i, prefix, schemaParams);
       if (module) {
         modules.push(module);
       }
     }
 
+    this.addMechanicModules(schema, modules, prefix, schemaParams);
+
     if (schema.requirements.interactions) {
       for (let i = 0; i < schema.requirements.interactions.length; i++) {
         const interaction = schema.requirements.interactions[i];
-        const inputModule = this.createInteractionModule(interaction, i, prefix);
+        const inputModule = this.createInteractionModule(interaction, i, prefix, schemaParams);
         if (inputModule && !modules.find(m => m.id === inputModule.id)) {
           modules.push(inputModule);
         }
@@ -210,7 +141,7 @@ export class BlueprintBuilder {
     if (schema.uiRequirements?.needed && schema.uiRequirements.surfaces) {
       for (let i = 0; i < schema.uiRequirements.surfaces.length; i++) {
         const surface = schema.uiRequirements.surfaces[i];
-        const uiModule = this.createUIModule(surface, i, prefix);
+        const uiModule = this.createUIModule(surface, i, prefix, schemaParams);
         if (uiModule) {
           modules.push(uiModule);
         }
@@ -226,18 +157,232 @@ export class BlueprintBuilder {
   private createFunctionalModule(
     req: string,
     index: number,
-    prefix: string
+    prefix: string,
+    schemaParams: Record<string, unknown>
   ): BlueprintModule | null {
     const category = this.inferCategoryFromRequirement(req);
     const patternIds = this.getCanonicalPatternIds(category);
+    const role = this.inferRoleFromCategory(category);
+    const parameters = this.extractModuleParameters(category, schemaParams);
     
     return {
       id: `${prefix}func_${index}`,
-      role: req,
+      role,
       category,
       patternIds,
       responsibilities: [req],
+      ...(Object.keys(parameters).length > 0 && { parameters }),
     };
+  }
+
+  /**
+   * 从 IntentSchema 扩展参数中读取模块参数。
+   */
+  private getSchemaParameters(schema: IntentSchema): Record<string, unknown> {
+    const params = (schema as IntentSchema & { parameters?: Record<string, unknown> }).parameters;
+    return params && typeof params === "object" ? params : {};
+  }
+
+  /**
+   * 根据 normalizedMechanics 补齐 functional 文本中未显式拆出的通用模块。
+   */
+  private addMechanicModules(
+    schema: IntentSchema,
+    modules: BlueprintModule[],
+    prefix: string,
+    schemaParams: Record<string, unknown>
+  ): void {
+    const categories = this.inferCategoriesFromMechanics(schema);
+
+    for (const category of categories) {
+      if (modules.some((module) => module.category === category)) {
+        continue;
+      }
+
+      const parameters = this.extractModuleParameters(category, schemaParams);
+      modules.push({
+        id: `${prefix}${category}_${modules.length}`,
+        role: this.inferRoleFromCategory(category),
+        category,
+        patternIds: this.getCanonicalPatternIds(category),
+        responsibilities: [this.describeMechanicResponsibility(category)],
+        ...(Object.keys(parameters).length > 0 && { parameters }),
+      });
+    }
+  }
+
+  private inferCategoriesFromMechanics(schema: IntentSchema): BlueprintModule["category"][] {
+    const mechanics = schema.normalizedMechanics;
+    const categories: BlueprintModule["category"][] = [];
+
+    if (mechanics.trigger) {
+      categories.push("trigger");
+    }
+    if (mechanics.candidatePool) {
+      categories.push("data");
+    }
+    if (mechanics.weightedSelection || mechanics.playerChoice) {
+      categories.push("rule");
+    }
+    if (mechanics.uiModal) {
+      categories.push("ui");
+    }
+    if (mechanics.outcomeApplication) {
+      categories.push("effect");
+    }
+    if (mechanics.resourceConsumption) {
+      categories.push("resource");
+    }
+
+    return categories;
+  }
+
+  private describeMechanicResponsibility(category: BlueprintModule["category"]): string {
+    switch (category) {
+      case "trigger":
+        return "Trigger flow activation";
+      case "data":
+        return "Provide candidate data and pool state";
+      case "rule":
+        return "Orchestrate selection and commit behavior";
+      case "ui":
+        return "Present interactive selection surface";
+      case "effect":
+        return "Apply selected outcome";
+      case "resource":
+        return "Track resource state and consumption";
+      case "integration":
+        return "Bridge integration boundaries";
+      default:
+        return "Handle feature behavior";
+    }
+  }
+
+  private inferRoleFromCategory(category: BlueprintModule["category"]): string {
+    const roleMap: Record<BlueprintModule["category"], string> = {
+      trigger: "input_trigger",
+      data: "weighted_pool",
+      rule: "selection_flow",
+      effect: "effect_application",
+      ui: "selection_modal",
+      resource: "resource_pool",
+      integration: "integration_bridge",
+    };
+    return roleMap[category];
+  }
+
+  private extractModuleParameters(
+    category: BlueprintModule["category"],
+    schemaParams: Record<string, unknown>
+  ): Record<string, unknown> {
+    switch (category) {
+      case "trigger":
+        return this.extractTriggerParams(schemaParams);
+      case "data":
+        return this.extractPoolParams(schemaParams);
+      case "rule":
+        return this.extractSelectionParams(schemaParams);
+      case "ui":
+        return this.extractUIParams(schemaParams);
+      case "effect":
+        return this.extractEffectParams(schemaParams);
+      default:
+        return {};
+    }
+  }
+
+  private extractTriggerParams(params: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    if (params.triggerKey) {
+      result.key = params.triggerKey;
+    }
+    if (params.eventName) {
+      result.eventName = params.eventName;
+    }
+    return result;
+  }
+
+  private extractPoolParams(params: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    if (params.entries) {
+      result.entries = params.entries;
+    }
+    if (params.weights) {
+      result.weights = params.weights;
+    }
+    if (params.tiers) {
+      result.tiers = params.tiers;
+    }
+    if (params.choiceCount) {
+      result.choiceCount = params.choiceCount;
+    }
+    if (params.drawMode) {
+      result.drawMode = params.drawMode;
+    }
+    if (params.duplicatePolicy) {
+      result.duplicatePolicy = params.duplicatePolicy;
+    }
+    if (params.poolStateTracking) {
+      result.poolStateTracking = params.poolStateTracking;
+    }
+    return result;
+  }
+
+  private extractSelectionParams(params: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    if (params.choiceCount) {
+      result.choiceCount = params.choiceCount;
+    }
+    if (params.selectionPolicy) {
+      result.selectionPolicy = params.selectionPolicy;
+    }
+    if (params.applyMode) {
+      result.applyMode = params.applyMode;
+    }
+    if (params.postSelectionPoolBehavior) {
+      result.postSelectionPoolBehavior = params.postSelectionPoolBehavior;
+    }
+    if (params.trackSelectedItems !== undefined) {
+      result.trackSelectedItems = params.trackSelectedItems;
+    }
+    if (params.effectApplication) {
+      result.effectApplication = params.effectApplication;
+    }
+    return result;
+  }
+
+  private extractUIParams(params: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    if (params.choiceCount) {
+      result.choiceCount = params.choiceCount;
+    }
+    if (params.layoutPreset) {
+      result.layoutPreset = params.layoutPreset;
+    }
+    if (params.selectionMode) {
+      result.selectionMode = params.selectionMode;
+    }
+    if (params.dismissBehavior) {
+      result.dismissBehavior = params.dismissBehavior;
+    }
+    if (params.payloadShape) {
+      result.payloadShape = params.payloadShape;
+    }
+    if (params.minDisplayCount !== undefined) {
+      result.minDisplayCount = params.minDisplayCount;
+    }
+    if (params.placeholderConfig) {
+      result.placeholderConfig = params.placeholderConfig;
+    }
+    return result;
+  }
+
+  private extractEffectParams(params: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    if (params.effectMapping) {
+      result.effectMapping = params.effectMapping;
+    }
+    return result;
   }
 
   /**
@@ -300,14 +445,17 @@ export class BlueprintBuilder {
   private createInteractionModule(
     interaction: string,
     index: number,
-    prefix: string
+    prefix: string,
+    schemaParams: Record<string, unknown>
   ): BlueprintModule | null {
+    const parameters = this.extractModuleParameters("trigger", schemaParams);
     return {
       id: `${prefix}input_${index}`,
-      role: interaction,
+      role: this.inferRoleFromCategory("trigger"),
       category: "trigger",
       patternIds: this.getCanonicalPatternIds("trigger"),
       responsibilities: [`处理交互: ${interaction}`],
+      ...(Object.keys(parameters).length > 0 && { parameters }),
     };
   }
 
@@ -317,14 +465,17 @@ export class BlueprintBuilder {
   private createUIModule(
     surface: string,
     index: number,
-    prefix: string
+    prefix: string,
+    schemaParams: Record<string, unknown>
   ): BlueprintModule | null {
+    const parameters = this.extractModuleParameters("ui", schemaParams);
     return {
       id: `${prefix}ui_${index}`,
-      role: surface,
+      role: this.inferRoleFromCategory("ui"),
       category: "ui",
       patternIds: this.getCanonicalPatternIds("ui"),
       responsibilities: [`渲染 UI: ${surface}`],
+      ...(Object.keys(parameters).length > 0 && { parameters }),
     };
   }
 

@@ -1,10 +1,11 @@
 # Multi-Output Realization Migration
 
+> Status Note
+> This document establishes migration planning, not current implementation.
+> The current `kv+ts` and `kv+lua` paths are working and will remain working during migration.
+> For current realization baseline, see [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md).
+
 ## Purpose
-
-This document establishes the migration baseline for evolving Rune Weaver's realization model from combination-enum types toward explicit multi-output modeling.
-
-This is a planning document, not an implementation claim. The current `kv+ts` and `kv+lua` paths are working and will remain working during migration.
 
 ## Current State
 

@@ -13,9 +13,12 @@ import { runWizardToIntentSchema, WizardIntentInput, WizardIntentOptions } from 
 import type { IntentSchema } from "../../core/schema/types.js";
 import { isCanonicalPatternAvailable } from "../../core/patterns/canonical-patterns.js";
 import { loadWorkspace, findFeatureById, workspaceExists, getActiveFeatures, saveWorkspace, deleteFeature, addFeatureToWorkspace } from "../../core/workspace/manager.js";
-import type { FeatureWriteResult } from "../../core/workspace/types.js";
+import type { FeatureWriteResult, RuneWeaverFeatureRecord } from "../../core/workspace/types.js";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
+import { createWritePlan, WritePlanEntry } from "../../adapters/dota2/assembler/index.js";
+import { updateWorkspaceState } from "../cli/helpers/workspace-integration.js";
+import type { Blueprint } from "../../core/schema/types.js";
 
 import {
   WORKBENCH_LLM_TEMPERATURE,
@@ -1160,44 +1163,81 @@ function createIntegrationPointRegistry(featureId: string, request: string, host
   };
 }
 
-interface MockFeatureBaseline {
-  featureId: string;
-  label: string;
-  integrationPoints: IntegrationPointKind[];
-}
+/**
+ * Extract integration points from a feature record
+ * Analyzes entryBindings and generatedFiles to infer integration points
+ */
+function extractIntegrationPoints(feature: RuneWeaverFeatureRecord): IntegrationPointKind[] {
+  const points: IntegrationPointKind[] = [];
 
-const MOCK_EXISTING_FEATURES: MockFeatureBaseline[] = [
-  {
-    featureId: "existing_dash_ability",
-    label: "dash_ability",
-    integrationPoints: ["kv_entry", "effect_slot"],
-  },
-];
+  // Extract from entryBindings
+  if (feature.entryBindings) {
+    for (const binding of feature.entryBindings) {
+      if (binding.kind === "import" || binding.kind === "register") {
+        points.push("trigger_binding");
+      }
+      if (binding.kind === "mount" || binding.kind === "append_index") {
+        points.push("ui_mount");
+      }
+    }
+  }
+
+  // Infer from generatedFiles
+  if (feature.generatedFiles) {
+    for (const file of feature.generatedFiles) {
+      if (file.includes("kv/") || file.includes("abilities")) {
+        points.push("kv_entry");
+      }
+      if (file.includes("effect") || file.includes("modifier")) {
+        points.push("effect_slot");
+      }
+      if (file.includes("lua")) {
+        points.push("lua_table");
+      }
+      if (file.includes("panorama") || file.includes("ui")) {
+        points.push("ui_mount");
+      }
+    }
+  }
+
+  return [...new Set(points)];
+}
 
 function detectSharedIntegrationPointConflict(
   featureId: string,
   featureLabel: string,
-  integrationPoints: IntegrationPointRegistry
+  integrationPoints: IntegrationPointRegistry,
+  workspace: { features: RuneWeaverFeatureRecord[] } | null
 ): ConflictCheckResult {
   const currentPointKinds = integrationPoints.points.map(p => p.kind);
   const conflicts: IntegrationPointConflict[] = [];
 
-  for (const existing of MOCK_EXISTING_FEATURES) {
-    for (const existingPoint of existing.integrationPoints) {
-      if (currentPointKinds.includes(existingPoint)) {
-        const severity: ConflictSeverity = 
-          existingPoint === "ability_slot" || existingPoint === "data_pool"
-            ? "error" 
-            : "warning";
+  // Query real workspace for existing features
+  if (workspace && workspace.features) {
+    const existingFeatures = workspace.features.filter((f: RuneWeaverFeatureRecord) => 
+      f.featureId !== featureId && f.status === "active"
+    );
 
-        conflicts.push({
-          kind: "shared_integration_point",
-          severity,
-          conflictingPoint: existingPoint,
-          existingFeatureId: existing.featureId,
-          existingFeatureLabel: existing.label,
-          explanation: `Both this feature and existing feature '${existing.label}' require '${existingPoint}' integration point. This may cause resource contention or behavior conflict.`,
-        });
+    for (const existingFeature of existingFeatures) {
+      // Extract integration points from existing feature
+      const existingPoints = extractIntegrationPoints(existingFeature);
+      
+      for (const existingPoint of existingPoints) {
+        if (currentPointKinds.includes(existingPoint)) {
+          const severity: ConflictSeverity = 
+            existingPoint === "ability_slot" || existingPoint === "data_pool"
+              ? "error" 
+              : "warning";
+
+          conflicts.push({
+            kind: "shared_integration_point",
+            severity,
+            conflictingPoint: existingPoint,
+            existingFeatureId: existingFeature.featureId,
+            existingFeatureLabel: existingFeature.featureName || existingFeature.intentKind || existingFeature.featureId,
+            explanation: `Both this feature and existing feature '${existingFeature.featureId}' require '${existingPoint}' integration point.`,
+          });
+        }
       }
     }
   }
@@ -1263,7 +1303,13 @@ export async function runWorkbench(
   console.log(`   Point Kinds: ${[...new Set(integrationPoints.points.map(p => p.kind))].join(", ")}`);
   console.log(`   Confidence: ${integrationPoints.confidence}`);
 
-  const conflictResult = detectSharedIntegrationPointConflict(featureIdentity.id, featureIdentity.label, integrationPoints);
+  // Load workspace for conflict detection
+  const workspaceResult = workspaceExists(options.hostRoot) 
+    ? loadWorkspace(options.hostRoot) 
+    : { success: false, workspace: null, issues: ["Workspace not found"] };
+  const workspace = workspaceResult.success ? workspaceResult.workspace : null;
+
+  const conflictResult = detectSharedIntegrationPointConflict(featureIdentity.id, featureIdentity.label, integrationPoints, workspace);
   console.log(`\n[Conflict Check - Integration Point]`);
   console.log(`   Has Conflict: ${conflictResult.hasConflict}`);
   console.log(`   Status: ${conflictResult.status}`);
@@ -1946,6 +1992,25 @@ export async function runWorkbench(
         console.log(`\n⚠️  Feature '${featureIdentity.id}' already exists in workspace - skipping persist`);
       } else {
         const selectedPatterns = blueprintProposal.proposedModules.flatMap(m => m.proposedPatternIds);
+
+        const assemblyPlan = {
+          blueprintId: blueprintProposal.id,
+          selectedPatterns: blueprintProposal.proposedModules.map(m => ({
+            patternId: m.proposedPatternIds[0] || "",
+            role: m.role,
+          })),
+          writeTargets: [] as { target: "server" | "shared" | "ui" | "config"; path: string; summary: string }[],
+          bridgeUpdates: [] as { target: "server" | "ui"; file: string; action: "create" | "refresh" | "inject_once" }[],
+          validations: [],
+          readyForHostWrite: true,
+        };
+
+        const writePlan = createWritePlan(
+          assemblyPlan,
+          options.hostRoot,
+          featureIdentity.id
+        );
+
         const entryBindings: import("../../core/workspace/types.js").EntryBinding[] = [];
         if (integrationPoints.points.some(p => p.kind === "trigger_binding" || p.kind === "lua_table")) {
           entryBindings.push({
@@ -1961,21 +2026,32 @@ export async function runWorkbench(
             kind: "mount",
           });
         }
-        const writeResult: FeatureWriteResult = {
-          featureId: featureIdentity.id,
-          blueprintId: blueprintProposal.id,
-          selectedPatterns,
-          generatedFiles: [],
-          entryBindings,
-        };
-        const updatedWorkspace = addFeatureToWorkspace(workspaceResult.workspace, writeResult, "micro-feature");
-        const saveResult = saveWorkspace(options.hostRoot, updatedWorkspace);
-        if (saveResult.success) {
+
+        const workspaceUpdateResult = updateWorkspaceState(
+          options.hostRoot,
+          { id: blueprintProposal.id, sourceIntent: { intentKind: "micro-feature" } } as Blueprint,
+          assemblyPlan,
+          writePlan,
+          "create",
+          featureIdentity.id,
+          null
+        );
+
+        if (workspaceUpdateResult.success) {
+          const generatedFilesFromPlan = writePlan.entries
+            .filter((e: WritePlanEntry) => !e.deferred)
+            .map((e: WritePlanEntry) => e.targetPath);
           console.log("\n✅ Feature persisted to workspace");
           console.log(`   Feature ID: ${featureIdentity.id}`);
           console.log(`   Blueprint ID: ${blueprintProposal.id}`);
           console.log(`   Selected Patterns: ${selectedPatterns.length > 0 ? selectedPatterns.join(", ") : "(none)"}`);
+          console.log(`   Generated Files: ${generatedFilesFromPlan.length} from plan`);
+          if (generatedFilesFromPlan.length > 0) {
+            console.log(`     Files: ${generatedFilesFromPlan.join(", ")}`);
+          }
           console.log(`   Entry Bindings: ${entryBindings.length > 0 ? entryBindings.map(b => `${b.target}:${b.file}`).join(", ") : "(none)"}`);
+        } else {
+          console.log(`\n❌ Workspace persistence failed: ${workspaceUpdateResult.error}`);
         }
       }
     }

@@ -227,10 +227,18 @@ export function generateKVContentWithIndex(entry: WritePlanEntry, index: number)
 
   const entryMetadata = entry.metadata || {};
   const params = {
-    cooldown: entryMetadata.abilityCooldown as string | undefined,
-    manaCost: entryMetadata.abilityManaCost as string | undefined,
-    duration: entryMetadata.abilityDuration as string | undefined,
-    castRange: entryMetadata.abilityCastRange as string | undefined,
+    cooldown: entryMetadata.abilityCooldown != null 
+      ? String(entryMetadata.abilityCooldown) 
+      : undefined,
+    manaCost: entryMetadata.abilityManaCost != null 
+      ? String(entryMetadata.abilityManaCost) 
+      : undefined,
+    duration: entryMetadata.abilityDuration != null 
+      ? String(entryMetadata.abilityDuration) 
+      : undefined,
+    castRange: entryMetadata.abilityCastRange != null 
+      ? String(entryMetadata.abilityCastRange) 
+      : undefined,
   };
 
   const kvInput: KVGeneratorInput = {
@@ -290,10 +298,18 @@ export function generateKVContent(entry: WritePlanEntry): string {
 
   const entryMetadata = entry.metadata || {};
   const params = {
-    cooldown: entryMetadata.abilityCooldown as string | undefined,
-    manaCost: entryMetadata.abilityManaCost as string | undefined,
-    duration: entryMetadata.abilityDuration as string | undefined,
-    castRange: entryMetadata.abilityCastRange as string | undefined,
+    cooldown: entryMetadata.abilityCooldown != null 
+      ? String(entryMetadata.abilityCooldown) 
+      : undefined,
+    manaCost: entryMetadata.abilityManaCost != null 
+      ? String(entryMetadata.abilityManaCost) 
+      : undefined,
+    duration: entryMetadata.abilityDuration != null 
+      ? String(entryMetadata.abilityDuration) 
+      : undefined,
+    castRange: entryMetadata.abilityCastRange != null 
+      ? String(entryMetadata.abilityCastRange) 
+      : undefined,
   };
 
   const kvInput: KVGeneratorInput = {

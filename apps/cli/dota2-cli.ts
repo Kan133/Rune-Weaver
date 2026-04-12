@@ -28,6 +28,7 @@ import {
   addFeatureToWorkspace,
   updateFeatureInWorkspace,
   rollbackFeatureInWorkspace,
+  deleteFeature,
   extractEntryBindings,
   RuneWeaverWorkspace,
   RuneWeaverFeatureRecord,
@@ -53,10 +54,12 @@ import {
 } from "../../adapters/dota2/validator/runtime-validator.js";
 import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateKVContentWithIndex, generateCodeContent, alignWritePlanWithExistingFeature, validateHost, buildRuntimeValidationResult, performUpdateHostValidation, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
 import type { VerdictInput, HostValidationResult, RuntimeValidationResult, WorkspaceUpdateResult } from "./helpers/index.js";
+import { checkWriteConflicts, checkDeleteDependencyRisk } from "./helpers/governance-check.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
 import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
 import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } from "../../adapters/dota2/routing/index.js";
-import { refreshBridge } from "../../adapters/dota2/bridge/index.js";
+import { refreshBridge, exportWorkspaceToBridge } from "../../adapters/dota2/bridge/index.js";
+import { isHostFullyReady } from "../../adapters/dota2/scanner/host-status.js";
 import {
   generateCleanupPlan,
   executeCleanup,
@@ -84,7 +87,7 @@ const __dirname = dirname(__filename);
 
 
 export interface Dota2CLIOptions {
-  command: "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback";
+  command: "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback" | "delete";
   prompt: string;
   hostRoot: string;
   featureId?: string;
@@ -127,6 +130,8 @@ export interface Dota2ReviewArtifact {
     hostRealization: { success: boolean; units: Array<{ id: string; sourceModuleId: string; sourcePatternIds: string[]; role: string; realizationType: string; hostTargets: string[]; confidence: string; blockers?: string[] }>; blockers: string[]; skipped?: boolean };
     /** T115: Generator routing - routes realization to generator families */
     generatorRouting?: { success: boolean; routes: Array<{ id: string; sourceUnitId: string; generatorFamily: string; routeKind: string; hostTarget: string; rationale: string[]; blockers?: string[] }>; warnings: string[]; blockers: string[]; skipped?: boolean };
+    /** Packet D: Governance pre-flight check */
+    governanceCheck?: { success: boolean; hasConflict: boolean; conflicts: Array<{ kind: string; severity: string; conflictingPoint: string; existingFeatureId: string; existingFeatureLabel: string; explanation: string }>; recommendedAction: string; status: string; summary: string };
     /** T115-R2: Added deferredEntries to track deferred entries separately from generatedFiles */
     generator: { success: boolean; generatedFiles: string[]; issues: string[]; skipped?: boolean; deferredEntries?: Array<{ pattern: string; reason: string }>; /** T112-R1: Realization context from write plan */ realizationContext?: { version: string; host: string; sourceBlueprintId: string; units: Array<{ id: string; sourcePatternIds: string[]; realizationType: string; hostTargets: string[]; confidence: string }>; isFallback: boolean }; /** T112-R2: Warnings for deferred entries */ deferredWarnings?: string[] };
     writeExecutor: { success: boolean; executedActions: number; skippedActions: number; failedActions: number; createdFiles: string[]; modifiedFiles: string[]; blockedByReadinessGate?: boolean; readinessBlockers?: string[]; skipped?: boolean };
@@ -200,6 +205,7 @@ export function showDota2Help(): void {
   dry-run    预演模式，不写入文件
   review     生成 review artifact，不写入文件
   regenerate 重新生成已有 feature
+  launch     启动 Dota2 Tools 进行测试
 
 选项:
   --host <path>       宿主项目根目录 (必需)
@@ -231,6 +237,9 @@ export function showDota2Help(): void {
   # 重新生成已有 feature (正式写入)
   npm run cli -- dota2 regenerate "做一个按Q键的冲刺技能" --host D:\\test1 --feature rw_dash_q --write
 
+  # 启动 Dota2 Tools
+  npm run cli -- dota2 launch --host D:\\test1
+
   # 输出 review artifact
   npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1 -o tmp/cli-review/result.json
 `);
@@ -243,6 +252,10 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
 
   if (options.command === "rollback") {
     return await runRollbackCommand(options);
+  }
+
+  if (options.command === "delete") {
+    return await runDeleteCommand(options);
   }
 
   if (options.command === "update") {
@@ -354,6 +367,32 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks = [existingFeatureContext.error];
     return artifact;
+  }
+
+  // Stage 0: Host Readiness Preflight
+  // T149: dota2 init 是 CLI authoritative create 的正式前置条件
+  // T149-FIX: --force 参数可以绕过初始化检查
+  if (!options.force && !isHostFullyReady(options.hostRoot)) {
+    const msg = [
+      "宿主未完成初始化，无法执行 create。",
+      "",
+      "原因: 宿主尚未执行 dota2 init，或初始化未完成。",
+      "",
+      "请先执行: dota2 init --host " + options.hostRoot,
+      "",
+      "查看详细状态: dota2 check-host --host " + options.hostRoot,
+      "",
+      "或者使用 --force 参数绕过此检查（不推荐）。",
+    ].join("\n");
+    throw new Error(msg);
+  }
+
+  if (options.force) {
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 0: Host Readiness Preflight");
+    console.log("=".repeat(70));
+    console.log("  ⚠️  Force mode: skipping host readiness check");
+    console.log("     This may cause unexpected behavior if the host is not properly initialized.");
   }
 
   // Stage 1: IntentSchema (try real Wizard first, fallback if needed)
@@ -554,6 +593,50 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
+  // Stage 5.5: Governance Pre-flight Check
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 5.5: Governance Pre-flight Check");
+  console.log("=".repeat(70));
+
+  const workspaceResult = initializeWorkspace(options.hostRoot);
+  const governanceCheck = checkWriteConflicts(
+    writePlan,
+    workspaceResult.success ? workspaceResult.workspace : null,
+    stableFeatureId
+  );
+
+  if (governanceCheck.hasConflict && governanceCheck.recommendedAction === "block") {
+    artifact.stages.governanceCheck = {
+      success: false,
+      ...governanceCheck,
+    };
+    artifact.finalVerdict.weakestStage = "governanceCheck";
+    artifact.finalVerdict.remainingRisks = governanceCheck.conflicts.map(c => c.explanation);
+    artifact.finalVerdict.overallSuccess = false;
+
+    console.log("\n[Governance Check] BLOCKED");
+    console.log(governanceCheck.summary);
+    for (const conflict of governanceCheck.conflicts) {
+      console.log(`  - [${conflict.severity.toUpperCase()}] ${conflict.explanation}`);
+    }
+
+    return artifact;
+  }
+
+  artifact.stages.governanceCheck = {
+    success: true,
+    ...governanceCheck,
+  };
+
+  if (governanceCheck.hasConflict) {
+    console.log(`\n  ⚠️  ${governanceCheck.summary}`);
+    for (const conflict of governanceCheck.conflicts) {
+      console.log(`     - [${conflict.severity.toUpperCase()}] ${conflict.explanation}`);
+    }
+  } else {
+    console.log(`\n  ✅ ${governanceCheck.summary}`);
+  }
+
   // Stage 6: Write Executor
   const { result, review } = await executeWrite(writePlan, options, stableFeatureId);
   artifact.stages.writeExecutor = {
@@ -726,6 +809,8 @@ async function createIntentSchema(prompt: string, hostRoot: string): Promise<{ s
     });
 
     if (result.valid && result.schema) {
+      const extractedParams = extractNumericParameters(prompt);
+      
       const schema = {
         ...result.schema,
         host: {
@@ -743,6 +828,10 @@ async function createIntentSchema(prompt: string, hostRoot: string): Promise<{ s
           resourceConsumption: false,
         },
       };
+
+      if (Object.keys(extractedParams).length > 0) {
+        (schema as any).parameters = extractedParams;
+      }
 
       console.log(`  ✅ IntentSchema created via LLM Wizard`);
       console.log(`     Goal: ${schema.request.goal}`);
@@ -1502,6 +1591,45 @@ async function runRollbackCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
   console.log(`   Status: ${existingFeature.status}`);
 
+  // T149: Check dependency risk before rollback
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 0: Dependency Risk Check");
+  console.log("=".repeat(70));
+
+  if (options.force) {
+    console.log("  ⚠️  Force mode: skipping dependency risk check");
+    console.log("     This may break features that depend on this feature.");
+  } else {
+    const dependencyConflicts = checkDeleteDependencyRisk(options.featureId, workspaceResult.workspace);
+
+    if (dependencyConflicts.length > 0) {
+      console.error("\n❌ Cannot rollback feature: other features depend on it");
+      console.error("\n  Dependent features:");
+      for (const conflict of dependencyConflicts) {
+        console.error(`    - ${conflict.existingFeatureLabel} (${conflict.existingFeatureId})`);
+      }
+      console.error("\n  Recommendation:");
+      console.error("    1. Remove the dependency from dependent features first");
+      console.error("    2. Or use --force to force rollback (not recommended)");
+
+      artifact.stages.governanceCheck = {
+        success: false,
+        hasConflict: true,
+        conflicts: dependencyConflicts,
+        recommendedAction: "block",
+        status: "blocked",
+        summary: `Cannot rollback feature: ${dependencyConflicts.length} dependent feature(s) found.`,
+      };
+      artifact.finalVerdict.pipelineComplete = false;
+      artifact.finalVerdict.weakestStage = "governanceCheck";
+      artifact.finalVerdict.remainingRisks.push(...dependencyConflicts.map(c => c.explanation));
+      saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+      return false;
+    }
+
+    console.log("  ✅ No dependency conflicts detected");
+  }
+
   console.log("\n" + "=".repeat(70));
   console.log("Stage 1: Rollback Plan");
   console.log("=".repeat(70));
@@ -1607,6 +1735,16 @@ async function runRollbackCommand(options: Dota2CLIOptions): Promise<boolean> {
         totalFeatures: updatedWorkspace.features.length,
         skipped: false,
       };
+      
+      // T134-FIX: Export workspace to bridge after successful rollback
+      const bridgeExportResult = exportWorkspaceToBridge(updatedWorkspace, {
+        hostRoot: options.hostRoot,
+      });
+      if (bridgeExportResult.success) {
+        console.log(`✅ Bridge export updated: ${bridgeExportResult.outputPath}`);
+      } else {
+        console.error(`⚠️ Bridge export failed: ${bridgeExportResult.issues.join(", ")}`);
+      }
     }
   } else {
     console.log("🔍 DRY-RUN MODE - Workspace state would be updated to mark feature as rolled_back");
@@ -1729,6 +1867,442 @@ async function runRollbackCommand(options: Dota2CLIOptions): Promise<boolean> {
 
   if (options.dryRun) {
     artifact.finalVerdict.nextSteps.push("Run with --write to execute the rollback plan.");
+  } else if (pipelineComplete) {
+    artifact.finalVerdict.nextSteps.push("Verify the feature has been completely removed.");
+    artifact.finalVerdict.nextSteps.push("Check that no residual files remain.");
+  } else {
+    artifact.finalVerdict.nextSteps.push("Fix the issues before retrying.");
+  }
+
+  const outputDir = join(process.cwd(), "tmp", "cli-review");
+  const outputPath = saveReviewArtifact(artifact, outputDir);
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Final Verdict");
+  console.log("=".repeat(70));
+  console.log(`  Pipeline Complete: ${pipelineComplete ? "✅" : "❌"}`);
+  console.log(`  Completion Kind: ${artifact.finalVerdict.completionKind}`);
+  console.log(`  Weakest Stage: ${weakestStage || "(none)"}`);
+  console.log(`  Sufficient for Demo: ${artifact.finalVerdict.sufficientForDemo ? "✅" : "❌"}`);
+
+  if (artifact.finalVerdict.remainingRisks.length > 0) {
+    console.log("\n  Remaining Risks:");
+    for (const risk of artifact.finalVerdict.remainingRisks) {
+      console.log(`    - ${risk}`);
+    }
+  }
+
+  if (artifact.finalVerdict.nextSteps.length > 0) {
+    console.log("\n  Next Steps:");
+    for (const step of artifact.finalVerdict.nextSteps) {
+      console.log(`    → ${step}`);
+    }
+  }
+
+  console.log(`\n📄 Review artifact saved: ${outputPath}`);
+
+  return pipelineComplete;
+}
+
+async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolean> {
+  console.log("=".repeat(70));
+  console.log("🧙 Rune Weaver - Delete Feature (Maintenance Command)");
+  console.log("=".repeat(70));
+  console.log(`\n📁 Host: ${options.hostRoot}`);
+  console.log(`📝 Feature: ${options.featureId || "(not specified)"}`);
+  console.log(`⚙️  Mode: ${options.dryRun ? "dry-run" : "write"}`);
+
+  if (!options.featureId) {
+    console.error("\n❌ Error: --feature <featureId> is required for delete");
+    return false;
+  }
+
+  const artifact: Dota2ReviewArtifact = {
+    version: "1.0",
+    generatedAt: new Date().toISOString(),
+    commandKind: "maintenance",
+    applicableStages: ["rollbackPlan", "workspaceState", "hostValidation", "runtimeValidation"],
+    cliOptions: {
+      command: options.command,
+      prompt: options.prompt || "",
+      hostRoot: options.hostRoot,
+      featureId: options.featureId,
+      dryRun: options.dryRun,
+      write: options.write,
+      force: options.force,
+    },
+    input: {
+      rawPrompt: options.prompt || "",
+      goal: `Delete feature: ${options.featureId}`,
+    },
+    intentSchema: {
+      usedFallback: true,
+      intentKind: "delete",
+      uiNeeded: false,
+      mechanics: [],
+    },
+    stages: {
+      intentSchema: { success: true, summary: "Not applicable for maintenance command", issues: [], usedFallback: true, skipped: true },
+      blueprint: { success: true, summary: "Not applicable for maintenance command", moduleCount: 0, patternHints: [], issues: [], skipped: true },
+      patternResolution: { success: true, resolvedPatterns: [], unresolvedPatterns: [], issues: [], complete: true, skipped: true },
+      assemblyPlan: { success: true, selectedPatterns: [], writeTargets: [], readyForHostWrite: true, blockers: [], skipped: true },
+      hostRealization: { success: true, units: [], blockers: [], skipped: true },
+      generator: { success: true, generatedFiles: [], issues: [], skipped: true },
+      writeExecutor: { success: true, executedActions: 0, skippedActions: 0, failedActions: 0, createdFiles: [], modifiedFiles: [], skipped: true },
+      hostValidation: { success: true, checks: [], issues: [], details: {}, skipped: false },
+      runtimeValidation: { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [], skipped: false },
+      workspaceState: { success: true, featureId: options.featureId, totalFeatures: 0, skipped: false },
+    },
+    finalVerdict: {
+      pipelineComplete: false,
+      completionKind: "default-safe",
+      weakestStage: "",
+      sufficientForDemo: false,
+      hasUnresolvedPatterns: false,
+      wasForceOverride: false,
+      remainingRisks: [],
+      nextSteps: [],
+    },
+  };
+
+  const workspaceResult = initializeWorkspace(options.hostRoot);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
+    console.error(`\n❌ Failed to load workspace: ${workspaceResult.issues.join(", ")}`);
+    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: 0, error: workspaceResult.issues.join(", ") };
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "workspaceState";
+    artifact.finalVerdict.remainingRisks.push("Failed to load workspace");
+    saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+    return false;
+  }
+
+  const existingFeature = findFeatureById(workspaceResult.workspace, options.featureId);
+  if (!existingFeature) {
+    console.error(`\n❌ Feature '${options.featureId}' not found in workspace`);
+    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: workspaceResult.workspace.features.length, error: "Feature not found" };
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "workspaceState";
+    artifact.finalVerdict.remainingRisks.push(`Feature '${options.featureId}' not found`);
+    saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+    return false;
+  }
+
+  if (existingFeature.status !== "active") {
+    console.error(`\n❌ Feature '${options.featureId}' has status '${existingFeature.status}' and cannot be deleted`);
+    console.error(`   Only features with status 'active' can be deleted`);
+    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: workspaceResult.workspace.features.length, error: `Feature status is '${existingFeature.status}', not 'active'` };
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "workspaceState";
+    artifact.finalVerdict.remainingRisks.push(`Feature status is '${existingFeature.status}', only 'active' features can be deleted`);
+    saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+    return false;
+  }
+
+  console.log(`\n📋 Existing Feature:`);
+  console.log(`   Feature ID: ${existingFeature.featureId}`);
+  console.log(`   Revision: ${existingFeature.revision}`);
+  console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
+  console.log(`   Status: ${existingFeature.status}`);
+
+  // T149: Check dependency risk before delete
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 0: Dependency Risk Check");
+  console.log("=".repeat(70));
+
+  if (options.force) {
+    console.log("  ⚠️  Force mode: skipping dependency risk check");
+    console.log("     This may break features that depend on this feature.");
+  } else {
+    const dependencyConflicts = checkDeleteDependencyRisk(options.featureId, workspaceResult.workspace);
+
+    if (dependencyConflicts.length > 0) {
+      console.error("\n❌ Cannot delete feature: other features depend on it");
+      console.error("\n  Dependent features:");
+      for (const conflict of dependencyConflicts) {
+        console.error(`    - ${conflict.existingFeatureLabel} (${conflict.existingFeatureId})`);
+      }
+      console.error("\n  Recommendation:");
+      console.error("    1. Remove the dependency from dependent features first");
+      console.error("    2. Or use 'dota2 rollback' instead to keep the feature record");
+      console.error("    3. Or use --force to force delete (not recommended)");
+
+      artifact.stages.governanceCheck = {
+        success: false,
+        hasConflict: true,
+        conflicts: dependencyConflicts,
+        recommendedAction: "block",
+        status: "blocked",
+        summary: `Cannot delete feature: ${dependencyConflicts.length} dependent feature(s) found.`,
+      };
+      artifact.finalVerdict.pipelineComplete = false;
+      artifact.finalVerdict.weakestStage = "governanceCheck";
+      artifact.finalVerdict.remainingRisks.push(...dependencyConflicts.map(c => c.explanation));
+      saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+      return false;
+    }
+
+    console.log("  ✅ No dependency conflicts detected");
+  }
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 1: Delete Plan");
+  console.log("=".repeat(70));
+
+  const deletePlan = generateRollbackPlan(
+    existingFeature,
+    workspaceResult.workspace,
+    options.hostRoot
+  );
+
+  console.log(formatRollbackPlan(deletePlan));
+
+  if (!deletePlan.canExecute) {
+    console.error("\n❌ Delete plan cannot be executed due to safety issues:");
+    for (const issue of deletePlan.safetyIssues) {
+      console.error(`   - ${issue}`);
+    }
+    artifact.stages.rollbackPlan = {
+      featureId: deletePlan.featureId,
+      currentRevision: deletePlan.currentRevision,
+      filesToDelete: deletePlan.filesToDelete,
+      bridgeEffectsToRefresh: deletePlan.bridgeEffectsToRefresh,
+      ownershipValid: deletePlan.ownershipValid,
+      safetyIssues: deletePlan.safetyIssues,
+      canExecute: false,
+      executedDeletes: [],
+      deleteFailures: [],
+      skippedDeletes: [],
+      indexRefreshSuccess: false,
+    };
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "rollbackPlan";
+    artifact.finalVerdict.remainingRisks.push(...deletePlan.safetyIssues);
+    saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+    return false;
+  }
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 2: Delete Execution");
+  console.log("=".repeat(70));
+
+  const deleteResult = executeRollback(
+    deletePlan,
+    workspaceResult.workspace,
+    options.hostRoot,
+    options.dryRun,
+    true  // skipBridgeRefresh - we will refresh bridge after workspace update
+  );
+  console.log(formatRollbackResult(deleteResult));
+
+  artifact.stages.rollbackPlan = {
+    featureId: deletePlan.featureId,
+    currentRevision: deletePlan.currentRevision,
+    filesToDelete: deletePlan.filesToDelete,
+    bridgeEffectsToRefresh: deletePlan.bridgeEffectsToRefresh,
+    ownershipValid: deletePlan.ownershipValid,
+    safetyIssues: deletePlan.safetyIssues,
+    canExecute: deletePlan.canExecute,
+    executedDeletes: deleteResult.deleted,
+    deleteFailures: deleteResult.failed,
+    skippedDeletes: deleteResult.skipped,
+    indexRefreshSuccess: deleteResult.indexRefreshSuccess,
+  };
+
+  if (!deleteResult.success) {
+    console.error("\n❌ Delete execution failed");
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "rollbackPlan";
+    artifact.finalVerdict.remainingRisks.push("Delete execution failed");
+    if (deleteResult.failed.length > 0) {
+      artifact.finalVerdict.remainingRisks.push(`${deleteResult.failed.length} file deletions failed`);
+    }
+    saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+    return false;
+  }
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 3: Workspace State Update");
+  console.log("=".repeat(70));
+
+  let workspaceStateResult: { success: boolean; featureId: string; totalFeatures: number; error?: string; skipped?: boolean } = 
+    { success: true, featureId: options.featureId, totalFeatures: 0, skipped: true };
+
+  if (!options.dryRun) {
+    const deleteFeatureResult = deleteFeature(
+      workspaceResult.workspace,
+      options.featureId
+    );
+    
+    if (!deleteFeatureResult.success) {
+      console.error(`\n❌ Failed to delete feature from workspace: ${deleteFeatureResult.issues.join(", ")}`);
+      workspaceStateResult = {
+        success: false,
+        featureId: options.featureId,
+        totalFeatures: workspaceResult.workspace.features.length,
+        error: deleteFeatureResult.issues.join(", "),
+        skipped: false,
+      };
+    } else {
+      const updatedWorkspace = deleteFeatureResult.workspace!;
+      const saveResult = saveWorkspace(options.hostRoot, updatedWorkspace);
+      if (!saveResult.success) {
+        console.error(`\n❌ Failed to update workspace state: ${saveResult.issues.join(", ")}`);
+        workspaceStateResult = {
+          success: false,
+          featureId: options.featureId,
+          totalFeatures: updatedWorkspace.features.length,
+          error: saveResult.issues.join(", "),
+          skipped: false,
+        };
+      } else {
+        console.log("✅ Workspace state updated - feature completely removed");
+        workspaceStateResult = {
+          success: true,
+          featureId: options.featureId,
+          totalFeatures: updatedWorkspace.features.length,
+          skipped: false,
+        };
+        
+        // Refresh bridge with updated workspace (feature removed)
+        const bridgeRefreshResult = refreshBridge(options.hostRoot, updatedWorkspace);
+        if (bridgeRefreshResult.success) {
+          console.log(`✅ Bridge indexes refreshed`);
+        } else {
+          console.error(`⚠️ Bridge refresh failed: ${bridgeRefreshResult.errors.join(", ")}`);
+        }
+        
+        // Export workspace to bridge after successful delete
+        const bridgeExportResult = exportWorkspaceToBridge(updatedWorkspace, {
+          hostRoot: options.hostRoot,
+        });
+        if (bridgeExportResult.success) {
+          console.log(`✅ Bridge export updated: ${bridgeExportResult.outputPath}`);
+        } else {
+          console.error(`⚠️ Bridge export failed: ${bridgeExportResult.issues.join(", ")}`);
+        }
+      }
+    }
+  } else {
+    console.log("🔍 DRY-RUN MODE - Workspace state would be updated to remove feature completely");
+    workspaceStateResult = {
+      success: true,
+      featureId: options.featureId,
+      totalFeatures: workspaceResult.workspace.features.length,
+      skipped: true,
+    };
+  }
+
+  artifact.stages.workspaceState = workspaceStateResult;
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 4: Host Validation");
+  console.log("=".repeat(70));
+
+  const hostValidationResult = performRollbackHostValidation(
+    options.hostRoot,
+    deletePlan,
+    deleteResult
+  );
+
+  artifact.stages.hostValidation = hostValidationResult;
+
+  for (const check of hostValidationResult.checks) {
+    console.log(`  ${check}`);
+  }
+
+  if (hostValidationResult.issues.length > 0) {
+    console.log("\n  Issues:");
+    for (const issue of hostValidationResult.issues) {
+      console.log(`    - ${issue}`);
+    }
+  }
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 5: Runtime Validation");
+  console.log("=".repeat(70));
+
+  let runtimeValidationResult: { success: boolean; serverPassed: boolean; uiPassed: boolean; serverErrors: number; uiErrors: number; limitations: string[] } = 
+    { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [] };
+
+  if (!options.dryRun && deleteResult.success) {
+    try {
+      const runtimeArtifact = await validateHostRuntime(options.hostRoot);
+      
+      runtimeValidationResult = {
+        success: runtimeArtifact.overall.success,
+        serverPassed: runtimeArtifact.overall.serverPassed,
+        uiPassed: runtimeArtifact.overall.uiPassed,
+        serverErrors: runtimeArtifact.server.errorCount,
+        uiErrors: runtimeArtifact.ui.errorCount,
+        limitations: runtimeArtifact.overall.limitations,
+      };
+
+      console.log(`  Server: ${runtimeArtifact.server.success ? "✅ Passed" : "❌ Failed"}`);
+      console.log(`    - Errors: ${runtimeArtifact.server.errorCount}`);
+      console.log(`    - Checked: ${runtimeArtifact.server.checked}`);
+      
+      console.log(`  UI: ${runtimeArtifact.ui.success ? "✅ Passed" : "❌ Failed"}`);
+      console.log(`    - Errors: ${runtimeArtifact.ui.errorCount}`);
+      console.log(`    - Checked: ${runtimeArtifact.ui.checked}`);
+
+      if (runtimeArtifact.overall.limitations.length > 0) {
+        console.log(`  Limitations:`);
+        for (const limitation of runtimeArtifact.overall.limitations) {
+          console.log(`    - ${limitation}`);
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log(`  ❌ Runtime validation failed: ${errorMessage}`);
+      runtimeValidationResult = {
+        success: false,
+        serverPassed: false,
+        uiPassed: false,
+        serverErrors: 0,
+        uiErrors: 0,
+        limitations: [`Runtime validation error: ${errorMessage}`],
+      };
+    }
+  } else {
+    console.log("  ⏭️  Skipped (dry-run mode or delete failed)");
+    runtimeValidationResult.limitations = ["Skipped due to dry-run mode or delete failure"];
+  }
+
+  artifact.stages.runtimeValidation = runtimeValidationResult;
+
+  const allStages = [
+    { name: "rollbackPlan", success: artifact.stages.rollbackPlan?.canExecute ?? false },
+    { name: "workspaceState", success: artifact.stages.workspaceState.success },
+    { name: "hostValidation", success: artifact.stages.hostValidation.success },
+    { name: "runtimeValidation", success: artifact.stages.runtimeValidation.success },
+  ];
+
+  const failedStages = allStages.filter(s => !s.success);
+  const weakestStage = failedStages.length > 0 ? failedStages[0].name : "";
+  const pipelineComplete = failedStages.length === 0;
+
+  artifact.finalVerdict.pipelineComplete = pipelineComplete;
+  artifact.finalVerdict.weakestStage = weakestStage;
+  artifact.finalVerdict.completionKind = options.dryRun ? "default-safe" : (pipelineComplete ? "default-safe" : "partial");
+  artifact.finalVerdict.sufficientForDemo = pipelineComplete;
+
+  if (!pipelineComplete) {
+    if (!artifact.stages.rollbackPlan?.canExecute) {
+      artifact.finalVerdict.remainingRisks.push("Delete plan has safety issues");
+    }
+    if (!artifact.stages.workspaceState.success) {
+      artifact.finalVerdict.remainingRisks.push("Workspace state update failed");
+    }
+    if (!artifact.stages.hostValidation.success) {
+      artifact.finalVerdict.remainingRisks.push("Host validation failed");
+    }
+    if (!artifact.stages.runtimeValidation.success) {
+      artifact.finalVerdict.remainingRisks.push("Runtime validation failed");
+    }
+  }
+
+  if (options.dryRun) {
+    artifact.finalVerdict.nextSteps.push("Run with --write to execute the delete plan.");
   } else if (pipelineComplete) {
     artifact.finalVerdict.nextSteps.push("Verify the feature has been completely removed.");
     artifact.finalVerdict.nextSteps.push("Check that no residual files remain.");
@@ -1984,6 +2558,96 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
     return false;
   }
 
+  // T113: 继承原始 feature 的 selectedPatterns，避免创建新文件
+  // 修正逻辑：保留所有原始 patterns，同时合并新 intent 需要的 patterns
+  if (existingFeature.selectedPatterns && existingFeature.selectedPatterns.length > 0) {
+    const existingPatternIds = new Set(existingFeature.selectedPatterns);
+    const newPatternIds = new Set(resolutionResult.patterns.map(p => p.patternId));
+    const originalCount = resolutionResult.patterns.length;
+
+    // 辅助函数：从文件路径推断 role
+    const inferRoleFromFiles = (patternId: string, generatedFiles: string[], featureId: string): string => {
+      // patternId 格式: "category.sub_pattern" -> "category_sub_pattern"
+      const patternSegment = patternId.replace(/\./g, "_");
+      
+      // 查找匹配的文件
+      for (const filePath of generatedFiles) {
+        // 文件路径格式: {namespace}/{featureId}_{role}_{patternSegment}.{ext}
+        // 或: {namespace}/{featureId}_{patternSegment}.{ext} (当 role === patternSegment)
+        const fileName = filePath.split("/").pop() || "";
+        const baseName = fileName.replace(/\.[^.]+$/, ""); // 移除扩展名
+        
+        // 检查是否包含 patternSegment
+        if (baseName.includes(patternSegment)) {
+          // 提取 role: {featureId}_{role}_{patternSegment} -> role
+          const prefix = `${featureId}_`;
+          if (baseName.startsWith(prefix)) {
+            const suffix = baseName.slice(prefix.length);
+            // suffix 可能是 "role_patternSegment" 或 "patternSegment"
+            if (suffix === patternSegment) {
+              // role === patternSegment
+              return patternSegment;
+            } else if (suffix.endsWith(`_${patternSegment}`)) {
+              // role_patternSegment -> role
+              return suffix.slice(0, -`_${patternSegment}`.length);
+            }
+          }
+        }
+      }
+      
+      // 如果无法推断，使用 patternId 作为默认 role
+      return patternSegment;
+    };
+
+    // 构建合并后的 patterns 列表
+    const mergedPatterns: typeof resolutionResult.patterns = [];
+    const addedPatternIds = new Set<string>();
+
+    // 1. 首先添加原始 patterns
+    for (const patternId of existingFeature.selectedPatterns) {
+      // 检查新 intent 是否也解析了这个 pattern
+      const newPattern = resolutionResult.patterns.find(p => p.patternId === patternId);
+      if (newPattern) {
+        // 使用新 intent 的参数更新
+        mergedPatterns.push(newPattern);
+        addedPatternIds.add(patternId);
+      } else {
+        // 保留原始 pattern（创建最小化的 ResolvedPattern）
+        // 从文件路径推断 role
+        const inferredRole = inferRoleFromFiles(
+          patternId,
+          existingFeature.generatedFiles,
+          existingFeature.featureId
+        );
+        
+        mergedPatterns.push({
+          patternId,
+          role: inferredRole,
+          priority: "required" as const,
+          source: "hint" as const,
+        });
+        addedPatternIds.add(patternId);
+      }
+    }
+
+    // 2. 检查新 intent 独有的 patterns（原始 feature 没有的）
+    const newOnlyPatterns = resolutionResult.patterns.filter(p => !addedPatternIds.has(p.patternId));
+    if (newOnlyPatterns.length > 0) {
+      // 注意：这里跳过新 patterns，因为 Packet B 的目标是保持文件集合不变
+      console.log(`\n  ⚠️  Pattern Inheritance: Skipping ${newOnlyPatterns.length} new patterns not in original feature`);
+      for (const p of newOnlyPatterns) {
+        console.log(`     - ${p.patternId}`);
+      }
+    }
+
+    resolutionResult.patterns = mergedPatterns;
+
+    console.log(`\n  🔒 Pattern Inheritance: Merged patterns`);
+    console.log(`     Original patterns: ${existingFeature.selectedPatterns.join(", ")}`);
+    console.log(`     New intent patterns: ${Array.from(newPatternIds).join(", ") || "(none)"}`);
+    console.log(`     Final patterns: ${resolutionResult.patterns.map(p => p.patternId).join(", ")}`);
+  }
+
   artifact.stages.patternResolution = {
     success: true,
     resolvedPatterns: resolutionResult.patterns.map(p => p.patternId),
@@ -2228,6 +2892,8 @@ async function runUpdateCommand(options: Dota2CLIOptions): Promise<boolean> {
     const updatedFeature: RuneWeaverFeatureRecord = {
       ...existingFeature,
       revision: existingFeature.revision + 1,
+      blueprintId: existingFeature.blueprintId, // 保持原有 blueprintId
+      entryBindings: extractEntryBindings(plan.bridgeUpdates),
       generatedFiles: generatedFilesForUpdate,
       selectedPatterns: resolutionResult.patterns.map(p => p.patternId),
       updatedAt: new Date().toISOString(),

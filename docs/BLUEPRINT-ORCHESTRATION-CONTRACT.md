@@ -3,7 +3,7 @@
 > Status Note
 > This document is an active technical reference for the Blueprint stage.
 > It defines boundary and contract rules for Blueprint orchestration, not current shipped product maturity.
-> If it conflicts with current MVP scope or implementation priority, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), and [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md).
+> If it conflicts with current MVP scope or implementation priority, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), and [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
 
 ## Purpose
 

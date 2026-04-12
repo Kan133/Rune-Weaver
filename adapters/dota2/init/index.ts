@@ -5,12 +5,12 @@
  * 实现 `dota2 init --host D:\test1` 的最小闭环
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "fs";
 import { join, resolve, basename } from "path";
 import { execSync } from "child_process";
 import { scanDota2Project } from "../scanner";
 import { createInterface } from "readline";
-import { repairDotaTsAdapter } from "../bridge/index.js";
+import { repairDotaTsAdapter, injectHostEntryBridge } from "../bridge/index.js";
 
 /**
  * 初始化结果
@@ -146,6 +146,82 @@ function createNamespaceDirectories(projectPath: string): string[] {
 }
 
 /**
+ * 扫描地图文件
+ * 
+ * 扫描 content/dota_addons/{addonName}/maps/ 目录下的 .vmap 文件
+ */
+function scanMapFiles(hostRoot: string, addonName: string): string[] {
+  const mapsDir = join(hostRoot, "content/dota_addons", addonName, "maps");
+  
+  if (!existsSync(mapsDir)) {
+    return [];
+  }
+  
+  try {
+    const files = readdirSync(mapsDir);
+    const vmapFiles = files
+      .filter(file => file.endsWith(".vmap"))
+      .map(file => file.replace(".vmap", ""));
+    
+    return vmapFiles;
+  } catch (error) {
+    console.error(`扫描地图目录失败: ${error}`);
+    return [];
+  }
+}
+
+/**
+ * 交互式选择地图
+ * 
+ * @param mapFiles 可用的地图文件列表（不含扩展名）
+ * @returns 用户选择的地图名称，或 undefined 表示跳过
+ */
+async function promptForMapSelection(mapFiles: string[]): Promise<string | undefined> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const ask = (prompt: string): Promise<string> => {
+    return new Promise((resolve) => {
+      rl.question(prompt, resolve);
+    });
+  };
+
+  console.log("\n检测到以下地图文件:");
+  mapFiles.forEach((map, index) => {
+    console.log(`  ${index + 1}. ${map}`);
+  });
+  console.log(`  0. 跳过（不设置默认地图）`);
+  console.log("\n请选择默认地图（输入序号）：\n");
+
+  let selection = "";
+  while (true) {
+    const input = await ask("> ");
+    selection = input.trim();
+    
+    // 跳过选项
+    if (selection === "0") {
+      rl.close();
+      console.log("已跳过地图选择");
+      return undefined;
+    }
+    
+    // 验证输入
+    const index = parseInt(selection, 10);
+    if (isNaN(index) || index < 1 || index > mapFiles.length) {
+      console.log(`❌ 无效输入，请输入 0-${mapFiles.length} 之间的数字`);
+      continue;
+    }
+    
+    rl.close();
+    const selectedMap = mapFiles[index - 1];
+    console.log(`✅ 已选择地图: ${selectedMap}`);
+    return selectedMap;
+  }
+}
+
+/**
  * 初始化宿主
  */
 export async function initDota2Host(options: InitOptions): Promise<InitResult> {
@@ -209,9 +285,24 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
   // 6. 创建命名空间目录
   result.createdDirectories = createNamespaceDirectories(options.hostPath);
 
-  // 7. 创建 workspace 文件
-  const workspaceContent = generateWorkspaceFile(finalAddonName, options.hostPath);
-  const workspacePath = join(options.hostPath, "rune-weaver.workspace.json");
+  // 7. 选择地图（可选）
+  let mapName: string | undefined;
+  const mapFiles = scanMapFiles(options.hostPath, finalAddonName);
+  
+  if (mapFiles.length > 0) {
+    mapName = await promptForMapSelection(mapFiles);
+    if (mapName) {
+      console.log(`已设置默认地图: ${mapName}`);
+    }
+  } else {
+    console.log("\n未检测到地图文件，跳过地图选择");
+    console.log("提示: 您可以稍后在 content/dota_addons/{addon_name}/maps/ 目录下添加地图文件");
+  }
+
+  // 8. 创建 workspace 文件
+  const workspaceContent = generateWorkspaceFile(finalAddonName, options.hostPath, mapName);
+  // F011: Workspace file is located in game/scripts/src/rune_weaver/
+  const workspacePath = join(options.hostPath, "game/scripts/src/rune_weaver", "rune-weaver.workspace.json");
   
   try {
     writeFileSync(workspacePath, JSON.stringify(workspaceContent, null, 2), "utf-8");
@@ -221,7 +312,7 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
     return result;
   }
 
-  // 8. 创建桥接文件（空壳）
+  // 9. 创建桥接文件（空壳）
   createBridgeFiles(options.hostPath);
 
   const adapterRepair = repairDotaTsAdapter(options.hostPath);
@@ -229,10 +320,19 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
     result.warnings.push(...adapterRepair.errors);
   }
 
+  // T149: 在 init 时注入宿主入口桥接
+  // 如果宿主入口文件不存在，给出 warning 但不 abort init
+  const injectionResult = injectHostEntryBridge(options.hostPath);
+  if (!injectionResult.success) {
+    for (const err of injectionResult.errors) {
+      result.warnings.push("宿主入口接线失败: " + err);
+    }
+  }
+
   result.success = true;
   result.initialized = true;
 
-  // 9. 调用 yarn install（可选）
+  // 10. 调用 yarn install（可选）
   if (!options.skipInstall) {
     console.log("\n📦 正在执行 yarn install...");
     try {
@@ -289,8 +389,16 @@ async function promptForAddonName(defaultName: string): Promise<string> {
 /**
  * 生成 workspace 文件内容
  */
-function generateWorkspaceFile(addonName: string, hostPath: string) {
-  return {
+function generateWorkspaceFile(addonName: string, hostPath: string, mapName?: string) {
+  const workspace: {
+    version: string;
+    hostType: "dota2-x-template";
+    hostRoot: string;
+    addonName: string;
+    mapName?: string;
+    initializedAt: string;
+    features: never[];
+  } = {
     version: "0.1.0",
     hostType: "dota2-x-template",
     hostRoot: resolve(hostPath),
@@ -298,6 +406,13 @@ function generateWorkspaceFile(addonName: string, hostPath: string) {
     initializedAt: new Date().toISOString(),
     features: [],
   };
+  
+  // 只有在 mapName 有值时才添加到 workspace
+  if (mapName) {
+    workspace.mapName = mapName;
+  }
+  
+  return workspace;
 }
 
 /**

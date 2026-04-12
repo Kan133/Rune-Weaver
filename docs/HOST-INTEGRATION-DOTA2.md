@@ -2,7 +2,7 @@
 
 > Status Note
 > This document is an active Dota2 host reference, but it mixes current boundary rules with environment-specific and historical notes.
-> For current MVP ownership, workspace truth, and lifecycle acceptance, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md), and [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md).
+> For current MVP ownership, workspace truth, and lifecycle acceptance, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md), and [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
 > Concrete example paths such as `D:\\test1` should be treated as reference examples, not required product assumptions.
 
 ## 1. 文档目的
@@ -140,7 +140,7 @@ Rune Weaver 采用：
 建议命令：
 
 ```bash
-rune-weaver dota2 init --host D:\test1
+npm run cli -- dota2 init --host D:\test1
 ```
 
 ### 5.3 初始化阶段必须完成的事情
@@ -442,7 +442,9 @@ P1 前建议：
 - Rune Weaver 在 `--run` 场景触发 `yarn launch`
 - Rune Weaver 暂不负责长期守护 `yarn dev`
 
-这样可先实现“一次生成，一次启动测试”的闭环。
+**注意**: --run 参数目前为计划中的功能，尚未实现。当前用户需要手动执行 `yarn launch`。
+
+这样可先实现"一次生成，一次启动测试"的闭环。
 
 ---
 
@@ -463,10 +465,12 @@ Rune Weaver 应隐藏这些细节。
 ### 10.2 推荐命令形态
 
 ```bash
-rune-weaver dota2 init --host D:\test1
-rune-weaver dota2 create --host D:\test1 --run
-rune-weaver dota2 update --host D:\test1 --feature rw_dash_q --run
+npm run cli -- dota2 init --host D:\test1
+npm run cli -- dota2 run "做一个冲刺技能" --host D:\test1
+npm run cli -- dota2 update --host D:\test1 --feature rw_dash_q
 ```
+
+**注意**: --run 参数目前为计划中的功能，尚未实现。当前用户需要手动执行 `yarn launch`。
 
 ### 10.3 `--run` 的标准含义
 

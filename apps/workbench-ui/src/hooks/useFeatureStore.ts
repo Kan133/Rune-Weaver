@@ -11,6 +11,7 @@ import {
   loadWorkspaceFromSource,
   switchWorkspaceSource,
   getAvailableSources,
+  WORKSPACE_SOURCES,
   BRIDGE_ARTIFACT_CONTRACT,
   type WorkspaceSourceConfig,
 } from '@/data/workspaceSource';
@@ -24,6 +25,32 @@ export interface BridgeArtifactMeta {
   version: string;
 }
 
+// Product Entry Integration: Execution state for CLI operations
+export interface ExecutionState {
+  isRunning: boolean;
+  command: string | null;
+  output: string[];
+  result: 'success' | 'failure' | null;
+  error: string | null;
+  artifactPath: string | null;
+}
+
+// Product Entry Integration: Host configuration state
+export interface HostConfigState {
+  hostRoot: string;
+  hostValid: boolean;
+  hostType: 'dota2-x-template' | 'unknown';
+  scanErrors: string[];
+  integrationStatus: {
+    initialized: boolean;
+    namespaceReady: boolean;
+    workspaceReady: boolean;
+    serverBridge: boolean;
+    uiBridge: boolean;
+    ready: boolean;
+  } | null;
+}
+
 interface FeatureStore {
   // Data
   features: Feature[];
@@ -34,6 +61,8 @@ interface FeatureStore {
   workspaceIssues: string[];
   // F011: Bridge artifact metadata when using bridge source
   bridgeArtifactMeta: BridgeArtifactMeta | null;
+  // Available workspace sources (cached)
+  availableSources: WorkspaceSourceConfig[];
 
   // Selection state
   selectedGroupId: string;
@@ -45,6 +74,11 @@ interface FeatureStore {
 
   // Wizard state
   wizard: WizardState;
+
+  // Product Entry Integration: Execution state
+  execution: ExecutionState;
+  // Product Entry Integration: Host configuration state
+  hostConfig: HostConfigState;
 
   // Actions
   selectGroup: (id: string) => void;
@@ -62,6 +96,19 @@ interface FeatureStore {
   addWizardMessage: (message: Omit<WizardMessage, 'id' | 'timestamp'>) => void;
   setWizardStep: (step: WizardState['currentStep']) => void;
   setDraftFeature: (feature: Partial<Feature> | null) => void;
+
+  // Product Entry Integration: Execution actions
+  setExecutionRunning: (isRunning: boolean, command?: string | null) => void;
+  addExecutionOutput: (line: string) => void;
+  setExecutionResult: (result: 'success' | 'failure', artifactPath?: string | null) => void;
+  setExecutionError: (error: string | null) => void;
+  clearExecutionOutput: () => void;
+  resetExecution: () => void;
+
+  // Product Entry Integration: Host config actions
+  setHostRoot: (hostRoot: string) => void;
+  setHostScanResult: (valid: boolean, hostType: 'dota2-x-template' | 'unknown', errors: string[]) => void;
+  setIntegrationStatus: (status: HostConfigState['integrationStatus']) => void;
 
   // Data loading
   loadRealData: () => void;
@@ -148,6 +195,8 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
   workspaceIssues: [],
   // F011: Bridge artifact metadata
   bridgeArtifactMeta: null,
+  // Available workspace sources (cached)
+  availableSources: WORKSPACE_SOURCES,
 
   selectedGroupId: 'all',
   selectedFeatureId: null,
@@ -159,6 +208,25 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
     messages: [],
     currentStep: 'intent',
     draftFeature: null,
+  },
+
+  // Product Entry Integration: Initial execution state
+  execution: {
+    isRunning: false,
+    command: null,
+    output: [],
+    result: null,
+    error: null,
+    artifactPath: null,
+  },
+
+  // Product Entry Integration: Initial host config state
+  hostConfig: {
+    hostRoot: '',
+    hostValid: false,
+    hostType: 'unknown',
+    scanErrors: [],
+    integrationStatus: null,
   },
 
   selectGroup: (id) => {
@@ -345,6 +413,102 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
       wizard: {
         ...state.wizard,
         draftFeature: feature,
+      },
+    }));
+  },
+
+  // Product Entry Integration: Execution actions implementation
+  setExecutionRunning: (isRunning, command = null) => {
+    set((state) => ({
+      execution: {
+        ...state.execution,
+        isRunning,
+        command: isRunning ? command : state.execution.command,
+        result: isRunning ? null : state.execution.result,
+        error: isRunning ? null : state.execution.error,
+      },
+    }));
+  },
+
+  addExecutionOutput: (line) => {
+    set((state) => ({
+      execution: {
+        ...state.execution,
+        output: [...state.execution.output, line],
+      },
+    }));
+  },
+
+  setExecutionResult: (result, artifactPath = null) => {
+    set((state) => ({
+      execution: {
+        ...state.execution,
+        isRunning: false,
+        result,
+        artifactPath,
+      },
+    }));
+  },
+
+  setExecutionError: (error) => {
+    set((state) => ({
+      execution: {
+        ...state.execution,
+        isRunning: false,
+        error,
+        result: error ? 'failure' : state.execution.result,
+      },
+    }));
+  },
+
+  clearExecutionOutput: () => {
+    set((state) => ({
+      execution: {
+        ...state.execution,
+        output: [],
+      },
+    }));
+  },
+
+  resetExecution: () => {
+    set({
+      execution: {
+        isRunning: false,
+        command: null,
+        output: [],
+        result: null,
+        error: null,
+        artifactPath: null,
+      },
+    });
+  },
+
+  // Product Entry Integration: Host config actions implementation
+  setHostRoot: (hostRoot) => {
+    set((state) => ({
+      hostConfig: {
+        ...state.hostConfig,
+        hostRoot,
+      },
+    }));
+  },
+
+  setHostScanResult: (valid, hostType, errors) => {
+    set((state) => ({
+      hostConfig: {
+        ...state.hostConfig,
+        hostValid: valid,
+        hostType,
+        scanErrors: errors,
+      },
+    }));
+  },
+
+  setIntegrationStatus: (status) => {
+    set((state) => ({
+      hostConfig: {
+        ...state.hostConfig,
+        integrationStatus: status,
       },
     }));
   },

@@ -3,7 +3,7 @@
 > Status Note
 > This document is an active technical reference for the current execution pipeline.
 > It defines architectural layering and boundary rules, not current product completion status.
-> For current MVP truth, execution priority, and acceptance scope, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), and [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md).
+> For current MVP truth, execution priority, and acceptance scope, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), and [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
 
 ## Purpose
 
@@ -230,7 +230,7 @@ For current MVP truth and next-step sequencing, prefer:
 
 - [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
 - [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
-- [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md)
+- [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 
 ## Current Architectural Status
 

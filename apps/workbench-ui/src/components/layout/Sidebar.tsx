@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFeatureStore } from '@/hooks/useFeatureStore';
 import { FeatureTree } from '@/components/feature/FeatureTree';
 import { WorkspaceSourceSelector } from '@/components/workspace/WorkspaceSourceSelector';
+import { ProjectSetupPanel } from '@/components/project-setup/ProjectSetupPanel';
 
 const iconMap: Record<string, React.ReactNode> = {
   Layers: <Layers className="h-4 w-4" />,
@@ -16,12 +17,16 @@ export function Sidebar() {
   const groups = useFeatureStore((state) => state.groups);
   const selectedGroupId = useFeatureStore((state) => state.selectedGroupId);
   const selectGroup = useFeatureStore((state) => state.selectGroup);
-  const rootFeatures = useFeatureStore((state) => state.getRootFeatures());
+  const features = useFeatureStore((state) => state.features);
+  const rootFeatures = features.filter((f) => f.parentId === null);
 
   return (
     <div className="w-64 bg-[#1a1a1a] border-r border-white/10 flex flex-col flex-shrink-0">
       {/* Workspace Source Selector */}
       <WorkspaceSourceSelector />
+
+      {/* Project Setup Panel */}
+      <ProjectSetupPanel />
 
       {/* Groups */}
       <div className="p-3 border-b border-white/5">

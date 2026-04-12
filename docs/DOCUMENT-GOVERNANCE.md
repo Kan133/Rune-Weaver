@@ -23,23 +23,25 @@ Every document should fit one of these classes:
 
 ## Current Authoritative Set
 
-For the current README-target MVP, the main authoritative set is:
+For the current post-ABCD execution phase, the main authoritative set is:
 
 1. [README.md](/D:/Rune%20Weaver/README.md)
 2. [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
 3. [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
-4. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
-5. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
-6. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
+4. [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md)
+5. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
+6. [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
+7. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+8. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
 
 ## What Stays In `docs/`
 
 Keep a document in `docs/` only if it does at least one of these:
 
-- defines the current MVP boundary
+- defines the current product boundary or execution order
 - explains current pipeline/layering used by code
 - constrains current host ownership or generator behavior
-- supports current create/update/delete/governance work
+- supports current product-entry / lifecycle / evidence work
 - is still an active technical reference for current implementation
 
 ## What Moves To `archive/`
@@ -50,13 +52,15 @@ Move a document to `archive/` when it is primarily:
 - future contract for not-yet-shipped capability
 - remediation or migration planning already superseded
 - historical implementation notes
-- architecture exploration outside the current MVP path
+- architecture exploration outside the current product path
+- stale execution queues or completion trackers
 
-## Current Archive Bucket
+## Current Archive Buckets
 
-The current governance pass archives superseded MVP-misaligned docs here:
+The current governance passes archive superseded docs here:
 
 - [archive/docs/2026-04-mvp-reset/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-mvp-reset/README.md)
+- [archive/docs/2026-04-post-abcd-plan-reset/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-post-abcd-plan-reset/README.md)
 
 ## Authoring Rules
 

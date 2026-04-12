@@ -32,15 +32,39 @@ export function workspaceExists(hostRoot: string): boolean {
   return existsSync(getWorkspaceFilePath(hostRoot));
 }
 
-export function createEmptyWorkspace(hostRoot: string): RuneWeaverWorkspace {
-  const addonName = basename(hostRoot);
-  const now = new Date().toISOString();
+/**
+ * Read addon_name from scripts/addon.config.ts
+ * Returns null if file doesn't exist or addon_name cannot be parsed
+ */
+function readAddonNameFromConfig(projectPath: string): string | null {
+  try {
+    const configPath = join(projectPath, "scripts/addon.config.ts");
+    if (!existsSync(configPath)) return null;
+    
+    const content = readFileSync(configPath, "utf-8");
+    const match = content.match(/let\s+addon_name(?::\s*\w+)?\s*=\s*['"]([^'"]+)['"]/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
 
+export function createEmptyWorkspace(
+  hostRoot: string, 
+  mapName?: string,
+  addonName?: string
+): RuneWeaverWorkspace {
+  if (!addonName) {
+    addonName = readAddonNameFromConfig(hostRoot) || basename(hostRoot);
+  }
+  
+  const now = new Date().toISOString();
   return {
     version: CURRENT_VERSION,
     hostType: "dota2-x-template",
     hostRoot,
     addonName,
+    mapName,
     initializedAt: now,
     features: [],
   };
@@ -159,7 +183,8 @@ export function checkDuplicateFeature(
 export function addFeatureToWorkspace(
   workspace: RuneWeaverWorkspace,
   result: FeatureWriteResult,
-  intentKind: string
+  intentKind: string,
+  integrationPoints?: string[]
 ): RuneWeaverWorkspace {
   const now = new Date().toISOString();
 
@@ -172,6 +197,7 @@ export function addFeatureToWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
+    integrationPoints,
     createdAt: now,
     updatedAt: now,
   };
@@ -186,7 +212,8 @@ export function updateFeatureInWorkspace(
   workspace: RuneWeaverWorkspace,
   featureId: string,
   result: FeatureWriteResult,
-  intentKind: string
+  intentKind: string,
+  integrationPoints?: string[]
 ): RuneWeaverWorkspace {
   const existing = findFeatureById(workspace, featureId);
   if (!existing) {
@@ -204,6 +231,7 @@ export function updateFeatureInWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
+    integrationPoints: integrationPoints || existing.integrationPoints,
     updatedAt: now,
   };
 
@@ -308,12 +336,13 @@ function validateWorkspaceStructure(workspace: unknown): workspace is RuneWeaver
  */
 function normalizeWorkspace(rawWorkspace: unknown): RuneWeaverWorkspace {
   const raw = rawWorkspace as Record<string, unknown>;
-  
+
   const workspace: RuneWeaverWorkspace = {
     version: (raw.version as string) || CURRENT_VERSION,
     hostType: (raw.hostType as "dota2-x-template") || "dota2-x-template",
     hostRoot: (raw.hostRoot as string) || "",
     addonName: (raw.addonName as string) || "",
+    mapName: (raw.mapName as string) || undefined,
     initializedAt: (raw.initializedAt as string) || new Date().toISOString(),
     features: [],
   };
@@ -342,6 +371,8 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
     selectedPatterns: (raw.selectedPatterns as string[]) || [],
     generatedFiles,
     entryBindings: normalizeEntryBindings(raw.entryBindings, generatedFiles),
+    integrationPoints: (raw.integrationPoints as string[]) || undefined,
+    dependsOn: (raw.dependsOn as string[]) || undefined,
     createdAt: (raw.createdAt as string) || now,
     updatedAt: (raw.updatedAt as string) || now,
   };
