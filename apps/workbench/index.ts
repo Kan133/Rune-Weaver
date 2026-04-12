@@ -54,6 +54,8 @@ import {
   createGovernanceRelease,
   createConfirmationAction,
 } from "./governance.js";
+import { BUILTIN_EXPERIENCES, findRelevantExperiences } from "./experience-library.js";
+import { detectSceneAnchors } from "./scene-anchors.js";
 
 import type {
   WorkbenchOptions,
@@ -137,165 +139,8 @@ import type {
   GapFillEntry,
   GapFillResult,
   FailureCorpus,
-  AnchorKind,
-  SceneReference,
   ActualWriteResult,
 } from "./types.js";
-
-const SCENE_ANCHOR_KEYWORDS: Record<AnchorKind, string[]> = {
-  trigger_zone: ["zone", "area", "region", "区域", "范围"],
-  spawn_point: ["spawn", "生成", "出生点", "start point"],
-  area_anchor: ["area", "location", "position", "位置", "地点"],
-  marker: ["marker", "标记", "flag", "旗帜"],
-  waypoint: ["waypoint", "path", "路径", "路线", "路点"],
-};
-
-function detectSceneAnchors(userRequest: string, host: string): SceneReference[] {
-  const references: SceneReference[] = [];
-  const requestLower = userRequest.toLowerCase();
-  
-  for (const [kind, keywords] of Object.entries(SCENE_ANCHOR_KEYWORDS) as [AnchorKind, string[]][]) {
-    for (const keyword of keywords) {
-      if (requestLower.includes(keyword)) {
-        const anchorName = extractAnchorName(userRequest, keyword);
-        if (anchorName) {
-          references.push({
-            id: `scene_ref_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            anchorName,
-            anchorKind: kind,
-            host,
-            notes: [`Detected ${kind} reference from user request`],
-            confidence: "medium",
-          });
-        }
-        break;
-      }
-    }
-  }
-  
-  return references.slice(0, 5);
-}
-
-function extractAnchorName(request: string, keyword: string): string | null {
-  const requestLower = request.toLowerCase();
-  const keywordIndex = requestLower.indexOf(keyword);
-  if (keywordIndex === -1) return null;
-  
-  const beforeKeyword = request.substring(0, keywordIndex).trim();
-  const afterKeyword = request.substring(keywordIndex + keyword.length).trim();
-  
-  const nameMatch = beforeKeyword.match(/(?:at|near|at\s+(?:the\s+)?|in\s+(?:the\s+)?|from\s+(?:the\s+)?)(\w+)$/i) ||
-                    afterKeyword.match(/^(\w+)/i);
-  
-  if (nameMatch) {
-    return nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1).toLowerCase();
-  }
-  
-  return `Anchor_${keyword.charAt(0).toUpperCase() + keyword.slice(1)}`;
-}
-
-const BUILTIN_EXPERIENCES: ExperienceEntry[] = [
-  {
-    id: "exp_talent_system",
-    kind: "case_preset",
-    host: "dota2",
-    featureType: "talent_system",
-    capabilityTags: ["talent", "selection", "upgrade", "choice"],
-    suggestedModuleIds: ["talent_pool", "selection_rule", "selection_ui", "talent_buff"],
-    suggestedPatternIds: ["data.weighted_pool", "rule.selection_flow", "ui.selection_modal", "effect.modifier_applier"],
-    notes: ["Talent systems typically require 4 modules", "Use weighted_pool for talent entries", "Selection flow handles the choice logic"],
-    maturity: "proven",
-    risks: ["May conflict with existing talent systems"],
-  },
-  {
-    id: "exp_dash_ability",
-    kind: "feature_preset",
-    host: "dota2",
-    featureType: "dash_ability",
-    capabilityTags: ["movement", "dash", "displacement"],
-    suggestedModuleIds: ["dash_trigger", "dash_effect"],
-    suggestedPatternIds: ["input.key_binding", "effect.dash"],
-    notes: ["Dash abilities need trigger + effect", "Use effect.dash for movement"],
-    maturity: "verified",
-    risks: ["Movement abilities can conflict with other movement mods"],
-  },
-  {
-    id: "exp_buff_spell",
-    kind: "known_good_example",
-    host: "dota2",
-    featureType: "buff_spell",
-    capabilityTags: ["buff", "增益", "effect", "modifier"],
-    suggestedModuleIds: ["buff_data", "buff_effect"],
-    suggestedPatternIds: ["data.weighted_pool", "effect.modifier_applier"],
-    notes: ["Buff spells need data + effect modules", "Use modifier_applier for buff application"],
-    maturity: "verified",
-    risks: ["Modifier stacking rules need to be defined"],
-  },
-  {
-    id: "exp_selection_modal",
-    kind: "feature_preset",
-    host: "dota2",
-    featureType: "selection_modal",
-    capabilityTags: ["selection", "modal", "choose", "pick"],
-    suggestedModuleIds: ["selection_data", "selection_rule", "selection_ui"],
-    suggestedPatternIds: ["data.weighted_pool", "rule.selection_flow", "ui.selection_modal"],
-    notes: ["Selection modals need 3 modules minimum", "UI modal provides the visual interface"],
-    maturity: "proven",
-    risks: ["Modal timing and state management need care"],
-  },
-  {
-    id: "exp_damage_ability",
-    kind: "known_good_example",
-    host: "dota2",
-    featureType: "damage_ability",
-    capabilityTags: ["damage", "伤害", "nuke", "burst"],
-    suggestedModuleIds: ["damage_data", "damage_effect"],
-    suggestedPatternIds: ["data.weighted_pool", "effect.modifier_applier"],
-    notes: ["Damage abilities typically use 2 modules", "Can combine with kv_entry for ability definition"],
-    maturity: "verified",
-    risks: ["Damage calculation and targeting need specification"],
-  },
-];
-
-function findRelevantExperiences(
-  featureLabel: string,
-  integrationPoints: IntegrationPointRegistry,
-  featureOwnership: FeatureOwnership
-): ExperienceReference[] {
-  const references: ExperienceReference[] = [];
-  const featureLabelLower = featureLabel.toLowerCase();
-  const pointKinds = integrationPoints.points.map(p => p.kind);
-  const surfaces = featureOwnership.expectedSurfaces;
-  
-  for (const exp of BUILTIN_EXPERIENCES) {
-    let matchScore = 0;
-    let matchReason = "";
-    
-    if (
-      exp.featureType &&
-      (exp.featureType.includes(featureLabelLower) || featureLabelLower.includes(exp.featureType))
-    ) {
-      matchScore += 3;
-      matchReason = "feature type match";
-    }
-    
-    for (const tag of exp.capabilityTags ?? []) {
-      if (pointKinds.some(p => p.includes(tag)) || surfaces.some(s => s.includes(tag))) {
-        matchScore += 1;
-        matchReason = "capability tag match";
-      }
-    }
-    
-    if (matchScore >= 1) {
-      references.push({
-        experienceId: exp.id,
-        reason: matchReason || `relevance score: ${matchScore}`,
-      });
-    }
-  }
-  
-  return references.slice(0, 3);
-}
 
 function identifyGapsAndFill(
   proposal: BlueprintProposal,
