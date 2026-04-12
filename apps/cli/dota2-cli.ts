@@ -25,20 +25,11 @@ import {
   FeatureWriteResult,
 } from "../../core/workspace/index.js";
 
-import { WritePlan, WritePlanEntry } from "../../adapters/dota2/assembler/index.js";
+import { WritePlan } from "../../adapters/dota2/assembler/index.js";
 import { generateCode } from "../../adapters/dota2/generator/index.js";
 import { generateAbilityKV } from "../../adapters/dota2/generator/kv/index.js";
 import { KVGeneratorInput } from "../../adapters/dota2/generator/kv/types.js";
-import {
-  executeWritePlan,
-  generateWriteReview,
-  WritePlan as ExecutorWritePlan,
-  WriteAction,
-  WriteExecutorOptions,
-  WriteReviewArtifact,
-  WriteResult,
-} from "../../adapters/dota2/executor/index.js";
-import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateKVContentWithIndex, generateCodeContent, validateHost, buildRuntimeValidationResult, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
+import { calculateFinalVerdict, buildDeferredEntriesInfo, buildGeneratorStage, computeAbilityName, generateCodeContent, validateHost, buildRuntimeValidationResult, performRollbackHostValidation, formatRuntimeValidationOutput, updateWorkspaceState } from "./helpers/index.js";
 import type { VerdictInput, HostValidationResult, RuntimeValidationResult, WorkspaceUpdateResult } from "./helpers/index.js";
 import { checkWriteConflicts } from "./helpers/governance-check.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
@@ -67,6 +58,7 @@ import {
   resolveExistingFeatureContext,
   resolvePatternsFromBlueprint,
 } from "./dota2/planning.js";
+import { executeWrite } from "./dota2/write-executor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -777,130 +769,4 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   artifact.finalVerdict = verdict;
 
   return artifact;
-}
-
-async function executeWrite(
-  writePlan: WritePlan,
-  options: Dota2CLIOptions,
-  stableFeatureId: string
-): Promise<{ result: WriteResult | null; review: WriteReviewArtifact | null }> {
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 6: Write Executor");
-  console.log("=".repeat(70));
-
-  // T115-R2: Filter out deferred entries - they should not become WriteActions
-  // Deferred entries remain in artifact/stats for traceability but don't generate files
-  const deferredEntries = writePlan.entries.filter((e) => e.deferred);
-  const executableEntries = writePlan.entries.filter((e) => !e.deferred);
-
-  if (deferredEntries.length > 0) {
-    console.log(`  ⚠️  Deferred entries (not executing): ${deferredEntries.length}`);
-    for (const entry of deferredEntries) {
-      console.log(`    - ${entry.sourcePattern}: ${entry.deferredReason || "Generator not yet implemented"}`);
-    }
-  }
-
-  // T118-R1: Aggregate KV entries by target file to avoid overwriting
-  // Multiple KV entries can target the same npc_abilities_custom.txt
-  const kvEntries = executableEntries.filter((e) => e.contentType === "kv");
-  const nonKvEntries = executableEntries.filter((e) => e.contentType !== "kv");
-
-  // Build aggregated KV actions if any KV entries exist
-  const kvActions: WriteAction[] = [];
-  if (kvEntries.length > 0) {
-    const kvEntriesByTarget = new Map<string, WritePlanEntry[]>();
-    for (const entry of kvEntries) {
-      const existing = kvEntriesByTarget.get(entry.targetPath) || [];
-      existing.push(entry);
-      kvEntriesByTarget.set(entry.targetPath, existing);
-    }
-
-    for (const [targetPath, entries] of kvEntriesByTarget) {
-      // T118-R2: Generate unique ability names for each entry by adding index suffix
-      // T121-R6-R1: Also generate Lua wrapper for each ability_lua entry
-      // T125-R4: REMOVED - old KV-side lua wrapper generation removed.
-      // The normal pipeline now produces proper lua entries via Pattern.outputTypes.
-      // Lua abilities generated from normal pipeline carry full metadata and
-      // generate complete ability+modifier code (generateLuaAbilityCode).
-      // This old wrapper path is superseded and kept only as a compat fallback
-      // if any legacy code still references it. It does NOT use pattern metadata.
-      const combinedContent = entries.map((e, idx) => {
-        return generateKVContentWithIndex(e, idx);
-      }).join("\n\n");
-      const aggregatedDescription = `KV aggregation: ${entries.length} abilities -> ${targetPath}`;
-      console.log(`  [KV] Aggregated ${entries.length} entries into ${targetPath}`);
-      kvActions.push({
-        type: "create",
-        targetPath,
-        content: combinedContent,
-        rwOwned: true,
-        description: aggregatedDescription,
-      });
-    }
-  }
-
-  // Non-KV actions are generated individually
-  const nonKvActions: WriteAction[] = nonKvEntries.map((entry) => ({
-    type: entry.operation === "create" ? "create" : "refresh",
-    targetPath: entry.targetPath,
-    content: generateCodeContent(entry),
-    rwOwned: true,
-    description: entry.contentSummary,
-  }));
-
-  const actions: WriteAction[] = [...nonKvActions, ...kvActions];
-
-  // T118-R2: Compute file lists from aggregated actions, not from raw executableEntries
-  // This ensures KV targets appear once even if multiple KV entries were aggregated
-  const executorPlan: ExecutorWritePlan = {
-    featureId: stableFeatureId,
-    actions,
-    filesToCreate: actions
-      .filter((a) => a.type === "create")
-      .map((a) => a.targetPath),
-    filesToModify: actions
-      .filter((a) => a.type === "refresh")
-      .map((a) => a.targetPath),
-    readyForHostWrite: writePlan.readyForHostWrite,
-    readinessBlockers: writePlan.readinessBlockers,
-  };
-
-  const executorOptions: WriteExecutorOptions = {
-    hostRoot: options.hostRoot,
-    dryRun: options.dryRun || !options.write,
-    force: options.force,
-  };
-
-  const review = generateWriteReview(executorPlan, executorOptions);
-  console.log(`  Write Review:`);
-  console.log(`    Ready to execute: ${review.readyToExecute}`);
-  console.log(`    Files to create: ${review.filesToCreate.length}`);
-  console.log(`    Blockers: ${review.blockers.length}`);
-
-  if (!options.write && !options.dryRun) {
-    console.log(`\n  ℹ️  Running in dry-run mode (use --write to actually write files)`);
-  }
-
-  const result = await executeWritePlan(executorPlan, executorOptions);
-
-  console.log(`\n  Execution Result:`);
-  console.log(`    Success: ${result.success}`);
-
-  if (result.blockedByReadinessGate) {
-    console.log(`    ⚠️  Blocked by Readiness Gate: ${result.readinessBlockers?.join(", ")}`);
-    console.log(`    (Use --force to override)`);
-  }
-
-  console.log(`    Executed: ${result.executed.length}`);
-  console.log(`    Skipped: ${result.skipped.length}`);
-  console.log(`    Failed: ${result.failed.length}`);
-
-  if (result.createdFiles.length > 0 && options.verbose) {
-    console.log(`    Created Files:`);
-    for (const f of result.createdFiles) {
-      console.log(`      - ${f}`);
-    }
-  }
-
-  return { result, review };
 }
