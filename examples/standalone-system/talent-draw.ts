@@ -312,23 +312,26 @@ export const talentDrawAssemblyPlan: AssemblyPlan = {
   version: "0.1",
   blueprintId: "talent_draw_system",
   host: { id: "dota2", mode: "mvp" },
-  resolvedPatterns: [
+  selectedPatterns: [
     {
       moduleId: "mod_input_f4",
       patternId: "input.key_binding",
-      params: { key: "F4", eventName: "OnTalentDraw" },
+      role: "F4_key_trigger",
+      parameters: { key: "F4", eventName: "OnTalentDraw" },
       priority: "required",
     },
     {
       moduleId: "mod_draw_resource",
       patternId: "resource.basic_pool",
-      params: { max: 3, regenRate: 1, regenInterval: "per_round" },
+      role: "draw_count_tracker",
+      parameters: { max: 3, regenRate: 1, regenInterval: "per_round" },
       priority: "required",
     },
     {
       moduleId: "mod_talent_pool",
       patternId: "data.weighted_pool",
-      params: { 
+      role: "talent_pool_data",
+      parameters: { 
         tiers: ["R", "SR", "SSR", "UR"],
         weights: { R: 50, SR: 30, SSR: 15, UR: 5 },
         choiceCount: 3,
@@ -338,29 +341,33 @@ export const talentDrawAssemblyPlan: AssemblyPlan = {
     {
       moduleId: "mod_draw_flow",
       patternId: "rule.selection_flow",
-      params: { choiceCount: 3, allowReroll: false },
+      role: "selection_flow_logic",
+      parameters: { choiceCount: 3, allowReroll: false },
       priority: "required",
     },
     {
       moduleId: "mod_draw_modal",
       patternId: "ui.selection_modal",
-      params: { layout: "horizontal", cardCount: 3 },
+      role: "selection_modal_ui",
+      parameters: { layout: "horizontal", cardCount: 3 },
       priority: "required",
     },
     {
       moduleId: "mod_draw_count_bar",
       patternId: "ui.resource_bar",
-      params: { color: "#4d8cff", showMax: true },
+      role: "draw_count_bar",
+      parameters: { color: "#4d8cff", showMax: true },
       priority: "required",
     },
     {
       moduleId: "mod_f4_hint",
       patternId: "ui.key_hint",
-      params: { key: "F4" },
+      role: "F4_key_hint",
+      parameters: { key: "F4" },
       priority: "optional",
     },
   ],
-  generatedTargets: [
+  writeTargets: [
     {
       kind: "code",
       targetId: "dota2.server.draw_system",
@@ -420,7 +427,7 @@ export function runExample(): ExampleResult {
   console.log(`   UI界面: ${talentDrawBlueprint.uiPlan?.requiredSurfaces.length || 0} 个`);
 
   console.log("\n📦 AssemblyPlan:");
-  console.log(`   Pattern 绑定数: ${talentDrawAssemblyPlan.resolvedPatterns.length}`);
+  console.log(`   Pattern 绑定数: ${talentDrawAssemblyPlan.selectedPatterns.length}`);
 
   console.log("\n🔍 Dota2 宿主验证:");
   const validation = validateDota2AssemblyPlan(talentDrawAssemblyPlan);

@@ -1,5 +1,13 @@
 # Blueprint Pattern Resolution
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: understanding Blueprint-to-pattern resolution behavior
+> Do not use for: current product status, current module-need seam authority, or final pattern selection by itself
+
 ## 目的
 
 定义从 `Blueprint` 到 `SelectedPattern[]` 的解析规则，建立编排设计到 Pattern 选型的最小链路。

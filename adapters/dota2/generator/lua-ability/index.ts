@@ -189,13 +189,17 @@ function ${modName}.prototype:OnIntervalThink(self)
     -- NOT self:GetCaster() (who cast the ability).
     -- For no-target self-DOT: parent = caster (correct self-damage).
     -- For targeted DOT: parent = target (correct enemy damage).
+    local caster = self:GetCaster()
     local target = self:GetParent()
     local ability = self:GetAbility()
+    if not caster or caster:IsNull() then return end
     if not target or target:IsNull() then return end
-    if not ability or ability:IsNull() then return end
+    if not target:IsAlive() then return end
+    if target:IsInvulnerable() then return end
+    if target:IsMagicImmune() then return end
     local damage_table = {
         victim = target,
-        attacker = self:GetCaster(),
+        attacker = caster,
         ability = ability,
         damage = ${damage},
         damage_type = DAMAGE_TYPE_MAGICAL,

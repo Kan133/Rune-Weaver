@@ -1,5 +1,13 @@
 # UIDesignSpec -> Template Mapping
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning how future `UIDesignSpec` fields could influence template output
+> Do not use for: current shipped UI baseline, current host UI authority, or proof that UIDesignSpec is already baseline truth
+
 ## 1. 文档目的
 
 定义 `UIDesignSpec` 字段如何真实影响 UI 模板输出。
@@ -12,6 +20,8 @@
 ---
 
 ## 2. 映射总览
+
+Runtime safety has priority over visual mapping. If a `UIDesignSpec` mapping would violate [UI-SAFER-PROFILE.md](./hosts/dota2/UI-SAFER-PROFILE.md), the safer profile wins.
 
 | UIDesignSpec 字段 | 影响目标 | 映射方式 |
 |------------------|----------|----------|

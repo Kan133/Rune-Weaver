@@ -9,6 +9,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname, basename } from "path";
 import {
+  DOTA2_X_TEMPLATE_HOST_KIND,
+  UNKNOWN_HOST_KIND,
+} from "../host/types.js";
+import {
   RuneWeaverWorkspace,
   RuneWeaverFeatureRecord,
   WorkspaceStateResult,
@@ -21,23 +25,50 @@ import {
 const WORKSPACE_FILE_NAME = "rune-weaver.workspace.json";
 const CURRENT_VERSION = "0.1";
 
+// F011: Workspace file is located in game/scripts/src/rune_weaver/
+const WORKSPACE_RELATIVE_PATH = "game/scripts/src/rune_weaver";
+
 export function getWorkspaceFilePath(hostRoot: string): string {
-  return join(hostRoot, WORKSPACE_FILE_NAME);
+  return join(hostRoot, WORKSPACE_RELATIVE_PATH, WORKSPACE_FILE_NAME);
 }
 
 export function workspaceExists(hostRoot: string): boolean {
   return existsSync(getWorkspaceFilePath(hostRoot));
 }
 
-export function createEmptyWorkspace(hostRoot: string): RuneWeaverWorkspace {
-  const addonName = basename(hostRoot);
-  const now = new Date().toISOString();
+/**
+ * Read addon_name from scripts/addon.config.ts
+ * Returns null if file doesn't exist or addon_name cannot be parsed
+ */
+function readAddonNameFromConfig(projectPath: string): string | null {
+  try {
+    const configPath = join(projectPath, "scripts/addon.config.ts");
+    if (!existsSync(configPath)) return null;
+    
+    const content = readFileSync(configPath, "utf-8");
+    const match = content.match(/let\s+addon_name(?::\s*\w+)?\s*=\s*['"]([^'"]+)['"]/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
 
+export function createEmptyWorkspace(
+  hostRoot: string, 
+  mapName?: string,
+  addonName?: string
+): RuneWeaverWorkspace {
+  if (!addonName) {
+    addonName = readAddonNameFromConfig(hostRoot) || basename(hostRoot);
+  }
+  
+  const now = new Date().toISOString();
   return {
     version: CURRENT_VERSION,
-    hostType: "dota2-x-template",
+    hostType: DOTA2_X_TEMPLATE_HOST_KIND,
     hostRoot,
     addonName,
+    mapName,
     initializedAt: now,
     features: [],
   };
@@ -156,7 +187,8 @@ export function checkDuplicateFeature(
 export function addFeatureToWorkspace(
   workspace: RuneWeaverWorkspace,
   result: FeatureWriteResult,
-  intentKind: string
+  intentKind: string,
+  integrationPoints?: string[]
 ): RuneWeaverWorkspace {
   const now = new Date().toISOString();
 
@@ -169,6 +201,8 @@ export function addFeatureToWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
+    integrationPoints,
+    gapFillBoundaries: result.gapFillBoundaries,
     createdAt: now,
     updatedAt: now,
   };
@@ -183,7 +217,8 @@ export function updateFeatureInWorkspace(
   workspace: RuneWeaverWorkspace,
   featureId: string,
   result: FeatureWriteResult,
-  intentKind: string
+  intentKind: string,
+  integrationPoints?: string[]
 ): RuneWeaverWorkspace {
   const existing = findFeatureById(workspace, featureId);
   if (!existing) {
@@ -201,6 +236,8 @@ export function updateFeatureInWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
+    integrationPoints: integrationPoints || existing.integrationPoints,
+    gapFillBoundaries: result.gapFillBoundaries || existing.gapFillBoundaries,
     updatedAt: now,
   };
 
@@ -209,6 +246,25 @@ export function updateFeatureInWorkspace(
     features: workspace.features.map((feature) =>
       feature.featureId === featureId ? updatedFeature : feature
     ),
+  };
+}
+
+export function deleteFeature(
+  workspace: RuneWeaverWorkspace,
+  featureId: string
+): { success: boolean; issues: string[]; workspace?: RuneWeaverWorkspace } {
+  const existing = findFeatureById(workspace, featureId);
+  if (!existing) {
+    return { success: false, issues: [`Feature '${featureId}' does not exist in workspace`] };
+  }
+
+  return {
+    success: true,
+    issues: [],
+    workspace: {
+      ...workspace,
+      features: workspace.features.filter((f) => f.featureId !== featureId),
+    },
   };
 }
 
@@ -269,7 +325,7 @@ function validateWorkspaceStructure(workspace: unknown): workspace is RuneWeaver
 
   return (
     typeof w.version === "string" &&
-    w.hostType === "dota2-x-template" &&
+    typeof w.hostType === "string" &&
     typeof w.hostRoot === "string" &&
     typeof w.addonName === "string" &&
     typeof w.initializedAt === "string" &&
@@ -286,12 +342,13 @@ function validateWorkspaceStructure(workspace: unknown): workspace is RuneWeaver
  */
 function normalizeWorkspace(rawWorkspace: unknown): RuneWeaverWorkspace {
   const raw = rawWorkspace as Record<string, unknown>;
-  
+
   const workspace: RuneWeaverWorkspace = {
     version: (raw.version as string) || CURRENT_VERSION,
-    hostType: (raw.hostType as "dota2-x-template") || "dota2-x-template",
+    hostType: typeof raw.hostType === "string" ? raw.hostType : UNKNOWN_HOST_KIND,
     hostRoot: (raw.hostRoot as string) || "",
     addonName: (raw.addonName as string) || "",
+    mapName: (raw.mapName as string) || undefined,
     initializedAt: (raw.initializedAt as string) || new Date().toISOString(),
     features: [],
   };
@@ -320,6 +377,9 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
     selectedPatterns: (raw.selectedPatterns as string[]) || [],
     generatedFiles,
     entryBindings: normalizeEntryBindings(raw.entryBindings, generatedFiles),
+    integrationPoints: (raw.integrationPoints as string[]) || undefined,
+    gapFillBoundaries: (raw.gapFillBoundaries as string[]) || undefined,
+    dependsOn: (raw.dependsOn as string[]) || undefined,
     createdAt: (raw.createdAt as string) || now,
     updatedAt: (raw.updatedAt as string) || now,
   };

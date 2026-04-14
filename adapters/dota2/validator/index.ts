@@ -9,6 +9,8 @@ import { AssemblyPlan, ValidationIssue, SelectedPattern } from "../../../core/sc
 import { dota2Patterns, Dota2PatternMeta } from "../patterns";
 
 export * from "./runtime-validator";
+export * from "./post-generation-validator.js";
+export * from "./post-generation-repair.js";
 
 export interface Dota2ValidationResult {
   valid: boolean;

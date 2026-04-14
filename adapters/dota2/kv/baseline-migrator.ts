@@ -133,25 +133,37 @@ function buildDOTAAbilitiesEntry(ability: ParsedAbilityBlock): string {
 }
 
 function wrapInDOTAAbilities(abilityBlocks: string[], existingContent: string): string {
-  let existingAbilities = parseExistingDOTAAbilities(existingContent);
-
-  if (existingAbilities.length === 0 && existingContent.trim().length > 0) {
-    existingAbilities = parseUnwrappedAbilities(existingContent);
-  }
-
-  const existingNames = new Set(existingAbilities.map(a => a.name));
-  const mergedBlocks: string[] = [];
-
-  for (const block of existingAbilities) {
-    mergedBlocks.push(block.kvText);
-  }
-
-  for (const block of abilityBlocks) {
+  const normalizedBlocks = abilityBlocks.filter((block) => {
     const nameMatch = block.match(/^"([^"]+)"/);
-    if (nameMatch && !existingNames.has(nameMatch[1])) {
-      mergedBlocks.push(block);
+    if (!nameMatch?.[1]) {
+      return false;
+    }
+    const escapedName = nameMatch[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return !new RegExp(`"${escapedName}"\\s*\\{`).test(existingContent);
+  });
+
+  if (existingContent.includes('"DOTAAbilities"')) {
+    if (normalizedBlocks.length === 0) {
+      return existingContent;
+    }
+
+    const insertIndex = existingContent.lastIndexOf("}");
+    if (insertIndex >= 0) {
+      const insertion = normalizedBlocks
+        .map((block) =>
+          block
+            .split("\n")
+            .map((line) => `\t${line}`)
+            .join("\n")
+        )
+        .join("\n\n");
+      return `${existingContent.slice(0, insertIndex).trimEnd()}\n\n${insertion}\n${existingContent.slice(insertIndex)}`;
     }
   }
+
+  const mergedBlocks = normalizedBlocks.length > 0
+    ? normalizedBlocks
+    : abilityBlocks;
 
   let result = '"DOTAAbilities"\n{\n';
   for (const block of mergedBlocks) {
@@ -175,39 +187,27 @@ function parseUnwrappedAbilities(content: string): ParsedAbilityBlock[] {
   for (const rawLine of lines) {
     const line = stripComments(rawLine).trim();
 
-    if (line === "{") {
-      depth++;
-      if (depth === 1 && currentAbility !== null) {
-        currentAbility.lines.push("{");
-      }
-      continue;
-    }
-
-    if (line === "}") {
-      depth--;
-      if (depth === 0 && currentAbility !== null) {
-        currentAbility.lines.push("}");
-        abilities.push({
-          name: currentAbility.name,
-          kvText: currentAbility.lines.join("\n"),
-        });
-        currentAbility = null;
-      } else if (currentAbility !== null) {
-        currentAbility.lines.push("}");
-      }
-      continue;
-    }
-
     if (depth === 0 && line.startsWith('"') && !line.includes("=")) {
       const nameMatch = line.match(/^"([^"]+)"$/);
-      if (nameMatch) {
+      if (nameMatch && nameMatch[1] !== "DOTAAbilities") {
         currentAbility = { name: nameMatch[1], lines: [`"${nameMatch[1]}"`] };
       }
       continue;
     }
 
-    if (currentAbility !== null && depth >= 1) {
+    if (currentAbility !== null) {
       currentAbility.lines.push(rawLine);
+    }
+
+    depth += countChar(rawLine, "{");
+    depth -= countChar(rawLine, "}");
+
+    if (currentAbility !== null && depth === 0) {
+      abilities.push({
+        name: currentAbility.name,
+        kvText: currentAbility.lines.join("\n"),
+      });
+      currentAbility = null;
     }
   }
 
@@ -224,7 +224,7 @@ function parseExistingDOTAAbilities(content: string): ParsedAbilityBlock[] {
   let currentAbility: { name: string; lines: string[] } | null = null;
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    const line = stripComments(rawLine).trim();
 
     if (!inDOTAAbilities) {
       if (line === '"DOTAAbilities"') {
@@ -233,40 +233,45 @@ function parseExistingDOTAAbilities(content: string): ParsedAbilityBlock[] {
       continue;
     }
 
-    if (line === "{") {
-      braceDepth++;
+    if (!currentAbility && braceDepth === 0 && line === "{") {
+      braceDepth += 1;
       continue;
     }
 
-    if (line === "}") {
-      braceDepth--;
-      if (braceDepth === 0) {
-        break;
-      }
-      if (braceDepth === 1 && currentAbility !== null) {
-        abilities.push({
-          name: currentAbility.name,
-          kvText: currentAbility.lines.join("\n"),
-        });
-        currentAbility = null;
-        continue;
-      }
-    }
-
-    if (braceDepth === 1 && line.startsWith('"') && !line.includes("=")) {
+    if (currentAbility === null && braceDepth === 1 && line.startsWith('"') && !line.includes("=")) {
       const nameMatch = line.match(/^"([^"]+)"$/);
-      if (nameMatch) {
+      if (nameMatch && nameMatch[1] !== "DOTAAbilities") {
         currentAbility = { name: nameMatch[1], lines: [`"${nameMatch[1]}"`] };
         continue;
       }
     }
 
-    if (currentAbility !== null && braceDepth >= 2) {
+    if (currentAbility !== null) {
       currentAbility.lines.push(rawLine);
+    }
+
+    braceDepth += countChar(rawLine, "{");
+    braceDepth -= countChar(rawLine, "}");
+
+    if (braceDepth === 1 && currentAbility !== null) {
+      abilities.push({
+        name: currentAbility.name,
+        kvText: currentAbility.lines.join("\n"),
+      });
+      currentAbility = null;
+      continue;
+    }
+
+    if (inDOTAAbilities && braceDepth === 0) {
+      break;
     }
   }
 
   return abilities;
+}
+
+function countChar(value: string, needle: string): number {
+  return value.split(needle).length - 1;
 }
 
 export function migrateBaselineAbilities(input: BaselineMigrationInput): BaselineMigrationResult {

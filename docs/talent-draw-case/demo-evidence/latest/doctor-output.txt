@@ -1,0 +1,76 @@
+
+> rune-weaver@0.1.0 cli
+> tsx apps/cli/index.ts dota2 doctor --host D:\RN
+
+======================================================================
+Rune Weaver - Runtime Doctor
+======================================================================
+
+Host: D:\RN
+Mode: Read-only health check (safe)
+
+----------------------------------------------------------------------
+Check Results
+----------------------------------------------------------------------
+
+[PASS] Addon Config
+   addon_name: "rn"
+
+[PASS] Dota Directories
+   game/ and content/ outputs exist for "rn"
+      - game -> E:\Steam\steamapps\common\dota 2 beta\game\dota_addons\x_template
+      - content -> E:\Steam\steamapps\common\dota 2 beta\content\dota_addons\x_template
+
+[PASS] Package Scripts
+   Found 3/3 key scripts
+
+[PASS] Rune Weaver Workspace
+   Workspace exists (1 features)
+      - workspace.hostRoot: D:\RN
+      - workspace.addonName: rn
+      - active features: 1
+      - gap-fill ready features: 1
+
+[PASS] Post-Generation Validation
+   All 9 checks passed
+
+[PASS] Runtime Assets
+   Bridge entry files and generated asset roots exist
+
+[PASS] Runtime Bridge Wiring
+   Server and Panorama bridge entry points are wired
+
+[WARN] Host Build Artifacts
+   2 build artifacts are missing or stale
+      Fix: Run yarn dev in the host so Panorama rebuilds the missing HUD artifacts.
+      - Missing: game/panorama/layout/custom_game/hud/script.js
+      - Missing: game/panorama/layout/custom_game/hud/styles.css
+      - Fix: run yarn dev in the host before launching Dota2.
+
+[PASS] Gap Fill Boundaries
+   All 3 Dota2 gap-fill anchor files declare boundary exports and markers
+
+----------------------------------------------------------------------
+Overall Status
+----------------------------------------------------------------------
+WARN
+
+Action Summary: Rebuild host scripts and Panorama assets
+Reason: The host is missing compiled build artifacts needed at runtime.
+Command: cd D:\RN && yarn dev
+
+Next Command: cd D:\RN && yarn dev
+
+----------------------------------------------------------------------
+Next Steps
+----------------------------------------------------------------------
+  - Compile host assets: cd <host> && yarn dev
+
+Suggested Commands
+----------------------------------------------------------------------
+  - npm run cli -- dota2 init --host D:\RN --addon-name RN
+  - npm run cli -- dota2 repair --host D:\RN --safe
+  - cd D:\RN && yarn dev
+  - cd D:\RN && yarn launch RN temp
+
+======================================================================

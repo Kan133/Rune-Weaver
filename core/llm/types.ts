@@ -59,6 +59,7 @@ export interface OpenAICompatibleConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  timeoutMs?: number;
 }
 
 export interface AnthropicConfig {

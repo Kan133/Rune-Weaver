@@ -14,6 +14,7 @@
 
 import type { Blueprint, AssemblyPlan } from "../../../core/schema/types.js";
 import type { WritePlan, WritePlanEntry } from "../../../adapters/dota2/assembler/index.js";
+import type { WriteResult } from "../../../adapters/dota2/executor/write-executor.js";
 import {
   initializeWorkspace,
   saveWorkspace,
@@ -25,7 +26,8 @@ import {
   RuneWeaverFeatureRecord,
   FeatureWriteResult,
 } from "../../../core/workspace/index.js";
-import { refreshBridge } from "../../../adapters/dota2/bridge/index.js";
+import { injectHostEntryBridge, refreshBridge } from "../../../adapters/dota2/bridge/index.js";
+import { resolveDota2GapFillBoundaryIdsForPatterns } from "../../../adapters/dota2/gap-fill/boundaries.js";
 
 export type FeatureMode = "create" | "update" | "regenerate";
 
@@ -36,6 +38,34 @@ export interface WorkspaceUpdateResult {
   error?: string;
 }
 
+/**
+ * Extract integration points from WritePlan
+ * Integration points are identifiers for shared resources like key bindings
+ */
+function extractIntegrationPointsFromWritePlan(writePlan: WritePlan): string[] {
+  const points: string[] = [];
+  
+  // Add explicit integration points from writePlan
+  if (writePlan.integrationPoints) {
+    points.push(...writePlan.integrationPoints);
+  }
+  
+  // Extract triggerKey from writePlan.entries for key_binding patterns
+  for (const entry of writePlan.entries) {
+    const triggerKey =
+      entry.parameters?.triggerKey ||
+      entry.parameters?.key ||
+      entry.metadata?.triggerKey ||
+      entry.metadata?.key;
+    if (triggerKey && entry.sourcePattern === "input.key_binding") {
+      points.push(`input.key_binding:${triggerKey}`);
+    }
+  }
+  
+  // Deduplicate
+  return [...new Set(points)];
+}
+
 export function updateWorkspaceState(
   hostRoot: string,
   blueprint: Blueprint,
@@ -43,7 +73,8 @@ export function updateWorkspaceState(
   writePlan: WritePlan,
   mode: FeatureMode,
   featureId: string,
-  existingFeature: RuneWeaverFeatureRecord | null
+  existingFeature: RuneWeaverFeatureRecord | null,
+  writeResult?: WriteResult
 ): WorkspaceUpdateResult {
   const initResult = initializeWorkspace(hostRoot);
   if (!initResult.success) {
@@ -90,13 +121,19 @@ export function updateWorkspaceState(
   }
 
   const entryBindings = extractEntryBindings(assemblyPlan.bridgeUpdates);
-  const executableEntries = writePlan.entries.filter((e: WritePlanEntry) => !e.deferred);
-  const kvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType === "kv");
-  const nonKvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType !== "kv");
-  const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e: WritePlanEntry) => e.targetPath));
-  const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
-  const nonKvFilesForWs = nonKvEntriesForWs.map((e: WritePlanEntry) => e.targetPath);
-  const generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
+
+  let generatedFiles: string[];
+  if (writeResult && writeResult.success) {
+    generatedFiles = [...writeResult.createdFiles, ...writeResult.modifiedFiles];
+  } else {
+    const executableEntries = writePlan.entries.filter((e: WritePlanEntry) => !e.deferred);
+    const kvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType === "kv");
+    const nonKvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType !== "kv");
+    const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e: WritePlanEntry) => e.targetPath));
+    const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
+    const nonKvFilesForWs = nonKvEntriesForWs.map((e: WritePlanEntry) => e.targetPath);
+    generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
+  }
 
   const featureResult: FeatureWriteResult = {
     featureId,
@@ -104,13 +141,20 @@ export function updateWorkspaceState(
     selectedPatterns: assemblyPlan.selectedPatterns.map((p) => p.patternId),
     generatedFiles,
     entryBindings,
+    gapFillBoundaries: resolveDota2GapFillBoundaryIdsForPatterns(
+      assemblyPlan.selectedPatterns.map((p) => p.patternId)
+    ),
   };
 
   const intentKind = blueprint.sourceIntent.intentKind;
+  
+  // Extract integration points for conflict detection
+  const integrationPoints = extractIntegrationPointsFromWritePlan(writePlan);
+  
   const updatedWorkspace =
     mode === "create"
-      ? addFeatureToWorkspace(workspace, featureResult, intentKind)
-      : updateFeatureInWorkspace(workspace, featureId, featureResult, intentKind);
+      ? addFeatureToWorkspace(workspace, featureResult, intentKind, integrationPoints)
+      : updateFeatureInWorkspace(workspace, featureId, featureResult, intentKind, integrationPoints);
 
   const saveResult = saveWorkspace(hostRoot, updatedWorkspace);
   if (!saveResult.success) {
@@ -129,6 +173,16 @@ export function updateWorkspaceState(
       featureId,
       totalFeatures: updatedWorkspace.features.length,
       error: `Failed to refresh generated bridge indexes: ${bridgeRefresh.errors.join(", ")}`,
+    };
+  }
+
+  const hostEntryInjection = injectHostEntryBridge(hostRoot);
+  if (!hostEntryInjection.success) {
+    return {
+      success: false,
+      featureId,
+      totalFeatures: updatedWorkspace.features.length,
+      error: `Failed to inject host bridge entries: ${hostEntryInjection.errors.join(", ")}`,
     };
   }
 

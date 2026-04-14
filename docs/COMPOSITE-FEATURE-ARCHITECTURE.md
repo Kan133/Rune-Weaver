@@ -1,5 +1,13 @@
 # Composite Feature Architecture
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning future composite-feature architecture beyond the current MVP baseline
+> Do not use for: current shipped architecture, current lifecycle scope, or current module-need seam authority
+
 ## Purpose
 
 This document defines the next-stage architecture direction for Rune Weaver after the current Phase 1 baseline.

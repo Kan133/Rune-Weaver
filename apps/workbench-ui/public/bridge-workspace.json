@@ -1,0 +1,16 @@
+{
+  "workspace": {
+    "version": "0.1.0",
+    "hostType": "dota2-x-template",
+    "hostRoot": "D:\\testB",
+    "addonName": "talent_draw_demo",
+    "initializedAt": "2026-04-12T16:20:48.847Z",
+    "features": []
+  },
+  "_bridge": {
+    "exportedAt": "2026-04-13T06:05:11.805Z",
+    "exportedBy": "rune-weaver-cli",
+    "sourceHostRoot": "D:\\testB",
+    "version": "0.1"
+  }
+}

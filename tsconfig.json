@@ -18,11 +18,14 @@
   "include": [
     "core/**/*",
     "adapters/**/*",
-    "apps/**/*"
+    "apps/workbench/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "old"
+    "old",
+    "apps/workbench-ui",
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ]
 }

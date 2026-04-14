@@ -1,0 +1,26 @@
+*** Begin Patch
+*** Update File: apps/cli/dota2/commands/demo-runbook.ts
+@@
+   console.log("Summary");
+   console.log("-".repeat(70));
+@@
+   console.log(`  ${runbook.summary.total} total steps`);
+   console.log();
++  const nextStep = findNextActionStep(runbook);
++  console.log("Next Action");
++  console.log("-".repeat(70));
++  if (nextStep) {
++    console.log(`  ${nextStep.name}: ${nextStep.command ?? nextStep.action ?? "Review step details above"}`);
++  } else {
++    console.log("  All steps marked READY. Launch the host once doctor/validate run.");
++  }
++  console.log();
+   console.log("Recommended path");
+@@
+   console.log("  6. Launch the addon for manual proof");
+ }
++
++function findNextActionStep(runbook: DemoRunbook): RunbookStep | null {
++  return runbook.steps.find((step) => step.status !== "OK" && step.status !== "READY") ?? null;
++}
+*** End Patch

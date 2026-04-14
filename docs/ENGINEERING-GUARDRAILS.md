@@ -1,5 +1,13 @@
 # Engineering Guardrails
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: low-frequency
+> Last verified: 2026-04-14
+> Read when: evaluating whether an engineering change introduces architectural drift or glue-code sprawl
+> Do not use for: current milestone sequencing, host-specific policy, or planning future product layers by itself
+
 ## Purpose
 
 This document records the engineering guardrails that should keep Rune Weaver from degrading into a multi-layer glue-code mess.

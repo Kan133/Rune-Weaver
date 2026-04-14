@@ -1,0 +1,33 @@
+{
+  "featureId": "talent_draw_demo",
+  "revision": 1,
+  "selectedPatterns": [
+    "input.key_binding",
+    "data.weighted_pool",
+    "rule.selection_flow",
+    "ui.selection_modal",
+    "effect.modifier_applier"
+  ],
+  "generatedFiles": [
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
+    "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
+    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
+    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
+    "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
+    "game/scripts/npc/npc_abilities_custom.txt"
+  ],
+  "entryBindings": [
+    {
+      "target": "server",
+      "file": "game/scripts/src/modules/index.ts",
+      "kind": "import"
+    },
+    {
+      "target": "ui",
+      "file": "content/panorama/src/hud/script.tsx",
+      "kind": "mount"
+    }
+  ]
+}

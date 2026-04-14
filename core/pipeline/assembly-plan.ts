@@ -15,7 +15,6 @@ import {
   WriteTarget,
   BridgeUpdate,
   ValidationContract,
-  HostWriteReadiness,
   RealizationRole,
 } from "../schema/types";
 import { resolvePatterns, PatternResolutionResult, ResolvedPattern } from "../patterns/resolver";

@@ -1,5 +1,13 @@
 # Host Realization Contract
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: changing or reviewing Host Realization layer boundaries
+> Do not use for: current MVP completion truth, execution ordering, or host-specific policy by itself
+
 ## Purpose
 
 This document defines the contract for the Host Realization layer in Rune Weaver.

@@ -1,0 +1,96 @@
+
+> rune-weaver@0.1.0 cli
+> tsx apps/cli/index.ts dota2 demo prepare --host D:\RN --addon-name talent_draw_demo --map temp
+
+======================================================================
+Rune Weaver - Talent Draw Demo Preparation Runbook
+======================================================================
+
+Host: D:\RN
+Scenario: talent-draw
+Addon: talent_draw_demo
+Map: temp
+Mode: PLAN-ONLY (dry-run)
+
+Talent Draw Demo Preparation Runbook
+======================================================================
+
+[STEP 1] Fix addon.config name
+  Status: NEEDS_FIX
+  Action: Rename before yarn install: "rn" -> "talent_draw_demo"
+
+[STEP 2] Install dependencies
+  Status: OK
+  Action: node_modules exists
+
+[STEP 3] Verify addon install outputs
+  Status: OK
+  Action: game/ and content/ install outputs exist
+
+[STEP 4] Check package.json scripts
+  Status: OK
+  Action: All scripts present
+    postinstall script present
+    dev script present
+    launch script present
+
+[STEP 5] Run Rune Weaver init/write
+  Status: OK
+  Action: Workspace exists (1 features)
+
+[STEP 6] Write or refresh Talent Draw feature
+  Status: READY
+  Action: Ready to write or refresh the canonical Talent Draw demo feature
+  Command: npm run demo:talent-draw -- --host D:\RN --write --force
+
+[STEP 7] Build TypeScript and Panorama
+  Status: READY
+  Action: Ready to compile host scripts and UI
+  Command: yarn dev
+
+[STEP 8] Run Runtime Doctor
+  Status: READY
+  Action: Run after Rune Weaver write and yarn dev to catch runtime wiring issues
+  Command: npm run cli -- dota2 doctor --host D:\RN
+
+[STEP 9] Run Post-Generation Validate
+  Status: READY
+  Action: Validate generated KV/Lua/UI/index consistency
+  Command: npm run cli -- dota2 validate --host D:\RN
+
+[STEP 10] Launch Dota2
+  Status: READY
+  Action: After doctor and validate pass, launch the host
+  Command: yarn launch talent_draw_demo temp
+
+----------------------------------------------------------------------
+Summary
+----------------------------------------------------------------------
+  Action Summary: Fix addon.config name
+  Reason: Rename before yarn install: "rn" -> "talent_draw_demo"
+
+  Overall: ACTION_REQUIRED
+  9 steps ready
+  0 steps blocked
+  1 steps need manual action
+  10 total steps
+  Next focus: [STEP 1] Fix addon.config name
+
+Recommended path
+----------------------------------------------------------------------
+  1. Fix addon name before install if needed
+  2. Run yarn install
+  3. Run the feature write/refresh command
+  4. Run yarn dev
+  5. Run doctor, then validate
+  6. Launch the addon for manual proof
+
+Evidence capture
+----------------------------------------------------------------------
+  npm run demo:talent-draw:refresh -- --host D:\RN
+  npm run demo:talent-draw:lifecycle -- --host D:\RN --write
+
+======================================================================
+To execute safe operations, add --write flag
+Next likely command: npm run demo:talent-draw -- --host D:\RN --write --force
+======================================================================

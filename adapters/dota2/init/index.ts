@@ -5,12 +5,12 @@
  * 实现 `dota2 init --host D:\test1` 的最小闭环
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "fs";
 import { join, resolve, basename } from "path";
 import { execSync } from "child_process";
 import { scanDota2Project } from "../scanner";
 import { createInterface } from "readline";
-import { repairDotaTsAdapter } from "../bridge/index.js";
+import { ensureBridgeFiles, repairDotaTsAdapter, injectHostEntryBridge } from "../bridge/index.js";
 
 /**
  * 初始化结果
@@ -146,6 +146,82 @@ function createNamespaceDirectories(projectPath: string): string[] {
 }
 
 /**
+ * 扫描地图文件
+ * 
+ * 扫描 content/dota_addons/{addonName}/maps/ 目录下的 .vmap 文件
+ */
+function scanMapFiles(hostRoot: string, addonName: string): string[] {
+  const mapsDir = join(hostRoot, "content/dota_addons", addonName, "maps");
+  
+  if (!existsSync(mapsDir)) {
+    return [];
+  }
+  
+  try {
+    const files = readdirSync(mapsDir);
+    const vmapFiles = files
+      .filter(file => file.endsWith(".vmap"))
+      .map(file => file.replace(".vmap", ""));
+    
+    return vmapFiles;
+  } catch (error) {
+    console.error(`扫描地图目录失败: ${error}`);
+    return [];
+  }
+}
+
+/**
+ * 交互式选择地图
+ * 
+ * @param mapFiles 可用的地图文件列表（不含扩展名）
+ * @returns 用户选择的地图名称，或 undefined 表示跳过
+ */
+async function promptForMapSelection(mapFiles: string[]): Promise<string | undefined> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const ask = (prompt: string): Promise<string> => {
+    return new Promise((resolve) => {
+      rl.question(prompt, resolve);
+    });
+  };
+
+  console.log("\n检测到以下地图文件:");
+  mapFiles.forEach((map, index) => {
+    console.log(`  ${index + 1}. ${map}`);
+  });
+  console.log(`  0. 跳过（不设置默认地图）`);
+  console.log("\n请选择默认地图（输入序号）：\n");
+
+  let selection = "";
+  while (true) {
+    const input = await ask("> ");
+    selection = input.trim();
+    
+    // 跳过选项
+    if (selection === "0") {
+      rl.close();
+      console.log("已跳过地图选择");
+      return undefined;
+    }
+    
+    // 验证输入
+    const index = parseInt(selection, 10);
+    if (isNaN(index) || index < 1 || index > mapFiles.length) {
+      console.log(`❌ 无效输入，请输入 0-${mapFiles.length} 之间的数字`);
+      continue;
+    }
+    
+    rl.close();
+    const selectedMap = mapFiles[index - 1];
+    console.log(`✅ 已选择地图: ${selectedMap}`);
+    return selectedMap;
+  }
+}
+
+/**
  * 初始化宿主
  */
 export async function initDota2Host(options: InitOptions): Promise<InitResult> {
@@ -209,9 +285,24 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
   // 6. 创建命名空间目录
   result.createdDirectories = createNamespaceDirectories(options.hostPath);
 
-  // 7. 创建 workspace 文件
-  const workspaceContent = generateWorkspaceFile(finalAddonName, options.hostPath);
-  const workspacePath = join(options.hostPath, "rune-weaver.workspace.json");
+  // 7. 选择地图（可选）
+  let mapName: string | undefined;
+  const mapFiles = scanMapFiles(options.hostPath, finalAddonName);
+  
+  if (mapFiles.length > 0) {
+    mapName = await promptForMapSelection(mapFiles);
+    if (mapName) {
+      console.log(`已设置默认地图: ${mapName}`);
+    }
+  } else {
+    console.log("\n未检测到地图文件，跳过地图选择");
+    console.log("提示: 您可以稍后在 content/dota_addons/{addon_name}/maps/ 目录下添加地图文件");
+  }
+
+  // 8. 创建 workspace 文件
+  const workspaceContent = generateWorkspaceFile(finalAddonName, options.hostPath, mapName);
+  // F011: Workspace file is located in game/scripts/src/rune_weaver/
+  const workspacePath = join(options.hostPath, "game/scripts/src/rune_weaver", "rune-weaver.workspace.json");
   
   try {
     writeFileSync(workspacePath, JSON.stringify(workspaceContent, null, 2), "utf-8");
@@ -221,18 +312,31 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
     return result;
   }
 
-  // 8. 创建桥接文件（空壳）
-  createBridgeFiles(options.hostPath);
+  // 9. 创建桥接文件（空壳）
+  const ensureBridgeResult = ensureBridgeFiles(options.hostPath);
+  if (!ensureBridgeResult.success) {
+    result.errors.push(...ensureBridgeResult.errors);
+    return result;
+  }
 
   const adapterRepair = repairDotaTsAdapter(options.hostPath);
   if (!adapterRepair.success) {
     result.warnings.push(...adapterRepair.errors);
   }
 
+  // T149: 在 init 时注入宿主入口桥接
+  // 如果宿主入口文件不存在，给出 warning 但不 abort init
+  const injectionResult = injectHostEntryBridge(options.hostPath);
+  if (!injectionResult.success) {
+    for (const err of injectionResult.errors) {
+      result.warnings.push("宿主入口接线失败: " + err);
+    }
+  }
+
   result.success = true;
   result.initialized = true;
 
-  // 9. 调用 yarn install（可选）
+  // 10. 调用 yarn install（可选）
   if (!options.skipInstall) {
     console.log("\n📦 正在执行 yarn install...");
     try {
@@ -244,6 +348,8 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
     } catch (error) {
       result.warnings.push("yarn install 执行失败，请手动运行");
     }
+  } else {
+    result.warnings.push("已跳过 yarn install，可稍后单独执行");
   }
 
   return result;
@@ -289,8 +395,16 @@ async function promptForAddonName(defaultName: string): Promise<string> {
 /**
  * 生成 workspace 文件内容
  */
-function generateWorkspaceFile(addonName: string, hostPath: string) {
-  return {
+function generateWorkspaceFile(addonName: string, hostPath: string, mapName?: string) {
+  const workspace: {
+    version: string;
+    hostType: "dota2-x-template";
+    hostRoot: string;
+    addonName: string;
+    mapName?: string;
+    initializedAt: string;
+    features: never[];
+  } = {
     version: "0.1.0",
     hostType: "dota2-x-template",
     hostRoot: resolve(hostPath),
@@ -298,122 +412,13 @@ function generateWorkspaceFile(addonName: string, hostPath: string) {
     initializedAt: new Date().toISOString(),
     features: [],
   };
-}
-
-/**
- * 创建桥接文件
- * 
- * 遵循 HOST-INTEGRATION-DOTA2.md 的桥接策略:
- * - bridge 只做聚合与接线，不做业务
- * - 业务逻辑归 generated/*
- */
-function createBridgeFiles(projectPath: string): void {
-  // 1. 服务端桥接文件 - 暴露 activateRuneWeaverModules()
-  const serverBridgePath = join(
-    projectPath,
-    "game/scripts/src/rune_weaver/index.ts"
-  );
   
-  if (!existsSync(serverBridgePath)) {
-    const serverContent = `// Rune Weaver Server Bridge
-// This file is the entry point for Rune Weaver generated server modules
-// Bridge 只做聚合与接线，业务逻辑在 generated/server/ 中
-
-import { activateRwGeneratedServer } from "./generated/server";
-
-export function activateRuneWeaverModules(): void {
-  activateRwGeneratedServer();
-}
-`;
-    writeFileSync(serverBridgePath, serverContent, "utf-8");
-  } else {
-    const existingContent = readFileSync(serverBridgePath, "utf-8");
-    const correctContent = `// Rune Weaver Server Bridge
-// This file is the entry point for Rune Weaver generated server modules
-// Bridge 只做聚合与接线，业务逻辑在 generated/server/ 中
-
-import { activateRwGeneratedServer } from "./generated/server";
-
-export function activateRuneWeaverModules(): void {
-  activateRwGeneratedServer();
-}
-`;
-    if (!existingContent.includes("activateRwGeneratedServer")) {
-      console.warn("[Init] Server bridge has incorrect content, fixing...");
-      writeFileSync(serverBridgePath, correctContent, "utf-8");
-    }
+  // 只有在 mapName 有值时才添加到 workspace
+  if (mapName) {
+    workspace.mapName = mapName;
   }
-
-  // 2. 服务端 generated 索引文件
-  const serverGeneratedIndexPath = join(
-    projectPath,
-    "game/scripts/src/rune_weaver/generated/server/index.ts"
-  );
   
-  if (!existsSync(serverGeneratedIndexPath)) {
-    const serverGeneratedContent = `// Generated by Rune Weaver
-// Server modules index - 由 Rune Weaver 自动刷新
-
-export function activateRwGeneratedServer(): void {
-  // TODO: Import and register generated modules here
-  // 此文件由 Rune Weaver 在 feature 变更时自动刷新
-  console.log("[Rune Weaver] Generated server modules activated");
-}
-`;
-    writeFileSync(serverGeneratedIndexPath, serverGeneratedContent, "utf-8");
-  }
-
-  // 3. UI 桥接文件 - 暴露 RuneWeaverHUDRoot()
-  const uiBridgePath = join(
-    projectPath,
-    "content/panorama/src/rune_weaver/index.tsx"
-  );
-  
-  if (!existsSync(uiBridgePath)) {
-    const uiContent = `// Rune Weaver UI Bridge
-// This file is the entry point for Rune Weaver generated UI components
-// Bridge 只做聚合与接线，UI 组件在 generated/ui/ 中
-
-import React from "react";
-import { RuneWeaverGeneratedUIRoot } from "./generated/ui";
-
-export function RuneWeaverHUDRoot() {
-  return (
-    <Panel className="rune-weaver-root">
-      <RuneWeaverGeneratedUIRoot />
-    </Panel>
-  );
-}
-
-export default RuneWeaverHUDRoot;
-`;
-    writeFileSync(uiBridgePath, uiContent, "utf-8");
-  }
-
-  // 4. UI generated 索引文件
-  const uiGeneratedIndexPath = join(
-    projectPath,
-    "content/panorama/src/rune_weaver/generated/ui/index.tsx"
-  );
-  
-  if (!existsSync(uiGeneratedIndexPath)) {
-    const uiGeneratedContent = `// Generated by Rune Weaver
-// UI components index - 由 Rune Weaver 自动刷新
-
-import React from "react";
-
-export function RuneWeaverGeneratedUIRoot() {
-  return (
-    <Panel className="rune-weaver-generated-root">
-      {/* Generated UI components will be mounted here by Rune Weaver */}
-    </Panel>
-  );
-}
-
-export default RuneWeaverGeneratedUIRoot;
-`;
-    writeFileSync(uiGeneratedIndexPath, uiGeneratedContent, "utf-8");
-  }
+  return workspace;
 }
 
 /**
@@ -460,8 +465,12 @@ export function printInitResult(result: InitResult): void {
 
   if (result.success) {
     console.log("下一步:");
-    console.log("  1. 运行 `yarn install` 链接宿主到 Dota2");
-    console.log("  2. 运行 `yarn launch` 启动 Dota2 Tools");
+    if (result.warnings.includes("已跳过 yarn install，可稍后单独执行")) {
+      console.log("  1. 运行 `yarn install` 安装并链接宿主依赖");
+      console.log("  2. 运行 `yarn launch` 启动 Dota2 Tools");
+    } else {
+      console.log("  1. 运行 `yarn launch` 启动 Dota2 Tools");
+    }
     console.log();
   }
 

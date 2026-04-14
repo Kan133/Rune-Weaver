@@ -1,5 +1,13 @@
 # 结构化经验层约束框架（中文）
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future structured-experience-layer design or RAG/preset organization
+> Do not use for: current baseline contract authority, current host policy, or execution routing
+
 ## 目的
 
 本文档用于明确 Rune Weaver 中 `case / feature / preset / example / pattern 经验层` 的组织边界，避免在 Phase 2 / Phase 3 推进过程中把经验资产做成：

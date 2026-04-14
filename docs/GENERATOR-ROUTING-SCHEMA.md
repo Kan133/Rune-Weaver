@@ -1,5 +1,13 @@
 # Generator Routing Schema
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: checking the current generator-routing data shape
+> Do not use for: proof that every routing detail is fully integrated, milestone status, or generator policy by itself
+
 ## Purpose
 
 This document defines the minimal schema for generator routing in Rune Weaver.

@@ -1,5 +1,13 @@
 # HostRealizationPlan Schema
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: checking the current `HostRealizationPlan` data shape
+> Do not use for: proof that every field is populated today, current milestone status, or host authority by itself
+
 ## Purpose
 
 This document defines the initial schema shape for `HostRealizationPlan`.

@@ -128,9 +128,9 @@ UI Pattern Strategy 收口。
 Dota2 UI Adapter Template 收口。
 
 完成内容：
-- 编写 [DOTA2-UI-TEMPLATE-SCOPE.md](/D:/Rune%20Weaver/docs/DOTA2-UI-TEMPLATE-SCOPE.md)
+- 编写 [DOTA2-UI-TEMPLATE-SCOPE.md](/D:/Rune%20Weaver/archive/docs/2026-04-mvp-reset/DOTA2-UI-TEMPLATE-SCOPE.md)
 - 编写 [UIDESIGNSPEC-TO-TEMPLATE-MAPPING.md](/D:/Rune%20Weaver/docs/UIDESIGNSPEC-TO-TEMPLATE-MAPPING.md)
-- 编写 [DOTA2-UI-ADAPTER-IMPLEMENTATION-NOTES.md](/D:/Rune%20Weaver/docs/DOTA2-UI-ADAPTER-IMPLEMENTATION-NOTES.md)
+- 编写 [DOTA2-UI-ADAPTER-IMPLEMENTATION-NOTES.md](/D:/Rune%20Weaver/archive/docs/2026-04-mvp-reset/DOTA2-UI-ADAPTER-IMPLEMENTATION-NOTES.md)
 - 定义 3 个核心 UI pattern 的 TSX / LESS 模板边界
 - 定义 `UIDesignSpec` 的规则化映射
 

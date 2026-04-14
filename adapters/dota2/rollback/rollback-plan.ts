@@ -14,6 +14,7 @@ export interface RollbackPlan {
   featureId: string;
   currentRevision: number;
   filesToDelete: string[];
+  abilityNamesToRemove: string[];
   bridgeEffectsToRefresh: string[];
   ownershipValid: boolean;
   safetyIssues: string[];
@@ -28,6 +29,7 @@ export interface RollbackValidationResult {
 
 const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
+  "game/scripts/vscripts/rune_weaver/",
   "content/panorama/src/rune_weaver/",
 ];
 
@@ -44,6 +46,7 @@ export function generateRollbackPlan(
   const currentRevision = feature.revision;
 
   const filesToDelete: string[] = [];
+  const abilityNamesToRemove: string[] = [];
   const bridgeEffectsToRefresh: string[] = [];
 
   for (const filePath of feature.generatedFiles) {
@@ -51,6 +54,11 @@ export function generateRollbackPlan(
       if (!isBridgePoint(filePath)) {
         filesToDelete.push(filePath);
       }
+    }
+
+    const abilityName = extractAbilityName(filePath);
+    if (abilityName && !abilityNamesToRemove.includes(abilityName)) {
+      abilityNamesToRemove.push(abilityName);
     }
   }
 
@@ -83,6 +91,7 @@ export function generateRollbackPlan(
     featureId: feature.featureId,
     currentRevision,
     filesToDelete,
+    abilityNamesToRemove,
     bridgeEffectsToRefresh,
     ownershipValid: ownershipValidation.valid,
     safetyIssues,
@@ -180,6 +189,15 @@ export function formatRollbackPlan(plan: RollbackPlan): string {
     }
   }
 
+  lines.push("", "--- Ability Blocks to Remove ---");
+  if (plan.abilityNamesToRemove.length === 0) {
+    lines.push("  (none)");
+  } else {
+    for (const abilityName of plan.abilityNamesToRemove) {
+      lines.push(`  - ${abilityName}`);
+    }
+  }
+
   lines.push("", "--- Bridge Effects to Refresh ---");
   if (plan.bridgeEffectsToRefresh.length === 0) {
     lines.push("  (none)");
@@ -203,4 +221,10 @@ export function formatRollbackPlan(plan: RollbackPlan): string {
   lines.push("", "=".repeat(70));
 
   return lines.join("\n");
+}
+
+function extractAbilityName(filePath: string): string | null {
+  const normalized = filePath.replace(/\\/g, "/");
+  const match = normalized.match(/game\/scripts\/vscripts\/rune_weaver\/abilities\/([^/]+)\.lua$/);
+  return match?.[1] || null;
 }

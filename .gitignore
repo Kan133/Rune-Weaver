@@ -6,6 +6,18 @@ api.txt
 
 tmp/
 references/dota2/dota-data/
+test-hosts/
+test-host/
+test-dota2-project/
+test-governance*/
+New UI/
+
+temp*.png
+temp*.md
+temp_*.js
+test-llm-simple.*
+test-gap-fill.ts
+workbench*.log
 
 *.log
 npm-debug.log*

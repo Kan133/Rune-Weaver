@@ -1,0 +1,4 @@
+No gap-fill approval records were found for this host.
+
+This is expected if the canonical demo did not use a require_confirmation gap-fill patch.
+If gap-fill participated, run the gap-fill command and approve the patch before refreshing evidence.

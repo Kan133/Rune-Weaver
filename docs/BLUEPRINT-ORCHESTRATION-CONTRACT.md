@@ -1,5 +1,16 @@
 # Blueprint Orchestration Contract
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: comparing older Blueprint-stage wording against the current BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint architecture
+> Do not use for: current Blueprint authority boundaries, current final Blueprint semantics, or current LLM placement decisions
+
+This document uses pre-normalizer Blueprint wording and remains planning-only.
+Prefer [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md), [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md), [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md), and the current proposal packet when explicitly doing planning work.
+
 ## Purpose
 
 This document defines the contract for the Blueprint orchestration stage in Rune Weaver.

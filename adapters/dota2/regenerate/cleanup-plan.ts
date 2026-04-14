@@ -39,6 +39,7 @@ export interface CleanupExecutionResult {
 
 const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
+  "game/scripts/vscripts/rune_weaver/",
   "content/panorama/src/rune_weaver/",
 ];
 

@@ -208,15 +208,25 @@ export function buildGeneratorStage(
 }
 
 export function computeAbilityName(entry: WritePlanEntry, index: number): string {
+  const metadataAbilityName = entry.metadata?.abilityName;
+  if (typeof metadataAbilityName === "string" && metadataAbilityName.trim().length > 0) {
+    return metadataAbilityName;
+  }
+
+  const parameterAbilityName = entry.parameters?.abilityName;
+  if (typeof parameterAbilityName === "string" && parameterAbilityName.trim().length > 0) {
+    return parameterAbilityName;
+  }
+
   const patternSegment = entry.sourcePattern.includes(".")
     ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
     : entry.sourcePattern;
   const baseName = patternSegment;
-  const featureSegment = entry.targetPath.includes("feature_")
-    ? entry.targetPath.match(/feature_([^/]+)/)?.[1]
-    : entry.targetPath.includes("micro_feature_")
-      ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
-      : null;
+  const featureMatch =
+    entry.targetPath.match(/(standalone_system_[a-z0-9]+)/i) ||
+    entry.targetPath.match(/(micro_feature_[a-z0-9]+)/i) ||
+    entry.targetPath.match(/(feature_[a-z0-9]+)/i);
+  const featureSegment = featureMatch?.[1] || null;
   return featureSegment
     ? `rw_${featureSegment}_${baseName}_${index}`
     : `rw_${baseName}_${index}`;
@@ -227,10 +237,18 @@ export function generateKVContentWithIndex(entry: WritePlanEntry, index: number)
 
   const entryMetadata = entry.metadata || {};
   const params = {
-    cooldown: entryMetadata.abilityCooldown as string | undefined,
-    manaCost: entryMetadata.abilityManaCost as string | undefined,
-    duration: entryMetadata.abilityDuration as string | undefined,
-    castRange: entryMetadata.abilityCastRange as string | undefined,
+    cooldown: entryMetadata.abilityCooldown != null 
+      ? String(entryMetadata.abilityCooldown) 
+      : undefined,
+    manaCost: entryMetadata.abilityManaCost != null 
+      ? String(entryMetadata.abilityManaCost) 
+      : undefined,
+    duration: entryMetadata.abilityDuration != null 
+      ? String(entryMetadata.abilityDuration) 
+      : undefined,
+    castRange: entryMetadata.abilityCastRange != null 
+      ? String(entryMetadata.abilityCastRange) 
+      : undefined,
   };
 
   const kvInput: KVGeneratorInput = {
@@ -290,10 +308,18 @@ export function generateKVContent(entry: WritePlanEntry): string {
 
   const entryMetadata = entry.metadata || {};
   const params = {
-    cooldown: entryMetadata.abilityCooldown as string | undefined,
-    manaCost: entryMetadata.abilityManaCost as string | undefined,
-    duration: entryMetadata.abilityDuration as string | undefined,
-    castRange: entryMetadata.abilityCastRange as string | undefined,
+    cooldown: entryMetadata.abilityCooldown != null 
+      ? String(entryMetadata.abilityCooldown) 
+      : undefined,
+    manaCost: entryMetadata.abilityManaCost != null 
+      ? String(entryMetadata.abilityManaCost) 
+      : undefined,
+    duration: entryMetadata.abilityDuration != null 
+      ? String(entryMetadata.abilityDuration) 
+      : undefined,
+    castRange: entryMetadata.abilityCastRange != null 
+      ? String(entryMetadata.abilityCastRange) 
+      : undefined,
   };
 
   const kvInput: KVGeneratorInput = {
@@ -336,7 +362,24 @@ export function generateKVContent(entry: WritePlanEntry): string {
   }
 }
 
-export function generateCodeContent(entry: WritePlanEntry): string {
+function deriveFeatureIdFromTargetPath(targetPath: string): string | null {
+  const patterns = [
+    /(micro_feature_[^_\/]+)/,
+    /(standalone_system_[^_\/]+)/,
+    /(feature_[^_\/]+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = targetPath.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+export function generateCodeContent(entry: WritePlanEntry, stableFeatureId?: string): string {
   const familyHint = entry.generatorFamilyHint;
 
   if (entry.deferred) {
@@ -361,7 +404,12 @@ export function generateCodeContent(entry: WritePlanEntry): string {
       break;
   }
 
-  const generated = generateCode(entry, entry.sourcePattern);
+  const resolvedFeatureId =
+    stableFeatureId ||
+    deriveFeatureIdFromTargetPath(entry.targetPath) ||
+    entry.sourcePattern;
+
+  const generated = generateCode(entry, resolvedFeatureId);
   return generated.content;
 }
 

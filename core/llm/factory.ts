@@ -15,7 +15,7 @@ import { OpenAICompatibleClient } from "./providers/openai-compatible";
 import { AnthropicClient } from "./providers/anthropic";
 
 export function createLLMClientFromEnv(projectRoot: string = process.cwd()): LLMClient {
-  const env = loadEnv(projectRoot);
+  const env = readLLMEnvironment(projectRoot);
   const provider = readRequired(env, "LLM_PROVIDER") as LLMProviderKind;
 
   switch (provider) {
@@ -32,7 +32,7 @@ export function createLLMClientFromEnv(projectRoot: string = process.cwd()): LLM
 
 export function isLLMConfigured(projectRoot: string = process.cwd()): boolean {
   try {
-    const env = loadEnv(projectRoot);
+    const env = readLLMEnvironment(projectRoot);
     if (!env.LLM_PROVIDER) {
       return false;
     }
@@ -48,6 +48,10 @@ export function isLLMConfigured(projectRoot: string = process.cwd()): boolean {
   }
 }
 
+export function readLLMEnvironment(projectRoot: string = process.cwd()): Record<string, string> {
+  return loadEnv(projectRoot);
+}
+
 function readOpenAICompatibleConfig(
   env: Record<string, string>
 ): OpenAICompatibleConfig {
@@ -56,6 +60,7 @@ function readOpenAICompatibleConfig(
     baseUrl: readRequired(env, "OPENAI_BASE_URL"),
     apiKey: readRequired(env, "OPENAI_API_KEY"),
     model: readRequired(env, "OPENAI_MODEL"),
+    timeoutMs: readOptionalPositiveNumber(env, "OPENAI_TIMEOUT_MS"),
   };
 }
 
@@ -74,6 +79,23 @@ function readRequired(env: Record<string, string>, key: string): string {
     throw new LLMConfigError(`Missing required environment variable: ${key}`);
   }
   return value;
+}
+
+function readOptionalPositiveNumber(
+  env: Record<string, string>,
+  key: string
+): number | undefined {
+  const raw = env[key];
+  if (!raw) {
+    return undefined;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function loadEnv(projectRoot: string): Record<string, string> {

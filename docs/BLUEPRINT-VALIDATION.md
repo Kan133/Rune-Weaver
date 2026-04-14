@@ -1,5 +1,13 @@
 # Blueprint 验证与评审指南
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: validating or reviewing Blueprint structure
+> Do not use for: final blueprint authority semantics, current planning truth, or host-write decisions
+
 ## 概述
 
 本文档定义 Blueprint 的结构验证规则和评审标准，确保从 IntentSchema 生成的 Blueprint 符合装配要求。

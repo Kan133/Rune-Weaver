@@ -1,0 +1,26 @@
+{
+  "classification": "canonical-acceptance",
+  "prompt": "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。",
+  "boundary": "selection_flow.effect_mapping",
+  "continuationOrder": [
+    "create skeleton",
+    "gap-fill review",
+    "confirmation/apply",
+    "validate",
+    "repair-build",
+    "launch"
+  ],
+  "requiredWorkbenchScreenshots": [
+    "06-gap-fill-review.png",
+    "07-gap-fill-approval-unit.png",
+    "08-gap-fill-continuation.png"
+  ],
+  "requiredRuntimeScreenshots": [
+    "01-initial.png",
+    "02-ui-open.png",
+    "03-card-detail.png",
+    "04-after-select.png",
+    "05-second-draw.png"
+  ],
+  "runtimeVideo": "talent-draw-demo-runtime.mp4"
+}

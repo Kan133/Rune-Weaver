@@ -1,284 +1,132 @@
 # Rune Weaver
 
-Rune Weaver 不是一个“更重的 vibe coding 工具”。
+> Status: authoritative
+> Audience: mixed
+> Doc family: baseline
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: understanding the public product boundary, target outcome, and honest current capability statement
+> Do not use for: same-day execution priority, freshest blocker truth, or replacing session-sync/current-plan inputs
 
-它的目标是：
+## 一句话定义
 
-**在一个已经活着的真实项目里，安全地构建、更新、审阅、回退和组合 feature。**
+**Rune Weaver 是一个把自然语言功能意图转成受控游戏功能代码与可管理 feature 的系统。**
 
-更准确地说，Rune Weaver 是一个面向真实项目的、受约束的 **Feature Construction Platform**。
+它不是任意代码生成器，也不是自由发挥型 vibe coding。它的目标是把“我想做什么功能”先结构化，再经过受控的规划、宿主落地和写入治理，最后变成可审阅、可验证、可维护的结果。
 
----
+## 当前状态
 
-## 它解决什么问题
+**As of 2026-04-14**
 
-Rune Weaver 不试图在所有场景都替代 Cursor / Cline。
+- 当前唯一可信主线是 Dota2。
+- 当前已经证明的是一条 Dota2 canonical skeleton+fill 路径，不是广义泛化能力。
+- 整体诚实口径是：**single canonical case proven, generalization pending**。
+- `Gap Fill` 已经进入真实产品化路径，不再是“未来能力”；但新鲜主机上的手动 acceptance / runtime evidence 仍未完全收口，novice-facing approval/apply 体验也还在继续打磨。
+- CLI 仍是 authoritative lifecycle path。
+- Workbench 目前是 orchestration / review / evidence / Gap Fill launch shell，不是 authoritative executor。
+- War3 仍是 bounded secondary lane，处于 proof / skeleton-tightening / host-contract 对齐阶段，不应被描述成第二个已交付宿主。
 
-它真正要解决的是这类问题：
+如果你要看同日 step / blocker truth，而不是产品边界说明，请优先看 [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) 和 `docs/session-sync/` 下最新的 mainline note。
 
-- 项目已经存在，不是一次性 demo
-- 功能在持续叠加
-- 多个 feature 需要共存
-- 改一个功能可能影响别的功能
-- 结果需要可审阅、可回退、可继续演进
+## Rune Weaver 到底做什么
 
-换句话说，Rune Weaver 不是为了“5 分钟吐一个 MVP”，而是为了：
+Rune Weaver 面向的不是“吐一堆代码文件”，而是“把一个功能作为一等对象管理”：
 
-- 向一个活项目持续加功能
-- 更新已有功能，而不是每次重写一版
-- 在多 feature 共存时尽量不把项目搞坏
+- 接收用户的自然语言需求。
+- 先把需求整理成结构化意图，而不是直接把 prompt 交给代码生成。
+- 生成一个可审阅、可验证、可追踪的 feature 结果，而不是一次性的代码片段。
+- 在写入前处理 ownership、governance、bridge 和 workspace state。
+- 把 feature 的身份、产物和后续维护路径记录下来，支持 `create` / `update` / `delete`。
+- 在 skeleton 已经固定后，为局部业务逻辑提供 **feature-scoped Gap Fill**，但仍受边界和策略控制。
 
----
+## 它怎么工作
 
-## 它不是什么
+第一次提到 `Blueprint stage` 时需要说明一件事：`BlueprintProposal` 只是可选 proposal assistance，最终可执行的下游 seam 仍然是 `FinalBlueprint`。
 
-Rune Weaver 不应被理解为：
-
-- 通用聊天式代码生成器
-- 任意宿主上的自由改写工具
-- 一个单纯的 MCP server
-- 一个“让 LLM 搭积木拼代码块”的产品
-
-MCP 可以是接入方式之一，但不是产品本体。
-
-Rune Weaver 的本体是一条正式、受约束、可审阅的 feature 构建链路。
-
----
-
-## 最适合的宿主区间
-
-Rune Weaver 当前最适合的不是所有软件项目，而是这类宿主：
-
-- 中等复杂度
-- feature 持续叠加
-- 规则和约束很多
-- 单个功能不一定难，但组合很容易失控
-- 后期维护痛感明显
-- 宿主有相对稳定的结构、入口和 ownership boundary
-
-当前第一真实宿主是：
-
-- **Dota2 Custom Game / x-template / test1**
-
-但 Dota2 不是产品本体，只是第一套 host pack。
-
-未来更合理的相邻宿主区间包括：
-
-- Warcraft 3 地图
-- 部分 Roblox 玩法项目
-- 其他规则密集、功能持续叠加、host 边界较稳定的内容型宿主
-
----
-
-## Rune Weaver 的真正优势
-
-Rune Weaver 的优势不在“模型更聪明”，而在下面这些能力的组合：
-
-- **Feature Lifecycle**
-  - create
-  - update
-  - regenerate
-  - rollback
-- **Host-aware Construction**
-  - 知道该写到哪里
-  - 知道哪些路径/桥接点被允许
-  - 知道哪些输出必须协同
-- **Feature Review**
-  - 不是只看代码片段
-  - 而是看这个 feature 会改什么、影响什么、风险是什么
-- **Feature Composition Governance**
-  - 在写入前发现一部分真实冲突
-  - 而不是等代码写完后让用户自己 debug
-
-Rune Weaver 的目标不是“比 vibe coding 更会说术语”，而是：
-
-**当项目进入持续 feature 演进阶段时，比普通 vibe coding 更不容易把项目搞坏。**
-
----
-
-## 当前系统状态
-
-当前项目状态应被理解为：
-
-- **Phase 1 的 architecture goals 与 case-construction goals 已基本完成**
-- 但 **runtime / client / toolchain closure** 仍未全部完成
-
-当前已经成立的关键能力包括：
-
-- 正式主链路：
-  - `Natural Language -> IntentSchema -> Blueprint -> Pattern Resolution -> Assembly -> Realization -> Routing -> Generation -> Write`
-- composite backbone 已建立并验证：
-  - `trigger`
-  - `data`
-  - `rule`
-  - `ui`
-  - `effect`
-- 最小 talent-drafting-like case 已在正式 pipeline 中闭环
-- case-specific parameter flow 已打通
-- parameterized talent-drafting path 已恢复到 5-module backbone
-- code-level formal-pipeline closure 已确认
-
-当前仍不应被过度宣称为已完成的部分：
-
-- 完整 runtime / client playability closure
-- 全部 toolchain/environment 闭环
-- 小白产品已完成
-- Phase 2 的 Wizard / Blueprint LLM / conflict governance / scene reference 已实现
-
----
-
-## 当前与未来的分层
-
-Rune Weaver 的长期结构不应是“一个 Dota2 专用生成器”，而应是三层：
-
-- **Product Universal Layer**
-  - 产品入口
-  - Wizard / Review / Governance
-  - feature lifecycle
-- **Host Contract Layer**
-  - host capability
-  - realization policy
-  - routing / ownership / validation policy
-- **Host Pack Layer**
-  - Dota2 generators
-  - Dota2 paths
-  - Dota2 write / validation specifics
-
-这也是后续避免“加一个宿主要改半个产品”的关键。
-
----
-
-## 当前高层链路
-
-### 产品与规划主流
-
-```text
-User Request
-  -> Workbench
-  -> Main Wizard
-  -> optional UI Wizard / optional scene reference intake
-  -> IntentSchema
-  -> Blueprint Proposal
-  -> Contract / Governance / Host Checks
-  -> Final Blueprint
+```mermaid
+flowchart LR
+  A["User Request"] --> B["Wizard"]
+  B --> C["IntentSchema"]
+  C --> D["BlueprintProposal (optional)"]
+  C --> E["BlueprintNormalizer"]
+  D --> E
+  E --> F["FinalBlueprint"]
+  F --> G["Pattern Resolution"]
+  G --> H["AssemblyPlan"]
+  H --> I["HostRealizationPlan"]
+  I --> J["GeneratorRoutingPlan"]
+  J --> K["Generators"]
+  K --> L["Write / Validation / Workspace State"]
 ```
 
-### 执行主流
+- `Wizard` 负责把原始请求收敛成 `IntentSchema`，保留约束、澄清点和不确定性，而不是假装所有细节都已明确。
+- `BlueprintProposal` 可以由 LLM 辅助产出候选结构，但它不是 final authority。
+- `BlueprintNormalizer` 是 legality / canonicalization / policy gate。
+- `FinalBlueprint` 才是 downstream 可确定性消费的 blueprint seam。
+- `Pattern Resolution` 和 `AssemblyPlan` 把结构需求变成稳定的功能骨架。
+- `HostRealizationPlan` 和 `GeneratorRoutingPlan` 决定怎样在具体宿主里落地，不把 host/write authority 交给 LLM。
+- `Generators` 负责产生受控输出，随后进入写入、验证和 workspace state 更新。
 
-```text
-Final Blueprint
-  -> Pattern Resolution
-  -> AssemblyPlan
-  -> HostRealizationPlan
-  -> GeneratorRoutingPlan
-  -> Generators
-  -> WritePlan
-  -> Write Executor
-  -> Validation Report
-  -> Workspace State / Feature Record
-```
+当前 Dota2 的 `Gap Fill` 处在这条 skeleton 路径的下游。它是 **bounded refinement**，不是第二个 planner，也不是 architecture authority，更不是通用自由代码编辑系统。
 
----
+## 当前已证明什么 / 尚未证明什么
 
-## Phase 2 方向
+| 状态 | 内容 | 说明 |
+| --- | --- | --- |
+| 已证明 | CLI authoritative path | Dota2 CLI 是当前可信生命周期主路径。 |
+| 已证明 | workspace-backed feature management baseline | feature registry、owned artifact 记录、基础治理与 bridge 刷新已经成型。 |
+| 已证明 | Dota2 canonical path | 至少一条 Dota2 canonical skeleton+fill 路径已经被收口成可重复的 acceptance 合同。 |
+| 已证明 | feature-scoped Gap Fill boundary exposure | 选中的 feature 可以暴露 fill surface，并走受控的 review / apply-style path。 |
+| 未证明或仍在产品化 | broader generalization | 还没有证明“更多机制类型也一样稳定”。 |
+| 未证明或仍在产品化 | second canonical mechanism | 还没有第二条同等级 canonical mechanism proof。 |
+| 未证明或仍在产品化 | second host shipping | War3 仍然不是 write-ready / shipped host。 |
+| 未证明或仍在产品化 | `rollback` / `regenerate` as current product baseline | 这些不应被描述成当前 README-MVP 的完成项。 |
+| 未证明或仍在产品化 | full Gap Fill approval/apply UX closure | 受控生命周期已在形成，但新手可理解的 approval/apply 产品闭环仍在继续打磨。 |
+| 未证明或仍在产品化 | runtime/manual evidence closure | 新鲜宿主上的手动截图、视频和最终 acceptance evidence 仍未全部自动化或完全闭环。 |
+| 未证明或仍在产品化 | arbitrary host-side code edit semantics | 当前 Gap Fill 仍是 downstream、bounded、policy-gated refinement，不是任意宿主代码编辑。 |
 
-Phase 2 不是“让 Rune Weaver 更像自由生成器”，而是让它从工程底座进入受控产品化。
+## 为什么它不是 template generator / vibe coding
 
-核心方向包括：
+| 对比点 | 常见模板生成 / vibe coding | Rune Weaver |
+| --- | --- | --- |
+| 最终结构 authority | 往往由 prompt 或 LLM 临场决定 | `FinalBlueprint`、Pattern、host policy 和 write path 保持 deterministic / rule-governed |
+| 管理对象 | 主要是代码文件或一次性输出 | `feature` 是一等对象，带 registry、ownership、revision 和生命周期语义 |
+| 写入前治理 | 常常先写再看是否冲突 | 先做 conflict / governance / ownership 判断，再进入写入 |
+| Gap Fill 角色 | 容易变成自由发挥 AI glue | `Gap Fill` 是 bounded refinement，不承担 architecture authority |
+| 宿主边界 | 容易直接混入宿主任意文件 | 保持 host separation，只在明确受管边界和 bridge 点内工作 |
 
-- Workbench / Main Wizard v1
-- UI Wizard v1
-- Feature Governance Foundation
-- Feature Conflict Governance v1
-- Feature Review v1
-- Blueprint LLM Proposal v1
-- Structured Experience Layer v1
-- Gap Fill v1
-- Scene / Map Reference v1
+## 当前推荐入口
 
-Phase 2 的原则是：
-
-- **先治理层，再智能层**
-- **构建优先，治理是保护层**
-- **Dota2 是第一宿主，不是产品本体**
-
----
-
-## 仓库结构
-
-- `core/`
-  - 通用 schema、planning、pipeline、wizard、llm
-- `adapters/`
-  - 宿主实现层，当前以 Dota2 为主
-- `apps/cli/`
-  - 当前 CLI 入口
-- `docs/`
-  - source-of-truth 文档
-- `references/`
-  - 宿主参考资料
-- `skills/`
-  - 本地 Codex skill
-- `archive/`
-  - 归档内容
-
----
-
-## 建议阅读顺序
-
-如果你第一次进入这个仓库，建议按下面顺序阅读：
-
-1. [docs/HANDOFF.md](./docs/HANDOFF.md)
-2. [docs/PRODUCT.md](./docs/PRODUCT.md)
-3. [docs/SYSTEM-ARCHITECTURE-ZH.md](./docs/SYSTEM-ARCHITECTURE-ZH.md)
-4. [docs/PHASE-ROADMAP-ZH.md](./docs/PHASE-ROADMAP-ZH.md)
-5. [docs/PHASE2-PLAN-ZH.md](./docs/PHASE2-PLAN-ZH.md)
-6. [docs/PHASE2-EXECUTION-CHECKLIST-ZH.md](./docs/PHASE2-EXECUTION-CHECKLIST-ZH.md)
-
-如果你要看当前已验证的执行链，再看：
-
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-
----
-
-## 开发
-
-要求：
-
-- Node.js 18+
-
-安装：
+CLI-first 仍然是当前真实入口。最小但真实的命令面大致如下：
 
 ```bash
 npm install
+
+npm run cli -- dota2 init --host <path>
+npm run cli -- dota2 run "<request>" --host <path> --write
+npm run cli -- dota2 update "<request>" --host <path> --feature <featureId> --write
+npm run cli -- dota2 delete --host <path> --feature <featureId> --write
+npm run cli -- dota2 gap-fill --host <path> --feature <featureId> --instruction "..." --mode review
 ```
 
-常用命令：
+补充说明：
 
-```bash
-npm run check-types
-npm run cli -- --help
-```
+- `dota2 run` 是当前 authoritative create path。
+- `update` 和 `delete` 已经存在，但语义仍然围绕当前受控宿主边界，而不是任意语义级 refactor。
+- `Gap Fill` 目前适合被理解成 post-write / post-skeleton 的业务逻辑 refinement path。
+- Workbench 现在更适合承担 onboarding、review、evidence、以及 Gap Fill launch shell，而不是独立执行完整生命周期。
 
----
+## War3 次要说明
 
-## 当前最自然的下一步
+War3 仍然是次线探索，不是 README 的主交付故事。它当前更接近 implementation-draft / skeleton-tightening / host-contract 对齐阶段，用来验证 Rune Weaver 的第二宿主可行性边界，而不是用来宣称“已经支持 War3 写入交付”。
 
-如果按当前路线继续推进，最自然的方向不是“再加更多 Dota2 特例”，而是：
+## 进一步阅读
 
-- 按 `PHASE2-PLAN-ZH` 与 `PHASE2-EXECUTION-CHECKLIST-ZH` 推进 Phase 2
-- 优先建立受控产品入口、治理层和 review 面
-- 再引入 Blueprint LLM proposal、structured experience、gap-fill、scene reference
+- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
+- [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+- [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md)
+- [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)
 
----
-
-## 说明
-
-- 当前 README 是入口摘要，不是完整设计文档
-- 更完整的判断、边界与计划，都在 `docs/` 下
-- Rune Weaver 的方向始终是：
-  - **受控构建**
-  - **受控治理**
-  - **受控写入**
-  - **受控演进**
-
-而不是自由生成。
+如需阅读 [CURRENT-STATE-VS-TARGET.md](/D:/Rune%20Weaver/docs/CURRENT-STATE-VS-TARGET.md)，请只把它当作 `planning-only` narrative comparison，不要把它当作当前执行真相。

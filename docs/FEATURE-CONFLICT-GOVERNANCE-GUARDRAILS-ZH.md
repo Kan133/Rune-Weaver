@@ -1,5 +1,13 @@
 # Feature Conflict Governance 约束框架（中文）
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future conflict-governance design and guardrails
+> Do not use for: current conflict-governance baseline, current lifecycle scope, or execution ordering
+
 ## 目的
 
 本文档用于明确 Rune Weaver 中 `Feature Conflict Governance` 的产品边界与架构边界，避免在 Phase 2 / Phase 3 推进过程中把“冲突治理”做成：
@@ -18,6 +26,20 @@
 **Feature Conflict Governance 是 Rune Weaver 在写入前发现、解释、裁决和约束 feature 之间冲突的治理层。**
 
 它不是“更聪明的代码生成”，而是“在多 feature 共存时，系统开始承担责任”。
+
+这里必须明确一个关键边界：
+
+- 它不是对“整个代码库”的全局语义理解系统
+- 它不是 AGI 级别的任意业务逻辑推理器
+- 它不承诺理解所有用户手写代码与所有运行时后果
+
+Rune Weaver 的冲突治理只应建立在：
+
+- Rune Weaver 已知的 feature identity
+- Rune Weaver 已声明的 ownership / impact baseline
+- Rune Weaver 已声明的 integration points / allowed host boundary
+
+也就是说，它首先是**受控边界内的 feature-level governance**，而不是全局代码语义治理。
 
 ---
 
@@ -42,6 +64,31 @@ Rune Weaver 如果只擅长：
 - 必要时阻止不安全写入
 
 这正是 `Feature Conflict Governance` 存在的意义。
+
+---
+
+## v1 可实现承诺
+
+Feature Conflict Governance 的第一版承诺必须收紧。
+
+第一版不应承诺：
+
+- 判断任意新功能是否会破坏整个代码库
+- 理解所有用户业务逻辑
+- 自动推演所有 runtime 交互后果
+- 自动修复所有 feature 组合问题
+
+第一版更合理的承诺是：
+
+- 只对 Rune Weaver 已知、已声明、已拥有的 feature 与接入边界负责
+- 只处理少数高价值、可规则化的冲突类型
+- 只做到最小：
+  - detect
+  - explain
+  - confirm
+  - block
+
+这不是能力收缩，而是让系统在可信边界内成立。
 
 ---
 
@@ -256,6 +303,23 @@ agent 可以：
 ### 4. 不允许把所有冲突都变成用户手动 debug
 
 如果最后所有冲突都要用户自己读代码解决，那 Rune Weaver 的治理价值就没有成立。
+
+### 5. 不允许把冲突治理宣传成“理解整个代码库”
+
+如果冲突治理被表述成：
+
+- 系统理解整个仓库的全部语义
+- 系统能判断任意代码改动的所有后果
+
+那这个承诺就是不现实的。
+
+冲突治理必须始终被约束在：
+
+- Rune Weaver 已知 feature
+- Rune Weaver 已声明接入点
+- Rune Weaver 已声明 ownership / host boundary
+
+之内。
 
 ---
 

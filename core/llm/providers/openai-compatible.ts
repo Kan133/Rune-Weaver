@@ -22,6 +22,7 @@ interface OpenAICompatibleResponse {
   choices?: Array<{
     message?: {
       content?: string | Array<{ type?: string; text?: string }>;
+      reasoning_content?: string;
     };
   }>;
   usage?: {
@@ -105,7 +106,8 @@ export class OpenAICompatibleClient implements LLMClient {
 
     let httpResponse: Response;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutMs = this.config.timeoutMs ?? 30000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       httpResponse = await fetch(url, {
@@ -120,7 +122,7 @@ export class OpenAICompatibleClient implements LLMClient {
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === "AbortError") {
-        throw new LLMRequestError("LLM request timed out after 10 seconds");
+        throw new LLMRequestError(`LLM request timed out after ${timeoutMs} ms`);
       }
       throw new LLMRequestError(
         `LLM request failed: ${error instanceof Error ? error.message : String(error)}`
@@ -160,17 +162,28 @@ function toOpenAIMessage(message: LLMMessage): OpenAICompatibleMessage {
 }
 
 function extractTextFromResponse(response: OpenAICompatibleResponse): string {
-  const content = response.choices?.[0]?.message?.content;
+  const message = response.choices?.[0]?.message;
+  const content = message?.content;
+  const reasoning = message?.reasoning_content;
 
-  if (typeof content === "string") {
+  if (typeof content === "string" && content.trim().length > 0) {
     return content;
   }
 
-  if (Array.isArray(content)) {
-    return content
+  if (Array.isArray(content) && content.length > 0) {
+    const text = content
       .map((item) => item.text ?? "")
       .join("")
       .trim();
+    if (text.length > 0) {
+      return text;
+    }
+  }
+
+  if (typeof reasoning === "string" && reasoning.trim().length > 0) {
+    throw new LLMResponseParseError(
+      "LLM response contained only reasoning content, no usable text response"
+    );
   }
 
   throw new LLMResponseParseError("LLM response did not contain message content");

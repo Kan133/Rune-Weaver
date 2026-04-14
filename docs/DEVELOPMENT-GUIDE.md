@@ -1,5 +1,13 @@
 # DEVELOPMENT-GUIDE
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: orienting implementation work after the core execution baseline is already understood
+> Do not use for: overriding README-target MVP scope, replacing the active execution queue, or superseding current session-sync freshness
+
 ## 当前开发目标
 
 当前开发目标不是继续扩概念，而是稳定推进主链路：

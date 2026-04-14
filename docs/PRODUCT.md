@@ -1,5 +1,13 @@
 # PRODUCT
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: low-frequency
+> Last verified: 2026-04-14
+> Read when: understanding long-term product thesis, product boundary, and why Rune Weaver exists
+> Do not use for: current execution queue, current blocker selection, or shipped capability claims by itself
+
 ## 目的
 
 本文档用于重新定义 Rune Weaver 的产品目标、产品边界、核心竞争力与最终形态。
@@ -11,6 +19,11 @@
 - 它的护城河是不是用户能感知到的价值
 - 它在 Host-aware 路线下是否还能规模化
 - 当模型持续变强时，它是否仍然成立
+
+> Status Note
+>
+> `PRODUCT.md` 同时包含长期产品目标与阶段性判断。
+> 当前 agent 执行时，若本文件与 [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) 或 [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md) 在“当前已交付能力”上冲突，请以后两者为准。
 
 如需查看阶段路线，请同时参考：
 

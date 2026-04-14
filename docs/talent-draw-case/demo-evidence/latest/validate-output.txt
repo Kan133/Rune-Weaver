@@ -1,0 +1,39 @@
+
+> rune-weaver@0.1.0 cli
+> tsx apps/cli/index.ts dota2 validate --host D:\RN
+
+======================================================================
+Rune Weaver - Post-Generation Validation
+======================================================================
+
+Host: D:\RN
+
+======================================================================
+Stage 1: Post-Generation Validation
+======================================================================
+============================================================
+Post-Generation Validation Report (P0)
+============================================================
+Host Root: D:\RN
+Result: PASS
+
+--- Passed Checks ---
+[PASS] npc_abilities_structure: npc_abilities_custom.txt structure valid (4 abilities)
+[PASS] lua_scriptfile_paths: All ScriptFile paths resolve correctly
+[PASS] workspace_generated_files_exist: All 8 generated files exist on disk
+[PASS] server_index_references: All server index imports resolve correctly
+[PASS] ui_index_mounts: All UI index imports resolve correctly
+[PASS] less_imports: All 1 generated LESS files are properly imported
+[PASS] rune_weaver_root_css: .rune-weaver-root has width: 100% and height: 100%
+[PASS] active_key_binding_conflicts: No key binding collisions detected across active features
+[PASS] selection_pool_seed_data: All active selection features have seeded weighted pools
+
+--- Summary ---
+Passed: 9/9
+Failed: 0/9
+
+============================================================
+
+======================================================================
+Final Result: VALIDATION PASSED
+======================================================================

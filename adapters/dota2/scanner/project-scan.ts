@@ -7,6 +7,14 @@
 
 import { existsSync, statSync, readFileSync } from "fs";
 import { join, resolve } from "path";
+import type { HostKind } from "../../../core/host/types.js";
+import {
+  DOTA2_X_TEMPLATE_HOST_KIND,
+  UNKNOWN_HOST_KIND,
+} from "../../../core/host/types.js";
+import { ensureDota2HostKindRegistered } from "../host-registration.js";
+
+ensureDota2HostKindRegistered();
 
 /**
  * Dota2 项目扫描结果
@@ -17,7 +25,7 @@ export interface Dota2ProjectScanResult {
   /** 项目路径 */
   path: string;
   /** 宿主类型 */
-  hostType: "dota2-x-template" | "unknown";
+  hostType: HostKind;
   /** 脚本能力 */
   capabilities: string[];
   /** 检测到的关键路径 */
@@ -70,18 +78,6 @@ const xTemplateIndicators = {
   /** package.json 中推荐存在的脚本 */
   optionalScripts: ["dev", "prod"] as const,
 };
-
-/**
- * 检查路径是否存在
- */
-function checkPath(projectPath: string, relativePath: string): boolean {
-  const fullPath = join(projectPath, relativePath);
-  try {
-    return existsSync(fullPath);
-  } catch {
-    return false;
-  }
-}
 
 /**
  * 检查文件是否存在
@@ -146,7 +142,7 @@ export function scanDota2Project(
   const result: Dota2ProjectScanResult = {
     valid: false,
     path: resolve(projectPath),
-    hostType: "unknown",
+    hostType: UNKNOWN_HOST_KIND,
     capabilities: [],
     directories: {},
     keyFiles: {},
@@ -231,7 +227,7 @@ export function scanDota2Project(
                              !xTemplateIndicators.requiredDirs.some(d => e.includes(d)));
 
   if (hasAllRequired && scripts?.postinstall && scripts?.launch) {
-    result.hostType = "dota2-x-template";
+    result.hostType = DOTA2_X_TEMPLATE_HOST_KIND;
     result.valid = true;
     
     // 设置能力
@@ -249,7 +245,7 @@ export function scanDota2Project(
       result.capabilities.push("production-build");
     }
   } else {
-    result.hostType = "unknown";
+    result.hostType = UNKNOWN_HOST_KIND;
     result.valid = false;
     result.errors.push("项目不符合 dota2-x-template 规范");
   }
@@ -262,7 +258,7 @@ export function scanDota2Project(
  */
 export function isSupportedHost(projectPath: string = "D:\\test1"): boolean {
   const result = scanDota2Project(projectPath);
-  return result.valid && result.hostType === "dota2-x-template";
+  return result.valid && result.hostType === DOTA2_X_TEMPLATE_HOST_KIND;
 }
 
 /**

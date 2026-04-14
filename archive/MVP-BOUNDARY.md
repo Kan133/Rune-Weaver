@@ -1,5 +1,15 @@
 # Rune Weaver MVP Boundary
 
+> ⚠️ **此文档已归档 (ARCHIVED)**
+> 
+> **状态**: 已过时  
+> **归档日期**: 2026-04-11  
+> **替代文档**: [PRODUCT.md](/D:/Rune%20Weaver/docs/PRODUCT.md), [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
+> 
+> 本文档描述的 MVP 边界定义已被更完整的产品和执行基线文档取代。
+
+---
+
 ## Purpose
 
 This document captures two near-term architectural decisions for Rune Weaver:

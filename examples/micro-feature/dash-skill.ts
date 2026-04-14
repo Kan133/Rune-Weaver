@@ -207,33 +207,37 @@ export const dashSkillAssemblyPlan: AssemblyPlan = {
   version: "0.1",
   blueprintId: "micro_feature_dash_skill",
   host: { id: "dota2", mode: "mvp" },
-  resolvedPatterns: [
+  selectedPatterns: [
     {
       moduleId: "mod_input_q",
       patternId: "input.key_binding",
-      params: { key: "Q", eventName: "OnDashCast" },
+      role: "Q_key_trigger",
+      parameters: { key: "Q", eventName: "OnDashCast" },
       priority: "required",
     },
     {
       moduleId: "mod_cooldown",
       patternId: "resource.basic_pool",
-      params: { max: 1, regenRate: 0.125 },
+      role: "cooldown_tracker",
+      parameters: { max: 1, regenRate: 0.125 },
       priority: "required",
     },
     {
       moduleId: "mod_dash_effect",
       patternId: "effect.dash",
-      params: { distance: 300, speed: 1200 },
+      role: "dash_movement",
+      parameters: { distance: 300, speed: 1200 },
       priority: "required",
     },
     {
       moduleId: "mod_key_hint",
       patternId: "ui.key_hint",
-      params: { key: "Q", showCooldown: true },
+      role: "key_hint_display",
+      parameters: { key: "Q", showCooldown: true },
       priority: "optional",
     },
   ],
-  generatedTargets: [
+  writeTargets: [
     {
       kind: "code",
       targetId: "dota2.server.dash_skill",
@@ -286,7 +290,7 @@ export function runExample(): ExampleResult {
 
   console.log("\n📦 AssemblyPlan:");
   console.log(`   Pattern 绑定:`);
-  for (const binding of dashSkillAssemblyPlan.resolvedPatterns) {
+  for (const binding of dashSkillAssemblyPlan.selectedPatterns) {
     console.log(`     - ${binding.moduleId} -> ${binding.patternId}`);
   }
 

@@ -1,10 +1,14 @@
 # Multi-Output Realization Migration
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning multi-output realization migration
+> Do not use for: current realization baseline, current host-routing authority, or proof that the migration is already shipped
+
 ## Purpose
-
-This document establishes the migration baseline for evolving Rune Weaver's realization model from combination-enum types toward explicit multi-output modeling.
-
-This is a planning document, not an implementation claim. The current `kv+ts` and `kv+lua` paths are working and will remain working during migration.
 
 ## Current State
 

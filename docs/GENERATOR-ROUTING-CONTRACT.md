@@ -1,5 +1,13 @@
 # Generator Routing Contract
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: changing or reviewing generator-family routing rules
+> Do not use for: proof that every routing path is already product-grade or current milestone status
+
 ## Purpose
 
 This document defines how `HostRealizationPlan` should route work into downstream generators.

@@ -1,5 +1,13 @@
 # UI-SPEC-GUIDE
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning future `UIDesignSpec` scope and UI intake boundaries
+> Do not use for: current baseline architecture, current UI realization authority, or proof that UI spec contracts are already shipped
+
 ## 目标
 
 这份文档定义 `UIDesignSpec` 的最小可执行范围，并明确：

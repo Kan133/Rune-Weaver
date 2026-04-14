@@ -1,5 +1,13 @@
 # UI Pattern Strategy
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future UI pattern strategy and UI-specific pattern modeling
+> Do not use for: current baseline pattern taxonomy, current UI host rules, or execution routing
+
 ## 1. UI Pattern 的定义
 
 ### 1.1 什么是 UI Pattern

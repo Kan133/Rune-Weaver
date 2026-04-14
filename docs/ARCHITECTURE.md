@@ -1,28 +1,72 @@
 # ARCHITECTURE
 
+> Status: authoritative
+> Audience: agents
+> Doc family: baseline
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: aligning current execution layering and cross-cutting architectural boundary rules
+> Do not use for: current product completion status or roadmap sequencing by itself
+
+> Status Note
+> This document is an active technical baseline for the execution pipeline.
+> It defines layering and authority boundaries, not current milestone completion status.
+> For current MVP truth and priority order, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), and [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
+
 ## Purpose
 
-This document describes the **current execution architecture baseline** of Rune Weaver.
+This document describes the current accepted execution architecture baseline of Rune Weaver.
 
-It is intended to reflect the real mainline execution pipeline used by the project, especially the Phase 1-proven chain, not the full future product architecture.
+It should reflect:
 
-For the higher-level final product/system architecture, see:
+- the real layered execution path used by the project
+- the accepted cross-cutting seam vocabulary
+- the authority boundaries that other docs must not violate
 
-- [SYSTEM-ARCHITECTURE-ZH.md](D:/Rune%20Weaver/docs/SYSTEM-ARCHITECTURE-ZH.md)
+It is intentionally narrower than a full future-system roadmap.
 
 ## Mainline Pipeline
 
-The current intended mainline is:
+The accepted mainline is:
 
-`User Prompt -> Wizard -> IntentSchema -> Blueprint -> Pattern Resolution -> AssemblyPlan -> HostRealizationPlan -> GeneratorRoutingPlan -> Generators -> Write Plan -> Write Executor -> Validation -> Workspace State`
-
-This is the architecture baseline other documents should align to.
+`User Prompt -> Wizard -> IntentSchema -> Blueprint Stage -> Pattern Resolution -> AssemblyPlan -> HostRealizationPlan -> GeneratorRoutingPlan -> Generators -> Write Plan -> Write Executor -> Validation -> Workspace State`
 
 Important:
 
+- `Blueprint Stage` may internally operate as `BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint`
+- the final executable blueprint boundary remains deterministic
+- `Pattern Resolution` consumes normalized `ModuleNeed` seams, not host/write authority
 - `HostRealizationPlan` is a real architectural layer
 - `GeneratorRoutingPlan` is a real architectural layer
 - generators should not be treated as a direct continuation of `AssemblyPlan`
+
+## Accepted Cross-Cutting Direction
+
+The following cross-cutting terms are now accepted baseline vocabulary:
+
+- `IntentSchema`
+  - typed semantic contract before blueprinting
+- `BlueprintProposal`
+  - optional candidate structure and uncertainty surfacing
+- `BlueprintNormalizer`
+  - deterministic legality / canonicalization / policy gate
+- `FinalBlueprint`
+  - deterministic downstream-trustable blueprint object
+- `ModuleNeed`
+  - canonical pattern-facing seam emitted by normalized blueprint output
+- `PatternContract`
+  - semantic pattern contract
+- `HostBinding`
+  - host-facing admissibility and restrictions
+- `RealizationFamily`
+  - policy vocabulary for common-path host realization
+- `FillSlot`
+  - declared bounded variability inside an already-selected pattern / realization path
+- `GapFill`
+  - execution that fills declared `FillSlot`s only
+
+This accepted vocabulary does not mean every implementation path has already migrated.
+It does mean other baseline docs should stop using conflicting seam names.
 
 ## Layering
 
@@ -58,7 +102,8 @@ It includes:
 
 - Wizard
 - IntentSchema
-- Blueprint Builder
+- optional BlueprintProposal
+- deterministic BlueprintNormalizer / FinalBlueprint
 - Pattern Resolution
 - AssemblyPlan Builder
 
@@ -66,7 +111,7 @@ Its role is to answer:
 
 - what the user wants
 - what structure the feature should have
-- which core patterns were selected
+- what deterministic `ModuleNeed`s Pattern Resolution must satisfy
 - what the feature needs before host realization
 
 Core Planning stops at:
@@ -75,16 +120,39 @@ Core Planning stops at:
 
 It does not decide final host realization medium.
 
+### Accepted Blueprint Boundary
+
+Within the blueprint stage, the accepted responsibility split is:
+
+- `BlueprintProposal`
+  - candidate structure and uncertainty
+- `BlueprintNormalizer`
+  - legality, canonicalization, and policy enforcement
+- `FinalBlueprint`
+  - deterministic modules, connections, assumptions, validations, and `ModuleNeed`s
+
+This means:
+
+- LLM may assist proposal
+- LLM is not final blueprint authority
+- `FinalBlueprint` must not decide host realization family, generator family, or write targets
+
 ## 3. Host Realization
 
 Host Realization is responsible for deciding how `AssemblyPlan` structure should be materialized inside the current host.
 
 It includes:
 
-- HostRealizationPlan
+- `HostRealizationPlan`
 - host-specific realization policy
 
-For Dota2, this is where the system decides whether a unit should be realized as:
+The accepted routing direction is:
+
+- common-path selection should evolve toward policy-driven `RealizationFamily` routing
+- the decision should be derived from `ModuleNeed`, selected `PatternContract`s, and `HostBinding`
+- per-pattern override remains an exception path, not the normal control plane
+
+For Dota2, current concrete realization outputs still include forms such as:
 
 - `kv`
 - `ts`
@@ -94,16 +162,11 @@ For Dota2, this is where the system decides whether a unit should be realized as
 - `shared-ts`
 - `bridge-only`
 
-This layer must remain distinct from:
-
-- Pattern Resolution
-- concrete generators
-
 Important:
 
 - current combination-enum realization types are transitional
 - future richer composite features may require explicit output-list realization rather than ever more enum combinations
-- see `COMPOSITE-FEATURE-ARCHITECTURE.md`
+- Host Realization must remain distinct from Pattern Resolution and from concrete generators
 
 ## 4. Generation And Host Execution
 
@@ -111,18 +174,14 @@ This layer consumes routed realization outputs and turns them into host-shaped g
 
 It includes:
 
-- GeneratorRoutingPlan
+- `GeneratorRoutingPlan`
 - generator router
 - Dota2TSGenerator
 - Dota2UIGenerator
-- Dota2LuaGenerator (narrow scope, short_time_buff-style)
-- Dota2KVGenerator (v1 scope defined, KV config generation route established)
+- Dota2LuaGenerator
+- Dota2KVGenerator
 - Write Plan
 - Write Executor
-
-For Dota2, `dota2-ts` and `dota2-lua` should be understood as different authoring paths into the same Lua runtime, not as two independent runtime languages.
-
-See `COMPOSITE-FEATURE-ARCHITECTURE.md` for the preferred boundary.
 
 The expected sequence is:
 
@@ -133,6 +192,12 @@ This layer should not:
 - reinterpret user intent
 - redo pattern resolution
 - redo host realization policy
+
+When bounded variability remains after pattern selection and host realization:
+
+- it should flow through declared `FillSlot` contracts
+- `GapFill` should remain bounded completion only
+- this layer must not invent missing architecture after the fact
 
 ## 5. Validation And State
 
@@ -151,25 +216,31 @@ It should make it possible to distinguish:
 - runtime checks passed
 - workspace updated cleanly
 
-## Core Objects
+## Core Objects And Seams
 
-The current key architectural objects are:
+The key architectural objects and seams are:
 
 - `IntentSchema`
-- `Blueprint`
+- `BlueprintProposal`
+- `FinalBlueprint`
+- `ModuleNeed`
 - `AssemblyPlan`
 - `HostRealizationPlan`
 - `GeneratorRoutingPlan`
 
-These objects must remain distinct.
+These must remain distinct.
 
 ### Boundary Rules
 
-- `IntentSchema` is not `Blueprint`
-- `Blueprint` is not `AssemblyPlan`
+- `IntentSchema` is not `FinalBlueprint`
+- `BlueprintProposal` is not `FinalBlueprint`
+- `FinalBlueprint` is not `AssemblyPlan`
+- `FinalBlueprint` does not decide host realization family, generator family, or write targets
+- `ModuleNeed` is not final pattern selection
 - `AssemblyPlan` is not `HostRealizationPlan`
 - `HostRealizationPlan` is not generator output
 - `GeneratorRoutingPlan` is not final write execution
+- `GapFill` is not architecture design
 
 ## UI In The Architecture
 
@@ -193,14 +264,16 @@ UI design support is expressed through `UIDesignSpec`, not through gameplay logi
 
 ## LLM Placement
 
-The current intended LLM boundary is:
+The accepted LLM boundary is:
 
-- Wizard LLM: intent extraction only
-- Blueprint orchestration LLM/rules: structure only
-- Host Realization v1: rule-first, host-specific, no realization LLM
+- Wizard LLM: intent extraction and typed semantic clarification
+- Blueprint proposal LLM: optional candidate structure only
+- BlueprintNormalizer / FinalBlueprint: deterministic, no LLM final authority
+- Host Realization: rule-first, host-specific, no realization LLM
 
 The system should not push LLM behavior into:
 
+- final executable blueprint authority
 - final pattern admission
 - host realization execution
 - write execution
@@ -211,9 +284,23 @@ The project must avoid these regressions:
 
 1. treating generators as if they all default to TS
 2. skipping Host Realization and routing directly from Assembly to generation
-3. letting Blueprint decide final host realization
+3. letting blueprint decide final host realization
 4. letting generators silently re-decide realization policy
 5. letting maintenance commands drift into parallel execution systems
+6. letting pattern hints bypass `ModuleNeed` compatibility checks
+7. letting `GapFill` or `FillSlot` absorb module-structure or host-routing decisions
+
+Before reading the status notes below:
+
+- treat them as current implementation context
+- not as the current product Definition of Done
+- not as the current execution priority list
+
+For current MVP truth and next-step sequencing, prefer:
+
+- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
+- [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
+- [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 
 ## Current Architectural Status
 
@@ -227,33 +314,33 @@ Already standing:
 - workspace state foundation
 - runtime validation foundation
 - maintenance command semantics tightening
-- **dota_ts_adapter repair** (mainlined via init/refresh)
-- **baseline migration** (XLSXContent -> DOTAAbilities, in refresh main path)
-- **lua entry production** (normal pipeline produces `contentType: "lua"` entries)
-- **lua write integration** (write executor writes `.lua` files to host)
+- `dota_ts_adapter` repair
+- baseline migration
+- lua entry production
+- lua write integration
 
 T121 verified (minimal real Dota2 E2E):
 
 - baseline 3 abilities appear correctly in host
 - fresh RW identity ability attaches to hero and is castable
 - ability has correct mana cost and cooldown
-- modifier creates successfully, buff appears and lasts ~6 seconds
-- visual/numeric effect quality remains minimal viable (not polished)
+- modifier creates successfully, buff appears and lasts about 6 seconds
+- visual/numeric effect quality remains minimal viable
 
 T125 verified (lua path mainlined):
 
-- `dota2.short_time_buff` pattern produces lua entries through normal pipeline
+- `dota2.short_time_buff` pattern produces lua entries through the normal pipeline
 - generator emits same-file ability + modifier Lua code
 - write executor successfully writes `.lua` file to host path
-- old KV→lua bypass has exited formal execution path
-- **boundary**: lua metadata scope currently converges on `short_time_buff`-style cases only; this is NOT a general-purpose lua ability framework
+- old KV-to-lua bypass has exited the formal execution path
+- current lua metadata scope still converges on `short_time_buff`-style cases only
 
 In progress / Phase 1 completion work:
 
 - formal Generator Routing integration
-- broader lua ability pattern support beyond short_time_buff
+- broader lua ability pattern support beyond `short_time_buff`
 - richer visual/numeric effect quality
-- realization-aware validation/artifact/workspace refinement
+- realization-aware validation / artifact / workspace refinement
 
 Not yet Phase 1 complete:
 
@@ -268,6 +355,6 @@ Those belong to Phase 2 or later.
 
 Rune Weaver is not a one-step natural-language-to-host-code system.
 
-It is a controlled multi-layer `NL-to-Code` system whose current stable direction is:
+It is a controlled multi-layer `NL-to-Code` system whose accepted stable direction is:
 
-`IntentSchema -> Blueprint -> Pattern Resolution -> AssemblyPlan -> Host Realization -> Generator Routing -> Generators -> Write / Validation / Workspace`
+`IntentSchema -> BlueprintProposal (optional) -> BlueprintNormalizer -> FinalBlueprint -> Pattern Resolution -> AssemblyPlan -> Host Realization -> Generator Routing -> Generators -> Write / Validation / Workspace`

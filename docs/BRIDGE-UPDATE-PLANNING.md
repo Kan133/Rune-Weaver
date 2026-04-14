@@ -1,5 +1,13 @@
 # Bridge Update Planning
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning future bridge update mechanics
+> Do not use for: current bridge lifecycle authority, current MVP scope, or execution ordering
+
 ## 1. 文档目的
 
 本文档定义 `bridgeUpdates` 从抽象动作到真实宿主桥接计划的映射。

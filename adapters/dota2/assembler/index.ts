@@ -8,6 +8,18 @@
  */
 
 import { AssemblyPlan, HostRealizationPlan, SelectedPattern, GeneratorRoutingPlan } from "../../../core/schema/types";
+import {
+  calculateHostWriteExecutionOrder,
+  type HostWriteOperation,
+  type HostWritePlan,
+  type HostWritePlanEntry,
+} from "../../../core/host/write-plan.js";
+import type {
+  HostRealizationContext,
+  HostRealizationContextUnit,
+  HostRouteContext,
+  HostRouteContextUnit,
+} from "../../../core/host/routing.js";
 import { getPatternMeta } from "../patterns";
 
 /**
@@ -19,36 +31,18 @@ export type GeneratorFamilyHint = "dota2-ts" | "dota2-ui" | "dota2-kv" | "dota2-
 /**
  * 写入操作类型
  */
-export type WriteOperation = "create" | "update" | "append" | "delete";
+export type WriteOperation = HostWriteOperation;
 
 /**
  * 文件写入条目
  */
-export interface WritePlanEntry {
-  /** 操作类型 */
-  operation: WriteOperation;
-  /** 目标文件路径（相对项目根目录） */
-  targetPath: string;
-  /** 内容类型 */
-  contentType: "typescript" | "tsx" | "less" | "css" | "json" | "kv" | "lua";
-  /** 内容摘要 */
-  contentSummary: string;
-  /** 来源 Pattern */
-  sourcePattern: string;
-  /** 来源模块 */
-  sourceModule: string;
-  /** 是否安全（无冲突） */
-  safe: boolean;
-  /** 潜在冲突 */
-  conflicts?: string[];
+export interface WritePlanEntry extends HostWritePlanEntry {
   /** T112-R2: Generator family hint for transitional routing */
   generatorFamilyHint?: GeneratorFamilyHint;
   /** T112-R2: Marks entry as deferred (generator not yet implemented) */
   deferred?: boolean;
   /** T112-R2: Reason for deferral if applicable */
   deferredReason?: string;
-  /** T172-R1: Parameters from source module for case-specific fill */
-  parameters?: Record<string, unknown>;
   /**
    * T125-R1: Optional metadata for generator-specific config.
    * For lua contentType, supports:
@@ -63,26 +57,12 @@ export interface WritePlanEntry {
 /**
  * 写入计划
  */
-export interface WritePlan {
-  id: string;
-  targetProject: string;
-  generatedAt: string;
+export interface WritePlan extends HostWritePlan {
   namespaceRoots: {
     server: string;
     panorama: string;
   };
   entries: WritePlanEntry[];
-  stats: {
-    total: number;
-    create: number;
-    update: number;
-    conflicts: number;
-    /** T112-R2: Number of deferred entries (KV side not yet implemented) */
-    deferred: number;
-  };
-  executionOrder: number[];
-  readyForHostWrite?: boolean;
-  readinessBlockers?: string[];
   /** T115: Route context from routing stage (primary for T115+) */
   routeContext?: RouteContext;
   /** T112-R1: Realization context (backward compatible) */
@@ -109,6 +89,27 @@ const RUNE_WEAVER_NAMESPACE = {
     ui: "content/panorama/src/rune_weaver/generated/ui",
   },
 };
+
+/**
+ * Normalize route hostTarget to patternMeta.hostTarget format
+ * Maps routing stage hostTarget values to namespace path keys
+ */
+function normalizeHostTarget(
+  routeHostTarget: string
+): "dota2.server" | "dota2.panorama" | "dota2.shared" | "dota2.config" {
+  const mapping: Record<string, "dota2.server" | "dota2.panorama" | "dota2.shared" | "dota2.config"> = {
+    "shared_ts": "dota2.shared",
+    "server_ts": "dota2.server",
+    "modifier_ts": "dota2.server",
+    "panorama_tsx": "dota2.panorama",
+    "panorama_less": "dota2.panorama",
+    "kv": "dota2.config",
+    "modifier_kv": "dota2.config",
+    "ability_kv": "dota2.config",
+    "lua_ability": "dota2.server",
+  };
+  return mapping[routeHostTarget] || "dota2.server";
+}
 
 /**
  * 宿主目标到命名空间的映射
@@ -210,6 +211,16 @@ export function createWritePlan(
     deferred: entries.filter((e) => e.deferred).length,
   };
 
+  // 提取集成点
+  const integrationPoints: string[] = [];
+  for (const binding of plan.selectedPatterns) {
+    // 从 key_binding pattern 中提取 triggerKey
+    const triggerKey = binding.parameters?.triggerKey || binding.parameters?.key;
+    if (binding.patternId === "input.key_binding" && triggerKey) {
+      integrationPoints.push(`input.key_binding:${triggerKey}`);
+    }
+  }
+
   return {
     id: `writeplan_${plan.blueprintId}_${Date.now()}`,
     targetProject: projectPath,
@@ -219,6 +230,7 @@ export function createWritePlan(
       panorama: RUNE_WEAVER_NAMESPACE.panorama.root,
     },
     entries,
+    integrationPoints,
     stats,
     executionOrder,
     readyForHostWrite: plan.readyForHostWrite,
@@ -240,24 +252,14 @@ export function createWritePlan(
  * Encapsulates GeneratorRoutingPlan data for route-aware write plan generation.
  * This is the primary interface for T115+ routing consumption.
  */
-export interface RouteContext {
-  version: string;
-  host: string;
-  sourceBlueprintId: string;
+export interface RouteContext extends HostRouteContext {
   routes: RouteContextUnit[];
 }
 
-export interface RouteContextUnit {
-  id: string;
-  sourceUnitId: string;
+export interface RouteContextUnit extends HostRouteContextUnit {
   // T143: Added dota2-lua for formal lua routing
   generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
   routeKind: "kv" | "ts" | "ui" | "lua" | "bridge";
-  hostTarget: string;
-  sourcePatternIds: string[];
-  /** T172-R1: Parameters from source module for case-specific fill */
-  parameters?: Record<string, unknown>;
-  blocked: boolean;
 }
 
 /**
@@ -298,20 +300,12 @@ function createRouteContext(
  * Encapsulates HostRealizationPlan data for downstream generator consumption.
  * This is the transitional interface before formal GeneratorRoutingPlan exists.
  */
-export interface RealizationContext {
-  version: string;
-  host: string;
-  sourceBlueprintId: string;
+export interface RealizationContext extends HostRealizationContext {
   units: RealizationContextUnit[];
-  isFallback: boolean;
 }
 
-export interface RealizationContextUnit {
-  id: string;
-  sourcePatternIds: string[];
+export interface RealizationContextUnit extends HostRealizationContextUnit {
   realizationType: string;
-  hostTargets: string[];
-  confidence: string;
 }
 
 /**
@@ -547,8 +541,13 @@ function generateEntriesForPattern(
       ? `Route ${matchingRoute?.id} is blocked`
       : outputDeferral.reason;
 
+    // 使用 route 的 hostTarget（如果有），否则使用 patternMeta.hostTarget
+    const effectiveHostTarget = matchingRoute 
+      ? normalizeHostTarget(matchingRoute.hostTarget)
+      : patternMeta.hostTarget;
+
     const targetPath = getNamespacePath(
-      patternMeta.hostTarget,
+      effectiveHostTarget,
       targetId,
       outputType
     );
@@ -576,6 +575,15 @@ function generateEntriesForPattern(
     // T138-R1: Attach ability parameters to KV entries for proper generation
     if (outputType === "kv" && abilityParams && Object.keys(abilityParams).length > 0) {
       entry.metadata = abilityParams;
+    }
+
+    if ((outputType === "kv" || outputType === "lua") && binding.patternId === "effect.modifier_applier") {
+      const effectAbilityName = (binding.parameters?.abilityName as string)
+        || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
+      entry.metadata = {
+        ...(entry.metadata || {}),
+        abilityName: effectAbilityName,
+      };
     }
 
     // T125-R3: Fill explicit metadata for lua entries
@@ -714,21 +722,7 @@ function generateContentSummary(
  * 计算执行顺序
  */
 function calculateExecutionOrder(entries: WritePlanEntry[]): number[] {
-  const priority: Record<string, number> = {
-    json: 1,
-    typescript: 2,
-    tsx: 3,
-    less: 4,
-    css: 5,
-  };
-
-  return entries
-    .map((_, index) => index)
-    .sort((a, b) => {
-      const pa = priority[entries[a].contentType] || 99;
-      const pb = priority[entries[b].contentType] || 99;
-      return pa - pb;
-    });
+  return calculateHostWriteExecutionOrder(entries);
 }
 
 /**

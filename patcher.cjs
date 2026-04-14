@@ -1,0 +1,13 @@
+const fs = require('fs');
+const path = require('path');
+const file = path.join('apps', 'cli', 'dota2', 'commands', 'doctor.ts');
+let content = fs.readFileSync(file, 'utf8');
+const checkResultsMarker = '  console.log("-".repeat(70));\r\n  console.log("Check Results");';
+if (!content.includes(checkResultsMarker)) throw new Error('check results marker not found');
+const checkResultsReplacement = '  console.log("-".repeat(70));\r\n  const evidenceAddon = addonName || "<addon>";\r\n  const evidenceMap = mapName || "<map>";\r\n  console.log("Check Results");';
+content = content.replace(checkResultsMarker, checkResultsReplacement);
+const scenarioBlock = '  console.log(`  - Scenario: ${scenarioName}`);\n  console.log();';
+if (!content.includes(scenarioBlock)) throw new Error('scenario block not found');
+const scenarioReplacement = '  console.log(`  - Scenario: ${scenarioName}`);\n  console.log(`  - npm run demo:talent-draw:refresh -- --host ${hostRoot}`);\n  console.log(`  - npm run demo:talent-draw:lifecycle -- --host ${hostRoot} --addon-name ${evidenceAddon} --map ${evidenceMap} --write`);\n  console.log();';
+content = content.replace(scenarioBlock, scenarioReplacement);
+fs.writeFileSync(file, content);
