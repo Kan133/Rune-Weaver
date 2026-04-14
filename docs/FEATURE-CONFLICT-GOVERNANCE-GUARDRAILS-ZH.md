@@ -1,9 +1,12 @@
 # Feature Conflict Governance 约束框架（中文）
 
-> Status Note
-> 本文档定义的是治理边界与未来收口方向，不是当前已交付能力说明。
-> 当前用于执行 agent 工作的基线，以 [AGENT-EXECUTION-BASELINE.md](D:\Rune Weaver\docs\AGENT-EXECUTION-BASELINE.md)、[HANDOFF.md](D:\Rune Weaver\docs\HANDOFF.md) 与 [WORKSPACE-MODEL.md](D:\Rune Weaver\docs\WORKSPACE-MODEL.md) 为准。
-> 若本文与 README-target MVP 的当前范围冲突，应以 create / update / delete + minimum governance 的执行基线为准。
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future conflict-governance design and guardrails
+> Do not use for: current conflict-governance baseline, current lifecycle scope, or execution ordering
 
 ## 目的
 

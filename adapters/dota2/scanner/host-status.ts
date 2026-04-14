@@ -9,6 +9,11 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { scanDota2Project } from "./project-scan.js";
 import { loadWorkspace, RuneWeaverWorkspace } from "../../../core/workspace/index.js";
+import type { HostKind } from "../../../core/host/types.js";
+import {
+  DOTA2_X_TEMPLATE_HOST_KIND,
+  UNKNOWN_HOST_KIND,
+} from "../../../core/host/types.js";
 
 /**
  * Rune Weaver 接入状态
@@ -51,7 +56,7 @@ export interface HostStatusResult {
   /** 是否受支持宿主 */
   supported: boolean;
   /** 宿主类型 */
-  hostType: "dota2-x-template" | "unknown";
+  hostType: HostKind;
   /** Rune Weaver 接入状态 */
   rwStatus: RWIntegrationStatus;
   /** Workspace 数据 (如存在) */
@@ -114,7 +119,7 @@ export function checkHostStatus(hostRoot: string = "D:\\test1"): HostStatusResul
     return {
       hostRoot,
       supported: false,
-      hostType: "unknown",
+      hostType: UNKNOWN_HOST_KIND,
       rwStatus: createEmptyRWStatus(),
       issues,
       checkedAt,
@@ -264,7 +269,7 @@ export function checkHostStatus(hostRoot: string = "D:\\test1"): HostStatusResul
   return {
     hostRoot,
     supported: true,
-    hostType: "dota2-x-template",
+    hostType: DOTA2_X_TEMPLATE_HOST_KIND,
     rwStatus,
     workspace: workspace || undefined,
     issues,

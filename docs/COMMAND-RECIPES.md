@@ -1,5 +1,13 @@
 # Rune Weaver 命令配方
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: locating real command entry points for validation, demo, or maintenance work
+> Do not use for: inventing unsupported commands, changing scope, or replacing the execution baseline
+
 本文档整理 Rune Weaver 项目中所有可用于验证执行的命令入口。
 
 **注意**: 只整理实际存在的命令，不虚构"应该存在"的命令。对不稳定入口会明确标注风险。

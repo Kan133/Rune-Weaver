@@ -201,8 +201,6 @@ function validateConnections(
   const warnings: ValidationIssue[] = [];
 
   const moduleIds = new Set(modules.map((m) => m.id));
-  const connectionIds = new Set<string>();
-
   for (let i = 0; i < connections.length; i++) {
     const conn = connections[i];
 

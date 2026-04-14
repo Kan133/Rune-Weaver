@@ -1,5 +1,13 @@
 # QA
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: answering high-level product viability or narrative questions about Rune Weaver
+> Do not use for: current execution instructions, current architecture authority, or worker task ordering
+
 ## Q1. Rune Weaver 这个想法可靠吗？
 
 可靠，但前提是目标定义准确。

@@ -7,117 +7,280 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFeatureStore } from '@/hooks/useFeatureStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface ExecuteAPIResponse {
+  success: boolean;
+  result?: {
+    success: boolean;
+    command: string;
+    exitCode: number;
+    output: string[];
+    error?: string;
+    artifactPath?: string;
+    review?: {
+      title: string;
+      summary: string;
+      blockers: string[];
+      highlights: string[];
+      recommendedActions: Array<{ label: string; command?: string }>;
+    };
+  };
+  error?: string;
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  const contentType = response.headers.get('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    try {
+      const data = (await response.json()) as ExecuteAPIResponse;
+      return data.error || `HTTP error! status: ${response.status}`;
+    } catch {
+      return `HTTP error! status: ${response.status}`;
+    }
+  }
+
+  try {
+    const text = await response.text();
+    return text.trim() || `HTTP error! status: ${response.status}`;
+  } catch {
+    return `HTTP error! status: ${response.status}`;
+  }
+}
+
+function summarizeOutput(output: string[]): string[] {
+  const important = output.filter((line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed.startsWith('Action Summary:') ||
+      trimmed.startsWith('Reason:') ||
+      trimmed.startsWith('Command:') ||
+      trimmed.startsWith('Next Command:') ||
+      trimmed.startsWith('Review Artifact:') ||
+      trimmed.startsWith('Generated Files') ||
+      trimmed.startsWith('Final Result:') ||
+      trimmed.startsWith('Error:') ||
+      trimmed.startsWith('❌') ||
+      trimmed.startsWith('✅')
+    );
+  });
+
+  if (important.length > 0) {
+    return important.slice(-8);
+  }
+
+  return output.slice(-8);
+}
+
+function normalizePromptForCLI(prompt: string): string {
+  return prompt
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function WizardDialog() {
   const wizard = useFeatureStore((state) => state.wizard);
   const closeWizard = useFeatureStore((state) => state.closeWizard);
   const addWizardMessage = useFeatureStore((state) => state.addWizardMessage);
   const setWizardStep = useFeatureStore((state) => state.setWizardStep);
-  const createFeature = useFeatureStore((state) => state.createFeature);
+  const setDraftFeature = useFeatureStore((state) => state.setDraftFeature);
+  const hostConfig = useFeatureStore((state) => state.hostConfig);
+  const reloadCurrentSource = useFeatureStore((state) => state.reloadCurrentSource);
 
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   if (!wizard.isActive) return null;
 
+  const promptDraft =
+    typeof wizard.draftFeature?.displayName === 'string' ? wizard.draftFeature.displayName : '';
+
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isProcessing) return;
+    if (isProcessing) return;
 
-    // Add user message
-    addWizardMessage({
-      role: 'user',
-      content: inputValue,
-    });
-
-    const userInput = inputValue;
-    setInputValue('');
-    setIsProcessing(true);
-
-    // Simulate processing delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Simulate assistant response based on step
     if (wizard.currentStep === 'intent') {
+      if (!inputValue.trim()) return;
+
       addWizardMessage({
-        role: 'assistant',
-        content: `我理解你想要创建: "${userInput}"
-
-让我为你分析这个需求：
-• 这是一个主动技能
-• 需要位移效果
-• 需要冷却时间管理
-
-请确认或补充更多细节：
-1. 冲刺距离是多少？
-2. 是否有无敌帧？
-3. 冷却时间大概多久？`,
+        role: 'user',
+        content: inputValue,
       });
-      setWizardStep('clarification');
-    } else if (wizard.currentStep === 'clarification') {
+
+      setDraftFeature({ displayName: normalizePromptForCLI(inputValue) });
+      setInputValue('');
+
+      if (!hostConfig.hostRoot || !hostConfig.hostValid) {
+        addWizardMessage({
+          role: 'assistant',
+          content:
+            '当前还没有有效的宿主路径。请先在左侧完成宿主扫描，然后再从这里创建 feature。',
+        });
+        return;
+      }
+
       addWizardMessage({
         role: 'assistant',
-        content: `收到！基于你的描述，我已经整理出以下信息：
-
-**功能名称**: 冲刺技能
-**System ID**: dash-ability
-**所属分组**: 技能
-**Patterns**: ability_active, dash_movement, cooldown_manager
-
-**Gap Fill 结果**:
-• 冲刺距离: 400 (默认)
-• 冷却时间: 12秒 (同类技能平均值)
-• 魔法消耗: 75 (根据效果推断)
-
-请确认以上信息，我将为你生成代码。`,
+        content: `我会把这段需求直接交给真实的 dota2 CLI 主链去生成并写入宿主。\n\n宿主：${hostConfig.hostRoot}\n模式：write\n\n确认后我会开始生成。`,
       });
       setWizardStep('confirmation');
-    } else if (wizard.currentStep === 'confirmation') {
-      addWizardMessage({
-        role: 'system',
-        content: '正在生成代码...',
-      });
-      setWizardStep('generating');
-
-      // Simulate generation
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Create the feature
-      createFeature({
-        displayName: '冲刺技能',
-        systemId: 'dash-ability',
-        group: 'skill',
-      });
-
-      addWizardMessage({
-        role: 'assistant',
-        content: '✅ Feature 创建成功！\n\n已生成以下文件:\n• abilities/dash_skill.lua\n• scripts/vscripts/abilities/dash.lua\n\n你可以在 Feature List 中查看新创建的功能。',
-      });
-
-      setIsProcessing(false);
       return;
     }
 
-    setIsProcessing(false);
+    if (wizard.currentStep !== 'confirmation' || !promptDraft.trim()) {
+      return;
+    }
+
+    setIsProcessing(true);
+    addWizardMessage({
+      role: 'system',
+      content: '正在调用真实 CLI 主链生成 feature...',
+    });
+    setWizardStep('generating');
+
+    try {
+      const response = await fetch('/api/cli/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: 'run',
+          hostRoot: hostConfig.hostRoot,
+          prompt: promptDraft,
+          write: true,
+          force: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffered = '';
+      let resultPayload: ExecuteAPIResponse['result'] | null = null;
+      const outputLines: string[] = [];
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            buffered += decoder.decode();
+            break;
+          }
+
+          buffered += decoder.decode(value, { stream: true });
+          const lines = buffered.split('\n');
+          buffered = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line) as
+                | { type: 'output'; content: string }
+                | { type: 'result'; result: NonNullable<ExecuteAPIResponse['result']> }
+                | { type: 'error'; error: string };
+
+              if (data.type === 'output') {
+                outputLines.push(data.content);
+              } else if (data.type === 'result') {
+                resultPayload = data.result;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              }
+            } catch {
+              outputLines.push(line);
+            }
+          }
+        }
+      }
+
+      if (buffered.trim()) {
+        try {
+          const data = JSON.parse(buffered) as
+            | { type: 'output'; content: string }
+            | { type: 'result'; result: NonNullable<ExecuteAPIResponse['result']> }
+            | { type: 'error'; error: string };
+
+          if (data.type === 'output') {
+            outputLines.push(data.content);
+          } else if (data.type === 'result') {
+            resultPayload = data.result;
+          } else if (data.type === 'error') {
+            throw new Error(data.error);
+          }
+        } catch {
+          outputLines.push(buffered);
+        }
+      }
+
+      if (!resultPayload) {
+        throw new Error('CLI did not return a final result');
+      }
+
+      if (!resultPayload.success) {
+        const detail = summarizeOutput(resultPayload.output || outputLines).join('\n');
+        const reviewBlock = resultPayload.review
+          ? [
+              resultPayload.review.title,
+              resultPayload.review.summary,
+              ...(resultPayload.review.blockers || []).slice(0, 3),
+              ...(resultPayload.review.recommendedActions || [])
+                .slice(0, 2)
+                .map((action) => action.command ? `${action.label}: ${action.command}` : action.label),
+            ].filter(Boolean).join('\n')
+          : '';
+        throw new Error(
+          `${resultPayload.error || `CLI exited with code ${resultPayload.exitCode}`}${reviewBlock ? `\n\n${reviewBlock}` : ''}${detail ? `\n\n${detail}` : ''}`
+        );
+      }
+
+      await reloadCurrentSource();
+      const reviewSummary = resultPayload.review
+        ? [
+            resultPayload.review.title,
+            resultPayload.review.summary,
+            ...(resultPayload.review.highlights || []).slice(0, 4),
+            ...(resultPayload.review.recommendedActions || [])
+              .slice(0, 2)
+              .map((action) => action.command ? `${action.label}: ${action.command}` : action.label),
+          ].filter(Boolean).join('\n')
+        : summarizeOutput(outputLines).join('\n');
+      addWizardMessage({
+        role: 'assistant',
+        content: `✅ Feature 已写入宿主。\n\n${reviewSummary}`,
+      });
+      setDraftFeature(null);
+      setWizardStep('intent');
+      setInputValue('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addWizardMessage({
+        role: 'assistant',
+        content: `❌ 生成失败。\n\n${message}`,
+      });
+      setWizardStep('confirmation');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      void handleSendMessage();
     }
   };
 
   const getStepLabel = () => {
     switch (wizard.currentStep) {
       case 'intent':
-        return '描述需求';
-      case 'clarification':
-        return '澄清细节';
+        return '输入需求';
       case 'confirmation':
-        return '确认生成';
+        return '确认写入';
       case 'generating':
-        return '生成中';
+        return '真实生成中';
       default:
-        return '';
+        return '输入需求';
     }
   };
 
@@ -129,7 +292,6 @@ export function WizardDialog() {
         exit={{ opacity: 0, scale: 0.95 }}
         className="w-full max-w-2xl h-[600px] bg-[#1e1e1e] rounded-xl border border-white/10 shadow-2xl flex flex-col overflow-hidden"
       >
-        {/* Header */}
         <div className="h-14 bg-[#1a1a1a] border-b border-white/10 flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6366f1] to-[#4f46e5] flex items-center justify-center">
@@ -148,7 +310,6 @@ export function WizardDialog() {
           </button>
         </div>
 
-        {/* Messages */}
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4">
             <AnimatePresence>
@@ -157,10 +318,7 @@ export function WizardDialog() {
                   key={message.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={cn(
-                    'flex gap-3',
-                    message.role === 'user' ? 'flex-row-reverse' : ''
-                  )}
+                  className={cn('flex gap-3', message.role === 'user' ? 'flex-row-reverse' : '')}
                 >
                   <div
                     className={cn(
@@ -168,8 +326,8 @@ export function WizardDialog() {
                       message.role === 'user'
                         ? 'bg-[#6366f1]'
                         : message.role === 'system'
-                        ? 'bg-white/10'
-                        : 'bg-gradient-to-br from-[#6366f1] to-[#4f46e5]'
+                          ? 'bg-white/10'
+                          : 'bg-gradient-to-br from-[#6366f1] to-[#4f46e5]'
                     )}
                   >
                     {message.role === 'user' ? (
@@ -186,8 +344,8 @@ export function WizardDialog() {
                       message.role === 'user'
                         ? 'bg-[#6366f1] text-white rounded-br-md'
                         : message.role === 'system'
-                        ? 'bg-white/5 text-white/60 rounded-bl-md'
-                        : 'bg-[#252525] text-white/90 border border-white/5 rounded-bl-md'
+                          ? 'bg-white/5 text-white/60 rounded-bl-md'
+                          : 'bg-[#252525] text-white/90 border border-white/5 rounded-bl-md'
                     )}
                   >
                     {message.content}
@@ -198,21 +356,20 @@ export function WizardDialog() {
           </div>
         </ScrollArea>
 
-        {/* Input Area */}
         <div className="p-4 bg-[#1a1a1a] border-t border-white/10">
           {wizard.currentStep === 'confirmation' ? (
             <div className="flex items-center gap-3">
               <Button
                 variant="outline"
                 className="flex-1 bg-transparent border-white/10 text-white/70 hover:bg-white/5"
-                onClick={() => setWizardStep('clarification')}
+                onClick={() => setWizardStep('intent')}
                 disabled={isProcessing}
               >
-                返回修改
+                返回编辑
               </Button>
               <Button
                 className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                onClick={handleSendMessage}
+                onClick={() => void handleSendMessage()}
                 disabled={isProcessing}
               >
                 {isProcessing ? (
@@ -232,7 +389,7 @@ export function WizardDialog() {
             <div className="flex items-center justify-center py-3">
               <div className="flex items-center gap-2 text-white/50">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">正在生成代码...</span>
+                <span className="text-sm">正在调用真实 CLI 主链...</span>
               </div>
             </div>
           ) : (
@@ -241,18 +398,14 @@ export function WizardDialog() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={
-                  wizard.currentStep === 'intent'
-                    ? '描述你想要创建的功能...'
-                    : '补充更多细节或确认...'
-                }
+                placeholder="描述你想要创建的功能，我会直接把它交给真实的 dota2 CLI 主链..."
                 className="flex-1 min-h-[44px] max-h-[120px] bg-[#252525] border-white/10 text-white placeholder:text-white/40 resize-none"
                 rows={1}
               />
               <Button
                 size="icon"
                 className="h-11 w-11 bg-[#6366f1] hover:bg-[#4f46e5] text-white flex-shrink-0"
-                onClick={handleSendMessage}
+                onClick={() => void handleSendMessage()}
                 disabled={!inputValue.trim() || isProcessing}
               >
                 {isProcessing ? (

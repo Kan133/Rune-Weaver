@@ -5,7 +5,7 @@
  * 提供真实的宿主项目扫描和状态检查功能
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 
 // 扫描结果类型
 export interface HostScanResult {
@@ -67,6 +67,7 @@ export type HostSetupStep =
 export interface UseHostScannerReturn {
   // 扫描状态
   isScanning: boolean;
+  isCheckingStatus: boolean;
   scanResult: HostScanResult | null;
   scanErrors: string[];
   statusErrors: string[];
@@ -122,6 +123,7 @@ interface StatusAPIResponse {
  */
 export function useHostScanner(): UseHostScannerReturn {
   const [isScanning, setIsScanning] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [scanResult, setScanResult] = useState<HostScanResult | null>(null);
   const [hostStatus, setHostStatus] = useState<HostStatusResult | null>(null);
   const [scanErrors, setScanErrors] = useState<string[]>([]);
@@ -197,7 +199,7 @@ export function useHostScanner(): UseHostScannerReturn {
       return;
     }
 
-    setIsScanning(true);
+    setIsCheckingStatus(true);
     setStatusErrors([]);
 
     try {
@@ -223,7 +225,7 @@ export function useHostScanner(): UseHostScannerReturn {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setStatusErrors([errorMessage]);
     } finally {
-      setIsScanning(false);
+      setIsCheckingStatus(false);
     }
   }, []);
 
@@ -240,6 +242,7 @@ export function useHostScanner(): UseHostScannerReturn {
    */
   const reset = useCallback(() => {
     setIsScanning(false);
+    setIsCheckingStatus(false);
     setScanResult(null);
     setHostStatus(null);
     setScanErrors([]);
@@ -255,6 +258,7 @@ export function useHostScanner(): UseHostScannerReturn {
   return {
     // 扫描状态
     isScanning,
+    isCheckingStatus,
     scanResult,
     scanErrors,
     statusErrors,

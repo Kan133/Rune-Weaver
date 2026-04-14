@@ -269,7 +269,20 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       {
         name: "三选一天赋",
         description: "展示3个天赋供玩家选择，选中后从剩余池移除，未选中保持可抽取",
-        params: { choiceCount: 3, postSelectionPoolBehavior: "remove_selected_and_keep_unselected_eligible", trackSelectedItems: true },
+        params: { 
+          choiceCount: 3, 
+          postSelectionPoolBehavior: "remove_selected_and_keep_unselected_eligible", 
+          trackSelectedItems: true,
+          effectApplication: {
+            enabled: true,
+            rarityAttributeBonusMap: {
+              R: { attribute: "strength", value: 10 },
+              SR: { attribute: "agility", value: 10 },
+              SSR: { attribute: "intelligence", value: 10 },
+              UR: { attribute: "all", value: 10 },
+            },
+          },
+        },
         useCase: "天赋抽取系统",
       },
     ],
@@ -384,7 +397,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       },
     ],
     hostTarget: "dota2.server",
-    outputTypes: ["typescript", "kv"],
+    outputTypes: ["lua", "kv"],
     dota2Params: { requiresModifier: true },
   }),
 
@@ -539,7 +552,17 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       {
         name: "天赋选择",
         description: "横向排列的三个天赋卡，支持稀有度显示和占位符",
-        params: { choiceCount: 3, minDisplayCount: 3, payloadShape: "card_with_rarity", placeholderConfig: { id: "empty", name: "空槽位", disabled: true } },
+        params: { 
+          choiceCount: 3, 
+          minDisplayCount: 3, 
+          payloadShape: "card_with_rarity", 
+          placeholderConfig: { 
+            id: "empty_slot", 
+            name: "Empty Slot", 
+            description: "No talent available", 
+            disabled: true 
+          } 
+        },
         useCase: "天赋抽取系统",
       },
     ],

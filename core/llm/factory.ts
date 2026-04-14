@@ -15,7 +15,7 @@ import { OpenAICompatibleClient } from "./providers/openai-compatible";
 import { AnthropicClient } from "./providers/anthropic";
 
 export function createLLMClientFromEnv(projectRoot: string = process.cwd()): LLMClient {
-  const env = loadEnv(projectRoot);
+  const env = readLLMEnvironment(projectRoot);
   const provider = readRequired(env, "LLM_PROVIDER") as LLMProviderKind;
 
   switch (provider) {
@@ -32,7 +32,7 @@ export function createLLMClientFromEnv(projectRoot: string = process.cwd()): LLM
 
 export function isLLMConfigured(projectRoot: string = process.cwd()): boolean {
   try {
-    const env = loadEnv(projectRoot);
+    const env = readLLMEnvironment(projectRoot);
     if (!env.LLM_PROVIDER) {
       return false;
     }
@@ -46,6 +46,10 @@ export function isLLMConfigured(projectRoot: string = process.cwd()): boolean {
   } catch {
     return false;
   }
+}
+
+export function readLLMEnvironment(projectRoot: string = process.cwd()): Record<string, string> {
+  return loadEnv(projectRoot);
 }
 
 function readOpenAICompatibleConfig(

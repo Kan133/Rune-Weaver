@@ -1,5 +1,16 @@
 # UI Wizard 约束框架（中文）
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future UI Wizard boundaries, intake strategy, or Wizard UI / Gap Fill planning discussions
+> Do not use for: current baseline architecture, current host realization rules, or proof that UI Wizard remains a separate shipped subsystem
+
+当前 `Wizard UI` 与 `Gap Fill` 的关系仍在规划讨论中。
+本文只能作为 planning-only 边界参考，不能覆盖当前 baseline truth。
+
 ## 目的
 
 本文档用于明确 Rune Weaver 中 `UI Wizard` 的产品边界与架构边界，避免在 Phase 2 / Phase 3 推进过程中把 UI 需求处理错误地做成：

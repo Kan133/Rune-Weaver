@@ -1,8 +1,8 @@
 # Talent Draw Blueprint Refresh Plan
 
-**Document Version**: 1.0
+**Document Version**: 1.1
 **Date**: 2026-04-12
-**Status**: Executable implementation plan for BlueprintBuilder refactoring
+**Status**: Staged implementation plan and review checklist for BlueprintBuilder refactoring
 **Case Truth**: [CANONICAL-CASE-TALENT-DRAW.md](./CANONICAL-CASE-TALENT-DRAW.md)
 
 ---
@@ -11,18 +11,28 @@
 
 ### Can BlueprintBuilder be modified directly?
 
-**Conditional GO** - BlueprintBuilder can be partially refactored now, but full validation requires Pattern Contract Actualization completion.
+**Conditional GO for P0 only** - BlueprintBuilder can be refactored now to remove case-specific roles and hardcoded Dota2 effect patterns. Full Talent Draw acceptance must wait for Pattern Contract Actualization and IntentSchema parameter production to stabilize.
+
+Blueprint work must be treated as a thin orchestration-layer cleanup, not as a place to implement Talent Draw semantics directly.
 
 ### Must Pattern Contract Actualization complete first?
 
-**Yes, partially** - The catalog already contains the required patterns with correct parameters:
-- `input.key_binding` - ready
-- `data.weighted_pool` - ready (includes `poolStateTracking`, `drawMode`, `duplicatePolicy`)
-- `rule.selection_flow` - ready (includes `postSelectionPoolBehavior`, `trackSelectedItems`, `effectApplication`)
-- `ui.selection_modal` - ready (includes `minDisplayCount`, `placeholderConfig`, `payloadShape`)
-- `effect.modifier_applier` - ready (generic effect application)
+**Yes for final acceptance, no for P0 cleanup**.
 
-However, the builder must NOT hardcode `dota2.short_time_buff` for Talent Draw case.
+P0 Builder cleanup can proceed without waiting:
+- Remove `talent_*` role names.
+- Remove hardcoded `dota2.short_time_buff`.
+- Keep `effect` and `resource` module pattern IDs polymorphic (`[]`).
+- Pass through `schema.parameters` without inventing missing Talent Draw structures.
+
+Final acceptance must wait until Pattern Contract Actualization freezes the exact parameter names and semantics for:
+- `input.key_binding`
+- `data.weighted_pool` (`poolStateTracking`, `drawMode`, `duplicatePolicy`)
+- `rule.selection_flow` (`postSelectionPoolBehavior`, `trackSelectedItems`, `effectApplication`)
+- `ui.selection_modal` (`minDisplayCount`, `placeholderConfig`, `payloadShape`)
+- generic effect application (`effect.modifier_applier` or resolver-selected equivalent)
+
+The builder must NOT hardcode `dota2.short_time_buff` for Talent Draw, and it must NOT replace that hardcode with a different concrete effect hardcode.
 
 ### Does IntentSchema need structural field additions?
 
@@ -31,7 +41,7 @@ However, the builder must NOT hardcode `dota2.short_time_buff` for Talent Draw c
 - `selection.postSelectionBehavior`
 - `effect.mapping` from rarity to attribute bonus
 
-Builder should read from `schema.parameters` or fail gracefully if missing.
+Builder should read from `schema.parameters`, route known fields to the correct module category, and report missing required structures as validation issues once the Pattern Contract is frozen. Before contract freeze, missing fields should be treated as a known limitation, not silently reported as a completed Talent Draw blueprint.
 
 ---
 
@@ -53,6 +63,19 @@ Builder should read from `schema.parameters` or fail gracefully if missing.
 4. **Host-specific implementation details** - Blueprint is host-aware, not host-bound
 5. **Guessing missing structures** - If IntentSchema lacks fields, Blueprint should fail or degrade gracefully
 6. **Domain-specific naming** - No `talent_*` roles, no `talent.xxx` patterns
+
+### Execution Guardrails for Agents
+
+Agents working from this plan must follow these gates:
+
+| Gate | Allowed Now? | Scope | Completion Signal |
+|------|--------------|-------|-------------------|
+| P0 Builder cleanup | Yes | Remove case-specific roles/pattern hardcodes and add generic pass-through | Typecheck, grep checks, focused fixture smoke test |
+| Blueprint validation hardening | Partially | Add no-duplicate-module checks and polymorphic-aware validation wording | Unit tests prove no duplicate trigger/ui/effect modules |
+| Missing-parameter diagnostics | After Pattern Contract freeze | Emit warnings/errors for missing `entries`, `choiceCount`, effect mapping, UI placeholder shape | Tests use the frozen parameter contract |
+| End-to-end Talent Draw acceptance | After Pattern Contract + IntentSchema production | Wizard/Schema -> Blueprint -> Assembly -> Routing | Canonical fixture and real CLI/workbench path pass |
+
+Do not report "Talent Draw Blueprint complete" after only a hand-built smoke schema passes. Report P0 as complete and final acceptance as pending Pattern Contract Actualization.
 
 ---
 
@@ -205,7 +228,8 @@ const talentDrawBlueprint: Blueprint = {
     "Unselected candidates remain eligible for future draws",
   ],
   validations: [
-    { scope: "blueprint", rule: "All modules must have valid pattern hints", severity: "error" },
+    { scope: "blueprint", rule: "No duplicate module categories for canonical Talent Draw shape", severity: "error" },
+    { scope: "assembly", rule: "All non-polymorphic modules must bind to available patterns", severity: "error" },
     { scope: "assembly", rule: "Effect application must resolve to valid pattern", severity: "error" },
   ],
   readyForAssembly: true,
@@ -344,6 +368,55 @@ This violates:
 4. Hardcodes `dota2.short_time_buff`
 
 This is the core problem - the builder should NOT have case-specific logic.
+
+### 4.7 Duplicate Module Risk After Generic Refactor (CRITICAL)
+
+When the builder constructs modules from both `requirements.functional` and `normalizedMechanics`, it can create duplicate category modules.
+
+Example risk:
+- `requirements.functional` contains "F4 key trigger" -> creates `input_trigger`
+- `normalizedMechanics.trigger === true` -> creates another `input_trigger`
+- `requirements.interactions` also contains "F4" -> creates a third trigger unless deduped by category/role
+
+The same risk exists for `ui.selection_modal` when both `normalizedMechanics.uiModal` and `uiRequirements.surfaces` are present.
+
+This matters because `buildConnections()` creates connections by category groups. Duplicate trigger/ui/rule modules multiply connections and make the blueprint diverge from the canonical 5-module Talent Draw shape.
+
+Required behavior:
+- Deduplicate by stable module role/category, not only by generated ID.
+- Canonical Talent Draw should contain exactly one module for each category: `trigger`, `data`, `rule`, `ui`, `effect`.
+- Resource modules may be present only when `normalizedMechanics.resourceConsumption` is true.
+
+### 4.8 Missing-Parameter Diagnostics Not Yet Implemented (CRITICAL)
+
+Parameter pass-through alone is not graceful degradation.
+
+If `schema.parameters.entries` is absent, a `weighted_pool` module with no entries is structurally incomplete. If `choiceCount` is absent, `selection_flow` cannot express the three-choice contract. If `effectMapping` / `effectApplication` is absent, the effect application boundary is unresolved.
+
+Required behavior after Pattern Contract freeze:
+- Missing `entries` for data pool: blueprint error or `readyForAssembly: false`.
+- Missing `choiceCount` for selection flow: blueprint error or `readyForAssembly: false`.
+- Missing UI display count/placeholder fields: warning if UI can inherit from selection params; error only if downstream contract requires them.
+- Missing effect mapping: warning before resolver; error only if the case contract says outcome application is mandatory and no resolver path can infer it.
+
+Before Pattern Contract freeze, agents should document this as pending rather than inventing defaults in BlueprintBuilder.
+
+### 4.9 Polymorphic Pattern Validation Conflict (HIGH)
+
+The current validation wording "all modules must bind to available Pattern" conflicts with `effect` and `resource` modules using `patternIds: []` intentionally.
+
+Required wording:
+- Non-polymorphic modules (`trigger`, `data`, `rule`, `ui`) must bind to available patterns.
+- Polymorphic modules (`effect`, `resource`, `integration`) may use empty `patternIds` in Blueprint and must resolve later in Pattern Resolver / Assembly.
+
+### 4.10 Effect Pattern Hints Must Not Reintroduce Hardcoding (HIGH)
+
+Even when `effect` module `patternIds` is empty, `patternHints` can still bias resolver behavior. Blueprint may suggest generic effect candidates only if the hint is clearly non-binding and resolver can reject it from module parameters.
+
+For Talent Draw:
+- Do not hint `dota2.short_time_buff`.
+- Do not force `effect.resource_consume`.
+- Prefer either no effect hint or a broad generic hint such as `effect.modifier_applier` only when Pattern Contract Actualization confirms it is the correct generic attribute-bonus carrier.
 
 ---
 
@@ -526,19 +599,75 @@ private getCanonicalPatternIds(category: BlueprintModule["category"]): string[] 
 
 ### 5.6 Graceful Degradation Rules
 
+Implement these rules only after Pattern Contract Actualization freezes the required field names. Until then, add TODOs/tests marked pending rather than inventing Blueprint defaults.
+
 When IntentSchema lacks required parameters:
 
 | Category | Required | Missing Behavior |
 |----------|----------|------------------|
-| trigger | `key` | Warning, use default "F4" |
-| data | `entries` | Error - cannot build pool |
-| rule | `choiceCount` | Error - cannot build selection |
-| ui | `choiceCount` | Warning, inherit from rule |
-| effect | `effectMapping` | Warning, pass empty |
+| trigger | `key` / `triggerKey` | Warning; allow downstream default only if host policy defines one |
+| data | `entries` | Error; data pool is incomplete |
+| rule | `choiceCount` | Error; selection flow is incomplete |
+| ui | `choiceCount` or inherited selection count | Warning if inheritance is available; otherwise error |
+| effect | `effectMapping` or `effectApplication` | Warning before resolver; error only if case contract requires a concrete effect mapping |
+
+### 5.7 Deduplicate Generic Modules
+
+**Function**: `buildModules()`
+
+When modules are created from multiple sources (`requirements.functional`, `normalizedMechanics`, `requirements.interactions`, `uiRequirements.surfaces`), merge or skip duplicates by category/role.
+
+Required canonical behavior for Talent Draw:
+
+```typescript
+const categories = blueprint.modules.map((m) => m.category);
+expect(categories.filter((c) => c === "trigger")).toHaveLength(1);
+expect(categories.filter((c) => c === "data")).toHaveLength(1);
+expect(categories.filter((c) => c === "rule")).toHaveLength(1);
+expect(categories.filter((c) => c === "ui")).toHaveLength(1);
+expect(categories.filter((c) => c === "effect")).toHaveLength(1);
+```
+
+Suggested implementation:
+- Keep the first module for a category when it came from a more specific source.
+- Merge responsibilities from duplicate sources.
+- Merge compatible parameter pass-through results.
+- Do not create a second UI module for the same `selection_modal` role.
+
+### 5.8 Polymorphic-Aware Validation Contract
+
+Update validation text and tests so empty `patternIds` is legal for polymorphic categories.
+
+Required behavior:
+
+```typescript
+if (module.category === "effect" || module.category === "resource" || module.category === "integration") {
+  // patternIds may be []
+  // resolver/assembly must prove a concrete route later
+} else {
+  // patternIds must contain available catalog IDs
+}
+```
+
+Do not keep validation rules that imply every Blueprint module must already have a concrete pattern ID.
+
+### 5.9 Pattern Hint Scope
+
+`buildPatternHints()` should not undermine polymorphic effect handling.
+
+Acceptable options:
+- Do not emit effect pattern hints for Talent Draw until effect contract is frozen.
+- Or emit only resolver-safe generic hints confirmed by Pattern Contract Actualization.
+
+Forbidden:
+- Any `dota2.short_time_buff` hint from BlueprintBuilder for Talent Draw.
+- Any required concrete effect pattern in Blueprint module `patternIds`.
 
 ---
 
 ## 6. IntentSchema Requirements
+
+This section is a target contract for Wizard/IntentSchema agents. BlueprintBuilder must consume these fields when present, but it must not synthesize Talent Draw data itself.
 
 ### 6.1 Minimum Structural Fields for Talent Draw
 
@@ -610,6 +739,16 @@ interface TalentDrawIntentSchema extends IntentSchema {
 | `minDisplayCount` | ✅ | - |
 | `placeholderConfig` | ✅ | - |
 
+### 6.3 Contract Freeze Dependency
+
+Before final Blueprint acceptance, Pattern Contract Actualization must confirm:
+
+1. The field names above are exactly the fields downstream generators/resolvers expect.
+2. `effectApplication.rarityAttributeBonusMap` and `effectMapping` are either both required with distinct purposes, or one is chosen as canonical.
+3. `poolStateTracking: "session"` means current match/session state only, not cross-match persistence.
+4. `postSelectionPoolBehavior: "remove_selected_and_keep_unselected_eligible"` is owned by `rule.selection_flow`, not `data.weighted_pool`.
+5. `ui.selection_modal` owns placeholder rendering only, not candidate draw logic.
+
 ---
 
 ## 7. Validation Plan
@@ -618,6 +757,16 @@ interface TalentDrawIntentSchema extends IntentSchema {
 
 ```typescript
 describe("BlueprintBuilder - Talent Draw Case", () => {
+  it("should produce one canonical module per Talent Draw category", () => {
+    const result = buildBlueprint(talentDrawSchema);
+    const modules = result.blueprint?.modules || [];
+    expect(modules.filter((m) => m.category === "trigger")).toHaveLength(1);
+    expect(modules.filter((m) => m.category === "data")).toHaveLength(1);
+    expect(modules.filter((m) => m.category === "rule")).toHaveLength(1);
+    expect(modules.filter((m) => m.category === "ui")).toHaveLength(1);
+    expect(modules.filter((m) => m.category === "effect")).toHaveLength(1);
+  });
+
   it("should not use talent_* role names", () => {
     const result = buildBlueprint(talentDrawSchema);
     const roles = result.blueprint?.modules.map(m => m.role) || [];
@@ -632,6 +781,16 @@ describe("BlueprintBuilder - Talent Draw Case", () => {
     const effectModule = result.blueprint?.modules.find(m => m.category === "effect");
     expect(effectModule?.patternIds).not.toContain("dota2.short_time_buff");
     expect(effectModule?.patternIds).toEqual([]); // Polymorphic
+  });
+
+  it("should allow empty patternIds only for polymorphic categories", () => {
+    const result = buildBlueprint(talentDrawSchema);
+    for (const module of result.blueprint?.modules || []) {
+      if (["effect", "resource", "integration"].includes(module.category)) {
+        continue;
+      }
+      expect(module.patternIds?.length).toBeGreaterThan(0);
+    }
   });
   
   it("should express selected-only removal in selection flow params", () => {
@@ -654,8 +813,16 @@ describe("BlueprintBuilder - Talent Draw Case", () => {
     expect(uiModule?.parameters?.minDisplayCount).toBe(3);
     expect(uiModule?.parameters?.placeholderConfig).toBeDefined();
   });
+
+  it("should not report full readiness when frozen required parameters are missing", () => {
+    const result = buildBlueprint(talentDrawSchemaWithoutEntries);
+    expect(result.success).toBe(false);
+    expect(result.issues.some((issue) => issue.code.includes("MISSING"))).toBe(true);
+  });
 });
 ```
+
+The final missing-parameter test should be enabled only after Pattern Contract Actualization freezes the required field names. Before that point, mark it as pending/TODO in the test suite rather than forcing guessed defaults.
 
 ### 7.2 Pattern Hint Validation
 
@@ -688,11 +855,13 @@ describe("Blueprint -> Assembly compatibility", () => {
 });
 ```
 
+This check is not sufficient by itself. It must use the same canonical fixture generated by the Wizard/IntentSchema path, not only a hand-built smoke schema.
+
 ---
 
 ## 8. Final Verdict
 
-### Status: **CONDITIONAL GO**
+### Status: **CONDITIONAL GO FOR P0, HOLD FINAL ACCEPTANCE**
 
 BlueprintBuilder implementation can proceed with the following conditions:
 
@@ -700,15 +869,21 @@ BlueprintBuilder implementation can proceed with the following conditions:
 2. **Immediate**: Remove hardcoded `dota2.short_time_buff` for effect modules
 3. **Immediate**: Implement generic parameter pass-through
 4. **Immediate**: Use `patternIds: []` for polymorphic categories (effect, resource)
+5. **Immediate**: Prevent duplicate canonical modules when multiple schema sources imply the same category
+6. **Immediate**: Update validation wording so polymorphic empty `patternIds` is legal
+7. **After Pattern Contract freeze**: Add missing-parameter diagnostics and final fixture tests
 
 ### Pattern Contract Status
 
-The Pattern Catalog already contains all required patterns with correct parameters:
-- ✅ `input.key_binding` - ready
-- ✅ `data.weighted_pool` - ready with `poolStateTracking`, `drawMode`, `duplicatePolicy`
-- ✅ `rule.selection_flow` - ready with `postSelectionPoolBehavior`, `trackSelectedItems`, `effectApplication`
-- ✅ `ui.selection_modal` - ready with `minDisplayCount`, `placeholderConfig`, `payloadShape`
-- ✅ `effect.modifier_applier` - ready for generic effect application
+Another agent group is actively performing Pattern Contract Actualization. Treat the following as target dependencies, not final acceptance evidence:
+
+- `input.key_binding`
+- `data.weighted_pool` with `poolStateTracking`, `drawMode`, `duplicatePolicy`
+- `rule.selection_flow` with `postSelectionPoolBehavior`, `trackSelectedItems`, `effectApplication`
+- `ui.selection_modal` with `minDisplayCount`, `placeholderConfig`, `payloadShape`
+- generic effect application via resolver-selected pattern
+
+Blueprint agents must not change these contracts unilaterally. If field names differ from this plan after actualization, update Blueprint extraction/tests to the frozen contract.
 
 ### IntentSchema Status
 
@@ -716,13 +891,23 @@ IntentSchema requires `parameters` field population for Talent Draw case. This i
 
 ### Blocking Issues
 
-None for Blueprint refactoring. The builder can be made generic now.
+No blockers for P0 cleanup.
+
+Final Talent Draw acceptance is blocked by:
+
+1. Pattern Contract Actualization freeze.
+2. Wizard/IntentSchema production of canonical `schema.parameters`.
+3. Duplicate-module prevention tests.
+4. Polymorphic-aware validation tests.
+5. End-to-end canonical fixture from real schema path.
 
 ---
 
 ## 9. Acceptance Criteria
 
-This plan is complete when:
+### 9.1 Plan Document Acceptance
+
+This planning document is complete when:
 
 - [x] Analysis of current builder gaps with file/line references
 - [x] Canonical Blueprint shape without `talent_*` roles
@@ -731,6 +916,21 @@ This plan is complete when:
 - [x] Session-only pool state (not cross-match persistence)
 - [x] Identified hardcoded `dota2.short_time_buff` issue
 - [x] Executable implementation checklist for next phase
+- [x] Added review guardrails for duplicate modules, polymorphic validation, and Pattern Contract dependency
+
+### 9.2 Implementation Acceptance
+
+The BlueprintBuilder implementation is complete only when:
+
+- [ ] `core/blueprint/builder.ts` contains no Talent Draw special-case branch
+- [ ] `core/blueprint/builder.ts` contains no `talent_trigger`, `talent_pool`, `talent_buff`, or `talent_selection` roles
+- [ ] `core/blueprint/builder.ts` contains no `dota2.short_time_buff`
+- [ ] canonical Talent Draw fixture produces exactly one `trigger`, `data`, `rule`, `ui`, and `effect` module
+- [ ] `effect` and `resource` modules may have empty `patternIds`; non-polymorphic modules may not
+- [ ] pool, selection, UI, and effect parameters pass through from frozen `schema.parameters`
+- [ ] missing required Talent Draw parameters produce validation issues after Pattern Contract freeze
+- [ ] Pattern hints do not force a concrete Dota2 effect pattern
+- [ ] downstream assembly/resolver tests pass using the real Wizard/IntentSchema-generated fixture
 
 ---
 
@@ -745,16 +945,30 @@ This plan is complete when:
 | Add generic role inference | `core/blueprint/builder.ts` | New function | P0 |
 | Add parameter extraction helpers | `core/blueprint/builder.ts` | New functions | P0 |
 | Update getCanonicalPatternIds | `core/blueprint/builder.ts` | Lines 278-297 | P0 |
+| Deduplicate category/role modules | `core/blueprint/builder.ts` | `buildModules()` | P0 |
+| Update polymorphic validation wording | `core/blueprint/builder.ts` | `buildValidationContracts()` | P0 |
+| Avoid concrete Dota2 effect hints | `core/blueprint/builder.ts` | `buildPatternHints()` | P1 |
 
 ### Phase 2: Validation (After Builder)
 
 | Task | File | Priority |
 |------|------|----------|
 | Add unit tests for generic roles | `tests/core/blueprint/builder.test.ts` | P1 |
+| Add no-duplicate-module test | `tests/core/blueprint/builder.test.ts` | P1 |
+| Add polymorphic patternIds test | `tests/core/blueprint/builder.test.ts` | P1 |
 | Add snapshot test for Talent Draw | `tests/fixtures/talent-draw-blueprint.json` | P1 |
 | Add grep-based validation | CI/CD pipeline | P1 |
 
-### Phase 3: Integration (After Validation)
+### Phase 3: Contract Freeze Follow-Up (After Pattern Contract Actualization)
+
+| Task | File | Priority |
+|------|------|----------|
+| Align extracted parameter names to frozen Pattern Contract | `core/blueprint/builder.ts` | P0 |
+| Add missing-parameter diagnostics | `core/blueprint/builder.ts` | P0 |
+| Add canonical IntentSchema fixture from Wizard path | `tests/fixtures/talent-draw-intent-schema.json` | P1 |
+| Update Talent Draw snapshot from real fixture | `tests/fixtures/talent-draw-blueprint.json` | P1 |
+
+### Phase 4: Integration (After Validation)
 
 | Task | Priority |
 |------|----------|

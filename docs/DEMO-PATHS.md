@@ -1,8 +1,12 @@
 # Rune Weaver Demo Paths
 
-> Status Note
-> This document defines demo and walkthrough paths, not the active execution queue.
-> For current implementation priority, use [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: selecting demo-safe walkthroughs and presentation paths
+> Do not use for: active execution priority, current milestone scope, or architecture authority
 
 本文档定义 Rune Weaver 的演示路径，面向外部用户和内部协作者。
 
@@ -189,13 +193,13 @@ npm run examples
 
 ---
 
-### 2.2 Workbench UI 可视化演示 ⚠️ Partial Product Entry
+### 2.2 Workbench UI 产品入口演示 ⚠️ Partial Product Entry
 
 > **Demo Gate: Partial Product Entry**  
-> UI 已接通真实 CLI 调用，但仅覆盖部分功能。演示时需明确说明已接通和未接通的能力边界。
+> UI 已接通真实 CLI 调用，并可展示真实的 onboarding / next-step guidance；但它仍然不是 authoritative lifecycle executor。演示时需明确说明它是 CLI 的产品入口和编排层。
 
 **演示目标**  
-展示 workspace-backed feature registry 的可视化界面
+展示用户如何通过 Workbench 进入真实的 Dota2 CLI 主链，而不是手记命令或依赖隐性操作知识。
 
 **面向谁**  
 前端开发者、产品/设计师、技术管理者
@@ -205,14 +209,17 @@ npm run examples
 | 步骤 | 动作 | 展示内容 |
 |------|------|----------|
 | 1 | 启动 UI | `cd apps/workbench-ui && npm run dev` |
-| 2 | 展示 FeatureList | 左侧 feature 列表，显示状态、revision、更新时间 |
-| 3 | 展示 FeatureDetail | 选中 feature 后展示详情 |
-| 4 | 展示场景切换 | Create / Update / Governance-Blocked / Write-Success |
+| 2 | 输入 Host 路径 | 真实 host scan + x-template 验证 |
+| 3 | 展示 Project Setup | addon name / map name / launch preview |
+| 4 | 点击 Initialize / Demo Prepare / Doctor / Validate | 所有操作通过 `dota2-cli` 执行 |
+| 5 | 展示 Guided State / Onboarding Checklist | UI 根据真实 CLI 结果显示下一步 |
+| 6 | 展示 FeatureList / FeatureDetail | workspace-backed feature registry 可视化 |
 
 **当前能力边界**
-- ✅ 已接通：Host scan, Host status check, Initialize, Create (dry-run)
-- ⚠️ 未接通：Project naming, Launch configuration
-- ✅ 架构定位：UI → CLI Bridge，所有操作通过 dota2-cli 执行
+- ✅ 已接通：Host scan, Host status check, Project naming, Launch configuration, Initialize, Demo Prepare, Doctor, Validate, Create (dry-run)
+- ✅ 已接通：执行结果中的 `Action Summary` / `Next Command` 已能在 UI 中结构化展示
+- ⚠️ 仍未完成：完整 canonical walkthrough 证据闭环、所有 lifecycle 路径的 UI 化呈现
+- ✅ 架构定位：UI → CLI Bridge，所有操作通过 `dota2-cli` 执行
 
 **可以承诺什么 / 必须说明的边界**
 
@@ -221,15 +228,18 @@ npm run examples
 | Host scan | ✅ 可以说"真实扫描宿主路径" | 仅验证路径有效性，不修改文件 |
 | Host status | ✅ 可以说"真实检查集成状态" | 仅读取状态，不执行修复 |
 | Initialize | ✅ 可以说"真实执行项目初始化" | 会创建真实文件和目录结构 |
+| Project naming | ✅ 可以说"真实管理 addon naming contract" | 只覆盖当前 onboarding contract，不是独立项目脚手架系统 |
+| Launch config | ✅ 可以说"真实展示 launch contract" | 当前主要是 addon/map 输入与 `yarn launch` 指引，不是完整启动器 |
+| Demo prepare / doctor / validate | ✅ 可以说"真实调用 CLI 主链检查与准备" | UI 只是入口和结果呈现，CLI 仍是权威执行面 |
 | Create dry-run | ✅ 可以说"真实预览生成结果" | 仅预览，不写入文件（dry-run 模式） |
-| Project naming | ❌ 不能说"可以创建项目" | 未接通 CLI，仅前端验证格式 |
-| Launch config | ❌ 不能说"可以配置启动参数" | 功能延迟到后续 phase |
+| Full lifecycle control | ❌ 不能说"Workbench 已完整覆盖 create/update/delete 产品入口" | 当前重点仍是 onboarding / create-path guidance |
 
 **演示时应避免的表述：**
 - ❌ "UI 是独立执行系统"（正确：UI → CLI Bridge，所有操作通过 dota2-cli 执行）
-- ❌ "可以创建真实功能"（正确：当前仅支持 dry-run 模式，预览不写入）
-- ❌ "所有功能都已接通"（正确：Project naming 和 Launch config 未接通）
-- ✅ "CLI 是 authoritative lifecycle path，UI 是可视化/编排层"
+- ❌ "Workbench 已经替代 CLI"
+- ❌ "所有 lifecycle 都已在 UI 内产品化"
+- ✅ "CLI 是 authoritative lifecycle path，UI 是产品入口 / 可视化 / 编排层"
+- ✅ "当前最强的 UI 证明是 onboarding → CLI-backed guidance，而不是 UI 自己执行完整 lifecycle"
 
 ---
 
@@ -294,7 +304,7 @@ npm run examples
 | 1.1 最小 Create 路径 | ✅ External-Safe | ✅ 可演示 | ✅ 可演示 |
 | 1.2 Examples 验证路径 | ✅ External-Safe | ✅ 可演示 | ✅ 可演示 |
 | 2.1 CLI 完整链路 | ✅ External-Safe | ✅ 可演示 | ✅ 可演示 |
-| 2.2 Workbench UI 可视化演示 | ⚠️ Partial Product Entry | ⚠️ 可演示（需说明边界） | ✅ 可演示 |
+| 2.2 Workbench UI 产品入口演示 | ⚠️ Partial Product Entry | ⚠️ 可演示（需说明边界） | ✅ 可演示 |
 | regenerate / rollback | ⏸️ Deferred | ❌ 不演示 | ❌ 不演示 |
 
 ### 5.2 必须说明的限制

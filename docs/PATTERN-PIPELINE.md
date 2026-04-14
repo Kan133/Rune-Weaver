@@ -1,5 +1,13 @@
 # PATTERN-PIPELINE
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: understanding the pattern candidate -> draft -> admission pipeline
+> Do not use for: current backlog priority, host-specific implementation notes, or pattern admission authority by itself
+
 ## 目标
 
 这份文档定义 Rune Weaver 的 pattern 自动化流程。

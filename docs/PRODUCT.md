@@ -1,5 +1,13 @@
 # PRODUCT
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: low-frequency
+> Last verified: 2026-04-14
+> Read when: understanding long-term product thesis, product boundary, and why Rune Weaver exists
+> Do not use for: current execution queue, current blocker selection, or shipped capability claims by itself
+
 ## 目的
 
 本文档用于重新定义 Rune Weaver 的产品目标、产品边界、核心竞争力与最终形态。

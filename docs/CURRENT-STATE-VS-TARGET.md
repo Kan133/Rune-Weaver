@@ -1,13 +1,22 @@
 # Current State vs Target State
 
+> Status: planning
+> Audience: mixed
+> Doc family: planning
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: comparing current shipped capability against target product narrative
+> Do not use for: execution priority, worker task ordering, or lifecycle baseline truth
+
 > Status Note
-> This document is a narrative/reference view, not the active execution queue.
+> This document is a pure narrative comparison view.
+> It is not the active execution queue.
 > For current execution priority, use [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
 
 本文档明确区分 Rune Weaver 的当前实现状态与目标状态，确保产品叙述真实可信。
 
 > **权威参考**  
-> 本文档基于 [AGENT-EXECUTION-BASELINE.md](./AGENT-EXECUTION-BASELINE.md) 和 [ROADMAP.md](./ROADMAP.md) 编写。如有冲突，以后两者为准。
+> 本文档基于 [AGENT-EXECUTION-BASELINE.md](./AGENT-EXECUTION-BASELINE.md)、[CURRENT-EXECUTION-PLAN.md](./CURRENT-EXECUTION-PLAN.md) 和 [ROADMAP.md](./ROADMAP.md) 编写。如有冲突，以这些文档为准。
 
 ---
 
@@ -27,17 +36,16 @@ Phase 3 (Extended Lifecycle): 未开始 ⏸️
 - ✅ root/build/typecheck baseline 已通过
 - ✅ Workbench UI 可可视化 workspace/bridge 数据
 
-### 1.2 正在进行的核心工作
+### 1.2 当前主线工作
 
-根据 [MVP-EXECUTION-QUEUE.md](./MVP-EXECUTION-QUEUE.md)：
+根据 [CURRENT-EXECUTION-PLAN.md](./CURRENT-EXECUTION-PLAN.md)：
 
-| Packet | 任务 | 状态 |
-|--------|------|------|
-| A | Workspace Truth And Product-Grade `create` | 进行中（关键路径） |
-| B | Owned-Scope `update` | 等待 Packet A |
-| C | Real `delete` And Unload | 等待 Packet A |
-| D | Minimum Governance v1 | 等待 Packet A |
-| E | Canonical Verification Flow | 等待 A/B/C/D |
+| 主线 | 目标 | 当前状态 |
+|------|------|----------|
+| Evidence Closure | 让 standing lifecycle claims 保持可重复、可审阅 | 进行中 |
+| Product Entry Integration | 让 UI/onboarding shell 接到 authoritative CLI path | 进行中 |
+| X-Template Onboarding Completion | 补齐 host setup 前置流 | 进行中 |
+| Canonical Walkthrough / Demo Gate | 锁定一个诚实且可重复的 walkthrough | 进行中 |
 
 ---
 
@@ -49,11 +57,11 @@ Phase 3 (Extended Lifecycle): 未开始 ⏸️
 |------|----------|----------|----------|
 | **Workspace 记录** | ✅ 可写入 feature record | ✅ 完整记录 | 已达成 |
 | **Feature ID** | ✅ 生成 stable ID | ✅ 保持稳定 | 已达成 |
-| **Selected Patterns** | ⚠️ 部分记录 | ✅ 真实记录 | Packet A 进行中 |
-| **Generated Files** | ⚠️ 部分记录 | ✅ 真实文件列表 | Packet A 进行中 |
-| **Entry Bindings** | ⚠️ 部分记录 | ✅ 真实绑定 | Packet A 进行中 |
+| **Selected Patterns** | ⚠️ 部分记录 | ✅ 真实记录 | 仍属于 lifecycle evidence closure 范围 |
+| **Generated Files** | ⚠️ 部分记录 | ✅ 真实文件列表 | 仍属于 lifecycle evidence closure 范围 |
+| **Entry Bindings** | ⚠️ 部分记录 | ✅ 真实绑定 | 仍属于 lifecycle evidence closure 范围 |
 | **代码生成** | ⚠️ 基础实现 | ✅ 产品级生成 | 需要完善 |
-| **文件写入** | ⚠️ 部分实现 | ✅ 完整写入 | Packet A 进行中 |
+| **文件写入** | ⚠️ 部分实现 | ✅ 完整写入 | 仍需补强到 repeatable walkthrough 级别 |
 
 **当前可演示内容：**
 - ✅ dry-run 模式下的完整 proposal 链路
@@ -71,8 +79,8 @@ Phase 3 (Extended Lifecycle): 未开始 ⏸️
 | 维度 | 当前状态 | 目标状态 | 差距说明 |
 |------|----------|----------|----------|
 | **Metadata Update** | ✅ 可更新 workspace 记录 | ✅ 支持 | 已达成 |
-| **Owned-Artifact Rewrite** | ❌ 未实现 | ✅ 重写 owned files | Packet B |
-| **Bridge Binding Update** | ❌ 未实现 | ✅ 更新 bridge | Packet B |
+| **Owned-Artifact Rewrite** | ❌ 未实现 | ✅ 重写 owned files | 属于 standing update gap |
+| **Bridge Binding Update** | ❌ 未实现 | ✅ 更新 bridge | 属于 standing update gap |
 | **Revision Tracking** | ⚠️ 基础实现 | ✅ 完整版本 | 需要完善 |
 | **Semantic Update** | ❌ 不支持（deferred） | ❌ 不在 MVP 范围 | N/A |
 
@@ -90,9 +98,9 @@ Phase 3 (Extended Lifecycle): 未开始 ⏸️
 | 维度 | 当前状态 | 目标状态 | 差距说明 |
 |------|----------|----------|----------|
 | **Workspace Record Removal** | ✅ 可移除记录 | ✅ 支持 | 已达成 |
-| **File Deletion** | ❌ 未实现 | ✅ 删除 owned files | Packet C |
-| **Bridge Unload** | ❌ 未实现 | ✅ 刷新 bridge | Packet C |
-| **Dependency Check** | ⚠️ 基础实现 | ✅ 完整检查 | Packet C |
+| **File Deletion** | ❌ 未实现 | ✅ 删除 owned files | 属于 standing delete gap |
+| **Bridge Unload** | ❌ 未实现 | ✅ 刷新 bridge | 属于 standing delete gap |
+| **Dependency Check** | ⚠️ 基础实现 | ✅ 完整检查 | 仍需补强到真实治理案例级别 |
 
 **当前可演示内容：**
 - ✅ workspace 记录移除
@@ -107,10 +115,10 @@ Phase 3 (Extended Lifecycle): 未开始 ⏸️
 
 | 维度 | 当前状态 | 目标状态 | 差距说明 |
 |------|----------|----------|----------|
-| **Ownership Overlap Detection** | ⚠️ mock-driven | ✅ workspace-backed | Packet D |
-| **Bridge Point Contention** | ⚠️ mock-driven | ✅ workspace-backed | Packet D |
-| **Target Ambiguity Detection** | ⚠️ 基础实现 | ✅ 完整检测 | Packet D |
-| **Dependency Risk Check** | ⚠️ 基础实现 | ✅ 完整检查 | Packet D |
+| **Ownership Overlap Detection** | ⚠️ mock-driven | ✅ workspace-backed | 属于治理证据缺口 |
+| **Bridge Point Contention** | ⚠️ mock-driven | ✅ workspace-backed | 属于治理证据缺口 |
+| **Target Ambiguity Detection** | ⚠️ 基础实现 | ✅ 完整检测 | 属于治理证据缺口 |
+| **Dependency Risk Check** | ⚠️ 基础实现 | ✅ 完整检查 | 属于治理证据缺口 |
 
 **当前可演示内容：**
 - ✅ mock-driven conflict detection
@@ -204,21 +212,20 @@ Phase 3 (Extended Lifecycle): 未开始 ⏸️
 
 ## 6. 下一步里程碑
 
-根据 [MVP-EXECUTION-QUEUE.md](./MVP-EXECUTION-QUEUE.md)：
+根据 [CURRENT-EXECUTION-PLAN.md](./CURRENT-EXECUTION-PLAN.md)：
 
-1. **Packet A 完成标志**：`create` 可持久化 truthful workspace state
-2. **Packet B 完成标志**：`update` 实现 owned-artifact rewrite
-3. **Packet C 完成标志**：`delete` 实现 true unload
-4. **Packet D 完成标志**：conflict checks 转为 workspace-backed
-5. **Packet E 完成标志**：提供可重复的 create/update/delete/conflict walkthrough
+1. lifecycle evidence 变得可重复、可审阅
+2. product entry 接入 authoritative CLI path
+3. x-template onboarding 补齐为完整 host setup 流程
+4. 锁定一个 create/update/delete/governance walkthrough
 
-当 Packet A-E 全部完成时，README-target MVP 即达成。
+当这些主线都收口时，README-target MVP 的诚实演示口径才算真正稳定。
 
 ---
 
 ## 附录：相关文档
 
 - [AGENT-EXECUTION-BASELINE.md](./AGENT-EXECUTION-BASELINE.md) - 当前 MVP 边界
-- [MVP-EXECUTION-QUEUE.md](./MVP-EXECUTION-QUEUE.md) - 执行队列
+- [CURRENT-EXECUTION-PLAN.md](./CURRENT-EXECUTION-PLAN.md) - 当前执行主线
 - [ROADMAP.md](./ROADMAP.md) - 阶段规划
 - [DEMO-PATHS.md](./DEMO-PATHS.md) - 演示路径

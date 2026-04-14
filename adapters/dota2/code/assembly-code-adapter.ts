@@ -913,11 +913,23 @@ export class ${className} {
     }
   }
 
+  /**
+   * 从加权池生成选项
+   * 优先使用 drawForSelection（支持 session state tracking）
+   */
   // @ts-ignore - pool may not be available
-  generateOptionsFromPool<T extends SelectionOption>(pool: any, count: number): T[] {
+  generateOptionsFromPool<T extends SelectionOption>(playerId: number, pool: any, count: number): T[] {
+    // 优先使用 drawForSelection（支持 session state tracking）
+    if (pool && typeof pool.drawForSelection === "function") {
+      const candidates = pool.drawForSelection(count);
+      return candidates;
+    }
+
+    // Fallback: 使用旧的 drawMultiple（不支持 session state）
     if (pool && typeof pool.drawMultiple === "function") {
       return pool.drawMultiple(count);
     }
+
     print(\`[Rune Weaver] Pool not available for ${className}, using default options\`);
     return [];
   }

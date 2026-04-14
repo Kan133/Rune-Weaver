@@ -26,6 +26,7 @@ export function generateFeatureReview(
   uiDetection: UIDetectionResult,
   uiIntake: UIIntakeResult | undefined,
   knownInputs: KnownInputs,
+  hostRoot = "D:\\test1",
 ): FeatureReview {
   const featureSummary = schema?.request?.goal
     ? schema.request.goal
@@ -90,11 +91,13 @@ export function generateFeatureReview(
     nextStep = {
       action: "clarify",
       reason: conflictResult.summary,
+      command: `npm run cli -- dota2 doctor --host ${hostRoot}`,
     };
   } else if (canProceed) {
     nextStep = {
       action: "proceed",
       reason: "All required information is available. Ready for controlled planning flow.",
+      command: `npm run cli -- dota2 run "${userRequest}" --host ${hostRoot}`,
     };
   } else if (uiDetection.uiBranchRecommended && !uiIntake) {
     nextStep = {
@@ -105,6 +108,7 @@ export function generateFeatureReview(
     nextStep = {
       action: "clarify",
       reason: "Missing key parameters or validation issues need to be resolved.",
+      command: `npm run workbench -- "${userRequest}" "${hostRoot}"`,
     };
   }
 
@@ -189,6 +193,9 @@ export function printFeatureReview(review: FeatureReview): void {
   console.log("\n🔜 Next Step:");
   console.log(`   Action: ${review.nextStep.action.toUpperCase()}`);
   console.log(`   Reason: ${review.nextStep.reason}`);
+  if (review.nextStep.command) {
+    console.log(`   Command: ${review.nextStep.command}`);
+  }
 
   if (review.canProceed) {
     console.log("\n✅ Status: READY TO PROCEED");

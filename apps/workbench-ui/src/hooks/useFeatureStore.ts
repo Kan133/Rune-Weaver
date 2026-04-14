@@ -38,6 +38,8 @@ export interface ExecutionState {
 // Product Entry Integration: Host configuration state
 export interface HostConfigState {
   hostRoot: string;
+  addonName: string;
+  mapName: string;
   hostValid: boolean;
   hostType: 'dota2-x-template' | 'unknown';
   scanErrors: string[];
@@ -107,6 +109,8 @@ interface FeatureStore {
 
   // Product Entry Integration: Host config actions
   setHostRoot: (hostRoot: string) => void;
+  setAddonName: (addonName: string) => void;
+  setMapName: (mapName: string) => void;
   setHostScanResult: (valid: boolean, hostType: 'dota2-x-template' | 'unknown', errors: string[]) => void;
   setIntegrationStatus: (status: HostConfigState['integrationStatus']) => void;
 
@@ -223,6 +227,8 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
   // Product Entry Integration: Initial host config state
   hostConfig: {
     hostRoot: '',
+    addonName: '',
+    mapName: 'temp',
     hostValid: false,
     hostType: 'unknown',
     scanErrors: [],
@@ -489,6 +495,24 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
       hostConfig: {
         ...state.hostConfig,
         hostRoot,
+      },
+    }));
+  },
+
+  setAddonName: (addonName) => {
+    set((state) => ({
+      hostConfig: {
+        ...state.hostConfig,
+        addonName,
+      },
+    }));
+  },
+
+  setMapName: (mapName) => {
+    set((state) => ({
+      hostConfig: {
+        ...state.hostConfig,
+        mapName,
       },
     }));
   },

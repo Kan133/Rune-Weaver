@@ -1,8 +1,12 @@
 # Bridge Update Planning
 
-> Status Note
-> This is a planning/design document for bridge update mechanics.
-> For current implementation baseline, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) and [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md).
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning future bridge update mechanics
+> Do not use for: current bridge lifecycle authority, current MVP scope, or execution ordering
 
 ## 1. 文档目的
 

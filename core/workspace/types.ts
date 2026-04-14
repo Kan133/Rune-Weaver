@@ -7,6 +7,8 @@
  * 与 docs/WORKSPACE-MODEL.md 对齐
  */
 
+import type { HostKind } from "../host/types.js";
+
 export interface EntryBinding {
   target: "server" | "ui" | "config";
   file: string;
@@ -26,13 +28,14 @@ export interface RuneWeaverFeatureRecord {
   entryBindings: EntryBinding[];
   dependsOn?: string[];
   integrationPoints?: string[];  // 存储集成点标识，如 ["input.key_binding:Q"]
+  gapFillBoundaries?: string[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface RuneWeaverWorkspace {
   version: string;
-  hostType: "dota2-x-template";
+  hostType: HostKind;
   hostRoot: string;
   addonName: string;
   mapName?: string;  // 可选：默认启动的地图名称
@@ -64,6 +67,7 @@ export interface FeatureWriteResult {
   selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
+  gapFillBoundaries?: string[];
 }
 
 export type DuplicateFeatureAction = "reject" | "overwrite" | "require-flag";

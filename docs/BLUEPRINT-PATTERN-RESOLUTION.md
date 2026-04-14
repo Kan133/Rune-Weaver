@@ -1,9 +1,12 @@
 # Blueprint Pattern Resolution
 
-> Status Note
-> This document is an active technical reference for Blueprint-to-pattern resolution behavior.
-> It is useful for understanding resolver intent and boundary vocabulary, but it is not the single source of truth for current product status.
-> When implementation and this document diverge, prefer current code plus [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md).
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: understanding Blueprint-to-pattern resolution behavior
+> Do not use for: current product status, current module-need seam authority, or final pattern selection by itself
 
 ## 目的
 

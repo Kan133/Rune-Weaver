@@ -14,18 +14,22 @@ import type {
   UIRequirementSummary,
   UserRequestSummary,
 } from "../schema/types";
+import {
+  DOTA2_X_TEMPLATE_HOST_KIND,
+} from "../host/types.js";
 import { validateIntentSchema } from "../validation";
 import type { WizardIntentOptions, WizardIntentResult } from "./types";
 
 const DEFAULT_HOST: HostDescriptor = {
-  kind: "dota2-x-template",
+  kind: DOTA2_X_TEMPLATE_HOST_KIND,
 };
 
 const INTENT_SCHEMA_REFERENCE = {
   version: "string",
   host: {
-    kind: "dota2-x-template | unknown",
+    kind: "string",
     projectRoot: "string?",
+    capabilities: ["string?"],
   },
   request: {
     rawPrompt: "string",
@@ -143,12 +147,15 @@ function normalizeHost(
   fallback: HostDescriptor
 ): HostDescriptor {
   return {
-    kind: host?.kind === "dota2-x-template" || host?.kind === "unknown" 
-      ? host.kind 
+    kind: typeof host?.kind === "string" && host.kind.trim()
+      ? host.kind
       : fallback.kind,
     projectRoot: typeof host?.projectRoot === "string" 
       ? host.projectRoot 
       : fallback.projectRoot,
+    capabilities: Array.isArray(host?.capabilities)
+      ? host.capabilities.filter((value): value is string => typeof value === "string")
+      : fallback.capabilities,
   };
 }
 

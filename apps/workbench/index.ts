@@ -268,7 +268,8 @@ export async function runWorkbench(
     clarification,
     uiDetection,
     uiIntake,
-    knownInputs
+    knownInputs,
+    options.hostRoot,
   );
 
   session.review = review;
@@ -325,7 +326,8 @@ export async function runWorkbench(
     integrationPoints,
     conflictResult,
     knownInputs,
-    clarification
+    clarification,
+    review.nextStep
   );
   printFeatureCardSection(featureCard);
   printFeatureDetailSection(featureDetail);

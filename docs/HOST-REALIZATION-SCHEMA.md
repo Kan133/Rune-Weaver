@@ -1,8 +1,12 @@
 # HostRealizationPlan Schema
 
-> Status Note
-> This document is an active technical reference for `HostRealizationPlan` shape.
-> It defines schema intent and layer boundaries, not a guarantee that every field is already fully populated in the current MVP implementation.
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: checking the current `HostRealizationPlan` data shape
+> Do not use for: proof that every field is populated today, current milestone status, or host authority by itself
 
 ## Purpose
 

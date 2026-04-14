@@ -39,6 +39,8 @@ export interface Feature {
   updatedAt: Date;
   patterns: string[];
   generatedFiles: string[];
+  gapFillBoundaries?: string[];
+  integrationPoints?: string[];
   hostRealization: HostRealization;
   reviewSignals: ReviewSignals;
 }

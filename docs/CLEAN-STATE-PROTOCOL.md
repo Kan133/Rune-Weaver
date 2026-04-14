@@ -1,5 +1,13 @@
 # Rune Weaver Clean-State Protocol
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: preparing a clean verification environment before acceptance or lifecycle checks
+> Do not use for: changing product scope, changing architecture authority, or deciding roadmap order
+
 本文档定义 Rune Weaver 验证执行前的环境准备协议，确保验证在干净、可重复的状态下进行。
 
 ---

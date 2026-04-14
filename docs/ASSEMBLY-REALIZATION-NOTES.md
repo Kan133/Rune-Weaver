@@ -1,5 +1,13 @@
 # Assembly To Host Realization Notes
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: reasoning about how Assembly feeds Host Realization
+> Do not use for: final host realization authority, current milestone status, or Dota2-only path decisions
+
 ## Purpose
 
 This document explains how `AssemblyPlan` should feed the Host Realization layer.

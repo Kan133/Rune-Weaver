@@ -18,6 +18,8 @@ import type { WritePlan, WritePlanEntry } from "../../../adapters/dota2/assemble
 import type { WriteResult } from "../../../adapters/dota2/executor/index.js";
 import type { UpdateDiffResult, SelectiveUpdateResult } from "../../../adapters/dota2/update/index.js";
 import type { RollbackPlan, RollbackExecutionResult } from "../../../adapters/dota2/rollback/index.js";
+import { checkHostEntryBridge } from "../../../adapters/dota2/bridge/index.js";
+import { loadWorkspace } from "../../../core/workspace/index.js";
 
 export interface HostValidationResult {
   success: boolean;
@@ -70,24 +72,17 @@ export function validateHost(
 
   const serverBridgePath = join(hostRoot, "game/scripts/src/modules/index.ts");
   const uiBridgePath = join(hostRoot, "content/panorama/src/hud/script.tsx");
+  const hostEntryBridge = checkHostEntryBridge(hostRoot);
 
   if (existsSync(serverBridgePath)) {
     checks.push("✅ Server bridge file exists");
-    
-    const bridgeContent = readFileSync(serverBridgePath, "utf-8");
-    const hasActivateCall = bridgeContent.includes("activateRuneWeaverModules");
-    const callCount = (bridgeContent.match(/activateRuneWeaverModules\(\)/g) || []).length;
-    
-    if (hasActivateCall && callCount === 1) {
-      checks.push("✅ Server bridge correctly injected (1 call)");
-    } else if (callCount > 1) {
-      checks.push("❌ Server bridge has duplicate calls");
-      issues.push(`Server bridge has ${callCount} activateRuneWeaverModules calls (expected 1)`);
+    if (hostEntryBridge.serverEntry) {
+      checks.push("✅ Server bridge correctly injected");
     } else {
-      checks.push("⚠️  Server bridge missing activation call");
+      checks.push("❌ Server bridge missing activation call");
+      issues.push("Server bridge host entry was not injected");
     }
-    
-    details.serverBridgeCalls = callCount;
+    details.serverBridgeInjected = hostEntryBridge.serverEntry;
   } else {
     checks.push("❌ Server bridge file missing");
     issues.push("Server bridge file not found");
@@ -95,17 +90,13 @@ export function validateHost(
 
   if (existsSync(uiBridgePath)) {
     checks.push("✅ UI bridge file exists");
-    
-    const uiBridgeContent = readFileSync(uiBridgePath, "utf-8");
-    const hasUIBridge = uiBridgeContent.includes("rune_weaver");
-    
-    if (hasUIBridge) {
+    if (hostEntryBridge.uiEntry) {
       checks.push("✅ UI bridge correctly connected");
     } else {
-      checks.push("⚠️  UI bridge missing rune_weaver reference");
+      checks.push("❌ UI bridge missing rune_weaver reference");
+      issues.push("UI bridge host entry was not injected");
     }
-    
-    details.uiBridgeConnected = hasUIBridge;
+    details.uiBridgeConnected = hostEntryBridge.uiEntry;
   } else {
     checks.push("❌ UI bridge file missing");
     issues.push("UI bridge file not found");
@@ -162,6 +153,37 @@ export function validateHost(
   }
   
   details.featureFilesCount = featureFiles.length;
+
+  const workspaceResult = loadWorkspace(hostRoot);
+  const workspaceFeature = workspaceResult.success
+    ? workspaceResult.workspace?.features.find((feature) => feature.featureId === stableFeatureId)
+    : undefined;
+
+  const keyBindingConflict = detectActiveKeyBindingConflict(hostRoot, stableFeatureId);
+  if (keyBindingConflict) {
+    checks.push(`❌ Key binding conflict detected on ${keyBindingConflict.key}`);
+    issues.push(
+      `Feature '${stableFeatureId}' shares key ${keyBindingConflict.key} with active features: ${keyBindingConflict.conflictingFeatureIds.join(", ")}`
+    );
+    details.keyBindingConflict = keyBindingConflict;
+  } else {
+    checks.push("✅ No active key binding conflicts detected");
+  }
+
+  const requiresSeededPool =
+    workspaceFeature?.selectedPatterns?.includes("data.weighted_pool") &&
+    workspaceFeature?.selectedPatterns?.includes("rule.selection_flow");
+
+  if (requiresSeededPool) {
+    const poolSeedCheck = checkSelectionPoolSeedData(hostRoot, stableFeatureId);
+    if (poolSeedCheck.ok) {
+      checks.push("✅ Selection pool contains initial entries");
+    } else {
+      checks.push("❌ Selection pool is empty for selection flow");
+      issues.push(poolSeedCheck.message);
+      details.selectionPoolSeed = poolSeedCheck;
+    }
+  }
 
   console.log(`  Validation Checks:`);
   for (const check of checks) {
@@ -346,4 +368,82 @@ export function formatRuntimeValidationOutput(result: RuntimeValidationResult): 
       console.log(`    - ${limitation}`);
     }
   }
+}
+
+function detectActiveKeyBindingConflict(
+  hostRoot: string,
+  stableFeatureId: string
+): { key: string; conflictingFeatureIds: string[] } | null {
+  const workspaceResult = loadWorkspace(hostRoot);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
+    return null;
+  }
+
+  const activeFeatures = workspaceResult.workspace.features.filter((feature) => feature.status === "active");
+  const keyToFeatures = new Map<string, string[]>();
+
+  for (const feature of activeFeatures) {
+    const keyBindingPath = join(
+      hostRoot,
+      "game/scripts/src/rune_weaver/generated/server",
+      `${feature.featureId}_input_input_key_binding.ts`
+    );
+    if (!existsSync(keyBindingPath)) {
+      continue;
+    }
+
+    const content = readFileSync(keyBindingPath, "utf8");
+    const match = content.match(/configuredKey:\s*string\s*=\s*"([^"]+)"/);
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1];
+    const featureIds = keyToFeatures.get(key) || [];
+    featureIds.push(feature.featureId);
+    keyToFeatures.set(key, featureIds);
+  }
+
+  for (const [key, featureIds] of keyToFeatures.entries()) {
+    if (featureIds.includes(stableFeatureId) && featureIds.length > 1) {
+      return {
+        key,
+        conflictingFeatureIds: featureIds.filter((featureId) => featureId !== stableFeatureId),
+      };
+    }
+  }
+
+  return null;
+}
+
+function checkSelectionPoolSeedData(
+  hostRoot: string,
+  stableFeatureId: string
+): { ok: true } | { ok: false; message: string } {
+  const poolPath = join(
+    hostRoot,
+    "game/scripts/src/rune_weaver/generated/shared",
+    `${stableFeatureId}_data_data_weighted_pool.ts`
+  );
+
+  if (!existsSync(poolPath)) {
+    return {
+      ok: false,
+      message: `Selection flow expects a weighted pool, but ${stableFeatureId}_data_data_weighted_pool.ts is missing`,
+    };
+  }
+
+  const content = readFileSync(poolPath, "utf8");
+  const hasTodoMarker = content.includes("TODO: Add initial talent entries");
+  const addCallCount = (content.match(/\.add\(/g) || []).length;
+  const seededAddCalls = hasTodoMarker ? addCallCount : Math.max(0, addCallCount - 1);
+
+  if (hasTodoMarker || seededAddCalls === 0) {
+    return {
+      ok: false,
+      message: `Feature '${stableFeatureId}' generated rule.selection_flow but the weighted pool has no initial entries, so runtime selection cannot produce UI options`,
+    };
+  }
+
+  return { ok: true };
 }

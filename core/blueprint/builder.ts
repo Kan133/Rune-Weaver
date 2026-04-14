@@ -122,7 +122,7 @@ export class BlueprintBuilder {
       const req = schema.requirements.functional[i];
       const module = this.createFunctionalModule(req, i, prefix, schemaParams);
       if (module) {
-        modules.push(module);
+        this.upsertModule(modules, module);
       }
     }
 
@@ -132,8 +132,8 @@ export class BlueprintBuilder {
       for (let i = 0; i < schema.requirements.interactions.length; i++) {
         const interaction = schema.requirements.interactions[i];
         const inputModule = this.createInteractionModule(interaction, i, prefix, schemaParams);
-        if (inputModule && !modules.find(m => m.id === inputModule.id)) {
-          modules.push(inputModule);
+        if (inputModule) {
+          this.upsertModule(modules, inputModule);
         }
       }
     }
@@ -143,7 +143,7 @@ export class BlueprintBuilder {
         const surface = schema.uiRequirements.surfaces[i];
         const uiModule = this.createUIModule(surface, i, prefix, schemaParams);
         if (uiModule) {
-          modules.push(uiModule);
+          this.upsertModule(modules, uiModule);
         }
       }
     }
@@ -195,19 +195,16 @@ export class BlueprintBuilder {
     const categories = this.inferCategoriesFromMechanics(schema);
 
     for (const category of categories) {
-      if (modules.some((module) => module.category === category)) {
-        continue;
-      }
-
       const parameters = this.extractModuleParameters(category, schemaParams);
-      modules.push({
+      const newModule: BlueprintModule = {
         id: `${prefix}${category}_${modules.length}`,
         role: this.inferRoleFromCategory(category),
         category,
         patternIds: this.getCanonicalPatternIds(category),
         responsibilities: [this.describeMechanicResponsibility(category)],
         ...(Object.keys(parameters).length > 0 && { parameters }),
-      });
+      };
+      this.upsertModule(modules, newModule);
     }
   }
 
@@ -382,7 +379,40 @@ export class BlueprintBuilder {
     if (params.effectMapping) {
       result.effectMapping = params.effectMapping;
     }
+    if (params.effectApplication) {
+      result.effectApplication = params.effectApplication;
+    }
     return result;
+  }
+
+  private upsertModule(
+    modules: BlueprintModule[],
+    newModule: BlueprintModule
+  ): void {
+    const existingIndex = modules.findIndex(m => m.category === newModule.category);
+
+    if (existingIndex >= 0) {
+      const existing = modules[existingIndex];
+      const mergedResponsibilities = [...new Set([...existing.responsibilities, ...newModule.responsibilities])];
+      const mergedParameters = {
+        ...(existing.parameters || {}),
+        ...(newModule.parameters || {}),
+      };
+      const existingPatternIds = existing.patternIds || [];
+      const newPatternIds = newModule.patternIds || [];
+      const mergedPatternIds = existingPatternIds.length > 0
+        ? existingPatternIds
+        : newPatternIds;
+
+      modules[existingIndex] = {
+        ...existing,
+        responsibilities: mergedResponsibilities,
+        ...(Object.keys(mergedParameters).length > 0 && { parameters: mergedParameters }),
+        patternIds: mergedPatternIds,
+      };
+    } else {
+      modules.push(newModule);
+    }
   }
 
   /**
@@ -615,25 +645,19 @@ export class BlueprintBuilder {
     }
 
     if (schema.normalizedMechanics.outcomeApplication) {
-      const patterns = [CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER, CORE_PATTERN_IDS.EFFECT_RESOURCE_CONSUME].filter(isPatternAvailable);
-      if (patterns.length > 0) {
-        hints.push({
-          category: "effect",
-          suggestedPatterns: patterns,
-          rationale: "需要结果应用机制",
-        });
-      }
+      hints.push({
+        category: "effect",
+        suggestedPatterns: [],
+        rationale: "需要结果应用机制（多态模块，由 resolver/assembly 根据上下文解析具体 pattern）",
+      });
     }
 
     if (schema.normalizedMechanics.resourceConsumption) {
-      const patterns = [CORE_PATTERN_IDS.RESOURCE_BASIC_POOL, CORE_PATTERN_IDS.EFFECT_RESOURCE_CONSUME].filter(isPatternAvailable);
-      if (patterns.length > 0) {
-        hints.push({
-          category: "resource",
-          suggestedPatterns: patterns,
-          rationale: "需要资源消耗处理",
-        });
-      }
+      hints.push({
+        category: "resource",
+        suggestedPatterns: [],
+        rationale: "需要资源消耗处理（多态模块，由 resolver/assembly 根据上下文解析具体 pattern）",
+      });
     }
 
     return hints;
@@ -732,8 +756,8 @@ export class BlueprintBuilder {
 
     contracts.push({
       scope: "assembly",
-      rule: "所有模块必须绑定到可用 Pattern",
-      severity: "error",
+      rule: "非多态模块必须绑定到可用 Pattern；多态模块（effect/resource/integration）可由 resolver/assembly 后续解析",
+      severity: "warning",
     });
 
     return contracts;

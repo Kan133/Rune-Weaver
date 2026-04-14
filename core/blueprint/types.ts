@@ -8,12 +8,8 @@
 // 导入基础类型
 import type {
   Blueprint,
-  BlueprintModule,
-  BlueprintConnection,
-  ValidationContract,
   ValidationIssue,
   PatternHint,
-  UIDesignSpec,
 } from "../schema/types";
 
 // 重新导出 schema 中已定义的 Blueprint 相关类型

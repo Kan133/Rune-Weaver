@@ -1,5 +1,16 @@
 # Wizard Intent Contract
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: comparing older Wizard/Intent wording against the current IntentSchema and Blueprint proposal packet
+> Do not use for: current Wizard authority boundaries, current IntentSchema baseline wording, or current execution routing
+
+This document predates the current IntentSchema / Blueprint proposal split and remains planning-only.
+Do not treat it as a current baseline contract.
+
 ## Purpose
 
 This document defines the contract for the Wizard stage in Rune Weaver.

@@ -48,9 +48,16 @@ import type { RollbackPlan, RollbackExecutionResult } from "../../adapters/dota2
 import { getDefaultReviewArtifactOutputDir, saveDefaultReviewArtifact, saveReviewArtifact } from "./dota2/review-artifacts.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
 import { runDeleteCommand } from "./dota2/commands/delete.js";
+import { runGapFillCommand } from "./dota2/commands/gap-fill.js";
+import type { GapFillMode } from "../../core/gap-fill/index.js";
 import { runRollbackCommand } from "./dota2/commands/rollback.js";
 import { runRegenerateCommand } from "./dota2/commands/regenerate.js";
 import { runUpdateCommand } from "./dota2/commands/update.js";
+import { runValidateCommand } from "./dota2/commands/validate.js";
+import { runRepairCommand } from "./dota2/commands/repair.js";
+import { runDoctorCommand } from "./dota2/commands/doctor.js";
+import { runDemoCommand } from "./dota2/commands/demo.js";
+import { runLifecycleProofCommand } from "./dota2/commands/lifecycle-proof.js";
 import {
   buildAssemblyPlan,
   buildBlueprint,
@@ -67,15 +74,23 @@ const __dirname = dirname(__filename);
 
 
 export interface Dota2CLIOptions {
-  command: "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback" | "delete";
+  command: "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback" | "delete" | "validate" | "repair" | "doctor" | "demo" | "lifecycle" | "gap-fill";
   prompt: string;
   hostRoot: string;
   featureId?: string;
+  boundaryId?: string;
+  instruction?: string;
+  approvalFile?: string;
+  gapFillMode?: GapFillMode;
+  apply?: boolean;
   dryRun: boolean;
   write: boolean;
   force: boolean;
+  safe?: boolean;
   output?: string;
   verbose: boolean;
+  addonName?: string;
+  mapName?: string;
 }
 
 export interface Dota2ReviewArtifact {
@@ -179,49 +194,82 @@ export function showDota2Help(): void {
   npm run cli -- dota2 dry-run "<prompt>" --host <path>
   npm run cli -- dota2 review "<prompt>" --host <path>
   npm run cli -- dota2 regenerate "<prompt>" --host <path> --feature <id>
+  npm run cli -- dota2 validate --host <path>
+  npm run cli -- dota2 repair --host <path> [--safe]
+  npm run cli -- dota2 doctor --host <path>
+  npm run cli -- dota2 gap-fill --boundary <id> --host <path> --instruction "..." --mode review
+  npm run cli -- dota2 gap-fill --feature <id> --host <path> --instruction "..." --mode review
+  npm run cli -- dota2 gap-fill --boundary <id> --host <path> --instruction "..." --mode apply
+  npm run cli -- dota2 gap-fill --host <path> --approve <file> --mode apply
+  npm run cli -- dota2 gap-fill --host <path> --approve <file> --mode validate-applied
+  npm run cli -- dota2 demo prepare --host <path> --addon-name <name> --map <map>
+  npm run cli -- dota2 lifecycle prove --host <path> --write
 
 命令:
-  run        运行完整主链路（默认 dry-run 模式）
+  run        运行完整主链路（默认 dry-run 模式�?
   dry-run    预演模式，不写入文件
   review     生成 review artifact，不写入文件
   regenerate 重新生成已有 feature
+  validate   验证生成的文�?  repair     修复验证失败的问�?  doctor     检查宿主运行准备状�?  demo       生成 demo prepare runbook
+  lifecycle  运行 Talent Draw 生命周期证明计划
   launch     启动 Dota2 Tools 进行测试
+  gap-fill   生成 boundary �?dry-run patch plan
 
 选项:
-  --host <path>       宿主项目根目录 (必需)
+  --host <path>       宿主项目根目�?(必需)
   --feature <id>      Feature ID (regenerate 必需)
+  --boundary <id>     gap-fill boundary ID
+  --feature <id>      gap-fill 可选：从 workspace 解析适用 boundary
+  --instruction <s>   gap-fill instruction text
+  --mode <mode>       gap-fill lifecycle mode: review | apply | validate-applied
+  --apply             兼容旧参数：等同于 --mode apply
+  --approve <file>    批准并执行先前生成的 gap-fill approval record
+  --addon-name <name> Dota2 addon 名称 (demo prepare/init 使用)
+  --map <name>        Dota2 地图�?(demo prepare/launch 使用)
   --dry-run           预演模式，不写入文件 (默认)
   --write             正式写入模式
   --force             强制覆盖 readiness gate
-  -o, --output <path> 输出 review artifact 到指定路径
+  -o, --output <path> 输出 review artifact 到指定路�?
   -v, --verbose       详细输出
 
 安全控制:
   - 默认行为: dry-run 模式，不写入文件
   - --write: 正式写入，但尊重 readiness gate
-  - --force: 强制写入，覆盖 readiness gate (需配合 --write)
+  - --force: 强制写入，覆�?readiness gate (需配合 --write)
 
 示例:
   # 预演模式
-  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1
+  npm run cli -- dota2 run "做一个按Q键的冲刺技�? --host D:\\test1
 
   # 正式写入
-  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1 --write
+  npm run cli -- dota2 run "做一个按Q键的冲刺技�? --host D:\\test1 --write
 
   # 强制写入
-  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1 --write --force
+  npm run cli -- dota2 run "做一个按Q键的冲刺技�? --host D:\\test1 --write --force
 
   # 重新生成已有 feature (预演)
-  npm run cli -- dota2 regenerate "做一个按Q键的冲刺技能" --host D:\\test1 --feature rw_dash_q
+  npm run cli -- dota2 regenerate "做一个按Q键的冲刺技�? --host D:\\test1 --feature rw_dash_q
 
   # 重新生成已有 feature (正式写入)
-  npm run cli -- dota2 regenerate "做一个按Q键的冲刺技能" --host D:\\test1 --feature rw_dash_q --write
+  npm run cli -- dota2 regenerate "做一个按Q键的冲刺技�? --host D:\\test1 --feature rw_dash_q --write
 
   # 启动 Dota2 Tools
   npm run cli -- dota2 launch --host D:\\test1
 
+  # 宿主体检
+  npm run cli -- dota2 doctor --host D:\\test1
+
+  # Demo 准备 runbook
+  npm run cli -- dota2 demo prepare --host D:\\test1 --addon-name talent_draw_demo --map temp
+
+  # Talent Draw lifecycle proof
+  npm run cli -- dota2 lifecycle prove --host D:\\test1 --addon-name talent_draw_demo --map temp --write
+
+  # Gap fill business-logic boundary by feature
+  npm run cli -- dota2 gap-fill --host D:\\test1 --feature standalone_system_abcd --instruction "补全稀有度到属性加成的映射逻辑"
+
   # 输出 review artifact
-  npm run cli -- dota2 run "做一个按Q键的冲刺技能" --host D:\\test1 -o tmp/cli-review/result.json
+  npm run cli -- dota2 run "做一个按Q键的冲刺技�? --host D:\\test1 -o tmp/cli-review/result.json
 `);
 }
 
@@ -254,6 +302,30 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
       createWritePlan,
       generateCodeContent,
     });
+  }
+
+  if (options.command === "validate") {
+    return await runValidateCommand(options);
+  }
+
+  if (options.command === "repair") {
+    return await runRepairCommand(options, { safe: options.safe ?? false });
+  }
+
+  if (options.command === "doctor") {
+    return await runDoctorCommand(options);
+  }
+
+  if (options.command === "demo") {
+    return await runDemoCommand(options);
+  }
+
+  if (options.command === "lifecycle") {
+    return await runLifecycleProofCommand(options);
+  }
+
+  if (options.command === "gap-fill") {
+    return await runGapFillCommand(options);
   }
 
   const artifact = await runPipeline(options);
@@ -364,8 +436,8 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 0: Host Readiness Preflight
-  // T149: dota2 init 是 CLI authoritative create 的正式前置条件
-  // T149-FIX: --force 参数可以绕过初始化检查
+  // T149: dota2 init �?CLI authoritative create 的正式前置条�?
+  // T149-FIX: --force 参数可以绕过初始化检�?
   if (!options.force && !isHostFullyReady(options.hostRoot)) {
     const msg = [
       "宿主未完成初始化，无法执行 create。",
@@ -488,7 +560,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.log(`  ❌ Host Realization failed: ${message}`);
+    console.log(`  �?Host Realization failed: ${message}`);
     artifact.stages.hostRealization = {
       success: false,
       units: [],
@@ -553,7 +625,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.log(`  ❌ Generator Routing failed: ${message}`);
+    console.log(`  �?Generator Routing failed: ${message}`);
     artifact.stages.generatorRouting = {
       success: false,
       routes: [],
@@ -627,7 +699,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       console.log(`     - [${conflict.severity.toUpperCase()}] ${conflict.explanation}`);
     }
   } else {
-    console.log(`\n  ✅ ${governanceCheck.summary}`);
+    console.log(`\n  �?${governanceCheck.summary}`);
   }
 
   // Stage 6: Write Executor
@@ -649,57 +721,13 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
-  // Stage 7: Host Validation (enhanced)
-  const hostValidation = validateHost(options.hostRoot, writePlan, result, stableFeatureId, deferredEntriesInfo);
-  artifact.stages.hostValidation = {
-    success: hostValidation.success,
-    checks: hostValidation.checks,
-    issues: hostValidation.issues,
-    details: hostValidation.details,
-  };
-
-  // Stage 8: Runtime Validation
-  let runtimeValidationResult: RuntimeValidationResult = 
-    { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [], skipped: true };
-
-  if (!options.dryRun && result.success) {
-    try {
-      const runtimeArtifact = await validateHostRuntime(options.hostRoot);
-      runtimeValidationResult = buildRuntimeValidationResult(
-        options.dryRun,
-        result.success,
-        runtimeArtifact
-      );
-      formatRuntimeValidationOutput(runtimeValidationResult);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.log(`  ❌ Runtime validation failed: ${errorMessage}`);
-      runtimeValidationResult = {
-        success: false,
-        serverPassed: false,
-        uiPassed: false,
-        serverErrors: 0,
-        uiErrors: 0,
-        limitations: [`Runtime validation error: ${errorMessage}`],
-      };
-    }
-  } else {
-    runtimeValidationResult = buildRuntimeValidationResult(
-      options.dryRun,
-      result.success
-    );
-    formatRuntimeValidationOutput(runtimeValidationResult);
-  }
-
-  artifact.stages.runtimeValidation = runtimeValidationResult;
-
-  // Stage 9: Workspace State Update (only on real write, not dry-run)
+  // Stage 7: Workspace State Update (only on real write, not dry-run)
   let workspaceStateResult: { success: boolean; featureId: string; totalFeatures: number; error?: string; skipped?: boolean } = 
     { success: true, featureId: "", totalFeatures: 0, skipped: true };
   
   if (!options.dryRun && result.success) {
     console.log("\n" + "=".repeat(70));
-    console.log("Stage 9: Workspace State Update");
+    console.log("Stage 7: Workspace State Update");
     console.log("=".repeat(70));
 
     const workspaceResult = updateWorkspaceState(
@@ -722,7 +750,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     };
 
     if (workspaceResult.success) {
-      console.log(`  ✅ Workspace state updated`);
+      console.log(`  �?Workspace state updated`);
       console.log(`     Feature ID: ${workspaceResult.featureId}`);
       console.log(`     Total features: ${workspaceResult.totalFeatures}`);
     } else {
@@ -730,7 +758,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     }
   } else if (options.dryRun) {
     console.log("\n" + "=".repeat(70));
-    console.log("Stage 8: Workspace State Update");
+    console.log("Stage 7: Workspace State Update");
     console.log("=".repeat(70));
     console.log(`  ℹ️  Skipped (dry-run mode)`);
     workspaceStateResult = { success: true, featureId: "", totalFeatures: 0, skipped: true };
@@ -747,6 +775,50 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     error: workspaceStateResult.error,
     skipped: workspaceStateResult.skipped,
   };
+
+  // Stage 8: Host Validation (enhanced)
+  const hostValidation = validateHost(options.hostRoot, writePlan, result, stableFeatureId, deferredEntriesInfo);
+  artifact.stages.hostValidation = {
+    success: hostValidation.success,
+    checks: hostValidation.checks,
+    issues: hostValidation.issues,
+    details: hostValidation.details,
+  };
+
+  // Stage 9: Runtime Validation
+  let runtimeValidationResult: RuntimeValidationResult = 
+    { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [], skipped: true };
+
+  if (!options.dryRun && result.success) {
+    try {
+      const runtimeArtifact = await validateHostRuntime(options.hostRoot);
+      runtimeValidationResult = buildRuntimeValidationResult(
+        options.dryRun,
+        result.success,
+        runtimeArtifact
+      );
+      formatRuntimeValidationOutput(runtimeValidationResult);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log(`  �?Runtime validation failed: ${errorMessage}`);
+      runtimeValidationResult = {
+        success: false,
+        serverPassed: false,
+        uiPassed: false,
+        serverErrors: 0,
+        uiErrors: 0,
+        limitations: [`Runtime validation error: ${errorMessage}`],
+      };
+    }
+  } else {
+    runtimeValidationResult = buildRuntimeValidationResult(
+      options.dryRun,
+      result.success
+    );
+    formatRuntimeValidationOutput(runtimeValidationResult);
+  }
+
+  artifact.stages.runtimeValidation = runtimeValidationResult;
 
   // T120-R1: Use helper for final verdict calculation
   const verdictInput: VerdictInput = {
@@ -771,3 +843,4 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
 
   return artifact;
 }
+

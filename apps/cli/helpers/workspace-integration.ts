@@ -26,7 +26,8 @@ import {
   RuneWeaverFeatureRecord,
   FeatureWriteResult,
 } from "../../../core/workspace/index.js";
-import { refreshBridge } from "../../../adapters/dota2/bridge/index.js";
+import { injectHostEntryBridge, refreshBridge } from "../../../adapters/dota2/bridge/index.js";
+import { resolveDota2GapFillBoundaryIdsForPatterns } from "../../../adapters/dota2/gap-fill/boundaries.js";
 
 export type FeatureMode = "create" | "update" | "regenerate";
 
@@ -51,7 +52,11 @@ function extractIntegrationPointsFromWritePlan(writePlan: WritePlan): string[] {
   
   // Extract triggerKey from writePlan.entries for key_binding patterns
   for (const entry of writePlan.entries) {
-    const triggerKey = entry.parameters?.triggerKey || entry.metadata?.triggerKey;
+    const triggerKey =
+      entry.parameters?.triggerKey ||
+      entry.parameters?.key ||
+      entry.metadata?.triggerKey ||
+      entry.metadata?.key;
     if (triggerKey && entry.sourcePattern === "input.key_binding") {
       points.push(`input.key_binding:${triggerKey}`);
     }
@@ -136,6 +141,9 @@ export function updateWorkspaceState(
     selectedPatterns: assemblyPlan.selectedPatterns.map((p) => p.patternId),
     generatedFiles,
     entryBindings,
+    gapFillBoundaries: resolveDota2GapFillBoundaryIdsForPatterns(
+      assemblyPlan.selectedPatterns.map((p) => p.patternId)
+    ),
   };
 
   const intentKind = blueprint.sourceIntent.intentKind;
@@ -165,6 +173,16 @@ export function updateWorkspaceState(
       featureId,
       totalFeatures: updatedWorkspace.features.length,
       error: `Failed to refresh generated bridge indexes: ${bridgeRefresh.errors.join(", ")}`,
+    };
+  }
+
+  const hostEntryInjection = injectHostEntryBridge(hostRoot);
+  if (!hostEntryInjection.success) {
+    return {
+      success: false,
+      featureId,
+      totalFeatures: updatedWorkspace.features.length,
+      error: `Failed to inject host bridge entries: ${hostEntryInjection.errors.join(", ")}`,
     };
   }
 

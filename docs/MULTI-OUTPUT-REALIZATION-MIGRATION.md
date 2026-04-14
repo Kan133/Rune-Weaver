@@ -1,9 +1,12 @@
 # Multi-Output Realization Migration
 
-> Status Note
-> This document establishes migration planning, not current implementation.
-> The current `kv+ts` and `kv+lua` paths are working and will remain working during migration.
-> For current realization baseline, see [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md).
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: planning multi-output realization migration
+> Do not use for: current realization baseline, current host-routing authority, or proof that the migration is already shipped
 
 ## Purpose
 

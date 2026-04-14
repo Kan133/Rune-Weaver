@@ -18,3 +18,9 @@ Rule:
 
 - Each workstream must treat the canonical case document as authoritative.
 - Workstreams should record gaps explicitly instead of silently redefining the case.
+
+## Lifecycle Proof
+
+The current lifecycle proof path lives in [LIFECYCLE-PROOF.md](./LIFECYCLE-PROOF.md).
+
+Use it to verify create/write, owned-scope update, delete, and recreate without relying on hidden operator memory.

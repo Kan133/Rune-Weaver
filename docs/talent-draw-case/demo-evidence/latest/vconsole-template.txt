@@ -1,0 +1,14 @@
+[VConsole Checkpoints]
+Source: DEMO-GUIDE.md
+Status: MANUAL EVIDENCE REQUIRED
+
+Extracted expected log lines:
+- [Rune Weaver] TalentDrawDemo... registered
+- [Rune Weaver] Runtime wiring ready for feature talent_draw_demo
+- [Rune Weaver] Bound key: F4 for feature talent_draw_demo
+- key F4
+- [Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: Initialized session for player 0
+- [Rune Weaver] Attached ability rw_modifier_applier_0 to hero at level 1
+
+Note: These are expected log lines from Dota 2 VConsole.
+Actual log capture must be done manually during demo execution.

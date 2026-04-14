@@ -1,5 +1,13 @@
 # Blueprint CLI 使用指南
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: using or reviewing the current blueprint CLI entry points
+> Do not use for: final blueprint authority semantics, current planning truth, or proof that newer blueprint proposals are shipped
+
 ## 1. 目的
 
 本文档说明 Rune Weaver 当前的 `blueprint` CLI 如何使用，以及它的输入输出边界。

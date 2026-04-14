@@ -1,5 +1,13 @@
 # Workspace Model
 
+> Status: authoritative
+> Audience: agents
+> Doc family: baseline
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: changing feature registry, ownership, or create/update/delete workspace behavior
+> Do not use for: roadmap sequencing or host realization policy by itself
+
 ## Status
 
 This document defines the workspace model agents should use for the current README-target MVP.

@@ -1,9 +1,12 @@
 # Feature Boundary And Relationship Guardrails（中文）
 
-> Status Note
-> 本文档是 feature 边界与关系建模的 guardrails，属于治理参考，不是当前实现状态的单一事实来源。
-> 当前 agent 执行应优先遵循 [AGENT-EXECUTION-BASELINE.md](D:\Rune Weaver\docs\AGENT-EXECUTION-BASELINE.md)、[HANDOFF.md](D:\Rune Weaver\docs\HANDOFF.md) 与 [WORKSPACE-MODEL.md](D:\Rune Weaver\docs\WORKSPACE-MODEL.md)。
-> 若本文与当前 README-target MVP 范围冲突，以 host separation、workspace-backed feature create/update/delete、minimum conflict governance 为准。
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future feature-boundary and relationship-governance design
+> Do not use for: current execution baseline, current conflict-governance truth, or worker task ordering
 
 ## 目的
 

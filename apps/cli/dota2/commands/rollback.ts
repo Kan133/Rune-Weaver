@@ -1,10 +1,14 @@
 import { exportWorkspaceToBridge } from "../../../../adapters/dota2/bridge/index.js";
 import { executeRollback, formatRollbackPlan, formatRollbackResult, generateRollbackPlan } from "../../../../adapters/dota2/rollback/index.js";
-import { validateHostRuntime } from "../../../../adapters/dota2/validator/runtime-validator.js";
 import { checkDeleteDependencyRisk } from "../../helpers/governance-check.js";
 import { performRollbackHostValidation } from "../../helpers/index.js";
 import { createRollbackReviewArtifact } from "../rollback-artifact.js";
-import { getDefaultReviewArtifactOutputDir, saveDefaultReviewArtifact, saveReviewArtifact } from "../review-artifacts.js";
+import { saveDefaultReviewArtifact } from "../review-artifacts.js";
+import {
+  finalizeDota2MaintenanceArtifact,
+  printHostValidationStage,
+  runDota2RuntimeValidation,
+} from "./lifecycle-runner.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import {
   findFeatureById,
@@ -239,136 +243,38 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
   );
 
   artifact.stages.hostValidation = hostValidationResult;
-
-  for (const check of hostValidationResult.checks) {
-    console.log(`  ${check}`);
-  }
-
-  if (hostValidationResult.issues.length > 0) {
-    console.log("\n  Issues:");
-    for (const issue of hostValidationResult.issues) {
-      console.log(`    - ${issue}`);
-    }
-  }
+  printHostValidationStage(hostValidationResult);
 
   console.log("\n" + "=".repeat(70));
   console.log("Stage 5: Runtime Validation");
   console.log("=".repeat(70));
 
-  let runtimeValidationResult: { success: boolean; serverPassed: boolean; uiPassed: boolean; serverErrors: number; uiErrors: number; limitations: string[] } =
-    { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [] };
-
-  if (!options.dryRun && rollbackResult.success) {
-    try {
-      const runtimeArtifact = await validateHostRuntime(options.hostRoot);
-
-      runtimeValidationResult = {
-        success: runtimeArtifact.overall.success,
-        serverPassed: runtimeArtifact.overall.serverPassed,
-        uiPassed: runtimeArtifact.overall.uiPassed,
-        serverErrors: runtimeArtifact.server.errorCount,
-        uiErrors: runtimeArtifact.ui.errorCount,
-        limitations: runtimeArtifact.overall.limitations,
-      };
-
-      console.log(`  Server: ${runtimeArtifact.server.success ? "✅ Passed" : "❌ Failed"}`);
-      console.log(`    - Errors: ${runtimeArtifact.server.errorCount}`);
-      console.log(`    - Checked: ${runtimeArtifact.server.checked}`);
-
-      console.log(`  UI: ${runtimeArtifact.ui.success ? "✅ Passed" : "❌ Failed"}`);
-      console.log(`    - Errors: ${runtimeArtifact.ui.errorCount}`);
-      console.log(`    - Checked: ${runtimeArtifact.ui.checked}`);
-
-      if (runtimeArtifact.overall.limitations.length > 0) {
-        console.log("  Limitations:");
-        for (const limitation of runtimeArtifact.overall.limitations) {
-          console.log(`    - ${limitation}`);
-        }
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.log(`  ❌ Runtime validation failed: ${errorMessage}`);
-      runtimeValidationResult = {
-        success: false,
-        serverPassed: false,
-        uiPassed: false,
-        serverErrors: 0,
-        uiErrors: 0,
-        limitations: [`Runtime validation error: ${errorMessage}`],
-      };
-    }
-  } else {
-    console.log("  ⏭️  Skipped (dry-run mode or rollback failed)");
-    runtimeValidationResult.limitations = ["Skipped due to dry-run mode or rollback failure"];
-  }
-
+  const runtimeValidationResult = await runDota2RuntimeValidation(
+    options,
+    !options.dryRun && rollbackResult.success,
+    "dry-run mode or rollback failure"
+  );
   artifact.stages.runtimeValidation = runtimeValidationResult;
-
-  const allStages = [
-    { name: "rollbackPlan", success: artifact.stages.rollbackPlan?.canExecute ?? false },
-    { name: "workspaceState", success: artifact.stages.workspaceState.success },
-    { name: "hostValidation", success: artifact.stages.hostValidation.success },
-    { name: "runtimeValidation", success: artifact.stages.runtimeValidation.success },
-  ];
-
-  const failedStages = allStages.filter((stage) => !stage.success);
-  const weakestStage = failedStages.length > 0 ? failedStages[0].name : "";
-  const pipelineComplete = failedStages.length === 0;
-
-  artifact.finalVerdict.pipelineComplete = pipelineComplete;
-  artifact.finalVerdict.weakestStage = weakestStage;
-  artifact.finalVerdict.completionKind = options.dryRun ? "default-safe" : (pipelineComplete ? "default-safe" : "partial");
-  artifact.finalVerdict.sufficientForDemo = pipelineComplete;
-
-  if (!pipelineComplete) {
-    if (!artifact.stages.rollbackPlan?.canExecute) {
-      artifact.finalVerdict.remainingRisks.push("Rollback plan has safety issues");
-    }
-    if (!artifact.stages.workspaceState.success) {
-      artifact.finalVerdict.remainingRisks.push("Workspace state update failed");
-    }
-    if (!artifact.stages.hostValidation.success) {
-      artifact.finalVerdict.remainingRisks.push("Host validation failed");
-    }
-    if (!artifact.stages.runtimeValidation.success) {
-      artifact.finalVerdict.remainingRisks.push("Runtime validation failed");
-    }
-  }
-
-  if (options.dryRun) {
-    artifact.finalVerdict.nextSteps.push("Run with --write to execute the rollback plan.");
-  } else if (pipelineComplete) {
-    artifact.finalVerdict.nextSteps.push("Verify the feature has been completely removed.");
-    artifact.finalVerdict.nextSteps.push("Check that no residual files remain.");
-  } else {
-    artifact.finalVerdict.nextSteps.push("Fix the issues before retrying.");
-  }
-
-  const outputPath = saveReviewArtifact(artifact, getDefaultReviewArtifactOutputDir());
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Final Verdict");
-  console.log("=".repeat(70));
-  console.log(`  Pipeline Complete: ${pipelineComplete ? "✅" : "❌"}`);
-  console.log(`  Completion Kind: ${artifact.finalVerdict.completionKind}`);
-  console.log(`  Weakest Stage: ${weakestStage || "(none)"}`);
-  console.log(`  Sufficient for Demo: ${artifact.finalVerdict.sufficientForDemo ? "✅" : "❌"}`);
-
-  if (artifact.finalVerdict.remainingRisks.length > 0) {
-    console.log("\n  Remaining Risks:");
-    for (const risk of artifact.finalVerdict.remainingRisks) {
-      console.log(`    - ${risk}`);
-    }
-  }
-
-  if (artifact.finalVerdict.nextSteps.length > 0) {
-    console.log("\n  Next Steps:");
-    for (const step of artifact.finalVerdict.nextSteps) {
-      console.log(`    → ${step}`);
-    }
-  }
-
-  console.log(`\n📄 Review artifact saved: ${outputPath}`);
-
+  const { pipelineComplete } = finalizeDota2MaintenanceArtifact({
+    artifact,
+    options,
+    stageStatuses: [
+      { name: "rollbackPlan", success: artifact.stages.rollbackPlan?.canExecute ?? false },
+      { name: "workspaceState", success: artifact.stages.workspaceState.success },
+      { name: "hostValidation", success: artifact.stages.hostValidation.success },
+      { name: "runtimeValidation", success: artifact.stages.runtimeValidation.success },
+    ],
+    stageRiskMessages: {
+      rollbackPlan: "Rollback plan has safety issues",
+      workspaceState: "Workspace state update failed",
+      hostValidation: "Host validation failed",
+      runtimeValidation: "Runtime validation failed",
+    },
+    dryRunNextStep: "Run with --write to execute the rollback plan.",
+    successNextSteps: [
+      "Verify the feature has been completely removed.",
+      "Check that no residual files remain.",
+    ],
+  });
   return pipelineComplete;
 }

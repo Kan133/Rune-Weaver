@@ -5,19 +5,14 @@
  * 与 docs/SCHEMA.md 保持一致
  */
 
-// ============================================================================
-// Host Descriptor
-// ============================================================================
-
-export interface HostDescriptor {
-  kind: "dota2-x-template" | "unknown";
-  projectRoot?: string;
-}
+import type { HostDescriptor } from "../host/types.js";
 
 // ============================================================================
 // Intent Schema - 需求层核心对象
 // 与 SCHEMA.md 4.2 节对齐
 // ============================================================================
+
+export type { HostDescriptor } from "../host/types.js";
 
 export interface IntentSchema {
   version: string;
@@ -288,7 +283,7 @@ export interface BridgeUpdate {
 
 /**
  * Dota2 Host  realization 类型
- * 与 docs/DOTA2-HOST-REALIZATION-POLICY.md 对齐
+ * 与 docs/hosts/dota2/DOTA2-HOST-REALIZATION-POLICY.md 对齐
  * T143: Added "lua" for formal routing of lua ability patterns
  * T143-R1: Added "kv+lua" to represent lua-backed abilities with kv static shell
  */

@@ -14,46 +14,35 @@
 
 ### 3.1 Panorama 的 React 支持
 
-Dota2 Panorama **原生不支持 React**。需要使用 `react-panorama` 库：
+Dota2 Panorama **原生不支持 React**。React 需要宿主模板提供对应运行时和构建链。
+
+Rune Weaver 当前验证过的 x-template host 使用 `react-panorama-x` 风格的 React/Panorama 管线，而不是浏览器 React。
 
 ```bash
-npm install react-panorama
+yarn install
 ```
 
 ### 3.2 Rune Weaver 的立场
 
-**Phase 1 策略**: 不使用 React
+**当前 Dota2 x-template 策略**: 可以生成 React TSX，但必须遵守 UI Safer Profile。
 
 原因：
-- 增加运行时依赖
-- 增加构建复杂度
-- 对宿主有额外要求
+- Talent Draw runtime proof 已经验证 React TSX 可以在 x-template 中工作
+- React 事件订阅和 payload 处理有明确坑点
+- LESS 不能从 TSX 直接 import，必须走 HUD `styles.less`
 
-**Phase 1 使用**: 原生 TypeScript + 类组件模式
+必须遵守：
 
-```typescript
-// ✅ Rune Weaver Phase 1 生成
-class MyComponent {
-  panel: Panel;
-  
-  constructor(panel: Panel) {
-    this.panel = panel;
-  }
-  
-  render() {
-    // 原生 Panorama API
-  }
-}
-```
+- [UI-SAFER-PROFILE.md](../../../../docs/UI-SAFER-PROFILE.md)
+- generated LESS 通过 `content/panorama/src/hud/styles.less` 引入
+- `useEffect` 订阅必须 cleanup
+- server payload 必须 defensive normalize
+- `.rune-weaver-root` 必须 full-size
 
-### 3.3 未来可能的 React 迁移
-
-如果后续决定支持 React，需要考虑：
+### 3.3 React 组件示例
 
 ```typescript
-// 未来可能的 React 组件
 import React from 'react';
-import { render } from 'react-panorama';
 
 interface Props {
   current: number;
@@ -73,13 +62,11 @@ const ResourceBar: React.FC<Props> = ({ current, max }) => {
   );
 };
 
-// 渲染
-render(<ResourceBar current={50} max={100} />, $.GetContextPanel());
 ```
 
 ### 3.4 类组件 vs React 组件对比
 
-| 特性 | 原生类组件 (Phase 1) | React 组件 (未来) |
+| 特性 | 原生类组件 | React 组件 |
 |------|---------------------|------------------|
 | 依赖 | 无 | react-panorama |
 | 构建 | 简单 | 需配置 |
@@ -108,10 +95,10 @@ export interface UIComponent {
 
 | 场景 | 价值 |
 |------|------|
-| 代码生成 | 明确生成原生 TS，不生成 React JSX |
-| 依赖管理 | Phase 1 不需要 react-panorama |
-| 未来扩展 | 保留 React 迁移可能性 |
-| 宿主兼容 | 不增加宿主构建负担 |
+| 代码生成 | 允许 React TSX，但必须满足 safer profile |
+| 依赖管理 | 依赖 x-template 已安装的 React/Panorama 管线 |
+| 宿主兼容 | 不把浏览器 React 假设带进 Panorama |
+| 验证 | doctor/validate 应检查 root、LESS、UI index |
 
 ## 5. 当前最相关的 Pattern / Module
 
@@ -120,14 +107,14 @@ export interface UIComponent {
 - `ui.key_hint`
 - `ui.resource_bar`
 
-**实现方式**: 原生 TypeScript 类组件
+**实现方式**: x-template target 当前可使用 React TSX；其他宿主可另行定义 native profile。
 
 ## 6. 后续注意事项
 
-- Phase 1 坚守原生 TypeScript
-- 如果要支持 React，需要重新评估宿主依赖
-- 原生代码向 React 迁移需要重写
-- 考虑提供两种生成模式的选择（远期）
+- 不要从 TSX import generated LESS
+- 不要在 render 中创建会进入 effect dependency 的默认数组/对象
+- 不要假设 Lua table 到 UI 后一定是 JS array
+- React profile 只对已验证的 x-template target 生效
 
 ## 7. 参考：原生 vs React 代码对比
 

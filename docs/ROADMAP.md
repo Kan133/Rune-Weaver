@@ -1,151 +1,500 @@
 # ROADMAP
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: understanding milestone sequencing and longer-horizon product direction
+> Do not use for: current step/blocker truth, current execution queue, or shipped capability claims by itself
+
+> Status Note
+>
+> This file may lag the freshest same-day mainline status.
+> For current step/blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md), the latest session-sync notes, and [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
+
 ## Purpose
 
-This document defines phase sequencing.
+This roadmap reflects the product sequence after the Talent Draw runtime proof.
 
-It is intentionally different from:
+Rune Weaver has now demonstrated the most important claim for the current phase:
 
-- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md), which defines current executable scope
-- [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md), which defines current operational next steps
+> A composite feature can move through the formal pipeline, be written into an x-template Dota2 host, launch in Dota2, open generated UI, and apply a runtime effect.
 
-If this file conflicts with current implementation reality, do not force reality to match the roadmap sentence. Fix the roadmap or defer the capability.
+The next move is not to add many new patterns or chase a second case immediately. The next move is to turn that success path into a repeatable product flow that does not depend on hidden operator knowledge.
 
-## Current Planning Principle
+Read alongside:
 
-Rune Weaver should now be sequenced around the README-target MVP, not around every lifecycle feature at once.
+- [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
+- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
+- [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md)
+- [talent-draw-case/CANONICAL-CASE-TALENT-DRAW.md](/D:/Rune%20Weaver/docs/talent-draw-case/CANONICAL-CASE-TALENT-DRAW.md)
+- [talent-draw-case/LIFECYCLE-PROOF.md](/D:/Rune%20Weaver/docs/talent-draw-case/LIFECYCLE-PROOF.md)
+- [../TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/TALENT-DRAW-E2E-LESSONS.md)
 
-The near-term priority is:
+If this file conflicts with current executable reality, trust the executable evidence and update this roadmap.
 
-1. strict host separation
-2. workspace-backed feature registry
-3. product-grade `create`
-4. product-grade `update`
-5. product-grade `delete`
-6. minimum cross-feature governance
+---
 
-Deferred:
+## Current Product Thesis
 
-- `regenerate`
-- `rollback`
-- semantic incremental update
-- second host
-- broad platformization
+Rune Weaver should prove that it can construct, review, write, track, validate, repair, run, update, and delete a feature inside a living host project.
 
-## Phase 1: Host-Separated Construction Baseline
+The near-term product proof is not:
 
-### Goal
+- generate any arbitrary code from any prompt,
+- support every Dota2 mechanic,
+- finish every lifecycle command,
+- build a full visual IDE,
+- support a second host.
 
-Establish a trustworthy host-aware construction pipeline from natural language to Rune Weaver-owned host output.
+The near-term product proof is:
 
-### Scope
+> A complex feature can travel through Rune Weaver as a first-class governed feature, and a user can get from an empty host skeleton to an in-game playable result without manual bridge/KV/Lua/Panorama configuration.
 
-Phase 1 includes:
+Talent Draw remains the active proving case:
 
-- Wizard -> IntentSchema
-- Blueprint orchestration
-- Pattern resolution
-- AssemblyPlan
-- Host realization
-- Generator routing
-- Generators
-- Write plan / write executor
-- validation / workspace baseline
+```text
+input_trigger
+  -> weighted_pool
+  -> selection_flow
+  -> selection_modal
+  -> effect_application
+```
 
-### Definition Of Done
+It stresses the pipeline:
 
-Phase 1 is complete when:
+- multi-module Blueprint,
+- pattern contract boundaries,
+- server/shared/ui outputs,
+- session state,
+- UI events,
+- bridge integration,
+- workspace tracking,
+- lifecycle operations,
+- runtime validation.
 
-1. the mainline architecture is stable
-2. at least one real host output path works end to end
-3. workspace exists as persisted state
-4. new cases no longer require frequent architecture rewrites
+---
 
-## Phase 2: README-Target MVP
+## Status Snapshot
 
-### Goal
+Approximate current state after the Talent Draw in-game proof:
 
-Turn the construction baseline into a usable feature-management MVP that matches the README story at minimum depth.
+| Area | Status | Notes |
+|---|---:|---|
+| Architecture baseline | 80-88% | Core layers exist and have survived a composite runtime case |
+| CLI lifecycle spine | 78-84% | Create/write/validate/repair, demo runbook, runtime doctor, and evidence refresh are wired; live lifecycle proof remains |
+| Workbench/UI product entry | 45-60% | Useful shell, should consume the CLI-backed lifecycle later |
+| README-target product | 60-70% | The story is credible and now has repeatable CLI docs; Workbench and lifecycle proof still lag |
+| Small-user product readiness | 40-50% | Gap-fill now has a core decision/approval gate; environment flow and parameter clarification still need product work |
+| Talent Draw case | 78-85% | Runnable in Dota2 with runbook, doctor, validate, and evidence refresh; fidelity and lifecycle proof remain |
 
-### Required Capabilities
+Do not turn these percentages into release promises. They are planning estimates for prioritization.
 
-Phase 2 requires:
+---
 
-- host separation as a hard boundary
-- feature registry / workspace as source of truth
-- `create`
-- `update` as owned-scope feature rewrite
-- `delete` as real unload
-- minimum cross-feature conflict governance
-- write-preview / impact / evidence visibility
+## P0: Make The Success Path Repeatable
 
-### Explicit Boundary
+### Milestone 0: Safe Gap-Fill Apply Gate
 
-Phase 2 `update` means:
+#### Goal
 
-- target an existing persisted feature
-- keep the same `featureId`
-- rewrite only that feature's owned outputs and allowed bridge bindings
+Make prompt-filled implementation changes safe enough for non-coder users by routing every patch through a shared core decision and approval gate.
 
-It does **not** mean:
+#### Current Status
 
-- semantic entity-aware evolution inside arbitrary existing systems
-- whole-codebase intelligent merge
+First slice is in place:
 
-### Definition Of Done
+- `core/gap-fill` evaluates patch plans as `auto_apply`, `require_confirmation`, or `reject`
+- `require_confirmation` can produce an approval record
+- approval records bind the host, boundary, target file hash, patch plan hash, decision, and record hash
+- Dota2 CLI can apply directly only for `auto_apply`
+- Dota2 CLI can apply confirmed patches through `--approve <approval-record.json>`
 
-Phase 2 is established only when:
+#### Required Next Capabilities
 
-1. `create` produces a persisted feature with truthful patterns/files/bindings
-2. `update` rewrites owned artifacts rather than only writing metadata
-3. `delete` unloads the feature from workspace, owned files, and bridge exposure
-4. minimum conflict checks run before write
-5. agents can use workspace and review artifacts to manage multiple features safely
+- expose the same approval contract to Workbench
+- let War3 provide a boundary provider without redefining decision policy
+- improve user-facing summaries for non-code readers
+- add evidence examples for approved apply and rejected apply
 
-## Phase 3: Extended Lifecycle And Platformization
+#### Done When
 
-### Goal
+Both CLI and Workbench can explain whether a gap-fill patch will auto-apply, needs confirmation, or is rejected, using the same core decision result.
 
-Expand beyond the README-target MVP into richer lifecycle and platform governance.
+---
 
-### Typical Later Capabilities
+### Milestone 1: Demo Runbook Automation
 
-- `regenerate`
-- `rollback`
-- semantic incremental update
-- richer relationship/dependency graphs
-- broader governance/productization
-- multi-host extension
+#### Goal
 
-## Current Status
+Turn the proven manual x-template flow into a command that can prepare a host for demo without tribal knowledge.
 
-Current status should be read as:
+Target command shape:
 
-- Phase 1 baseline: substantially standing
-- Phase 2 README-target MVP: **in progress**
-- Phase 3: not started as a product milestone
+```bash
+npm run cli -- dota2 demo prepare --host <path> --addon-name talent_draw_demo --map temp
+```
 
-The project should no longer claim:
+#### Required Capabilities
 
-- Phase 2 complete
-- Phase 3 started
+The command should check or perform the critical sequence:
 
-unless `create/update/delete/governance` are all product-grade.
+1. rename `addon.config` before install,
+2. ensure `yarn install` has created the matching Dota addon/content output,
+3. initialize Rune Weaver workspace if needed,
+4. write or refresh the Talent Draw demo feature,
+5. run the host TypeScript/Panorama build step (`yarn dev` or equivalent),
+6. print or dispatch the fast launch command (`yarn launch <addon> <map>`),
+7. explain every blocked step with a concrete recovery action.
 
-## Immediate Priority
+#### Current Status
 
-1. align workspace docs and code
-2. finish product-grade `create`
-3. finish product-grade `update`
-4. finish product-grade `delete`
-5. move conflict checks from mock/demo logic to workspace-backed checks
-6. keep workbench/UI focused on feature registry, detail, and evidence
+The CLI runbook path is wired through `dota2 demo prepare` and small command modules. It checks addon rename order, dependency/install outputs, workspace readiness, Talent Draw write readiness, `yarn dev`, doctor, validate, and `yarn launch <addon> <map>` guidance.
 
-## Not Recommended As The Next First Step
+#### Constraints
 
-- semantic incremental update
-- `regenerate` / `rollback` productization
-- adding a second host
-- broad UI expansion
-- large graph/governance systems
-- broad pattern expansion unrelated to the README MVP
+- The command must be idempotent.
+- It must not hide destructive actions behind a friendly name.
+- CLI entry files should stay thin; command implementation belongs in small modules.
+- It should prefer checks and explicit steps over broad magic.
+
+#### Done When
+
+A fresh x-template host can be prepared for the Talent Draw demo with one documented command path, and rerunning the command reports a stable ready state instead of duplicating or corrupting files.
+
+---
+
+### Milestone 2: Runtime Doctor
+
+#### Goal
+
+Add a host-level doctor that explains why a written feature will or will not run in Dota2.
+
+Target command shape:
+
+```bash
+npm run cli -- dota2 doctor --host <path>
+```
+
+#### Required Checks
+
+The doctor should detect the failures found during the Talent Draw runtime debug cycle:
+
+- `addon.config` addon name matches the intended addon,
+- install output exists under Dota game/content addon directories,
+- `npc_abilities_custom.txt` has a valid `DOTAAbilities` structure,
+- ability `ScriptFile` values resolve to real Lua files,
+- generated server index references existing modules,
+- generated UI index imports existing TSX components,
+- generated LESS files are imported by the HUD styles entry,
+- `.rune-weaver-root` is full-size and mounted,
+- bridge/runtime wiring exists,
+- workspace generated file records match files on disk,
+- host build artifacts are present or stale.
+
+#### Relationship To Existing Validation
+
+`dota2 validate` checks post-generation self-consistency.
+
+`dota2 repair` applies safe fixes for known post-generation issues.
+
+`dota2 doctor` checks whether the host is ready to launch and play.
+
+The commands can share lower-level checks, but their user-facing intent should stay distinct.
+
+#### Current Status
+
+The first productized Runtime Doctor is wired into the CLI. It reports fix hints for addon/install output, workspace, post-generation validation, runtime bridge wiring, host build artifacts, and gap-fill boundary anchors. It is still file-level and bridge-level; live in-game validation remains manual or runbook-driven.
+
+#### Done When
+
+The doctor can explain the most common Dota2 runtime failures without requiring the user to inspect VConsole logs manually.
+
+---
+
+### Milestone 3: Canonical Walkthrough And Evidence Pack
+
+#### Goal
+
+Turn Talent Draw from "it worked once" into repeatable evidence.
+
+#### Required Evidence
+
+Maintain:
+
+- canonical prompt,
+- canonical fixture parameters,
+- canonical IntentSchema/Blueprint/Assembly/Realization/Routing snapshots,
+- generated files evidence,
+- host write evidence,
+- workspace record evidence,
+- lifecycle proof evidence for update / rollback / delete / recreate, when validating the Talent Draw feature lifecycle,
+- gap-fill decision and approval record evidence, when gap-fill participates,
+- runtime/manual checklist,
+- screenshots or notes from a successful Dota2 run.
+
+#### Evidence Pack Location
+
+- [docs/talent-draw-case/DEMO-GUIDE.md](./talent-draw-case/DEMO-GUIDE.md) - Complete runtime walkthrough with fresh x-template flow, success criteria, and troubleshooting table
+- [docs/talent-draw-case/demo-evidence/README.md](./talent-draw-case/demo-evidence/README.md) - Evidence specification (review artifact, generated files, doctor/validate output, VConsole excerpt, screenshots)
+
+#### Current Status
+
+The canonical evidence refresh command captures demo prepare output, doctor output, validate output, workspace generated files, review artifact, optional gap-fill approval records, VConsole template, screenshots instructions, and manifest metadata.
+
+#### Done When
+
+A new teammate can rerun the walkthrough without hidden steps and can compare the result against known-good evidence.
+
+---
+
+## P1: Make Talent Draw A Trustworthy Product Sample
+
+### Milestone 4: UI Safer Generation Profile
+
+#### Goal
+
+Make generated Panorama React UI stable enough for demos and future cases.
+
+#### Required Capabilities
+
+- error boundary around generated UI root,
+- stable event subscription effects,
+- full-size Rune Weaver HUD root,
+- modal/card layout with predictable sizing,
+- disabled placeholder behavior,
+- confirm button state clarity,
+- text truncation and overflow handling,
+- empty/invalid payload fallback,
+- user-readable debug output.
+
+#### Done When
+
+Selection-style generated UI no longer fails through infinite render loops, missing root sizing, or invalid payload assumptions.
+
+---
+
+### Milestone 5: Fixture And Case Parameter Fidelity
+
+#### Goal
+
+Make the Talent Draw demo match the canonical case closely enough for product storytelling.
+
+#### Required Capabilities
+
+- talent entries match the canonical case,
+- rarity labels and card text are stable,
+- rarity-to-attribute effects match documented values,
+- placeholder text is consistent,
+- prompt, fixture, generated output, and demo explanation agree.
+
+#### Done When
+
+The demo can be explained without caveats such as "the effect values are only placeholders."
+
+---
+
+### Milestone 6: Product-Grade Review Surface
+
+#### Goal
+
+Translate pipeline artifacts into a user-readable feature review before write.
+
+The review should explain:
+
+- what feature will be created,
+- which modules it contains,
+- which patterns are selected or deferred,
+- which files will be written,
+- which bridge points are touched,
+- which parameters came from the user,
+- which parameters came from controlled defaults,
+- what risks remain,
+- which doctor/validation checks are expected after write.
+
+#### First Surface
+
+Start in CLI. Let Workbench consume the same structured review later.
+
+#### Done When
+
+Before write, the user can understand impact without reading Blueprint JSON or generated code.
+
+---
+
+## P2: Prove Rune Weaver Is Not A One-Shot Demo
+
+### Milestone 7: Talent Draw Lifecycle
+
+#### Goal
+
+Use Talent Draw to prove lifecycle operations.
+
+The active executable checklist is [talent-draw-case/LIFECYCLE-PROOF.md](./talent-draw-case/LIFECYCLE-PROOF.md).
+It is also wired as:
+
+```bash
+npm run cli -- dota2 lifecycle prove --host <path> --addon-name talent_draw_demo --map temp
+```
+
+#### Update Cases
+
+Support owned-scope updates such as:
+
+- add a new talent entry,
+- change rarity weights,
+- modify placeholder text,
+- change UR bonus value,
+- change trigger key/event.
+
+Acceptance:
+
+- featureId remains stable,
+- revision increments,
+- only owned artifacts are rewritten,
+- bridge is not duplicated,
+- review shows file/parameter impact,
+- doctor and validate still pass after update.
+
+#### Delete Cases
+
+Support true unload:
+
+- remove feature record or mark deleted,
+- remove owned generated files,
+- remove bridge exports/bindings,
+- preserve unrelated files and features.
+
+#### Done When
+
+Talent Draw can be created, inspected, updated, deleted, and re-created without corrupting workspace or host state.
+
+---
+
+### Milestone 8: Real Conflict Governance
+
+#### Goal
+
+Move conflict governance from demo-level proof to feature-backed behavior.
+
+Use Talent Draw plus another feature to test:
+
+- same key/event contention,
+- same generated module name,
+- same UI event channel,
+- update touching non-owned files,
+- delete affecting another feature dependency.
+
+#### Done When
+
+The system blocks or warns before write, explains the conflict, and identifies the involved feature records.
+
+---
+
+### Milestone 9: Second Complex Composite Case
+
+#### Goal
+
+Prove the system did not become a Talent Draw-specific generator.
+
+Candidate cases:
+
+- resource cost + resource bar + skill release,
+- area trigger + wave spawn + reward selection,
+- card/shop selection + inventory state,
+- multi-stage challenge system,
+- kill trigger + stacking state + reward effect.
+
+#### Done When
+
+The second case reuses existing generic patterns and requires content/config work more than architecture rewrites.
+
+---
+
+## P3: Product Entry
+
+### Milestone 10: Workbench Product Entry
+
+#### Goal
+
+Connect the UI/onboarding shell to the authoritative lifecycle path.
+
+Workbench should not invent a second execution system.
+
+Required flow:
+
+1. select/scan host,
+2. initialize or prepare host if needed,
+3. enter request,
+4. show proposal/review,
+5. dry-run,
+6. write,
+7. run validate/doctor,
+8. show feature detail,
+9. expose list/inspect/update/delete entries.
+
+#### Done When
+
+A user can reach the CLI-backed lifecycle spine through one coherent product entry flow.
+
+---
+
+## Deferred Capabilities
+
+These remain out of the near-term roadmap unless explicitly reopened:
+
+- productized semantic arbitrary-code incremental update,
+- second host,
+- broad UI redesign unrelated to generated feature stability,
+- full multiplayer/state architecture,
+- account-level persistence,
+- general talent-effect DSL.
+
+---
+
+## Demo Readiness Levels
+
+### External-Safe Now
+
+- static architecture walkthrough,
+- Talent Draw in-game runtime proof with clear caveats,
+- CLI create/write path,
+- workspace feature registry,
+- post-generation validate/repair,
+- Workbench feature visualization with clear limits.
+
+### Internal-Only Until Runbook And Doctor Land
+
+- fresh-host Talent Draw setup,
+- x-template install/launch flow,
+- host-level runtime diagnosis,
+- lifecycle update/delete demo.
+
+### Do Not Demo As Complete
+
+- guaranteed one-click public setup,
+- rollback/regenerate as productized lifecycle,
+- second host,
+- full small-user Wizard,
+- Workbench as the authoritative execution surface.
+
+---
+
+## README-Target MVP Bar
+
+Rune Weaver reaches the README-target MVP only when:
+
+1. a complex feature can be created through the formal pipeline,
+2. the feature can be reviewed before write,
+3. generated files and workspace truth match,
+4. the host can be prepared and launched through a repeatable runbook,
+5. doctor/validate can explain common runtime failures,
+6. update/delete work within owned scope,
+7. real conflict governance exists,
+8. the canonical walkthrough is repeatable,
+9. UI can drive the authoritative lifecycle path or clearly defer to CLI.
+
+Gap-fill counts toward the MVP only when its patches are not just generated, but safely decided, confirmable when needed, and traceable through review artifacts.
+
+Talent Draw does not by itself finish the product. But now that it is runnable, making it repeatable, diagnosable, and lifecycle-managed is the shortest path from promising construction baseline to credible feature construction platform.

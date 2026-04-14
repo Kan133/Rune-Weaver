@@ -1,5 +1,18 @@
 # 阶段路线图（中文）
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: understanding the Chinese phase model and product-shape framing
+> Do not use for: current execution queue, current blocker selection, or shipped capability claims by itself
+
+> Status Note
+>
+> 本文档可能落后于 same-day 的 mainline 状态。
+> 当前 step / blocker 请优先参考 [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)、最新 session-sync，以及 [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)。
+
 ## 目的
 
 本文档用于明确 Rune Weaver 的阶段划分，并回答下面几个问题：

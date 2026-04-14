@@ -24,6 +24,8 @@
     "node_modules",
     "dist",
     "old",
-    "apps/workbench-ui"
+    "apps/workbench-ui",
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ]
 }

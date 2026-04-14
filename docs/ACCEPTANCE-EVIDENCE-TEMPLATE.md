@@ -1,5 +1,13 @@
 # Acceptance Evidence Template
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: writing or reviewing acceptance evidence reports
+> Do not use for: deciding product scope, architecture, or execution priority
+
 ## Status
 
 This document provides a uniform evidence template for Rune Weaver canonical case execution reports.

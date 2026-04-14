@@ -1,5 +1,13 @@
 # Canonical Walkthrough
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: running or refreshing the canonical demo / handoff walkthrough
+> Do not use for: architecture authority, current execution queue, or future roadmap commitments
+
 ## 文档目的
 
 本文档定义一条可重复、可交接、可演示、不过度承诺的 canonical walkthrough。
@@ -63,6 +71,44 @@ npm install
 ---
 
 ## Walkthrough 步骤
+
+### Step 0A: 可选 - 通过 Workbench 进入产品入口
+
+**目的**：
+- 用产品入口方式展示同一条 Dota2 主链
+- 证明用户不需要记住全部命令顺序，也能进入正确的 onboarding flow
+
+**命令**：
+```bash
+cd apps/workbench-ui
+npm run dev
+```
+
+**在 UI 中展示**：
+- Host path 输入
+- 自动 host scan
+- addon name / map name 管理
+- launch preview: `yarn launch <addon> <map>`
+- CLI-backed `Initialize / Demo Prepare / Doctor / Validate`
+- Guided State / Onboarding Checklist
+- Execution Result 中的 `Recommended Next Step`
+
+**验证标准**：
+- UI 明确声明 `UI -> CLI Bridge`
+- 至少执行一次真实 CLI 操作并回显结果
+- Guided State 会随着真实 CLI 结果变化
+- 不把 UI 描述成独立执行系统
+
+**证据建议**：
+- 截图 Project Setup 面板初始状态
+- 截图一次 CLI-backed 执行后的 `Recommended Next Step`
+- 记录对应的 CLI 输出面板
+
+**当前边界**：
+- Workbench 仍不是 authoritative lifecycle path
+- 此步骤是产品入口证明，不替代后面的 CLI canonical evidence
+
+---
 
 ### Step 0: 准备宿主
 
@@ -566,7 +612,7 @@ Recommended Actions:
 - [COMMAND-RECIPES.md](./COMMAND-RECIPES.md) - 命令使用指南
 - [WORKSPACE-MODEL.md](./WORKSPACE-MODEL.md) - Workspace 模型定义
 - [DEMO-PATHS.md](./DEMO-PATHS.md) - 演示路径定义
-- [X-TEMPLATE-ONBOARDING.md](./X-TEMPLATE-ONBOARDING.md) - X-Template 集成流程
+- [X-TEMPLATE-ONBOARDING.md](./hosts/dota2/X-TEMPLATE-ONBOARDING.md) - X-Template 集成流程
 - [PRODUCT.md](./PRODUCT.md) - 产品定位和目标
 
 ---

@@ -1,5 +1,13 @@
 # Agent Execution Baseline
 
+> Status: authoritative
+> Audience: agents
+> Doc family: baseline
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: aligning current lifecycle truth, scope, and MVP boundary before execution
+> Do not use for: long-term architecture proposals or roadmap sequencing by itself
+
 ## Purpose
 
 This document is the current authoritative execution baseline for Rune Weaver.

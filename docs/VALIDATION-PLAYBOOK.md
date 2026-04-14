@@ -1,5 +1,13 @@
 # Rune Weaver 验证执行手册
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: executing validation and recording validation results
+> Do not use for: defining acceptance by itself, changing milestone scope, or replacing the execution baseline
+
 ## 文档定位
 
 本手册是**验证执行方法**文档，不是验收标准定义，也不是产品叙述文档。

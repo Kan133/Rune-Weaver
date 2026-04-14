@@ -1,5 +1,13 @@
 # Acceptance Checklists
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: verifying canonical acceptance behavior and execution evidence
+> Do not use for: overriding current lifecycle scope or execution queue truth
+
 ## Status
 
 This document provides executable checklists for the Rune Weaver README-target MVP.

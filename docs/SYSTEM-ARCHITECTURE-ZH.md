@@ -1,5 +1,16 @@
 # 系统总架构（中文）
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: discussing long-range product architecture or future system layers beyond the current shipped baseline
+> Do not use for: current execution layering, current milestone scope, or current authority boundaries
+
+本文描述的是长期目标架构，而不是当前 baseline truth。
+当前执行链与当前 authority boundary 仍以 [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md) 等 baseline docs 为准。
+
 ## 目的
 
 本文用于描述 Rune Weaver 的**最终产品总架构**。

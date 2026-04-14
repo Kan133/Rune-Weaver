@@ -4,16 +4,19 @@ import { join } from "path";
 import type { AssemblyPlan, Blueprint, GeneratorRoutingPlan, HostRealizationPlan, IntentSchema } from "../../../../core/schema/types.js";
 import { extractEntryBindings, findFeatureById, initializeWorkspace, saveWorkspace } from "../../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/index.js";
+import { LifecycleArtifactBuilder } from "../../../../core/lifecycle/artifact-builder.js";
 import type { PatternResolutionResult } from "../../../../core/patterns/resolver.js";
+import { exportWorkspaceToBridge, refreshBridge } from "../../../../adapters/dota2/bridge/index.js";
 import { classifyUpdateDiff, executeSelectiveUpdate, formatUpdateDiffResult, formatSelectiveUpdateResult } from "../../../../adapters/dota2/update/index.js";
-import { validateHostRuntime } from "../../../../adapters/dota2/validator/runtime-validator.js";
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
-import { performUpdateHostValidation } from "../../helpers/index.js";
+import { generateKVContentWithIndex, performUpdateHostValidation } from "../../helpers/index.js";
 import { saveReviewArtifact } from "../review-artifacts.js";
 import { createUpdateReviewArtifact } from "../update-artifact.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import type { FeatureMode } from "../planning.js";
+import { printHostValidationStage, runDota2RuntimeValidation } from "./lifecycle-runner.js";
+import { normalizeUpdateWritePlanEntries } from "../update-entry-normalizer.js";
 
 export interface UpdateCommandDeps {
   createIntentSchema: (prompt: string, hostRoot: string) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
@@ -39,6 +42,9 @@ export async function runUpdateCommand(
   options: Dota2CLIOptions,
   deps: UpdateCommandDeps,
 ): Promise<boolean> {
+  const buildArtifact = (artifact: ReturnType<typeof createUpdateReviewArtifact>) =>
+    new LifecycleArtifactBuilder(artifact);
+
   console.log("=".repeat(70));
   console.log("🧙 Rune Weaver - Update Feature (Maintenance Command)");
   console.log("=".repeat(70));
@@ -47,6 +53,7 @@ export async function runUpdateCommand(
   console.log(`⚙️  Mode: ${options.dryRun ? "dry-run" : "write"}`);
 
   const artifact = createUpdateReviewArtifact(options);
+  const artifactBuilder = buildArtifact(artifact);
 
   if (!options.featureId) {
     console.error("\n❌ Error: --feature <featureId> is required for update");
@@ -355,6 +362,8 @@ export async function runUpdateCommand(
     return false;
   }
 
+  writePlan.entries = normalizeUpdateWritePlanEntries(writePlan.entries);
+
   const executableEntries = writePlan.entries.filter((entry: any) => !entry.deferred);
   const kvEntriesForGen = executableEntries.filter((entry: any) => entry.contentType === "kv");
   const nonKvEntriesForGen = executableEntries.filter((entry: any) => entry.contentType !== "kv");
@@ -448,8 +457,11 @@ export async function runUpdateCommand(
   console.log("=".repeat(70));
 
   const contentMap = new Map<string, string>();
+  const stableFeatureId = existingFeature.featureId;
   for (const entry of writePlan.entries) {
-    const content = deps.generateCodeContent(entry);
+    const content = entry.contentType === "kv"
+      ? generateKVContentWithIndex(entry, 0)
+      : deps.generateCodeContent(entry, stableFeatureId);
     const relativePath = entry.targetPath.replace(options.hostRoot.replace(/\\/g, "/"), "").replace(/^\//, "");
     contentMap.set(relativePath, content);
   }
@@ -530,12 +542,29 @@ export async function runUpdateCommand(
       };
       artifact.finalVerdict.weakestStage = "workspaceState";
       artifact.finalVerdict.remainingRisks.push("Failed to update workspace state");
-    } else {
-      console.log("✅ Workspace state updated");
-      console.log(`   Revision: ${existingFeature.revision} -> ${updatedFeature.revision}`);
-      artifact.stages.workspaceState = {
-        success: true,
-        featureId: existingFeature.featureId,
+      } else {
+        console.log("✅ Workspace state updated");
+        console.log(`   Revision: ${existingFeature.revision} -> ${updatedFeature.revision}`);
+
+        const bridgeRefreshResult = refreshBridge(options.hostRoot, updatedWorkspace);
+        if (bridgeRefreshResult.success) {
+          console.log("✅ Bridge indexes refreshed");
+        } else {
+          console.error(`⚠️ Bridge refresh failed: ${bridgeRefreshResult.errors.join(", ")}`);
+        }
+
+        const bridgeExportResult = exportWorkspaceToBridge(updatedWorkspace, {
+          hostRoot: options.hostRoot,
+        });
+        if (bridgeExportResult.success) {
+          console.log(`✅ Bridge export updated: ${bridgeExportResult.outputPath}`);
+        } else {
+          console.error(`⚠️ Bridge export failed: ${bridgeExportResult.issues.join(", ")}`);
+        }
+
+        artifact.stages.workspaceState = {
+          success: true,
+          featureId: existingFeature.featureId,
         totalFeatures: updatedFeatures.length,
       };
     }
@@ -560,19 +589,12 @@ export async function runUpdateCommand(
     issues: hostValidationResult.issues,
     details: {},
   };
+  printHostValidationStage(artifact.stages.hostValidation);
 
-  for (const check of hostValidationResult.checks) {
-    console.log(`  ${check}`);
-  }
-
-  if (hostValidationResult.issues.length > 0) {
-    console.log("\n  Issues:");
+  if (hostValidationResult.issues.length > 0 && !hostValidationResult.success) {
+    artifactBuilder.setFinalVerdict({ weakestStage: "hostValidation" });
     for (const issue of hostValidationResult.issues) {
-      console.log(`    - ${issue}`);
-    }
-    if (!hostValidationResult.success) {
-      artifact.finalVerdict.weakestStage = "hostValidation";
-      artifact.finalVerdict.remainingRisks.push(...hostValidationResult.issues);
+      artifactBuilder.addRemainingRisk(issue);
     }
   }
 
@@ -580,58 +602,33 @@ export async function runUpdateCommand(
   console.log("Stage 10: Runtime Validation");
   console.log("=".repeat(70));
 
-  if (!options.dryRun && updateResult.success) {
-    try {
-      const runtimeArtifact = await validateHostRuntime(options.hostRoot);
+  artifact.stages.runtimeValidation = await runDota2RuntimeValidation(
+    options,
+    !options.dryRun && updateResult.success,
+    "dry-run mode or update failed"
+  );
 
-      artifact.stages.runtimeValidation = {
-        success: runtimeArtifact.overall.success,
-        serverPassed: runtimeArtifact.overall.serverPassed,
-        uiPassed: runtimeArtifact.overall.uiPassed,
-        serverErrors: runtimeArtifact.server.errorCount,
-        uiErrors: runtimeArtifact.ui.errorCount,
-        limitations: [],
-      };
-
-      console.log(`  Server: ${runtimeArtifact.server.success ? "✅ Passed" : "❌ Failed"}`);
-      console.log(`    - Errors: ${runtimeArtifact.server.errorCount}`);
-
-      console.log(`  UI: ${runtimeArtifact.ui.success ? "✅ Passed" : "❌ Failed"}`);
-      console.log(`    - Errors: ${runtimeArtifact.ui.errorCount}`);
-
-      if (!runtimeArtifact.overall.success) {
-        artifact.finalVerdict.weakestStage = "runtimeValidation";
-        if (!runtimeArtifact.overall.serverPassed) {
-          artifact.finalVerdict.remainingRisks.push(`Server runtime validation failed with ${runtimeArtifact.server.errorCount} errors`);
-        }
-        if (!runtimeArtifact.overall.uiPassed) {
-          artifact.finalVerdict.remainingRisks.push(`UI runtime validation failed with ${runtimeArtifact.ui.errorCount} errors`);
-        }
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.log(`  ❌ Runtime validation failed: ${errorMessage}`);
-      artifact.stages.runtimeValidation = {
-        success: false,
-        serverPassed: false,
-        uiPassed: false,
-        serverErrors: 0,
-        uiErrors: 0,
-        limitations: [errorMessage],
-      };
-      artifact.finalVerdict.weakestStage = "runtimeValidation";
-      artifact.finalVerdict.remainingRisks.push(`Runtime validation failed: ${errorMessage}`);
+  if (!artifact.stages.runtimeValidation.success) {
+    artifactBuilder.setFinalVerdict({ weakestStage: "runtimeValidation" });
+    if (!artifact.stages.runtimeValidation.serverPassed) {
+      artifactBuilder.addRemainingRisk(
+        `Server runtime validation failed with ${artifact.stages.runtimeValidation.serverErrors} errors`
+      );
     }
-  } else {
-    console.log("  ⏭️  Skipped (dry-run mode or update failed)");
-    artifact.stages.runtimeValidation = {
-      success: true,
-      serverPassed: true,
-      uiPassed: true,
-      serverErrors: 0,
-      uiErrors: 0,
-      limitations: ["Skipped due to dry-run mode or update failed"],
-    };
+    if (!artifact.stages.runtimeValidation.uiPassed) {
+      artifactBuilder.addRemainingRisk(
+        `UI runtime validation failed with ${artifact.stages.runtimeValidation.uiErrors} errors`
+      );
+    }
+    if (
+      artifact.stages.runtimeValidation.limitations.length > 0 &&
+      artifact.stages.runtimeValidation.serverErrors === 0 &&
+      artifact.stages.runtimeValidation.uiErrors === 0
+    ) {
+      for (const limitation of artifact.stages.runtimeValidation.limitations) {
+        artifactBuilder.addRemainingRisk(`Runtime validation failed: ${limitation}`);
+      }
+    }
   }
 
   const pipelineComplete =
@@ -645,33 +642,37 @@ export async function runUpdateCommand(
     artifact.stages.hostValidation.success &&
     artifact.stages.runtimeValidation.success;
 
-  artifact.finalVerdict.pipelineComplete = pipelineComplete;
-  artifact.finalVerdict.hasUnresolvedPatterns = resolutionResult.unresolved.length > 0;
-  artifact.finalVerdict.wasForceOverride = options.force;
+  artifactBuilder.setFinalVerdict({
+    pipelineComplete,
+    hasUnresolvedPatterns: resolutionResult.unresolved.length > 0,
+    wasForceOverride: options.force,
+  });
 
   if (pipelineComplete) {
-    artifact.finalVerdict.completionKind = options.force ? "forced" : "default-safe";
-    artifact.finalVerdict.sufficientForDemo = true;
+    artifactBuilder.setFinalVerdict({
+      completionKind: options.force ? "forced" : "default-safe",
+      sufficientForDemo: true,
+    });
     if (options.dryRun) {
-      artifact.finalVerdict.nextSteps.push("Run with --write to execute the selective update");
+      artifactBuilder.addNextStep("Run with --write to execute the selective update");
     } else {
-      artifact.finalVerdict.nextSteps.push("Update completed successfully");
+      artifactBuilder.addNextStep("Update completed successfully");
     }
   } else {
-    artifact.finalVerdict.completionKind = "partial";
+    artifactBuilder.setFinalVerdict({ completionKind: "partial" });
     if (!artifact.stages.writeExecutor.success) {
-      artifact.finalVerdict.remainingRisks.push("Selective update execution failed");
+      artifactBuilder.addRemainingRisk("Selective update execution failed");
     }
     if (!artifact.stages.workspaceState.success) {
-      artifact.finalVerdict.remainingRisks.push("Workspace state update failed");
+      artifactBuilder.addRemainingRisk("Workspace state update failed");
     }
     if (!artifact.stages.hostValidation.success) {
-      artifact.finalVerdict.remainingRisks.push("Host validation failed");
+      artifactBuilder.addRemainingRisk("Host validation failed");
     }
     if (!artifact.stages.runtimeValidation.success) {
-      artifact.finalVerdict.remainingRisks.push("Runtime validation failed");
+      artifactBuilder.addRemainingRisk("Runtime validation failed");
     }
-    artifact.finalVerdict.nextSteps.push("Fix the issues before retrying");
+    artifactBuilder.addNextStep("Fix the issues before retrying");
   }
 
   const outputPath = saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));

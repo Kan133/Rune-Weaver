@@ -1,5 +1,13 @@
 # Agent Task Contract
 
+> Status: authoritative
+> Audience: agents
+> Doc family: baseline
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: scoping, assigning, reviewing, or auditing worker-agent tasks
+> Do not use for: redefining current milestone scope or product architecture by itself
+
 ## Purpose
 
 This document defines how lead agents should scope, assign, and evaluate work for Rune Weaver during the current README-target MVP milestone.
@@ -62,6 +70,21 @@ Every worker task should include all of the following:
    - worker must not widen host ownership or redefine milestone scope
 
 If a task packet is missing these fields, it is underspecified.
+
+### Documentation Task Addendum
+
+If a task touches any high-signal doc, the task packet must also name:
+
+1. status / freshness / action decision
+   - for each touched high-signal doc, state whether it stays `authoritative`, `active-reference`, `planning`, or `archive`, plus any `needs-refresh`, `planning-only`, `ignore-for-execution`, or `redirect-stub` handling
+2. registry / routing / index impact
+   - state whether [DOC-STATUS-REGISTRY.md](/D:/Rune%20Weaver/docs/DOC-STATUS-REGISTRY.md), [AGENT-DOC-ROUTING.md](/D:/Rune%20Weaver/docs/AGENT-DOC-ROUTING.md), or [INDEX.md](/D:/Rune%20Weaver/INDEX.md) must change in the same task
+3. archive or redirect impact
+   - state whether any doc is being archived, relocated, or reduced to a redirect stub
+4. planning-only remainder
+   - state what still remains proposal-only after the task and must not be read as baseline truth
+
+If a docs task cannot state these four items, it is still underspecified.
 
 For default autonomy behavior, also pair this file with [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md).
 
@@ -168,6 +191,16 @@ Each worker should return:
 3. what acceptance check was run
 4. what is still incomplete or intentionally deferred
 
+If the task touched high-signal docs, the report must also include:
+
+1. decisions made
+2. status / freshness / action decision
+3. registry / routing / index impact
+4. archive or redirect impact
+5. what remains planning-only
+
+Main controllers or lead agents should not merge high-signal doc changes without these report fields.
+
 ## Prompt Skeleton
 
 Use this template when assigning work:
@@ -192,6 +225,7 @@ Non-Goals:
 
 Acceptance:
 - <specific scenario or command>
+- if docs changed: `npm run check:docs`
 
 Reminder:
 Stay inside the current README-target MVP. Do not redefine scope or revert unrelated user changes.

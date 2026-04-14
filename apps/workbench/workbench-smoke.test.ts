@@ -1,6 +1,14 @@
 import { detectSharedIntegrationPointConflict } from "./conflict-detection.js";
 import { generateFeatureReview } from "./feature-review.js";
 import { collectUIIntake, detectMissingKeyParams, detectUIRequirements, extractKnownInputs } from "./request-analysis.js";
+import {
+  TALENT_DRAW_CANONICAL_BOUNDARY,
+  TALENT_DRAW_CANONICAL_PROMPT,
+  buildCanonicalGapFillGuidance,
+  deriveCanonicalAcceptanceStatus,
+  deriveGapFillContinuationState,
+  isTalentDrawCanonicalGapFill,
+} from "../workbench-ui/src/lib/gapFillCanonical.js";
 import type {
   ClarificationResult,
   ConflictCheckResult,
@@ -129,8 +137,101 @@ function testGenerateFeatureReview(): void {
 
   assert(review.canProceed, "review should be allowed to proceed");
   assert(review.nextStep.action === "proceed", "review should recommend proceed");
+  assert(review.nextStep.command?.includes("npm run cli -- dota2 run"), "review should surface an executable next-step command");
   assert(review.uiNeeds?.needed, "review should retain UI needs");
   assert(review.integrationPoints.count === 2, "review should summarize integration points");
+}
+
+function testCanonicalGapFillContract(): void {
+  assert(
+    TALENT_DRAW_CANONICAL_BOUNDARY === "selection_flow.effect_mapping",
+    "canonical boundary should stay frozen",
+  );
+  assert(
+    TALENT_DRAW_CANONICAL_PROMPT.includes("R / SR / SSR / UR"),
+    "canonical prompt should stay frozen",
+  );
+  assert(
+    isTalentDrawCanonicalGapFill(TALENT_DRAW_CANONICAL_BOUNDARY, TALENT_DRAW_CANONICAL_PROMPT),
+    "canonical helper should recognize the frozen prompt/boundary pair",
+  );
+  assert(
+    !isTalentDrawCanonicalGapFill("weighted_pool.selection_policy", TALENT_DRAW_CANONICAL_PROMPT),
+    "non-canonical boundary should not be treated as canonical acceptance evidence",
+  );
+}
+
+function testCanonicalGuidanceAndContinuation(): void {
+  const reviewGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "ready_to_apply",
+    validationSucceeded: false,
+    hostReady: false,
+  });
+  assert(reviewGuidance.classification === "canonical", "canonical guidance should classify frozen input as canonical");
+  assert(reviewGuidance.nextStep.includes("应用补丁"), "canonical guidance should point to apply+validate before continuation");
+
+  const exploratoryGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: "weighted_pool.selection_policy",
+    instruction: "改一下权重池逻辑",
+  });
+  assert(exploratoryGuidance.classification === "exploratory", "non-frozen input should remain exploratory");
+
+  const preValidation = deriveGapFillContinuationState({
+    status: "ready_to_apply",
+    validationSucceeded: false,
+    hostReady: true,
+  });
+  assert(!preValidation.showContinuationRail, "continuation rail should stay hidden before validate succeeds");
+
+  const hostBlocked = deriveGapFillContinuationState({
+    status: "ready_to_apply",
+    validationSucceeded: true,
+    hostReady: false,
+  });
+  assert(hostBlocked.showContinuationRail, "continuation rail should appear after apply+validate");
+  assert(!hostBlocked.canLaunchHost, "launch should stay blocked when host is not ready");
+
+  const readyToLaunch = deriveGapFillContinuationState({
+    status: "ready_to_apply",
+    validationSucceeded: true,
+    hostReady: true,
+  });
+  assert(readyToLaunch.canLaunchHost, "launch should only unlock after validate succeeds and host is ready");
+
+  const exploratoryAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: "weighted_pool.selection_policy",
+    instruction: "改一下权重池逻辑",
+    status: "ready_to_apply",
+  });
+  assert(exploratoryAcceptance.classification === "exploratory", "non-canonical input should stay exploratory");
+
+  const incompleteAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "ready_to_apply",
+    validationSucceeded: false,
+    hostReady: true,
+    continuationVisible: false,
+  });
+  assert(
+    incompleteAcceptance.classification === "canonical_but_incomplete",
+    "canonical input without validate success should remain incomplete",
+  );
+
+  const readyAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "ready_to_apply",
+    validationSucceeded: true,
+    hostReady: true,
+    continuationVisible: true,
+  });
+  assert(
+    readyAcceptance.classification === "canonical_acceptance_ready",
+    "canonical input with validate success and continuation should be acceptance ready",
+  );
 }
 
 export function runTests(): boolean {
@@ -139,6 +240,8 @@ export function runTests(): boolean {
     { name: "detect ui requirements and intake", fn: testDetectUIRequirementsAndIntake },
     { name: "detect shared integration conflicts", fn: testConflictDetection },
     { name: "generate feature review", fn: testGenerateFeatureReview },
+    { name: "canonical gap-fill contract", fn: testCanonicalGapFillContract },
+    { name: "canonical guidance and continuation", fn: testCanonicalGuidanceAndContinuation },
   ];
 
   let passed = 0;

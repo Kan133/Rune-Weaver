@@ -1,5 +1,13 @@
 # Failure Classification
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: classifying failures during canonical case execution or verification work
+> Do not use for: acceptance criteria by itself, future roadmap planning, or architecture authority
+
 ## Status
 
 This document defines how subsequent agents should classify and report failures during Rune Weaver canonical case execution and Packet A/B/C/D verification.

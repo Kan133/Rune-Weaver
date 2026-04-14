@@ -14,6 +14,7 @@ import type {
   FeatureReview,
   IntegrationPointRegistry,
   KnownInputs,
+  NextStepRecommendation,
 } from "./types.js";
 
 export function createFeatureCard(
@@ -75,6 +76,7 @@ export function createFeatureDetail(
   conflictResult: ConflictCheckResult,
   knownInputs: KnownInputs,
   clarification: ClarificationResult,
+  nextStep?: NextStepRecommendation,
 ): FeatureDetail {
   const now = new Date();
 
@@ -122,5 +124,6 @@ export function createFeatureDetail(
     editableParams,
     hostOutput,
     patternBindings,
+    nextStep,
   };
 }

@@ -1,8 +1,12 @@
 # Generator Routing Contract
 
-> Status Note
-> This document is an active technical reference for generator-family boundaries and routing responsibility.
-> It should not be read as proof that all routing paths are already fully integrated or product-grade in the current MVP.
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: changing or reviewing generator-family routing rules
+> Do not use for: proof that every routing path is already product-grade or current milestone status
 
 ## Purpose
 

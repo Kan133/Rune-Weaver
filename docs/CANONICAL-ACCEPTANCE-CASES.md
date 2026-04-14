@@ -1,5 +1,13 @@
 # Canonical Acceptance Cases
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: checking the canonical README-target MVP acceptance scenarios
+> Do not use for: ad hoc roadmap reprioritization or planning future hosts beyond the current acceptance surface
+
 ## Status
 
 This document defines the authoritative canonical cases for the Rune Weaver README-target MVP acceptance.

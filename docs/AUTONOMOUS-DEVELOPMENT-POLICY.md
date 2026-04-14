@@ -1,5 +1,13 @@
 # Autonomous Development Policy
 
+> Status: authoritative
+> Audience: agents
+> Doc family: baseline
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: deciding what agents may assume or execute without asking the user
+> Do not use for: changing lifecycle scope truth or task priority by itself
+
 ## Purpose
 
 This document defines how agents should work autonomously during the current post-ABCD execution phase.

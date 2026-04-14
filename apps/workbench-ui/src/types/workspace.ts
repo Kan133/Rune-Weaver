@@ -20,6 +20,8 @@ export interface RuneWeaverFeatureRecord {
   generatedFiles: string[];
   entryBindings: EntryBinding[];
   dependsOn?: string[];
+  integrationPoints?: string[];
+  gapFillBoundaries?: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -9,6 +9,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname, basename } from "path";
 import {
+  DOTA2_X_TEMPLATE_HOST_KIND,
+  UNKNOWN_HOST_KIND,
+} from "../host/types.js";
+import {
   RuneWeaverWorkspace,
   RuneWeaverFeatureRecord,
   WorkspaceStateResult,
@@ -61,7 +65,7 @@ export function createEmptyWorkspace(
   const now = new Date().toISOString();
   return {
     version: CURRENT_VERSION,
-    hostType: "dota2-x-template",
+    hostType: DOTA2_X_TEMPLATE_HOST_KIND,
     hostRoot,
     addonName,
     mapName,
@@ -198,6 +202,7 @@ export function addFeatureToWorkspace(
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
     integrationPoints,
+    gapFillBoundaries: result.gapFillBoundaries,
     createdAt: now,
     updatedAt: now,
   };
@@ -232,6 +237,7 @@ export function updateFeatureInWorkspace(
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
     integrationPoints: integrationPoints || existing.integrationPoints,
+    gapFillBoundaries: result.gapFillBoundaries || existing.gapFillBoundaries,
     updatedAt: now,
   };
 
@@ -319,7 +325,7 @@ function validateWorkspaceStructure(workspace: unknown): workspace is RuneWeaver
 
   return (
     typeof w.version === "string" &&
-    w.hostType === "dota2-x-template" &&
+    typeof w.hostType === "string" &&
     typeof w.hostRoot === "string" &&
     typeof w.addonName === "string" &&
     typeof w.initializedAt === "string" &&
@@ -339,7 +345,7 @@ function normalizeWorkspace(rawWorkspace: unknown): RuneWeaverWorkspace {
 
   const workspace: RuneWeaverWorkspace = {
     version: (raw.version as string) || CURRENT_VERSION,
-    hostType: (raw.hostType as "dota2-x-template") || "dota2-x-template",
+    hostType: typeof raw.hostType === "string" ? raw.hostType : UNKNOWN_HOST_KIND,
     hostRoot: (raw.hostRoot as string) || "",
     addonName: (raw.addonName as string) || "",
     mapName: (raw.mapName as string) || undefined,
@@ -372,6 +378,7 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
     generatedFiles,
     entryBindings: normalizeEntryBindings(raw.entryBindings, generatedFiles),
     integrationPoints: (raw.integrationPoints as string[]) || undefined,
+    gapFillBoundaries: (raw.gapFillBoundaries as string[]) || undefined,
     dependsOn: (raw.dependsOn as string[]) || undefined,
     createdAt: (raw.createdAt as string) || now,
     updatedAt: (raw.updatedAt as string) || now,

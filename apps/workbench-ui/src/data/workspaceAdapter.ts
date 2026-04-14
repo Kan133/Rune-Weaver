@@ -5,6 +5,12 @@
 import type { RuneWeaverWorkspace, RuneWeaverFeatureRecord } from "@/types/workspace";
 import type { Feature, Group, FeatureStatus } from "@/types/feature";
 
+const PATTERN_TO_GAP_FILL_BOUNDARIES: Record<string, string[]> = {
+  "rule.selection_flow": ["selection_flow.effect_mapping"],
+  "data.weighted_pool": ["weighted_pool.selection_policy"],
+  "ui.selection_modal": ["ui.selection_modal.payload_adapter"],
+};
+
 // F008: Convert workspace record status to frontend FeatureStatus
 function mapWorkspaceStatus(status: string): FeatureStatus {
   switch (status) {
@@ -47,6 +53,20 @@ function deriveGroup(record: RuneWeaverFeatureRecord): string {
   }
 
   return "skill"; // Default group
+}
+
+function deriveGapFillBoundaries(record: RuneWeaverFeatureRecord): string[] {
+  if (record.gapFillBoundaries && record.gapFillBoundaries.length > 0) {
+    return record.gapFillBoundaries;
+  }
+
+  const boundaries = new Set<string>();
+  for (const patternId of record.selectedPatterns || []) {
+    for (const boundaryId of PATTERN_TO_GAP_FILL_BOUNDARIES[patternId] || []) {
+      boundaries.add(boundaryId);
+    }
+  }
+  return [...boundaries];
 }
 
 // F008: Convert a single workspace record to Feature
@@ -94,6 +114,8 @@ export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord): 
     updatedAt: new Date(record.updatedAt),
     patterns: record.selectedPatterns || [],
     generatedFiles: record.generatedFiles || [],
+    gapFillBoundaries: deriveGapFillBoundaries(record),
+    integrationPoints: record.integrationPoints || [],
     hostRealization: {
       host: "Dota2",
       context: record.blueprintId || "",

@@ -1,404 +1,292 @@
-# Pattern Spec
+# PATTERN-SPEC
 
-## 1. 文档目的
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: admitting or reviewing `PatternContract`, `HostBinding`, and `FillSlot` surfaces for catalog use
+> Do not use for: pattern backlog priority, extraction workflow, or host-specific implementation notes by itself
 
-本文档定义 Rune Weaver 中“一个合格的 Pattern 到底是什么”。
+> Status Note
+> This document is the current admission baseline for pattern entries.
+> It defines the minimum contract a pattern entry must expose before it is safe to admit, extend, or rely on in resolver-facing work.
+> For model boundaries, prefer [PATTERN-MODEL.md](/D:/Rune%20Weaver/docs/PATTERN-MODEL.md).
+> For candidate and draft flow, prefer [PATTERN-PIPELINE.md](/D:/Rune%20Weaver/docs/PATTERN-PIPELINE.md).
+> For authoring workflow, prefer [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md).
 
-它回答四个问题：
-- Pattern 是什么
-- Pattern 不是什么
-- 一个 Pattern 至少要包含哪些信息
-- 如何判断一个 Pattern 是通用机制，还是只是换名字的专用模板
+## Purpose
 
-这份文档是：
-- Pattern Catalog 的上位约束
-- Pattern Resolver 的输入契约
-- Pattern Authoring 的规范依据
-- 后续通用性验证的判断基线
+This document defines what counts as an admissible Rune Weaver pattern entry.
 
----
+It answers five questions:
 
-## 2. 本文档与其他 Pattern 文档的边界
+1. what a formal pattern entry is
+2. what minimum semantic contract it must expose
+3. what minimum host-binding contract it must expose
+4. when bounded variability is allowed through `FillSlot`
+5. which entries should be rejected before they reach catalog truth
 
-Pattern 相关文档只保留三类：
+The goal is not to make pattern docs longer.
+The goal is to make them easier for agents to review, compare, and admit without hidden authority creep.
 
-### `PATTERN-SPEC.md`
+## Accepted Baseline Terms
 
-负责：
-- 定义 Pattern 的元模型
-- 定义合格标准
-- 定义“抽象是否成立”的判断规则
+This document follows the accepted baseline vocabulary:
 
-不负责：
-- 教你怎么提取资料
-- 排具体优先级
+- `PatternContract`
+  - semantic pattern unit
+- `HostBinding`
+  - host-facing admissibility and restriction layer
+- `RealizationFamily`
+  - policy vocabulary for common-path host realization
+- `ModuleNeed`
+  - canonical upstream seam consumed by Pattern Resolution
+- `FillSlot`
+  - declared bounded variability inside an already-selected pattern / realization path
+- `GapFill`
+  - execution that fills declared `FillSlot`s only
 
-### `PATTERN-AUTHORING-GUIDE.md`
+This document does not reopen those terms.
 
-负责：
-- 如何从资料或实现中提取 Pattern
-- 如何写出可入库的 Pattern 草案
+## What Counts As An Admitted Pattern Entry
 
-不负责：
-- 定义 Pattern 的上位模型
-- 决定先做哪些 Pattern
+In this spec, an admitted pattern entry is not just a pattern id plus a template fragment.
 
-### `PATTERN-BACKLOG.md`
+It is at least:
 
-负责：
-- 当前阶段先做哪些 Pattern
-- 每个 Pattern 服务哪个 MVP 用例
-- 优先级与候选清单
+1. one reviewable `PatternContract`
+2. one or more reviewable `HostBinding` entries
+3. a validation surface that can reject or escalate invalid use
+4. declared `FillSlot`s when bounded variability is intentionally supported
 
-不负责：
-- 充当正式规范
-- 替代 Pattern 结构定义
+Practical rule:
 
----
+- a `PatternContract` without any host-attachment path is not yet an admitted catalog entry
+- a host-only fragment without a semantic contract is not yet an admitted catalog entry
 
-## 3. Pattern 的定义
+## Relationship To Other Pattern Docs
 
-Pattern 是一个：
+- [PATTERN-MODEL.md](/D:/Rune%20Weaver/docs/PATTERN-MODEL.md)
+  - defines the boundary between `PatternContract`, `HostBinding`, `RealizationFamily`, and `FillSlot`
+- [PATTERN-SPEC.md](/D:/Rune%20Weaver/docs/PATTERN-SPEC.md)
+  - defines minimum admission requirements
+- [PATTERN-PIPELINE.md](/D:/Rune%20Weaver/docs/PATTERN-PIPELINE.md)
+  - defines `candidate -> draft -> admission -> catalog`
+- [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md)
+  - defines how to extract and draft candidate patterns
 
-`可复用、可参数化、可验证、可组合、可落到宿主实现的功能构件。`
+If these docs disagree on admission truth, prefer this document for minimum admission rules and [PATTERN-MODEL.md](/D:/Rune%20Weaver/docs/PATTERN-MODEL.md) for boundary meaning.
 
-一个 Pattern 不只是模板文件，也不只是代码片段。
+## Minimum Admission Shape
 
-一个合格 Pattern 至少应同时包含：
-- 语义职责
-- 边界
-- 参数
-- 输入/输出
-- 约束与依赖
-- 宿主绑定
-- 示例
-- 验证方式
-
-如果缺少这些信息中的大部分，它更像：
-- 草稿
-- 模板
-- 碎片实现
-
-而不是 Rune Weaver 的正式 Pattern。
-
----
-
-## 4. Pattern 不是什么
-
-Pattern 不应被写成以下东西：
-
-- 一个完整大系统
-- 一组没有元数据的模板文件
-- 一个只在单项目里成立的历史 hack
-- 一个只因为题材不同就重新命名的“新模式”
-
-例如：
-- `talent_selection_flow`
-- `card_selection_flow`
-- `forge_selection_flow`
-
-如果它们只是同一个选择骨架换皮，正确做法应是复用：
-- `data.weighted_pool`
-- `rule.selection_flow`
-- `ui.selection_modal`
-
-而不是继续新增专用 Pattern。
-
----
-
-## 5. 合格 Pattern 的必要属性
-
-一个合格 Pattern 至少要满足以下七条。
-
-### 5.1 有明确职责
-
-必须能回答：
-
-`它稳定解决的到底是什么问题？`
-
-### 5.2 有明确边界
-
-必须能回答：
-
-`它负责什么，不负责什么？`
-
-### 5.3 有参数化接口
-
-主要变体应通过参数表达，而不是每次新增一个近似 Pattern。
-
-### 5.4 有输入与输出
-
-必须说明：
-- 需要什么输入
-- 产出什么输出
-
-### 5.5 有约束与依赖
-
-必须说明：
-- 使用条件
-- 冲突条件
-- 对其他 Pattern 或宿主能力的依赖
-
-### 5.6 有宿主落点
-
-在当前阶段，至少要能说明它如何落到 Dota2 Adapter。
-
-### 5.7 有验证方式
-
-必须告诉系统：
-
-`如何判断这个 Pattern 被正确使用了。`
-
----
-
-## 6. Pattern 的五层结构
-
-推荐把一个完整 Pattern 理解为五层。
-
-### Layer 1: Identity
-
-说明它是谁：
-- `id`
-- `name`
-- `category`
-- `summary`
-
-### Layer 2: Semantics
-
-说明它在语义上做什么：
-- `responsibilities`
-- `capabilities`
-- `nonGoals`
-
-### Layer 3: Contract
-
-说明它怎么被使用：
-- `params`
-- `inputs`
-- `outputs`
-- `constraints`
-- `dependencies`
-
-### Layer 4: Host Binding
-
-说明它如何落到具体宿主：
-- server 落点
-- UI 落点
-- config/KV 落点
-- wiring 要求
-
-### Layer 5: Validation & Examples
-
-说明它如何被理解和验证：
-- examples
-- anti-patterns
-- validation hints
-
----
-
-## 7. 建议的 PatternMeta
+The exact implementation schema may evolve.
+The required review surfaces should not.
 
 ```ts
-export interface PatternMeta {
+interface AdmittedPatternEntry {
+  contract: PatternContractAdmission;
+  bindings: HostBindingAdmission[];
+  fillSlots?: FillSlotAdmission[];
+}
+
+interface PatternContractAdmission {
   id: string;
-  name: string;
-  category: PatternCategory;
   summary: string;
+  semanticCategory: string;
   responsibilities: string[];
-  nonGoals?: string[];
+  nonGoals: string[];
   capabilities: string[];
-  supportedHosts: string[];
-  params?: PatternParam[];
-  inputs?: PatternIO[];
-  outputs?: PatternIO[];
-  constraints?: PatternConstraint[];
-  dependencies?: PatternDependency[];
-  hostBindings?: HostBindingRef[];
-  examples?: PatternExample[];
-  validation?: PatternValidationSpec;
-  tags?: string[];
-  version: string;
+  traits?: string[];
+  inputs: string[];
+  outputs: string[];
+  invariants: string[];
+  compositionRules?: string[];
+  hostBindingRefs: string[];
+}
+
+interface HostBindingAdmission {
+  hostKind: string;
+  allowedFamilies: string[];
+  preferredFamily?: string;
+  requiredHostCapabilities?: string[];
+  hostRestrictions?: string[];
+  overridePolicy?: {
+    reason: string;
+    owner: string;
+    sunsetCondition: string;
+  };
+}
+
+interface FillSlotAdmission {
+  slotId: string;
+  slotKind: string;
+  scope: "pattern" | "binding" | "generator-template";
+  validatorOwnership: string[];
+  fallbackPolicy?: "reject" | "default" | "escalate";
 }
 ```
 
----
+The point of this sketch is the contract split, not the exact field names.
 
-## 8. 通用性要求
+## Minimum `PatternContract` Admission Rules
 
-Rune Weaver 的 Pattern 体系不能只支持“很多不同名字的系统”，而必须支持：
+A minimally admissible `PatternContract` must expose all of the following review surfaces:
 
-`同骨架不同皮的需求，复用同一组机制 Pattern。`
+| Surface | Must answer |
+| --- | --- |
+| semantic identity | what mechanism this is and how reviewers distinguish it from near-duplicates |
+| semantic boundary | what it owns and what it explicitly does not own |
+| capability surface | what `ModuleNeed.requiredCapabilities` it can satisfy |
+| usage contract | what inputs, outputs, parameters, or state affordances it expects |
+| validation surface | what invariants or constraints must hold |
+| host-attachment path | which `HostBinding` entries may realize it |
 
-所以 Pattern 规范本身必须约束这种通用性。
+Additional admission rules:
 
-### 8.1 优先抽象机制，不优先抽象题材
+- `traits` are required when realization, composition, or exclusion behavior depends on them
+- a pattern that can only be found by raw pattern-id hinting is not mature enough for admission
+- domain/theme renaming is not enough to justify a new contract
+- host API names, file paths, or generator internals must not become semantic identity
 
-优先抽象：
-- candidate pool
-- weighted selection
-- player choice
-- modal UI
-- outcome application
+## Minimum `HostBinding` Admission Rules
 
-不优先抽象：
-- 天赋题材
-- 卡牌题材
-- 锻造题材
+A minimally admissible `HostBinding` must expose all of the following review surfaces:
 
-### 8.2 领域词不应直接变成新 Pattern
+| Surface | Must answer |
+| --- | --- |
+| host identity | which host kind or host target scope this binding applies to |
+| admissible family surface | which `RealizationFamily` values are legal for this host binding |
+| host restrictions or requirements | what host capabilities, blockers, or narrowing rules apply |
+| deterministic routing relationship | how this binding participates in policy-driven family selection without becoming semantic authority |
+| exception metadata | when override exists, why it exists, who owns it, and when it expires |
 
-如果一个新需求只是：
-- 候选对象名字变了
-- UI 文案变了
-- 结果对象变了
+Additional admission rules:
 
-那优先应修改：
-- 参数
-- 数据
-- overlay
+- `preferredFamily` may guide common-path routing, but final family selection remains host policy
+- `HostBinding overridePolicy` is exception-only
+- every override must carry `reason`, `owner`, and `sunsetCondition`
+- overrides may narrow, block, or pin an otherwise-admissible family only for documented exception cases
+- overrides must not restore `pattern id -> family` as the normal routing path
 
-而不是新增新 Pattern。
+## Minimum `FillSlot` Admission Rules
 
-### 8.3 Pattern 应尽量服务“机制家族”
+`FillSlot` is optional only when the admitted pattern truly has no bounded variability surface.
 
-一个 Pattern 最好能服务一类机制家族，而不是只服务一个单独场景。
+If downstream use expects `ModuleNeed.boundedVariability`, the admitted pattern and binding surface must do one of two things:
 
-例如：
-- `rule.selection_flow`
+1. declare corresponding `FillSlot`s
+2. explicitly state that no fillable variability is allowed
 
-应能服务：
-- 天赋三选一
-- 卡牌三选一
-- 装备升级三选一
+Every admitted `FillSlot` must expose:
 
----
+| Surface | Must answer |
+| --- | --- |
+| slot identity | which bounded variability zone is being filled |
+| slot kind | what typed fill surface is allowed |
+| scope | whether the slot belongs to pattern, binding, or generator-template surface |
+| validator ownership path | which layer validates invariants, grammar, or host restrictions |
+| deterministic fallback behavior | whether failure means `reject`, `escalate`, or declared default application |
 
-## 9. 家族验证原则
+`FillSlot` must not decide:
 
-为了判断 Pattern 抽象是否成立，后续应使用家族用例验证。
+- whether a module exists
+- which pattern is selected
+- which realization family is selected
+- which generator family is selected
+- host write targets
+- cross-module architecture
 
-家族用例指：
+If a requested variability needs any of those decisions, the entry is underspecified upstream and should not pass admission.
 
-`共享底层机制骨架，但领域表述不同的一组需求。`
+## Resolver And Realization Compatibility Rules
 
-当前建议至少验证三类家族：
+An admitted entry must remain compatible with the accepted common path:
 
-### Selection 家族
+`ModuleNeed -> capability fit -> realization family -> routed outputs -> fill slots`
 
-案例：
-- 天赋三选一
-- 卡牌三选一
-- 装备升级三选一
+Shared precedence remains:
 
-预期共享：
-- `data.weighted_pool`
-- `rule.selection_flow`
-- `ui.selection_modal`
+`host policy -> HostBinding constraints -> ModuleNeed compatibility -> family -> routed outputs -> fill`
 
-### Resource 家族
+Admission implications:
 
-案例：
-- 技能消耗法力
-- 抽卡消耗货币
-- 锻造消耗材料
+- `ModuleNeed` is the only canonical module-level seam
+- `explicitPatternHints` are tie-break only
+- hints may participate only after capability / invariants / outputs / state / family evaluation has produced a tie set
+- generator routing is downstream of family selection, not a second semantic resolver
+- `FillSlot` is downstream of realization choice and may not reopen family or host authority
 
-预期共享：
-- `resource.basic_pool`
-- `effect.resource_consume`
-- `ui.resource_bar`
+If an entry only works because hints bypass capability fit, or because generator logic re-decides family, the entry should stay in draft.
 
-### Trigger 家族
+## Validator Ownership And Result Space
 
-案例：
-- 按键触发
-- 事件触发
-- 回合开始触发
+Validator ownership must stay reviewable.
 
-预期共享：
-- 主功能 Pattern 不变
-- 只替换触发侧 Pattern
+Minimum rule:
 
----
+- `PatternContract`
+  - declares invariant expectations
+- `HostBinding`
+  - may narrow admissible values with host-side restrictions
+- generator or template layer
+  - may define grammar, schema, or allowed symbol surface
+- validator layer
+  - runs after fill and before write
 
-## 10. 失败信号
+Validator result space must remain deterministic:
 
-如果出现以下情况，说明 Pattern 抽象失败或不足。
+- `accept`
+- `reject`
+- `escalate`
+- declared default application
 
-### 10.1 不断新增题材专用 Pattern
+Validation failure must not:
 
-例如：
-- `talent_draw_flow`
-- `card_draw_flow`
-- `forge_upgrade_flow`
+- reselect pattern
+- reselect family
+- invent host targets
+- trigger freeform architectural repair
 
-### 10.2 参数过少
+## Rejection Signals
 
-每遇到一个变体就必须新增 Pattern。
+Reject or keep draft when any of the following is true:
 
-### 10.3 参数过多
+1. the entry is mainly a host API fragment, file path, or template snippet
+2. semantic contract and host binding are mixed into one uncontrolled blob
+3. the entry relies on raw pattern-id routing as its primary selection mechanism
+4. `HostBinding` is missing or cannot explain admissible family choices
+5. `overridePolicy` exists without `reason`, `owner`, or `sunsetCondition`
+6. bounded variability exists but no `FillSlot` or explicit no-fill rule is declared
+7. validator failure would require freeform LLM repair to keep going
+8. the proposed pattern is just a renamed domain skin of an existing mechanism family
 
-一个 Pattern 试图吞掉整个系统，导致边界失控。
+## Admission Checklist
 
-### 10.4 宿主绑定反向主导语义
+An entry is ready for catalog admission only when all of the following are true:
 
-Pattern 被写成：
-- 某个 TS 文件
-- 某个 XML 片段
-- 某个 KV block
+- [ ] `PatternContract` has clear semantic identity
+- [ ] `PatternContract` has clear responsibilities and non-goals
+- [ ] capability surface is declared and reviewable
+- [ ] inputs, outputs, and invariants are reviewable
+- [ ] at least one `HostBinding` path is declared
+- [ ] admissible `RealizationFamily` surface is declared for each binding
+- [ ] any `overridePolicy` is exception-only and carries `reason`, `owner`, and `sunsetCondition`
+- [ ] any `ModuleNeed.boundedVariability` demand maps to declared `FillSlot`s or explicit no-fill
+- [ ] validator ownership path is explicit
+- [ ] validator result space stays deterministic
+- [ ] the entry can be matched from `ModuleNeed` without making hints the main authority
 
-而不是先写清它的语义职责。
+## Current Direction
 
-### 10.5 无法被 Resolver 和 AssemblyPlan 消费
+Rune Weaver should continue admitting patterns under these rules:
 
-如果一个 Pattern 草案无法进入：
-- Pattern Catalog
-- Pattern Resolver
-- AssemblyPlan
+- semantic contract first
+- host binding attached, not substituted
+- family-driven realization for the normal path
+- `explicitPatternHints` as tie-break only
+- exception-only overrides
+- `FillSlot` as bounded completion only
+- no gap-fill takeover of architecture or host authority
 
-那它仍然不是成熟 Pattern。
-
----
-
-## 11. Dota2 宿主的额外要求
-
-当前宿主是 Dota2，所以 Pattern 还应额外说明：
-
-- 落在 server / ui / shared / config 的哪一侧
-- 是否依赖 Panorama
-- 是否依赖 KV
-- 是否依赖特定 wiring
-- 是否依赖 x-template 工程结构
-
-这部分属于 `hostBindings` 的扩展说明，而不是 Pattern 的全部定义。
-
----
-
-## 12. 入库最低标准
-
-一个 Pattern 正式入库前，至少要满足：
-
-- [ ] 职责清晰
-- [ ] 非目标清晰
-- [ ] 参数完整
-- [ ] 输入/输出明确
-- [ ] 约束与依赖明确
-- [ ] 宿主落点明确
-- [ ] 至少有一个标准示例
-- [ ] 至少有基础验证说明
-
-如果大部分项做不到，就仍应停留在 draft。
-
----
-
-## 13. 结论
-
-Rune Weaver 的 Pattern 不是模板库，而是：
-
-`一组带有语义职责、参数接口、组合约束、宿主绑定和验证能力的可复用功能构件。`
-
-它的好坏，不取决于数量有多少，而取决于：
-
-- 是否边界清晰
-- 是否可参数化
-- 是否可复用
-- 是否能支撑同骨架不同皮的需求复用
+This is the minimum baseline needed to keep the pattern system scalable, reviewable, and agent-usable.

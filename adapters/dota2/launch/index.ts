@@ -12,6 +12,8 @@ import { loadWorkspace } from "../../../core/workspace/index.js";
 
 export interface LaunchOptions {
   hostRoot: string;
+  addonName?: string;
+  mapName?: string;
 }
 
 export interface LaunchResult {
@@ -35,6 +37,23 @@ export interface LaunchResult {
   warnings: string[];
 }
 
+export interface LaunchPreflightResult {
+  ready: boolean;
+  missingArtifacts: string[];
+}
+
+function quoteCmdArg(arg: string): string {
+  if (arg.length === 0) {
+    return '""';
+  }
+
+  if (!/[ \t"]/u.test(arg)) {
+    return arg;
+  }
+
+  return `"${arg.replace(/"/g, '""')}"`;
+}
+
 function readHostAddonName(hostRoot: string): string | null {
   try {
     const configPath = join(hostRoot, "scripts/addon.config.ts");
@@ -48,6 +67,21 @@ function readHostAddonName(hostRoot: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function checkLaunchPreflight(hostRoot: string): LaunchPreflightResult {
+  const requiredArtifacts = [
+    "game/scripts/vscripts/addon_game_mode.lua",
+    "content/panorama/layout/custom_game/hud/script.js",
+    "content/panorama/layout/custom_game/hud/styles.css",
+  ];
+
+  const missingArtifacts = requiredArtifacts.filter((relativePath) => !existsSync(join(hostRoot, relativePath)));
+
+  return {
+    ready: missingArtifacts.length === 0,
+    missingArtifacts,
+  };
 }
 
 /**
@@ -95,8 +129,22 @@ export async function runLaunchCommand(options: LaunchOptions): Promise<LaunchRe
     return result;
   }
 
-  result.addonName = hostAddonName;
-  result.mapName = workspace.mapName;
+  const preflight = checkLaunchPreflight(options.hostRoot);
+  if (!preflight.ready) {
+    result.errors.push("启动前检查失败：宿主缺少运行时构建产物");
+    for (const artifact of preflight.missingArtifacts) {
+      result.errors.push(`缺少: ${artifact}`);
+    }
+    result.errors.push("请先执行修复并构建，确保 Lua 和 Panorama 产物已经生成");
+    result.warnings.push("典型修复顺序：npm run cli -- dota2 repair --host <path> --safe，然后在宿主目录执行 yarn dev");
+    return result;
+  }
+
+  const finalAddonName = options.addonName || hostAddonName;
+  const finalMapName = options.mapName || workspace.mapName;
+
+  result.addonName = finalAddonName;
+  result.mapName = finalMapName;
 
   // 2. 构建命令参数
   const args = ["launch"];
@@ -107,11 +155,11 @@ export async function runLaunchCommand(options: LaunchOptions): Promise<LaunchRe
   // 如果不传参数，x-template 会从 addon.config.ts 读取默认 addon_name
 
   // 始终传递 addonName
-  args.push(hostAddonName);
+  args.push(finalAddonName);
 
-  if (workspace.mapName) {
+  if (finalMapName) {
     // 有 mapName：传两个参数
-    args.push(workspace.mapName);
+    args.push(finalMapName);
   } else {
     // 没有 mapName：传引号包裹的空字符串作为第二个参数
     // shell 模式下，空字符串需要用引号包裹才能正确传递
@@ -123,21 +171,32 @@ export async function runLaunchCommand(options: LaunchOptions): Promise<LaunchRe
   console.log("🚀 Rune Weaver - Launch Dota2 Tools");
   console.log("=".repeat(60));
   console.log(`\n📁 Host: ${options.hostRoot}`);
-  console.log(`📦 Addon: ${workspace.addonName}`);
-  if (workspace.mapName) {
-    console.log(`🗺️  Map: ${workspace.mapName}`);
+  console.log(`📦 Addon: ${finalAddonName}`);
+  if (finalMapName) {
+    console.log(`🗺️  Map: ${finalMapName}`);
   }
   console.log(`\n⚙️  Executing: yarn ${args.join(" ")}`);
   console.log();
 
   // 3. 执行 yarn launch
   return new Promise((resolve) => {
-    const child = spawn("yarn", args, {
-      cwd: options.hostRoot,
-      shell: true,
-      stdio: "inherit",
-      detached: true,
-    });
+    const child = process.platform === "win32"
+      ? spawn(
+          "cmd.exe",
+          ["/d", "/s", "/c", ["yarn", ...args].map(quoteCmdArg).join(" ")],
+          {
+            cwd: options.hostRoot,
+            shell: false,
+            stdio: "inherit",
+            detached: true,
+          },
+        )
+      : spawn("yarn", args, {
+          cwd: options.hostRoot,
+          shell: false,
+          stdio: "inherit",
+          detached: true,
+        });
 
     child.on("error", (error) => {
       result.errors.push(`启动失败: ${error.message}`);

@@ -129,6 +129,7 @@ export interface FeatureDetail {
   editableParams: FeatureDetailEditableParams;
   hostOutput: FeatureDetailHostOutput;
   patternBindings: FeatureDetailPatternBindings;
+  nextStep?: NextStepRecommendation;
 }
 
 export type LifecycleActionKind = "create" | "read" | "update" | "archive";
@@ -392,6 +393,7 @@ export interface NextStepRecommendation {
   action: string;
   reason: string;
   priority?: "high" | "medium" | "low";
+  command?: string;
 }
 
 export interface ClarificationResult {

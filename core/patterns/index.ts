@@ -6,7 +6,7 @@
  * 
  * 对齐要求:
  * - PATTERN-SPEC.md
- * - PATTERN-AUTHORING-GUIDE.md
+ * - docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md
  * - 三个 draft pattern 试点
  */
 

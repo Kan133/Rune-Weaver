@@ -126,6 +126,7 @@ async function runCheckDraft(options: PatternCLIOptions): Promise<boolean> {
   const draftIds = [
     "input.key_binding",
     "data.weighted_pool",
+    "rule.selection_flow",
     "ui.selection_modal",
   ];
 
@@ -158,6 +159,10 @@ async function runCheckDraft(options: PatternCLIOptions): Promise<boolean> {
     if (!pattern.hostBindings || pattern.hostBindings.length === 0) {
       issues.push("缺少 hostBindings");
     }
+
+    // Contract-level parameter checks
+    const contractChecks = checkContractParameters(pattern);
+    issues.push(...contractChecks);
 
     return {
       id,
@@ -196,6 +201,37 @@ async function runCheckDraft(options: PatternCLIOptions): Promise<boolean> {
   }
 
   return allAligned;
+}
+
+function checkContractParameters(pattern: Dota2PatternMeta): string[] {
+  const issues: string[] = [];
+  const paramNames = (pattern.parameters || []).map(p => p.name);
+  
+  // Pattern-specific required parameters
+  const requiredParams: Record<string, string[]> = {
+    "data.weighted_pool": ["drawMode", "duplicatePolicy", "poolStateTracking"],
+    "rule.selection_flow": ["postSelectionPoolBehavior", "trackSelectedItems", "effectApplication"],
+    "ui.selection_modal": ["payloadShape", "minDisplayCount", "placeholderConfig"],
+  };
+  
+  const required = requiredParams[pattern.id];
+  if (required) {
+    for (const param of required) {
+      if (!paramNames.includes(param)) {
+        issues.push(`缺少必需参数: ${param}`);
+      }
+    }
+  }
+  
+  // Forbidden parameters
+  const forbiddenParams = ["persistDrawnItems"];
+  for (const forbidden of forbiddenParams) {
+    if (paramNames.includes(forbidden)) {
+      issues.push(`禁止参数存在: ${forbidden}`);
+    }
+  }
+  
+  return issues;
 }
 
 function printValidationResult(

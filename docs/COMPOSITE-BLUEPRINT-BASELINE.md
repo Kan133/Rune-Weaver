@@ -1,5 +1,13 @@
 # Composite Blueprint Baseline
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: temporary
+> Last verified: 2026-04-14
+> Read when: evaluating future composite-feature blueprint requirements
+> Do not use for: current shipped Blueprint baseline, current MVP acceptance, or current execution scope
+
 ## Purpose
 
 This document defines the minimal Blueprint baseline required before Rune Weaver can safely attempt composite feature work. It establishes what a composite feature Blueprint must contain at minimum, without claiming that composite features are fully implemented.

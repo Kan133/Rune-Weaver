@@ -1,9 +1,12 @@
 # Host Realization Contract
 
-> Status Note
-> This document is an active technical reference for the Host Realization layer.
-> It defines realization-layer responsibility and boundaries, not a claim that the full realization contract is already fully productized.
-> For current MVP acceptance and immediate implementation priority, prefer [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) and [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: changing or reviewing Host Realization layer boundaries
+> Do not use for: current MVP completion truth, execution ordering, or host-specific policy by itself
 
 ## Purpose
 

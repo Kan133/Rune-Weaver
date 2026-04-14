@@ -1,8 +1,12 @@
 # Generator Routing Schema
 
-> Status Note
-> This document is an active technical reference for generator-routing data shape.
-> It should be read together with [GENERATOR-ROUTING-CONTRACT.md](/D:/Rune%20Weaver/docs/GENERATOR-ROUTING-CONTRACT.md), and not as proof that all routing schema details are already fully integrated in the current MVP.
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-contract-change
+> Last verified: 2026-04-14
+> Read when: checking the current generator-routing data shape
+> Do not use for: proof that every routing detail is fully integrated, milestone status, or generator policy by itself
 
 ## Purpose
 

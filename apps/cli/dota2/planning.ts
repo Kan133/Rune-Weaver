@@ -4,6 +4,7 @@ import { resolvePatterns, PatternResolutionResult } from "../../../core/patterns
 import { AssemblyPlanBuilder, AssemblyPlanConfig } from "../../../core/pipeline/assembly-plan.js";
 import { createLLMClientFromEnv, isLLMConfigured } from "../../../core/llm/factory.js";
 import { runWizardToIntentSchema, extractNumericParameters } from "../../../core/wizard/index.js";
+import { mergeCanonicalTalentDrawParameters } from "../../../adapters/dota2/cases/talent-draw.js";
 import {
   initializeWorkspace,
   findFeatureById,
@@ -81,15 +82,9 @@ export async function createIntentSchema(
     });
 
     if (result.valid && result.schema) {
-      const extractedParams = extractNumericParameters(prompt);
-      const schema = {
-        ...result.schema,
-        host: {
-          kind: "dota2-x-template" as const,
-          projectRoot: hostRoot,
-        },
-        isReadyForBlueprint: true,
-        normalizedMechanics: result.schema.normalizedMechanics ?? {
+      const extractedParams = mergeCanonicalTalentDrawParameters(prompt, extractNumericParameters(prompt));
+      const normalizedMechanics = applyMechanicHints(
+        {
           trigger: false,
           candidatePool: false,
           weightedSelection: false,
@@ -97,7 +92,18 @@ export async function createIntentSchema(
           uiModal: false,
           outcomeApplication: false,
           resourceConsumption: false,
+          ...(result.schema.normalizedMechanics || {}),
         },
+        extractedParams
+      );
+      const schema = {
+        ...result.schema,
+        host: {
+          kind: "dota2-x-template" as const,
+          projectRoot: hostRoot,
+        },
+        isReadyForBlueprint: true,
+        normalizedMechanics,
       };
 
       if (Object.keys(extractedParams).length > 0) {
@@ -129,7 +135,7 @@ export async function createIntentSchema(
 
 function createFallbackIntentSchema(prompt: string, hostRoot: string): IntentSchema {
   const lowerPrompt = prompt.toLowerCase();
-  const extractedParams = extractNumericParameters(prompt);
+  const extractedParams = mergeCanonicalTalentDrawParameters(prompt, extractNumericParameters(prompt));
 
   let intentKind: "micro-feature" | "standalone-system" = "micro-feature";
   if (lowerPrompt.includes("系统") || lowerPrompt.includes("天赋")) {
@@ -139,15 +145,20 @@ function createFallbackIntentSchema(prompt: string, hostRoot: string): IntentSch
   const uiKeywords = ["ui", "界面", "显示", "天赋", "modal", "窗口"];
   const uiNeeded = uiKeywords.some((kw) => lowerPrompt.includes(kw));
 
-  const normalizedMechanics = {
+  const normalizedMechanics = applyMechanicHints({
     trigger: lowerPrompt.includes("按") || lowerPrompt.includes("键") || lowerPrompt.includes("触发"),
     candidatePool: lowerPrompt.includes("选择") && lowerPrompt.includes("天赋"),
     weightedSelection: lowerPrompt.includes("权重") || lowerPrompt.includes("随机"),
     playerChoice: lowerPrompt.includes("选择") && !lowerPrompt.includes("天赋"),
     uiModal: lowerPrompt.includes("天赋") || lowerPrompt.includes("窗口"),
-    outcomeApplication: lowerPrompt.includes("冲刺") || lowerPrompt.includes("效果") || lowerPrompt.includes("应用"),
+    outcomeApplication:
+      lowerPrompt.includes("冲刺") ||
+      lowerPrompt.includes("效果") ||
+      lowerPrompt.includes("应用") ||
+      lowerPrompt.includes("生效") ||
+      lowerPrompt.includes("属性"),
     resourceConsumption: lowerPrompt.includes("消耗") || lowerPrompt.includes("资源"),
-  };
+  }, extractedParams);
 
   const schema: IntentSchema = {
     version: "1.0",
@@ -187,6 +198,35 @@ function createFallbackIntentSchema(prompt: string, hostRoot: string): IntentSch
   }
 
   return schema;
+}
+
+function applyMechanicHints(
+  mechanics: IntentSchema["normalizedMechanics"],
+  extractedParams: Record<string, unknown>
+): IntentSchema["normalizedMechanics"] {
+  const hasCanonicalSelectionPool = Array.isArray(extractedParams.entries) && extractedParams.entries.length > 0;
+  const hasEffectApplication =
+    typeof extractedParams.effectApplication === "object" &&
+    extractedParams.effectApplication !== null;
+
+  return {
+    ...mechanics,
+    trigger: mechanics.trigger || typeof extractedParams.triggerKey === "string",
+    candidatePool: mechanics.candidatePool || hasCanonicalSelectionPool,
+    weightedSelection:
+      mechanics.weightedSelection ||
+      typeof extractedParams.drawMode === "string" ||
+      typeof extractedParams.duplicatePolicy === "string",
+    playerChoice:
+      mechanics.playerChoice ||
+      typeof extractedParams.selectionPolicy === "string" ||
+      typeof extractedParams.choiceCount === "number",
+    uiModal:
+      mechanics.uiModal ||
+      typeof extractedParams.payloadShape === "string" ||
+      typeof extractedParams.minDisplayCount === "number",
+    outcomeApplication: mechanics.outcomeApplication || hasEffectApplication,
+  };
 }
 
 export function buildBlueprint(schema: IntentSchema): { blueprint: Blueprint | null; issues: string[] } {

@@ -1,5 +1,13 @@
 # Rune Weaver 验证自动化边界说明
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: deciding which validation steps may be automated versus manual
+> Do not use for: acceptance criteria, current queue priority, or architecture authority
+
 本文档说明 Rune Weaver 验证流程中哪些动作现在就可以脚本化、哪些后续适合脚本化、哪些当前必须人工判断。
 
 **注意**: 本文档是"自动化边界说明"，不是自动化实现计划。目的是帮助后续做验证自动化决策。
