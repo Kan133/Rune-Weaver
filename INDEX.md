@@ -93,11 +93,18 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 ### Host-Specific Docs
 
 - Dota2-specific docs now live under [docs/hosts/dota2](/D:/Rune%20Weaver/docs/hosts/dota2)
+- the frozen Talent Draw acceptance support docs now also live under [docs/hosts/dota2](/D:/Rune%20Weaver/docs/hosts/dota2):
+  - [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md)
+  - [TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md)
 - War3-specific docs now live under [docs/hosts/war3](/D:/Rune%20Weaver/docs/hosts/war3)
+- War3 host-planning context now includes [WAR3-LUA-EVALUATION-BRIEFING.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-LUA-EVALUATION-BRIEFING.md)
+  - planning-only; not current host execution truth
 - use [DOC-STATUS-REGISTRY.md](/D:/Rune%20Weaver/docs/DOC-STATUS-REGISTRY.md) and [AGENT-DOC-ROUTING.md](/D:/Rune%20Weaver/docs/AGENT-DOC-ROUTING.md) to decide which host docs are active-reference versus planning-only
 
 ### Reference, Not Single Source Of Truth
 
+- [PRODUCT-GUIDE-FOR-AI-PM-ZH.md](/D:/Rune%20Weaver/docs/PRODUCT-GUIDE-FOR-AI-PM-ZH.md)
+  - 面向 AI 产品经理和外部协作者的公开产品说明，解释 workflow、feature-first 方法论与 Rune Weaver 的泛化路径；不替代 README 的当前能力边界
 - [PRODUCT.md](/D:/Rune%20Weaver/docs/PRODUCT.md)
 - [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md)
   - planning-only and may lag fresh mainline status

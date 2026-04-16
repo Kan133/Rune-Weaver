@@ -24,3 +24,18 @@ This directory contains manual screenshot evidence for the Talent Draw demo.
 5. Save the runtime video beside latest/ as talent-draw-demo-runtime.mp4
 
 Note: Screenshots are manual evidence and cannot be auto-generated.
+
+## Closure Workflow
+
+Use screenshots as part of the canonical closure flow, not as standalone proof:
+
+1. Run the frozen canonical path through `review -> confirmation/apply -> validate -> repair-build -> launch`
+2. Capture the Workbench screenshots `06`-`08`
+3. Capture the runtime screenshots `01`-`05`
+4. Save `talent-draw-demo-runtime.mp4` under `latest/`
+5. Re-run `npm run demo:talent-draw:refresh -- --host <x-template-path>`
+6. Inspect `../acceptance-summary.json` first
+
+The pack is only complete when `acceptance-summary.json` reports `canonical_acceptance_ready`.
+If it reports `canonical_incomplete`, continue filling the missing screenshot/video items.
+If it reports `exploratory`, do not use the run as canonical acceptance evidence.

@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: changing feature registry, ownership, or create/update/delete workspace behavior
 > Do not use for: roadmap sequencing or host realization policy by itself
 
@@ -42,6 +42,12 @@ The current canonical workspace file path is:
 Agents must treat this file as the authoritative persisted registry for Rune Weaver-managed features inside a host.
 
 Do not document or implement another source of truth for feature state without explicitly changing the code and this document together.
+
+Planning-only guardrail:
+
+- future feature-owned source artifacts, if adopted, remain authoring artifacts owned by the same feature lifecycle
+- they do not replace workspace as the persisted registry or lifecycle authority
+- current workspace schema does not add source-model fields
 
 ## 3. Workspace Structure
 

@@ -298,20 +298,18 @@ export function generateGeneratorRoutingPlan(
     const unitRoutes = routeUnit(unit);
     routes.push(...unitRoutes);
     
-    // Check for deferred/blocked routes
     for (const route of unitRoutes) {
       if (route.blockers && route.blockers.length > 0) {
-        if (route.routeKind === "kv") {
-          warnings.push(`KV route blocked for unit ${unit.id}: ${route.blockers.join("; ")}`);
-        }
+        warnings.push(
+          `${route.routeKind.toUpperCase()} route blocked for unit ${unit.id}: ${route.blockers.join("; ")}`
+        );
       }
     }
   }
-  
-  // Check for overall blockers
-  const blockedKVCount = routes.filter(r => r.routeKind === "kv" && r.blockers && r.blockers.length > 0).length;
-  if (blockedKVCount > 0) {
-    blockers.push(`${blockedKVCount} KV route(s) blocked - dota2-kv generator not implemented`);
+
+  const blockedRoutes = routes.filter((route) => route.blockers && route.blockers.length > 0);
+  if (blockedRoutes.length > 0) {
+    blockers.push(`${blockedRoutes.length} generator route(s) remain blocked by realization constraints`);
   }
   
   return {

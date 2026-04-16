@@ -12,7 +12,7 @@
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { dirname, resolve } from "path";
-import { createLLMClientFromEnv } from "../../core/llm/factory.js";
+import { createLLMClientFromEnv, readLLMExecutionConfig } from "../../core/llm/factory.js";
 import { runWizardToIntentSchema } from "../../core/wizard/intent-schema.js";
 import { BlueprintBuilder } from "../../core/blueprint/builder.js";
 import { validateBlueprint } from "../../core/blueprint/validator.js";
@@ -191,14 +191,15 @@ async function runBlueprintCommand(options: BlueprintCLIOptions): Promise<Bluepr
 async function runWizard(options: BlueprintCLIOptions): Promise<{ success: boolean; schema?: IntentSchema; error?: string }> {
   try {
     const client = createLLMClientFromEnv(process.cwd());
+    const llmConfig = readLLMExecutionConfig(process.cwd(), "blueprint");
     
     const result = await runWizardToIntentSchema({
       client,
       input: {
         rawText: options.rawText!,
-        temperature: options.temperature ?? 0.6,
-        model: options.model,
-        providerOptions: { thinking: { type: "disabled" } },
+        temperature: options.temperature ?? llmConfig.temperature,
+        model: options.model ?? llmConfig.model,
+        providerOptions: llmConfig.providerOptions,
       },
     });
 

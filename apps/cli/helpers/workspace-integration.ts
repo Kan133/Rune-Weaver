@@ -25,6 +25,7 @@ import {
   RuneWeaverWorkspace,
   RuneWeaverFeatureRecord,
   FeatureWriteResult,
+  FeatureSourceModelRef,
 } from "../../../core/workspace/index.js";
 import { injectHostEntryBridge, refreshBridge } from "../../../adapters/dota2/bridge/index.js";
 import { resolveDota2GapFillBoundaryIdsForPatterns } from "../../../adapters/dota2/gap-fill/boundaries.js";
@@ -36,6 +37,28 @@ export interface WorkspaceUpdateResult {
   featureId: string;
   totalFeatures: number;
   error?: string;
+}
+
+function isFeatureSourceModelRef(value: unknown): value is FeatureSourceModelRef {
+  return !!value &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).adapter === "string" &&
+    typeof (value as Record<string, unknown>).version === "number" &&
+    typeof (value as Record<string, unknown>).path === "string";
+}
+
+function extractSourceModelRefFromWritePlan(writePlan: WritePlan): FeatureSourceModelRef | undefined {
+  const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
+  const candidate = sourceEntry?.metadata?.sourceModelRef;
+  if (!isFeatureSourceModelRef(candidate)) {
+    return undefined;
+  }
+
+  return {
+    adapter: candidate.adapter,
+    version: candidate.version,
+    path: candidate.path,
+  };
 }
 
 /**
@@ -141,6 +164,7 @@ export function updateWorkspaceState(
     selectedPatterns: assemblyPlan.selectedPatterns.map((p) => p.patternId),
     generatedFiles,
     entryBindings,
+    sourceModel: extractSourceModelRefFromWritePlan(writePlan),
     gapFillBoundaries: resolveDota2GapFillBoundaryIdsForPatterns(
       assemblyPlan.selectedPatterns.map((p) => p.patternId)
     ),

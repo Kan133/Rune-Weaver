@@ -58,7 +58,7 @@ export interface TalentDrawFixture {
 }
 
 export const talentDrawFixture: TalentDrawFixture = {
-  prompt: "做一个按 F4 触发的三选一天赋抽取系统。玩家按 F4 后，从加权天赋池抽出 3 个候选天赋，显示卡牌选择 UI。玩家选择 1 个后，根据天赋稀有度给英雄增加属性，并且已选择的天赋后续不再出现。",
+  prompt: "做一个按 F4 触发的三选一天赋抽取系统。玩家按 F4 后，从加权天赋池抽出 3 个候选天赋，显示卡牌选择 UI。玩家选择 1 个后立即应用效果，并且已选择的天赋后续不再出现。",
   parameters: getCanonicalTalentDrawParameters() as TalentDrawFixture["parameters"],
 };
 

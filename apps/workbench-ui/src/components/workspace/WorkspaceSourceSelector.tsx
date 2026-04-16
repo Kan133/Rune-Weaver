@@ -58,7 +58,7 @@ export function WorkspaceSourceSelector() {
               <Database className="h-4 w-4 text-[#6366f1] flex-shrink-0" />
               <div className="flex flex-col items-start min-w-0">
                 <span className="text-sm text-white font-medium truncate">
-                  {workspaceSource?.label || "Loading..."}
+                  {workspaceSource?.label || "选择 Debug Source"}
                 </span>
                 {workspaceSource?.description && (
                   <span className="text-[10px] text-white/40 truncate">

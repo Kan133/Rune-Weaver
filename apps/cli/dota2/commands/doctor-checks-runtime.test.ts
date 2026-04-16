@@ -7,7 +7,7 @@
 import assert from "assert";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { checkRuntimeBridgeWiring, checkWorkspace } from "./doctor-checks-rw.js";
+import { checkHostBuildArtifacts, checkRuntimeBridgeWiring, checkWorkspace } from "./doctor-checks-rw.js";
 
 const TEST_ROOT = join(process.cwd(), "tmp", "test-doctor-runtime");
 
@@ -77,6 +77,9 @@ function writeBaseHost(): void {
   writeFileSync(join(TEST_ROOT, "game/scripts/src/modules/index.ts"), "export function ActivateModules() {}\n", "utf-8");
   writeFileSync(join(TEST_ROOT, "content/panorama/src/hud/script.tsx"), "export function Root() { return <Panel />; }\n", "utf-8");
   writeFileSync(join(TEST_ROOT, "content/panorama/src/hud/styles.less"), ".rune-weaver-root { width: 100%; height: 100%; }\n", "utf-8");
+  mkdirSync(join(TEST_ROOT, "content/panorama/layout/custom_game/hud"), { recursive: true });
+  writeFileSync(join(TEST_ROOT, "content/panorama/layout/custom_game/hud/script.js"), "(()=>{})();\n", "utf-8");
+  writeFileSync(join(TEST_ROOT, "content/panorama/layout/custom_game/hud/styles.css"), ".rune-weaver-root{}\n", "utf-8");
 }
 
 async function runTests(): Promise<void> {
@@ -93,6 +96,49 @@ async function runTests(): Promise<void> {
   const bridgeCheck = checkRuntimeBridgeWiring(TEST_ROOT);
   assert.strictEqual(bridgeCheck.status, "fail");
   assert(bridgeCheck.suggestion?.includes("Refresh bridge wiring"), "Bridge wiring check should include a fix hint");
+
+  writeFileSync(
+    join(TEST_ROOT, "game/scripts/src/rune_weaver/index.ts"),
+    "export function activateRuneWeaverModules() {}\n",
+    "utf-8"
+  );
+  writeFileSync(
+    join(TEST_ROOT, "content/panorama/src/rune_weaver/index.tsx"),
+    "export function RuneWeaverHUDRoot() { return <Panel />; }\n",
+    "utf-8"
+  );
+  writeFileSync(
+    join(TEST_ROOT, "game/scripts/src/rune_weaver/rune-weaver.workspace.json"),
+    JSON.stringify(
+      {
+        version: "0.1",
+        hostType: "dota2-x-template",
+        hostRoot: TEST_ROOT,
+        addonName: "test_addon",
+        initializedAt: new Date().toISOString(),
+        features: [],
+      },
+      null,
+      2
+    ),
+    "utf-8"
+  );
+  writeFileSync(
+    join(TEST_ROOT, "game/scripts/src/modules/index.ts"),
+    'import { activateRuneWeaverModules } from "../rune_weaver";\nexport function ActivateModules() { activateRuneWeaverModules(); }\n',
+    "utf-8"
+  );
+  writeFileSync(
+    join(TEST_ROOT, "content/panorama/src/hud/script.tsx"),
+    'import { RuneWeaverHUDRoot } from "../rune_weaver";\nexport function Root() { return <RuneWeaverHUDRoot />; }\n',
+    "utf-8"
+  );
+
+  const emptyWorkspaceBridgeCheck = checkRuntimeBridgeWiring(TEST_ROOT);
+  assert.strictEqual(emptyWorkspaceBridgeCheck.status, "pass");
+
+  const buildArtifactsCheck = checkHostBuildArtifacts(TEST_ROOT);
+  assert.strictEqual(buildArtifactsCheck.status, "pass");
 
   console.log("  PASS");
 

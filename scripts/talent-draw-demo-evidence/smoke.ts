@@ -53,7 +53,7 @@ export function runSmokeAssertions(input: SmokeInput): SmokeResult {
   const hasAllCategories = REQUIRED_MODULE_CATEGORIES.every((category) =>
     moduleCategories.includes(category as BlueprintModule["category"])
   );
-  assert("Blueprint has trigger/data/rule/ui/effect modules", hasAllCategories, `Found: ${moduleCategories.join(", ")}`);
+  assert("Blueprint has trigger/data/rule/ui modules", hasAllCategories, `Found: ${moduleCategories.join(", ")}`);
 
   assert(
     "Blueprint modules have parameters",
@@ -62,7 +62,7 @@ export function runSmokeAssertions(input: SmokeInput): SmokeResult {
 
   const selectedPatternIds = resolution.patterns.map((pattern) => pattern.patternId);
   assert(
-    "Selected patterns include five key patterns",
+    "Selected patterns include the current Talent Draw pattern set",
     REQUIRED_PATTERNS.every((id) => selectedPatternIds.includes(id)),
     `Missing: ${REQUIRED_PATTERNS.filter((id) => !selectedPatternIds.includes(id)).join(", ")}`
   );

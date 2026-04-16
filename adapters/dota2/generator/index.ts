@@ -13,6 +13,7 @@ import { generateSelectionFlowCode } from "./server/selection-flow.js";
 import { generateKeyBindingCode } from "./server/key-binding.js";
 import { generateDashEffectCode } from "./server/dash-effect.js";
 import { generateResourcePoolCode } from "./server/resource-pool.js";
+import { generateResourceConsumeCode } from "./server/resource-consume.js";
 import { generateDefaultServerCode } from "./server/default-server.js";
 import { generateSelectionModalComponent } from "./ui/selection-modal.js";
 import { generateKeyHintComponent } from "./ui/key-hint.js";
@@ -150,6 +151,8 @@ function generateServerCode(
       return generateKeyBindingCode(className, featureId, entry);
     case "effect.dash":
       return generateDashEffectCode(className, featureId, entry);
+    case "effect.resource_consume":
+      return generateResourceConsumeCode(className, featureId, entry);
     case "resource.basic_pool":
       return generateResourcePoolCode(className, featureId, entry);
     case "data.weighted_pool":
@@ -181,12 +184,12 @@ function generateUICode(
   
   switch (patternId) {
     case "ui.key_hint":
-      return generateKeyHintComponent(componentName, featureId);
+      return generateKeyHintComponent(componentName, featureId, entry);
     case "ui.selection_modal":
       // GP-4: Use enhanced selection modal generator with placeholder support
       return generateSelectionModalComponent(componentName, featureId, entry);
     case "ui.resource_bar":
-      return generateResourceBarComponent(componentName, featureId);
+      return generateResourceBarComponent(componentName, featureId, entry);
     default:
       return generateDefaultUIComponent(componentName, featureId);
   }
@@ -204,6 +207,7 @@ export function generateCode(
   const isLess = entry.targetPath.endsWith(".less");
   const isLua = entry.contentType === "lua" || entry.targetPath.endsWith(".lua");
   const isKV = entry.contentType === "kv";
+  const isJson = entry.contentType === "json" || entry.targetPath.endsWith(".json");
 
   if (isLua) {
     return generateLuaAbilityCode(patternId, entry, featureId);
@@ -211,6 +215,14 @@ export function generateCode(
 
   if (isKV) {
     return generateKVCode(patternId, entry, featureId);
+  }
+
+  if (isJson) {
+    return {
+      content: `${JSON.stringify(entry.parameters || {}, null, 2)}\n`,
+      language: "json",
+      exports: [],
+    };
   }
 
   let content: string;

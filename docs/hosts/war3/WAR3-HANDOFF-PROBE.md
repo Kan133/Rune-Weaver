@@ -131,6 +131,15 @@ The current recommended use is:
 - implementation-draft probe second
 - formal generation path only after those probes stabilize
 
+Current note for the bounded TSTL skeleton lane:
+
+- the skeleton now exposes a local review artifact chain and a bounded handoff-prep surface
+- the canonical probe path now runs through the existing review-package/export/validate family first
+- the recommended probe input is the exported bounded review package for `setup-mid-zone-shop`, reflected into a planning-only probe input file
+- the recommended narrow local consumer loop is: review package export -> review package validation -> probe input build -> probe runner -> bounded result summary
+- these can inform future probe input shaping and bounded evidence ledgers
+- they are not validator integration, not final handoff authority, and not proof of runtime readiness
+
 ## Quick Probe Runner
 
 `scripts/war3-probe-runner.ts` is a file-driven, zero-dep utility that pipes a prompt file to the `kimi` CLI and records:
@@ -151,3 +160,27 @@ Status classifications:
 - `tool-execution-failure` — non-zero exit, spawn error, or patterns like "Max number of steps reached"
 - `unusable-output` — blank or whitespace-only final output
 - `model-output-success` — final output present and not obviously a tool failure
+
+## Current Recommended Demo Flow
+
+For the current bounded War3 lane, the first recommended demo flow is:
+
+1. `tsx scripts/war3-export-skeleton-demo-package.ts`
+2. `tsx scripts/war3-validate-review-package.ts <review-package-dir>`
+3. `tsx scripts/war3-build-skeleton-probe-input.ts --package-dir <review-package-dir>`
+4. `tsx scripts/war3-probe-runner.ts <probe-input-file>`
+5. `tsx scripts/war3-summarize-probe-result.ts <probe-summary-json>`
+
+Or use the bounded wrapper:
+
+```bash
+tsx scripts/war3-run-skeleton-demo-probe.ts
+```
+
+This flow is still:
+
+- planning-only / typed-pseudo-implementation oriented
+- read-only with respect to the War3 host workspace
+- not a validator-integrated path
+- not runtime proof
+- not a write-ready or shipping-ready path

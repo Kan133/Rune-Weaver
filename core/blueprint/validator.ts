@@ -10,6 +10,9 @@ import {
   Blueprint,
   BlueprintModule,
   BlueprintConnection,
+  FinalBlueprint,
+  ModuleNeed,
+  NormalizedBlueprintStatus,
   ValidationIssue,
 } from "../schema/types";
 import { BlueprintValidationResult, BlueprintStats } from "./types";
@@ -57,12 +60,160 @@ export function validateBlueprint(blueprint: Blueprint): BlueprintValidationResu
   errors.push(...statIssues.errors);
   warnings.push(...statIssues.warnings);
 
+  // 7. 验证 normalized FinalBlueprint 合同（迁移期可选）
+  const normalizedIssues = validateNormalizedBlueprint(blueprint);
+  errors.push(...normalizedIssues.errors);
+  warnings.push(...normalizedIssues.warnings);
+
   return {
     valid: errors.length === 0,
     errors,
     warnings,
     stats,
   };
+}
+
+function validateNormalizedBlueprint(blueprint: Blueprint): {
+  errors: ValidationIssue[];
+  warnings: ValidationIssue[];
+} {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+  const finalBlueprint = blueprint as FinalBlueprint;
+
+  if (finalBlueprint.status && !isOneOf(finalBlueprint.status, ["ready", "weak", "blocked"])) {
+    errors.push({
+      code: "INVALID_BLUEPRINT_STATUS",
+      scope: "blueprint",
+      severity: "error",
+      message: `Blueprint.status '${String(finalBlueprint.status)}' 不是合法状态`,
+      path: "status",
+    });
+  }
+
+  if (!finalBlueprint.moduleNeeds) {
+    return { errors, warnings };
+  }
+
+  if (!Array.isArray(finalBlueprint.moduleNeeds)) {
+    errors.push({
+      code: "INVALID_MODULE_NEEDS",
+      scope: "blueprint",
+      severity: "error",
+      message: "moduleNeeds 必须为数组",
+      path: "moduleNeeds",
+    });
+    return { errors, warnings };
+  }
+
+  const moduleIds = new Set(blueprint.modules.map((module) => module.id));
+  const seenNeedIds = new Set<string>();
+
+  for (let i = 0; i < finalBlueprint.moduleNeeds.length; i++) {
+    const need = finalBlueprint.moduleNeeds[i];
+    const path = `moduleNeeds[${i}]`;
+
+    if (!need.moduleId) {
+      errors.push({
+        code: "MISSING_MODULE_NEED_MODULE_ID",
+        scope: "blueprint",
+        severity: "error",
+        message: `${path} 缺少 moduleId`,
+        path: `${path}.moduleId`,
+      });
+      continue;
+    }
+
+    if (!moduleIds.has(need.moduleId)) {
+      errors.push({
+        code: "ORPHAN_MODULE_NEED",
+        scope: "blueprint",
+        severity: "error",
+        message: `${path}.moduleId '${need.moduleId}' 未对应到任何模块`,
+        path: `${path}.moduleId`,
+      });
+    }
+
+    if (seenNeedIds.has(need.moduleId)) {
+      errors.push({
+        code: "DUPLICATE_MODULE_NEED",
+        scope: "blueprint",
+        severity: "error",
+        message: `moduleId '${need.moduleId}' 存在重复的 ModuleNeed`,
+        path: `${path}.moduleId`,
+      });
+    } else {
+      seenNeedIds.add(need.moduleId);
+    }
+
+    if (!need.semanticRole) {
+      errors.push({
+        code: "MISSING_MODULE_NEED_ROLE",
+        scope: "blueprint",
+        severity: "error",
+        message: `${path} 缺少 semanticRole`,
+        path: `${path}.semanticRole`,
+      });
+    }
+
+    if (!need.requiredCapabilities || need.requiredCapabilities.length === 0) {
+      warnings.push({
+        code: "EMPTY_REQUIRED_CAPABILITIES",
+        scope: "blueprint",
+        severity: "warning",
+        message: `${path} 缺少 requiredCapabilities`,
+        path: `${path}.requiredCapabilities`,
+      });
+    }
+
+    if (need.requiredCapabilities && !Array.isArray(need.requiredCapabilities)) {
+      errors.push({
+        code: "INVALID_REQUIRED_CAPABILITIES",
+        scope: "blueprint",
+        severity: "error",
+        message: `${path}.requiredCapabilities 必须为字符串数组`,
+        path: `${path}.requiredCapabilities`,
+      });
+    }
+
+    for (const field of [
+      "optionalCapabilities",
+      "requiredOutputs",
+      "stateExpectations",
+      "integrationHints",
+      "invariants",
+      "boundedVariability",
+      "explicitPatternHints",
+      "prohibitedTraits",
+    ] as const) {
+      const value = need[field];
+      if (value !== undefined && (!Array.isArray(value) || value.some((item) => typeof item !== "string"))) {
+        errors.push({
+          code: "INVALID_MODULE_NEED_FIELD",
+          scope: "blueprint",
+          severity: "error",
+          message: `${path}.${field} 必须为字符串数组`,
+          path: `${path}.${field}`,
+        });
+      }
+    }
+  }
+
+  if (finalBlueprint.status === "ready" && finalBlueprint.moduleNeeds.length !== blueprint.modules.length) {
+    errors.push({
+      code: "READY_BLUEPRINT_MODULE_NEED_MISMATCH",
+      scope: "blueprint",
+      severity: "error",
+      message: "ready FinalBlueprint 的 moduleNeeds 数量必须与 modules 数量一致",
+      path: "moduleNeeds",
+    });
+  }
+
+  return { errors, warnings };
+}
+
+function isOneOf<T extends string>(value: unknown, choices: readonly T[]): value is T {
+  return typeof value === "string" && choices.includes(value as T);
 }
 
 /**

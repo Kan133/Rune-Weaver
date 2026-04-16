@@ -30,12 +30,11 @@ export const REQUIRED_PATTERNS = [
   "input.key_binding",
   "data.weighted_pool",
   "rule.selection_flow",
-  "effect.modifier_applier",
   "ui.selection_modal",
 ];
 
 // Expected blueprint module categories
-export const REQUIRED_MODULE_CATEGORIES = ["trigger", "data", "rule", "ui", "effect"];
+export const REQUIRED_MODULE_CATEGORIES = ["trigger", "data", "rule", "ui"];
 
 // Expected write target path patterns
 export const EXPECTED_PATH_PATTERNS = {

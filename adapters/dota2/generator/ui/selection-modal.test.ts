@@ -134,6 +134,89 @@ function testDismissBehavior() {
   console.log("✓ Test 4 passed\n");
 }
 
+// Test 4b: Generation only admits the current layoutPreset/selectionMode slice
+function testAdmittedSelectionModalContract() {
+  console.log("Test 4b: Selection modal admits only card_tray + single");
+
+  const entry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {
+      layoutPreset: "card_tray",
+      selectionMode: "single",
+    }
+  };
+
+  const code = generateSelectionModalComponent("TestModal", "test_feature", entry);
+
+  assert(code.includes('layoutPreset: "card_tray"'), "Should include admitted layoutPreset in generated header");
+  assert(code.includes('selectionMode: "single"'), "Should include admitted selectionMode in generated header");
+
+  console.log("✓ Test 4b passed\n");
+}
+
+// Test 4c: Unsupported layoutPreset must throw instead of being ignored
+function testUnsupportedLayoutPresetFails() {
+  console.log("Test 4c: Unsupported layoutPreset fails fast");
+
+  const entry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {
+      layoutPreset: "grid"
+    }
+  };
+
+  let error: unknown;
+  try {
+    generateSelectionModalComponent("TestModal", "test_feature", entry);
+  } catch (caught) {
+    error = caught;
+  }
+
+  assert(error instanceof Error, "Unsupported layoutPreset should throw");
+  assert(
+    error.message.includes('layoutPreset "card_tray"'),
+    "Error should mention admitted layoutPreset contract"
+  );
+
+  console.log("✓ Test 4c passed\n");
+}
+
+// Test 4d: Unsupported selectionMode must throw instead of being ignored
+function testUnsupportedSelectionModeFails() {
+  console.log("Test 4d: Unsupported selectionMode fails fast");
+
+  const entry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {
+      selectionMode: "multi"
+    }
+  };
+
+  let error: unknown;
+  try {
+    generateSelectionModalComponent("TestModal", "test_feature", entry);
+  } catch (caught) {
+    error = caught;
+  }
+
+  assert(error instanceof Error, "Unsupported selectionMode should throw");
+  assert(
+    error.message.includes('selectionMode "single"'),
+    "Error should mention admitted selectionMode contract"
+  );
+
+  console.log("✓ Test 4d passed\n");
+}
+
 // ==================== P0 UI Safer Profile Tests ====================
 
 // Test 5: normalizeSelectionItems accepts unknown input
@@ -469,12 +552,46 @@ function testPreventDisabledSelection() {
   console.log("✓ Test 15 passed\n");
 }
 
+// Test 16: inventory panel support stays inside selection modal surface
+function testInventoryPanelGeneration() {
+  console.log("Test 16: Inventory panel generation");
+
+  const entry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {
+      inventory: {
+        enabled: true,
+        capacity: 15,
+        storeSelectedItems: true,
+        blockDrawWhenFull: true,
+        fullMessage: "Talent inventory full",
+        presentation: "persistent_panel",
+      },
+    }
+  };
+
+  const code = generateSelectionModalComponent("TestModal", "test_feature", entry);
+
+  assert(code.includes("inventory-panel"), "Should render the inventory panel");
+  assert(code.includes("rune_weaver_selection_inventory_state"), "Should subscribe to inventory state updates");
+  assert(code.includes("Talent inventory full"), "Should render the frozen full-state message");
+  assert(code.includes("inventorySlots"), "Should build fixed inventory slots");
+
+  console.log("✓ Test 16 passed\n");
+}
+
 // Run all tests
 console.log("=== Selection Modal Generator Tests ===\n");
 testBasicGeneration();
 testPlaceholderGeneration();
 testPayloadShapes();
 testDismissBehavior();
+testAdmittedSelectionModalContract();
+testUnsupportedLayoutPresetFails();
+testUnsupportedSelectionModeFails();
 testNormalizeSelectionItemsUnknown();
 testObjectValuesFallback();
 testFilterNonObjectItems();
@@ -486,4 +603,5 @@ testStableEffectDeps();
 testDebugLogs();
 testNoLessImport();
 testPreventDisabledSelection();
+testInventoryPanelGeneration();
 console.log("=== All tests passed ===");

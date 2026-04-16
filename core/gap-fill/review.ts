@@ -28,8 +28,13 @@ export interface GapFillArtifact {
   llm: {
     configured: boolean;
     provider?: string;
+    baseUrl?: string;
     model?: string;
+    thinking?: "enabled" | "disabled";
     temperature?: number;
+    configSource?: ".env";
+    apiKeyPresent?: boolean;
+    apiKeyFingerprint?: string;
   };
   decisionRecord: GapFillDecisionRecord;
   decision: GapFillDecisionResult;
@@ -40,6 +45,10 @@ export interface GapFillArtifact {
     patchPlan?: GapFillRunResult["patchPlan"];
   };
   runnerIssues: string[];
+  runnerIssueDetails: Array<{
+    kind: "config" | "authentication" | "request" | "unknown";
+    message: string;
+  }>;
   apply: {
     requested: boolean;
     attempted: boolean;
@@ -62,8 +71,13 @@ export interface GapFillArtifactInput {
   targetFile: GapFillTargetFile;
   llmConfigured: boolean;
   llmProvider?: string;
+  llmBaseUrl?: string;
   llmModel?: string;
+  llmThinking?: "enabled" | "disabled";
   llmTemperature?: number;
+  llmConfigSource?: ".env";
+  llmApiKeyPresent?: boolean;
+  llmApiKeyFingerprint?: string;
   runResult: GapFillRunResult;
   applyRequested: boolean;
   applyResult?: GapFillApplyResult;
@@ -171,8 +185,13 @@ export function buildGapFillArtifact(input: GapFillArtifactInput): GapFillArtifa
     llm: {
       configured: input.llmConfigured,
       provider: input.llmProvider,
+      baseUrl: input.llmBaseUrl,
       model: input.llmModel,
+      thinking: input.llmThinking,
       temperature: input.llmTemperature,
+      configSource: input.llmConfigSource,
+      apiKeyPresent: input.llmApiKeyPresent,
+      apiKeyFingerprint: input.llmApiKeyFingerprint,
     },
     decisionRecord,
     decision,
@@ -183,6 +202,13 @@ export function buildGapFillArtifact(input: GapFillArtifactInput): GapFillArtifa
       patchPlan: input.runResult.patchPlan,
     },
     runnerIssues: input.runResult.issues,
+    runnerIssueDetails: input.runResult.issues.map((issue) => {
+      const match = issue.match(/^\[(config|authentication|request|unknown)\]\s*/);
+      return {
+        kind: (match?.[1] as "config" | "authentication" | "request" | "unknown") ?? "unknown",
+        message: issue.replace(/^\[(config|authentication|request|unknown)\]\s*/, ""),
+      };
+    }),
     planMetadata: validation.planMetadata,
     apply: {
       requested: input.applyRequested,

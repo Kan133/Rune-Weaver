@@ -4,9 +4,12 @@ import { resolve } from "path";
 import {
   createLLMClientFromEnv,
   isLLMConfigured,
+  maskLLMApiKey,
+  readLLMExecutionConfig,
   readLLMEnvironment,
 } from "../../../../core/llm/index.js";
 import type { LLMClient } from "../../../../core/llm/index.js";
+import { LLMConfigError, LLMRequestError } from "../../../../core/llm/index.js";
 import {
   applyGapFillPatchPlan,
   createGapFillApprovalToken,
@@ -95,28 +98,23 @@ function resolveBoundaryFromFeature(
   return { boundaryId: boundaries[0], issues: [] };
 }
 
-function getGapFillProviderOptions(env: Record<string, string>): Record<string, unknown> | undefined {
-  const provider = env.LLM_PROVIDER;
-  const model = env.OPENAI_MODEL || env.ANTHROPIC_MODEL || "";
-
-  if (provider === "openai-compatible" && /^kimi-k2\.5/i.test(model)) {
-    return {
-      thinking: { type: "disabled" },
-    };
+function classifyRunnerError(error: unknown): "config" | "authentication" | "request" | "unknown" {
+  if (error instanceof LLMConfigError) {
+    return "config";
   }
 
-  return undefined;
-}
-
-function getGapFillTemperature(env: Record<string, string>): number | undefined {
-  const provider = env.LLM_PROVIDER;
-  const model = env.OPENAI_MODEL || env.ANTHROPIC_MODEL || "";
-
-  if (provider === "openai-compatible" && /^kimi-k2\.5/i.test(model)) {
-    return 0.6;
+  if (error instanceof LLMRequestError) {
+    if (/invalid authentication|unauthorized|invalid api key|authentication/i.test(error.message)) {
+      return "authentication";
+    }
+    return "request";
   }
 
-  return undefined;
+  const message = getGapFillErrorMessage(error);
+  if (/invalid authentication|unauthorized|invalid api key|authentication/i.test(message)) {
+    return "authentication";
+  }
+  return "unknown";
 }
 
 function resolveGapFillMode(options: Dota2CLIOptions): GapFillMode {
@@ -251,17 +249,84 @@ export async function runGapFillCommand(options: Dota2CLIOptions): Promise<boole
   }
 
   const llmEnv = readLLMEnvironment(process.cwd());
+  let llmExecutionConfig;
+  try {
+    llmExecutionConfig = readLLMExecutionConfig(process.cwd(), "gap-fill");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const failedResult: GapFillRunResult = {
+      success: false,
+      summary: "Gap-fill LLM configuration failed",
+      promptMessages: [],
+      issues: [message],
+    };
+    const artifactPath = persistGapFillArtifact({
+      mode,
+      hostRoot: options.hostRoot,
+      instruction: options.instruction,
+      boundary,
+      targetFile,
+      llmConfigured,
+      llmProvider: llmEnv.LLM_PROVIDER,
+      llmBaseUrl: llmEnv.OPENAI_BASE_URL || llmEnv.ANTHROPIC_BASE_URL,
+      llmModel: llmEnv.OPENAI_MODEL || llmEnv.ANTHROPIC_MODEL,
+      llmThinking: undefined,
+      llmTemperature: undefined,
+      llmConfigSource: ".env",
+      llmApiKeyPresent: !!(llmEnv.OPENAI_API_KEY || llmEnv.ANTHROPIC_API_KEY),
+      llmApiKeyFingerprint: maskLLMApiKey(llmEnv.OPENAI_API_KEY || llmEnv.ANTHROPIC_API_KEY),
+      runResult: failedResult,
+      applyRequested: mode === "apply",
+      recommendedNextStep: "Fix the LLM workflow configuration in .env before retrying gap-fill.",
+    });
+    console.log(`Gap-fill artifact: ${artifactPath}`);
+    console.error(`Error: gap-fill LLM configuration failed: ${message}`);
+    return false;
+  }
   let llmClient: LLMClient;
   try {
     llmClient = createLLMClientFromEnv(process.cwd());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const failedResult: GapFillRunResult = {
+      success: false,
+      summary: "Gap-fill LLM client creation failed",
+      promptMessages: [],
+      issues: [`[config] ${message}`],
+    };
+    const artifactPath = persistGapFillArtifact({
+      mode,
+      hostRoot: options.hostRoot,
+      instruction: options.instruction,
+      boundary,
+      targetFile,
+      llmConfigured,
+      llmProvider: llmEnv.LLM_PROVIDER,
+      llmBaseUrl: llmEnv.OPENAI_BASE_URL || llmEnv.ANTHROPIC_BASE_URL,
+      llmModel: llmEnv.OPENAI_MODEL || llmEnv.ANTHROPIC_MODEL,
+      llmConfigSource: ".env",
+      llmApiKeyPresent: !!(llmEnv.OPENAI_API_KEY || llmEnv.ANTHROPIC_API_KEY),
+      llmApiKeyFingerprint: maskLLMApiKey(llmEnv.OPENAI_API_KEY || llmEnv.ANTHROPIC_API_KEY),
+      runResult: failedResult,
+      applyRequested: mode === "apply",
+      recommendedNextStep: "Fix the provider credentials in .env before retrying gap-fill.",
+    });
+    console.log(`Gap-fill artifact: ${artifactPath}`);
     console.error(`Error: failed to create LLM client: ${message}`);
     return false;
   }
 
-  const llmProviderOptions = getGapFillProviderOptions(llmEnv);
-  const llmTemperature = getGapFillTemperature(llmEnv);
+  const llmProviderOptions = llmExecutionConfig.providerOptions;
+  const llmTemperature = llmExecutionConfig.temperature;
+  const llmThinking = llmExecutionConfig.thinking;
+  const llmBaseUrl = llmEnv.OPENAI_BASE_URL || llmEnv.ANTHROPIC_BASE_URL;
+  const llmApiKey = llmEnv.OPENAI_API_KEY || llmEnv.ANTHROPIC_API_KEY;
+  console.log(`[gap-fill llm] provider=${llmEnv.LLM_PROVIDER || "(unset)"}`);
+  console.log(`[gap-fill llm] baseUrl=${llmBaseUrl || "(unset)"}`);
+  console.log(`[gap-fill llm] model=${llmExecutionConfig.model || "(unset)"}`);
+  console.log(`[gap-fill llm] thinking=${llmThinking || "(unset)"}`);
+  console.log(`[gap-fill llm] temperature=${llmTemperature ?? "(unset)"}`);
+  console.log(`[gap-fill llm] apiKeyPresent=${llmApiKey ? "true" : "false"} fingerprint=${maskLLMApiKey(llmApiKey) || "(missing)"}`);
   const artifactBase = {
     mode,
     hostRoot: options.hostRoot,
@@ -270,8 +335,13 @@ export async function runGapFillCommand(options: Dota2CLIOptions): Promise<boole
     targetFile,
     llmConfigured,
     llmProvider: llmEnv.LLM_PROVIDER,
-    llmModel: llmEnv.OPENAI_MODEL || llmEnv.ANTHROPIC_MODEL,
+    llmBaseUrl,
+    llmModel: llmExecutionConfig.model,
+    llmThinking,
     llmTemperature,
+    llmConfigSource: ".env" as const,
+    llmApiKeyPresent: !!llmApiKey,
+    llmApiKeyFingerprint: maskLLMApiKey(llmApiKey),
     assumptionsMade: buildAssumptions(options.instruction),
     userInputsUsed: [options.instruction],
     inferredInputsUsed: [],
@@ -293,7 +363,7 @@ export async function runGapFillCommand(options: Dota2CLIOptions): Promise<boole
           boundary,
           targetFile,
           llmProvider: llmEnv.LLM_PROVIDER,
-          llmModel: llmEnv.OPENAI_MODEL || llmEnv.ANTHROPIC_MODEL,
+          llmModel: llmExecutionConfig.model,
           llmTemperature,
           llmProviderOptions,
         },
@@ -303,7 +373,8 @@ export async function runGapFillCommand(options: Dota2CLIOptions): Promise<boole
       break;
     } catch (error) {
       const message = getGapFillErrorMessage(error);
-      finalRunnerError = message;
+      const errorKind = classifyRunnerError(error);
+      finalRunnerError = `[${errorKind}] ${message}`;
 
       if (attempt < 3 && isTransientGapFillError(error)) {
         const delayMs = getGapFillRetryDelayMs(attempt - 1);
@@ -499,6 +570,7 @@ function runGapFillApprovalCommand(options: Dota2CLIOptions, mode: GapFillMode):
     hostRoot,
     boundary,
     targetFile,
+    allowTargetFileHashChange: mode === "validate-applied",
   });
   const runResult = buildRunResultFromApproval(approvalRecord);
 
@@ -544,6 +616,7 @@ function runGapFillApprovalCommand(options: Dota2CLIOptions, mode: GapFillMode):
       },
       patchPlan: approvalRecord.patchPlan,
       decision: approvalRecord.decision,
+      currentTargetFile: targetFile,
     });
     const artifactPath = persistGapFillArtifact({
       mode,

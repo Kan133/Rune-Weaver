@@ -1,5 +1,15 @@
 # 工程评估简报：Warcraft III 1.29 Lua 宿主新增方案
 
+> Status: planning
+> Audience: agents
+> Doc family: planning
+> Update cadence: low-frequency
+> Last verified: 2026-04-14
+> Read when: comparing historical War3 Lua-host feasibility assumptions against the current War3 host planning lane and community tooling landscape
+> Do not use for: current War3 mainline execution truth, write-ready host claims, or replacing the TSTL-based host baseline
+
+Moved from repo root into the War3 host planning surface on 2026-04-14 so it remains discoverable as planning context without floating outside the control plane.
+
 > 评估目标：现有 Dota2 定向代码生成/宿主集成项目扩展支持 Warcraft III 1.29 宿主\
 > 约束条件：TypeScript → Lua、完全不支持 JASS
 

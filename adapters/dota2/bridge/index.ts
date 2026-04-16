@@ -73,6 +73,22 @@ const BRIDGE_PATHS = {
   runtimeAdapter: "game/scripts/vscripts/utils/dota_ts_adapter.lua",
 } as const;
 
+function isGeneratedKeyBindingModule(fileName: string): boolean {
+  return fileName.endsWith("_input_key_binding");
+}
+
+function isGeneratedKeyBindingAbilityModule(fileName: string): boolean {
+  return fileName.endsWith("_input_key_binding_ability");
+}
+
+function isGeneratedWeightedPoolModule(fileName: string): boolean {
+  return fileName.endsWith("_data_weighted_pool");
+}
+
+function isGeneratedSelectionFlowModule(fileName: string): boolean {
+  return fileName.endsWith("_rule_selection_flow");
+}
+
 export function ensureBridgeFiles(projectPath: string): EnsureBridgeFilesResult {
   const result: EnsureBridgeFilesResult = {
     success: false,
@@ -367,13 +383,13 @@ function generateServerIndexContent(
         registerKey: `register${className}`,
       });
 
-      if (fileName.includes("_input_input_key_binding")) {
+      if (isGeneratedKeyBindingModule(fileName)) {
         wiringPlan.keyBindingFile = fileName;
         wiringPlan.keyBindingClass = className;
-      } else if (fileName.includes("_data_data_weighted_pool")) {
+      } else if (isGeneratedWeightedPoolModule(fileName)) {
         wiringPlan.poolFile = fileName;
         wiringPlan.poolClass = className;
-      } else if (fileName.includes("_rule_rule_selection_flow")) {
+      } else if (isGeneratedSelectionFlowModule(fileName)) {
         wiringPlan.selectionFlowFile = fileName;
         wiringPlan.selectionFlowClass = className;
       }
@@ -442,8 +458,12 @@ ${abilityBlocks.join("\n")}
 const moduleDescriptors = ${JSON.stringify(moduleDescriptors, null, 2)};
 const runtimeWiringPlans = ${JSON.stringify(runtimeWiringPlans, null, 2)};
 
+function isGeneratedKeyBindingAbilityModule(fileName: string): boolean {
+  return fileName.endsWith("_input_key_binding_ability");
+}
+
 function shouldRegisterModule(descriptor: { fileName: string }): boolean {
-  if (descriptor.fileName.endsWith("_input_input_key_binding_ability")) {
+  if (isGeneratedKeyBindingAbilityModule(descriptor.fileName)) {
     return false;
   }
 
@@ -600,26 +620,30 @@ function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeature
     }
   }
 
-  if (styleImports.size === 0) {
-    return;
-  }
-
   const existingContent = readFileSync(hudStylesPath, "utf-8");
+  const contentWithoutGeneratedImports = existingContent
+    .replace(/^@import "\.\.\/rune_weaver\/generated\/ui\/[^"]+\.less";\s*$/gm, "")
+    .replace(/^\s+/, "");
   const rootStyleBlock = `.rune-weaver-root {
     width: 100%;
     height: 100%;
 }`;
-  const missingImports = Array.from(styleImports).filter((styleImport) => !existingContent.includes(styleImport));
-  const missingRootStyle = !existingContent.includes(".rune-weaver-root");
-  if (missingImports.length === 0 && !missingRootStyle) {
+  const styleImportBlock = Array.from(styleImports).join("\n");
+  const missingRootStyle = !contentWithoutGeneratedImports.includes(".rune-weaver-root");
+  const nextContent = [
+    styleImportBlock,
+    missingRootStyle ? rootStyleBlock : undefined,
+    contentWithoutGeneratedImports.trim(),
+  ]
+    .filter((section): section is string => !!section && section.trim().length > 0)
+    .join("\n\n");
+
+  const normalizedNextContent = `${nextContent}\n`;
+  if (normalizedNextContent === existingContent) {
     return;
   }
 
-  const additions = [
-    ...missingImports,
-    ...(missingRootStyle ? [rootStyleBlock] : []),
-  ];
-  writeFileSync(hudStylesPath, `${additions.join("\n\n")}\n${existingContent}`, "utf-8");
+  writeFileSync(hudStylesPath, normalizedNextContent, "utf-8");
 }
 
 export function refreshBridge(

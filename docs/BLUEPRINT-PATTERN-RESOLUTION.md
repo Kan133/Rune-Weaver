@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-15
 > Read when: understanding Blueprint-to-pattern resolution behavior
 > Do not use for: current product status, current module-need seam authority, or final pattern selection by itself
 
@@ -52,7 +52,7 @@ Pattern 建议列表，包含：
 | effect | effect.dash |
 | resource | resource.basic_pool |
 | ui | ui.selection_modal |
-| integration | unresolved -> clarify via host binding / bridge planning |
+| integration | unresolved by default; if the normalized need is specifically narrow selection-state sync, bias toward `integration.state_sync_bridge` and still verify host binding / bridge policy |
 
 ### 策略 3: 机制推断（补充）
 基于 `normalizedMechanics` 补充 pattern：
@@ -66,6 +66,19 @@ Pattern 建议列表，包含：
 | uiModal | ui.selection_modal |
 | outcomeApplication | effect.modifier_applier |
 | resourceConsumption | effect.resource_consume |
+
+## 当前 narrow truth 注记
+
+- `resourceConsumption -> effect.resource_consume` does not mean broad admitted `resource/cost` support by itself
+- 当前 honest canonical path 仍然是窄路径：
+  - same-feature
+  - single `input.key_binding`
+  - single compatible `resource.basic_pool`
+  - single `effect.resource_consume`
+- `integration` 也不是一律 unresolved:
+  - 对于 narrow selection-state sync，`integration.state_sync_bridge` 已经是 honest current mapping candidate
+  - 但它当前 truthful downstream state 仍然只是 routed + deliberately elided + no standalone bridge file emitted
+- 以上两条都不能被写成 broad family admission
 
 ## 输出
 

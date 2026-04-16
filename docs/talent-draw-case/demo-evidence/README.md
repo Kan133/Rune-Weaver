@@ -22,6 +22,7 @@ This command:
 7. Creates `vconsole-template.txt` with expected log checkpoints
 8. Creates `screenshots/` directory with README
 9. Writes `canonical-gap-fill-contract.json` with the frozen prompt, boundary, continuation order, screenshot set, and runtime video name
+10. Writes `acceptance-summary.json` with the canonical/exploratory judgment, lifecycle checkpoint presence, and missing evidence
 
 Lifecycle proof artifacts are generated separately by:
 
@@ -30,7 +31,7 @@ npm run cli -- dota2 lifecycle prove --host <host> --addon-name talent_draw_demo
 ```
 
 Save the resulting `tmp/cli-review/lifecycle-proof-*.json` beside the refreshed evidence when validating update/delete/recreate behavior.
-10. Writes `manifest.json` with overall status and exit codes
+11. Writes `manifest.json` with overall status, exit codes, and the acceptance summary reference
 
 ### Manual Evidence
 
@@ -85,6 +86,30 @@ latest/canonical-gap-fill-contract.json
 - required runtime video filename
 
 Use this file as the source of truth when deciding whether a refreshed pack qualifies as canonical acceptance evidence.
+
+### 0.5 Acceptance Summary
+
+**Source**:
+```text
+latest/acceptance-summary.json
+```
+
+**Contains**:
+- canonical vs exploratory classification
+- whether the observed prompt/boundary match the frozen Talent Draw contract
+- lifecycle checkpoint presence booleans
+- missing manual evidence
+- missing auto evidence
+- consistency checks for the replay pack
+- handoff readiness
+- proof-point gate status
+- final judgment:
+  - `canonical_acceptance_ready`
+  - `canonical_incomplete`
+  - `exploratory`
+
+Use this file as the first operator-facing answer to “is this fresh-host run actually acceptance-complete yet?”
+Use it as the second answer to “is this replay pack handoff-safe?” and “can Dota2 move on to the next proof point yet?”
 
 ---
 
@@ -270,6 +295,7 @@ demo-evidence/
 ├── latest/                      # Most recent successful run (auto-refreshed)
 │   ├── manifest.json            # Generation metadata and overall status
 │   ├── canonical-gap-fill-contract.json # Frozen canonical prompt/boundary/order
+│   ├── acceptance-summary.json  # Canonical/exploratory judgment and missing evidence
 │   ├── demo-prepare-output.txt  # Output from 'dota2 demo prepare'
 │   ├── review-artifact.json     # Pipeline review artifact
 │   ├── review-artifact-missing.txt  # Instructions if no review artifact
@@ -303,6 +329,10 @@ New teammate reproduction verification:
 
 - [ ] Review artifact contains 5 modules (trigger/data/rule/effect/ui)
 - [ ] canonical-gap-fill-contract.json matches the frozen Talent Draw prompt and boundary
+- [ ] acceptance-summary.json reports the correct final judgment for this refreshed pack
+- [ ] acceptance-summary.json reports replay-pack consistency checks
+- [ ] acceptance-summary.json reports the correct handoff readiness
+- [ ] acceptance-summary.json keeps the proof-point gate blocked unless the pack is complete and handoff-safe
 - [ ] Demo prepare output shows addon.config rename before yarn install
 - [ ] Demo prepare output records yarn install output checks
 - [ ] Generated files count matches (~9 files expected)
@@ -322,4 +352,4 @@ New teammate reproduction verification:
 
 - [../DEMO-GUIDE.md](../DEMO-GUIDE.md) - Step-by-step walkthrough
 - [../CANONICAL-CASE-TALENT-DRAW.md](../CANONICAL-CASE-TALENT-DRAW.md) - Case definition
-- [../../../TALENT-DRAW-E2E-LESSONS.md](../../../TALENT-DRAW-E2E-LESSONS.md) - E2E lessons
+- [../../hosts/dota2/TALENT-DRAW-E2E-LESSONS.md](../../hosts/dota2/TALENT-DRAW-E2E-LESSONS.md) - E2E lessons

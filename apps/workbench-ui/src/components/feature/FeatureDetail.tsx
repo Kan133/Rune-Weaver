@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -6,7 +6,6 @@ import {
   FolderOpen,
   Server,
   Plus,
-  Eye,
   Trash2,
   RefreshCw,
   WandSparkles,
@@ -41,7 +40,7 @@ import { ReviewSignals } from '@/components/review/ReviewSignals';
 import { ExecutionOutputPanel } from '@/components/project-setup/ExecutionOutputPanel';
 import { Textarea } from '@/components/ui/textarea';
 import { useCLIExecutor } from '@/hooks/useCLIExecutor';
-import type { CLIReviewAction, CLIReviewStageStatus, GapFillProductStatus } from '@/hooks/useCLIExecutor';
+import type { CLIExecutionResult, CLIReviewAction, CLIReviewStageStatus, GapFillProductStatus } from '@/hooks/useCLIExecutor';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { describeGapFillBoundary } from '@/types/gapFill';
@@ -52,6 +51,8 @@ import {
   TALENT_DRAW_CANONICAL_BOUNDARY,
   TALENT_DRAW_CANONICAL_PROMPT,
 } from '@/lib/gapFillCanonical';
+import { buildGapFillApprovalUnit } from '@/lib/gapFillApprovalUnit';
+import { normalizeFeatureDisplay } from '@/lib/normalizeFeatureDisplay';
 
 function extractApprovalFile(command?: string): string | undefined {
   if (!command) {
@@ -79,13 +80,38 @@ const reviewStageStatusLabel: Record<CLIReviewStageStatus, string> = {
   info: '信息',
 };
 
+export function shouldRefreshAfterUpdateSuccess(params: {
+  currentCommand: string | null;
+  isRunning: boolean;
+  result: CLIExecutionResult | null;
+}): boolean {
+  return params.currentCommand === 'update' && !params.isRunning && params.result?.success === true;
+}
+
+export async function refreshFeatureAfterUpdate(
+  reloadConnectedWorkspace: (preferredFeatureId?: string | null) => Promise<void>,
+  featureId: string,
+): Promise<void> {
+  await reloadConnectedWorkspace(featureId);
+}
+
+function shouldRefreshAfterDeleteSuccess(params: {
+  currentCommand: string | null;
+  isRunning: boolean;
+  result: CLIExecutionResult | null;
+}): boolean {
+  return params.currentCommand === 'delete' && !params.isRunning && params.result?.success === true;
+}
+
 export function FeatureDetail() {
   const selectedFeature = useFeatureStore((state) => state.getSelectedFeature());
-  const deleteFeature = useFeatureStore((state) => state.deleteFeature);
-  const regenerateFeature = useFeatureStore((state) => state.regenerateFeature);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const reloadConnectedWorkspace = useFeatureStore((state) => state.reloadConnectedWorkspace);
   const workspace = useFeatureStore((state) => state.workspace);
   const hostConfig = useFeatureStore((state) => state.hostConfig);
   const {
+    executeUpdate,
+    executeDelete,
     executeGapFill,
     executeRepairBuild,
     executeLaunch,
@@ -100,26 +126,16 @@ export function FeatureDetail() {
 
   const [filesOpen, setFilesOpen] = useState(false);
   const [hostOpen, setHostOpen] = useState(true);
+  const [updateOpen, setUpdateOpen] = useState(true);
   const [gapFillOpen, setGapFillOpen] = useState(true);
+  const [updatePrompt, setUpdatePrompt] = useState('');
   const [selectedBoundary, setSelectedBoundary] = useState<string>('');
   const [gapFillInstruction, setGapFillInstruction] = useState('');
-
-  // No feature selected - show a Dota2-focused empty state
-  if (!selectedFeature) {
-    return (
-      <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center min-w-0 h-full overflow-hidden">
-        <div className="max-w-md text-center px-6">
-          <div className="w-16 h-16 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-4">
-            <Sparkles className="h-7 w-7 text-white/25" />
-          </div>
-          <h2 className="text-lg font-semibold text-white mb-2">选择一个功能查看详情</h2>
-          <p className="text-sm text-white/45 leading-relaxed">
-            左侧可以查看已存在的功能，也可以先通过“项目准备”完成宿主配置、初始化、安装依赖和运行检查。
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const handledUpdateResultRef = useRef<string | null>(null);
+  const handledDeleteResultRef = useRef<string | null>(null);
+  const lastUpdateWriteModeRef = useRef(false);
+  const normalizedFeature = normalizeFeatureDisplay(selectedFeature);
+  const featureId = normalizedFeature?.id ?? '';
 
   const groupNames: Record<string, string> = {
     skill: '技能',
@@ -127,20 +143,26 @@ export function FeatureDetail() {
     system: '系统',
   };
 
-  const parentFeature = selectedFeature.parentId
-    ? useFeatureStore.getState().features.find((f) => f.id === selectedFeature.parentId)
+  const parentFeature = normalizedFeature?.parentId
+    ? useFeatureStore.getState().features.find((f) => f.id === normalizedFeature.parentId)
     : null;
 
   const childrenFeatures = useFeatureStore
     .getState()
-    .features.filter((f) => selectedFeature.childrenIds.includes(f.id));
+    .features.filter((f) => normalizedFeature?.childrenIds.includes(f.id) ?? false);
 
-  const hostRoot = workspace?.hostRoot || hostConfig.hostRoot;
-  const gapFillBoundaries = selectedFeature.gapFillBoundaries || [];
+  const hostRoot = connectedHostRoot || '';
+  const canRunUpdate =
+    !!hostRoot &&
+    normalizedFeature?.status === 'active' &&
+    featureId.length > 0 &&
+    updatePrompt.trim().length > 0 &&
+    !isRunning;
+  const gapFillBoundaries = normalizedFeature?.gapFillBoundaries ?? [];
   const effectiveBoundary = selectedBoundary || gapFillBoundaries[0] || '';
   const canRunGapFill =
     !!hostRoot &&
-    selectedFeature.status === 'active' &&
+    normalizedFeature?.status === 'active' &&
     gapFillBoundaries.length > 0 &&
     gapFillInstruction.trim().length > 0 &&
     !isRunning;
@@ -149,8 +171,12 @@ export function FeatureDetail() {
   const gapFillStatus = review?.gapFillStatus;
   const decisionRecord = review?.gapFillDecisionRecord;
   const structuredReadiness = review?.gapFillReadiness;
-  const readiness = selectedFeature.reviewSignals.readiness;
-  const readinessStage = review?.stages.find((stage) => stage.id === 'gap-readiness');
+  const readiness = normalizedFeature?.reviewSignals.readiness ?? { score: 0, warnings: [] as string[] };
+  const reviewStages = review?.stages ?? [];
+  const reviewHighlights = review?.highlights ?? [];
+  const reviewBlockers = review?.blockers ?? [];
+  const reviewGeneratedFiles = review?.generatedFiles ?? [];
+  const readinessStage = reviewStages.find((stage) => stage.id === 'gap-readiness');
   const readinessScore = Math.max(0, Math.min(100, readiness.score));
   const readinessWarnings = structuredReadiness?.blockingItems || readinessStage?.details || readiness.warnings || [];
 
@@ -166,7 +192,7 @@ export function FeatureDetail() {
   const approvalFile = extractApprovalFile(approvalAction?.command) || extractApprovalFile(validateAction?.command);
   const canContinueAfterApply =
     gapFillStatus === 'ready_to_apply' &&
-    review?.stages.some((stage) => stage.id === 'gap-validation' && stage.status === 'success');
+    reviewStages.some((stage) => stage.id === 'gap-validation' && stage.status === 'success');
   const continuationState = deriveGapFillContinuationState({
     status: gapFillStatus,
     validationSucceeded: !!canContinueAfterApply,
@@ -193,6 +219,14 @@ export function FeatureDetail() {
       hostReady: structuredReadiness?.hostReady ?? false,
       continuationVisible: continuationState.showContinuationRail,
     });
+  const approvalUnit = buildGapFillApprovalUnit({
+    review,
+    decisionRecord,
+    readiness: structuredReadiness,
+    guidance: canonicalGuidance,
+    acceptance: canonicalAcceptance,
+    effectiveBoundary,
+  });
 
   const summaryStatusStyles: Record<CLIReviewStageStatus, string> = {
     success: 'bg-[#22c55e]/20 text-[#22c55e]',
@@ -224,32 +258,107 @@ export function FeatureDetail() {
   ];
 
   const actionSlotDescription: Record<string, string> = {
-    确认: '查看审批单元与确认要求',
-    应用: '执行补丁应用或后续修复',
-    校验: '检查应用后的结果与建议',
+    确认: '先理解你正在批准什么，再决定是否继续',
+    应用: '在现有 CLI authority 下继续执行补丁应用',
+    校验: '检查应用后结果是否还能继续进入 acceptance 收尾',
   };
 
   useEffect(() => {
+    if (!featureId) {
+      return;
+    }
+    handledUpdateResultRef.current = null;
+    handledDeleteResultRef.current = null;
+    lastUpdateWriteModeRef.current = false;
+    setUpdatePrompt('');
     setSelectedBoundary('');
     setGapFillInstruction('');
-  }, [selectedFeature.id]);
+  }, [featureId]);
+
+  useEffect(() => {
+    if (!normalizedFeature?.id) {
+      return;
+    }
+
+    if (!shouldRefreshAfterUpdateSuccess({ currentCommand, isRunning, result })) {
+      return;
+    }
+
+    if (!lastUpdateWriteModeRef.current) {
+      return;
+    }
+
+    const handledKey =
+      result?.artifactPath ||
+      `${normalizedFeature.id}:${result?.exitCode}:${result?.output.length ?? 0}`;
+    if (handledUpdateResultRef.current === handledKey) {
+      return;
+    }
+
+    handledUpdateResultRef.current = handledKey;
+    void refreshFeatureAfterUpdate(reloadConnectedWorkspace, normalizedFeature.id);
+  }, [currentCommand, isRunning, normalizedFeature?.id, reloadConnectedWorkspace, result]);
+
+  useEffect(() => {
+    if (!normalizedFeature?.id) {
+      return;
+    }
+
+    if (!shouldRefreshAfterDeleteSuccess({ currentCommand, isRunning, result })) {
+      return;
+    }
+
+    const handledKey =
+      result?.artifactPath ||
+      `${normalizedFeature.id}:${result?.exitCode}:${result?.output.length ?? 0}`;
+    if (handledDeleteResultRef.current === handledKey) {
+      return;
+    }
+
+    handledDeleteResultRef.current = handledKey;
+    void reloadConnectedWorkspace(null);
+  }, [currentCommand, isRunning, normalizedFeature?.id, reloadConnectedWorkspace, result]);
+
+  const handlePreviewUpdate = async () => {
+    if (!hostRoot || !updatePrompt.trim() || !normalizedFeature) {
+      return;
+    }
+    lastUpdateWriteModeRef.current = false;
+    await executeUpdate(hostRoot, normalizedFeature.id, updatePrompt.trim(), false);
+  };
+
+  const handleApplyUpdate = async () => {
+    if (!hostRoot || !updatePrompt.trim() || !normalizedFeature) {
+      return;
+    }
+    lastUpdateWriteModeRef.current = true;
+    await executeUpdate(hostRoot, normalizedFeature.id, updatePrompt.trim(), true);
+  };
+
+  const handleDeleteFeature = async () => {
+    if (!hostRoot || !normalizedFeature) {
+      return;
+    }
+
+    await executeDelete(hostRoot, normalizedFeature.id, true);
+  };
 
   const handleRunGapFill = async () => {
-    if (!hostRoot || !gapFillInstruction.trim()) {
+    if (!hostRoot || !gapFillInstruction.trim() || !normalizedFeature) {
       return;
     }
     const boundaryId = effectiveBoundary || undefined;
-    await executeGapFill(hostRoot, selectedFeature.id, gapFillInstruction.trim(), boundaryId, 'review');
+    await executeGapFill(hostRoot, normalizedFeature.id, gapFillInstruction.trim(), boundaryId, 'review');
   };
 
   const handleApplyGapFill = async () => {
-    if (!hostRoot || !gapFillInstruction.trim()) {
+    if (!hostRoot || !gapFillInstruction.trim() || !normalizedFeature) {
       return;
     }
     const boundaryId = effectiveBoundary || undefined;
     await executeGapFill(
       hostRoot,
-      selectedFeature.id,
+      normalizedFeature.id,
       gapFillInstruction.trim(),
       boundaryId,
       'apply',
@@ -258,13 +367,13 @@ export function FeatureDetail() {
   };
 
   const handleValidateGapFill = async () => {
-    if (!hostRoot || (!gapFillInstruction.trim() && !approvalFile)) {
+    if (!hostRoot || (!gapFillInstruction.trim() && !approvalFile) || !normalizedFeature) {
       return;
     }
     const boundaryId = effectiveBoundary || undefined;
     await executeGapFill(
       hostRoot,
-      selectedFeature.id,
+      normalizedFeature.id,
       gapFillInstruction.trim(),
       boundaryId,
       'validate-applied',
@@ -283,8 +392,24 @@ export function FeatureDetail() {
     if (!hostRoot) {
       return;
     }
-    await executeLaunch(hostRoot, workspace?.addonName, workspace?.mapName);
+    await executeLaunch(hostRoot, workspace?.addonName || hostConfig.addonName, hostConfig.mapName);
   };
+
+  if (!normalizedFeature) {
+    return (
+      <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center min-w-0 h-full overflow-hidden">
+        <div className="max-w-md text-center px-6">
+          <div className="w-16 h-16 rounded-full bg-white/5 mx-auto flex items-center justify-center mb-4">
+            <Sparkles className="h-7 w-7 text-white/25" />
+          </div>
+          <h2 className="text-lg font-semibold text-white mb-2">选择一个功能查看详情</h2>
+          <p className="text-sm text-white/45 leading-relaxed">
+            左侧可以查看已存在的功能，也可以先通过“项目准备”完成宿主配置、初始化、安装依赖和运行检查。
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-[#1a1a1a] flex flex-col min-w-0 h-full overflow-hidden">
@@ -294,12 +419,12 @@ export function FeatureDetail() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold text-white mb-2">
-                {selectedFeature.displayName}
+                {normalizedFeature.displayName}
               </h1>
               <div className="flex items-center gap-3">
-                <StatusBadge status={selectedFeature.status} />
+                <StatusBadge status={normalizedFeature.status} />
                 <span className="text-xs font-mono text-white/40">
-                  #{selectedFeature.systemId}
+                  #{normalizedFeature.systemId}
                 </span>
               </div>
             </div>
@@ -312,7 +437,7 @@ export function FeatureDetail() {
                 System ID
               </p>
               <p className="text-sm font-mono text-white/80">
-                {selectedFeature.systemId}
+                {normalizedFeature.systemId}
               </p>
             </div>
             <div className="bg-[#252525] rounded-lg p-3 border border-white/5">
@@ -320,7 +445,7 @@ export function FeatureDetail() {
                 分组
               </p>
               <p className="text-sm text-white/80">
-                {groupNames[selectedFeature.group] || selectedFeature.group}
+                {groupNames[normalizedFeature.group] || normalizedFeature.group}
               </p>
             </div>
             <div className="bg-[#252525] rounded-lg p-3 border border-white/5">
@@ -336,7 +461,7 @@ export function FeatureDetail() {
                 版本
               </p>
               <p className="text-sm font-mono text-white/80">
-                v{selectedFeature.revision}
+                v{normalizedFeature.revision}
               </p>
             </div>
             <div className="bg-[#252525] rounded-lg p-3 border border-white/5">
@@ -354,10 +479,12 @@ export function FeatureDetail() {
                 更新时间
               </p>
               <p className="text-sm text-white/80">
-                {formatDistanceToNow(selectedFeature.updatedAt, {
-                  locale: zhCN,
-                  addSuffix: true,
-                })}
+                {normalizedFeature.updatedAt
+                  ? formatDistanceToNow(normalizedFeature.updatedAt, {
+                      locale: zhCN,
+                      addSuffix: true,
+                    })
+                  : '未知'}
               </p>
             </div>
           </div>
@@ -378,10 +505,10 @@ export function FeatureDetail() {
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {selectedFeature.patterns.map((pattern) => (
+              {normalizedFeature.patterns.map((pattern) => (
                 <PatternTag key={pattern} pattern={pattern} removable />
               ))}
-              {selectedFeature.patterns.length === 0 && (
+              {normalizedFeature.patterns.length === 0 && (
                 <p className="text-xs text-white/30">暂无 patterns</p>
               )}
             </div>
@@ -400,7 +527,7 @@ export function FeatureDetail() {
                     variant="secondary"
                     className="text-[10px] px-1.5 py-0 bg-white/5 text-white/50 border-0"
                   >
-                    {selectedFeature.generatedFiles.length}
+                    {normalizedFeature.generatedFiles.length}
                   </Badge>
                 </div>
                 {filesOpen ? (
@@ -412,7 +539,7 @@ export function FeatureDetail() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="mt-2 space-y-1">
-                {selectedFeature.generatedFiles.map((file, index) => (
+                {normalizedFeature.generatedFiles.map((file, index) => (
                   <div
                     key={index}
                     className="flex items-center gap-2 px-3 py-2 rounded-md bg-[#252525] text-xs text-white/60"
@@ -421,7 +548,7 @@ export function FeatureDetail() {
                     <span className="font-mono">{file}</span>
                   </div>
                 ))}
-                {selectedFeature.generatedFiles.length === 0 && (
+                {normalizedFeature.generatedFiles.length === 0 && (
                   <p className="text-xs text-white/30 px-3">暂无生成文件</p>
                 )}
               </div>
@@ -441,16 +568,16 @@ export function FeatureDetail() {
                     variant="secondary"
                     className={cn(
                       'text-[10px] px-1.5 py-0 border-0',
-                      selectedFeature.hostRealization.syncStatus === 'synced'
+                      normalizedFeature.hostRealization.syncStatus === 'synced'
                         ? 'bg-[#22c55e]/20 text-[#22c55e]'
-                        : selectedFeature.hostRealization.syncStatus === 'error'
+                        : normalizedFeature.hostRealization.syncStatus === 'error'
                         ? 'bg-[#ef4444]/20 text-[#ef4444]'
                         : 'bg-[#f59e0b]/20 text-[#f59e0b]'
                     )}
                   >
-                    {selectedFeature.hostRealization.syncStatus === 'synced'
+                    {normalizedFeature.hostRealization.syncStatus === 'synced'
                       ? '已同步'
-                      : selectedFeature.hostRealization.syncStatus === 'error'
+                      : normalizedFeature.hostRealization.syncStatus === 'error'
                       ? '错误'
                       : '等待中'}
                   </Badge>
@@ -467,15 +594,110 @@ export function FeatureDetail() {
                 <div className="flex items-center justify-between py-1">
                   <span className="text-xs text-white/40">Host</span>
                   <span className="text-xs text-white/80">
-                    {selectedFeature.hostRealization.host}
+                    {normalizedFeature.hostRealization.host}
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-1">
                   <span className="text-xs text-white/40">Context</span>
                   <span className="text-xs text-white/80">
-                    {selectedFeature.hostRealization.context || '-'}
+                    {normalizedFeature.hostRealization.context || '-'}
                   </span>
                 </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          <Separator className="bg-white/5" />
+
+          {/* Update */}
+          <Collapsible open={updateOpen} onOpenChange={setUpdateOpen}>
+            <CollapsibleTrigger asChild>
+              <button className="w-full flex items-center justify-between py-2 group">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 text-white/50" />
+                  <h3 className="text-sm font-medium text-white">Update</h3>
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] px-1.5 py-0 bg-white/5 text-white/50 border-0"
+                  >
+                    CLI authoritative
+                  </Badge>
+                </div>
+                {updateOpen ? (
+                  <ChevronUp className="h-4 w-4 text-white/40 group-hover:text-white/60" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-white/40 group-hover:text-white/60" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-2 space-y-3 rounded border border-white/10 bg-[#10151c] p-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">Update Path</p>
+                  <p className="text-[12px] text-white/65">
+                    这里直接调用真实的 `dota2 update` CLI。成功后会重新加载 workspace，并重新选中当前 feature。
+                  </p>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-white/35">Feature ID</p>
+                    <p className="mt-1 text-[12px] font-mono text-white/75">{normalizedFeature.id}</p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-white/35">Current Revision</p>
+                    <p className="mt-1 text-[12px] font-mono text-white/75">v{normalizedFeature.revision}</p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-white/35">Generated Files</p>
+                    <p className="mt-1 text-[12px] font-mono text-white/75">{normalizedFeature.generatedFiles.length}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase tracking-wider text-white/35">更新指令</p>
+                  <Textarea
+                    value={updatePrompt}
+                    onChange={(event) => setUpdatePrompt(event.target.value)}
+                    placeholder='例如：给现有天赋抽取功能增加一个常驻天赋库存界面：15 格。玩家每次从 F4 三选一中确认的天赋都进入库存。库存满了后，再按 F4 不再继续抽取，并在库存界面显示 "Talent inventory full"。保持现有 F4 三选一抽取逻辑、稀有度展示和已选天赋不再出现的行为不变。'
+                    className="min-h-[108px] resize-none bg-[#1a1a1a] border-white/10 text-white placeholder:text-white/30"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="h-9 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    disabled={!canRunUpdate}
+                    onClick={() => void handlePreviewUpdate()}
+                  >
+                    {isRunning && currentCommand === 'update' && !result?.success ? '预览中...' : '预览更新'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 border-white/10 bg-transparent text-white/80 hover:bg-white/5"
+                    disabled={!canRunUpdate}
+                    onClick={() => void handleApplyUpdate()}
+                  >
+                    应用更新
+                  </Button>
+                  {!hostRoot && (
+                    <p className="text-[10px] text-[#9e6a03]">
+                      先连接宿主，才能执行 update。
+                    </p>
+                  )}
+                </div>
+
+                <ExecutionOutputPanel
+                  isRunning={isRunning && currentCommand === 'update'}
+                  status={currentCommand === 'update' ? status : 'idle'}
+                  output={currentCommand === 'update' ? output : []}
+                  result={currentCommand === 'update' ? result : null}
+                  error={currentCommand === 'update' ? error : null}
+                  maxHeight="220px"
+                  onClear={clearOutput}
+                />
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -529,59 +751,171 @@ export function FeatureDetail() {
                 </div>
                 <div
                   className={cn(
-                    'rounded border p-3 space-y-2',
-                    canonicalGuidance.classification === 'canonical'
+                    'rounded border p-4 space-y-4',
+                    approvalUnit.classificationTone === 'canonical'
                       ? 'border-[#22c55e]/20 bg-[#0f1a13]'
                       : 'border-[#f59e0b]/20 bg-[#1d180f]'
                   )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">Canonical 演示引导</p>
-                      <p className="mt-1 text-[12px] font-medium text-white">{canonicalGuidance.title}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">审批单元 / 当前动作单元</p>
+                      <p className="text-[13px] font-medium text-white">{canonicalGuidance.title}</p>
+                      <p className="text-[11px] text-white/70">{approvalUnit.evidenceLabel}</p>
                     </div>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        'border-0 text-[10px]',
-                        canonicalGuidance.classification === 'canonical'
-                          ? 'bg-[#22c55e]/15 text-[#86efac]'
-                          : 'bg-[#f59e0b]/15 text-[#fcd34d]'
-                      )}
-                    >
-                      {canonicalGuidance.classification === 'canonical' ? '标准验收路径' : '探索性运行'}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-2">
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          'border-0 text-[10px]',
+                          approvalUnit.classificationTone === 'canonical'
+                            ? 'bg-[#22c55e]/15 text-[#86efac]'
+                            : 'bg-[#f59e0b]/15 text-[#fcd34d]'
+                        )}
+                      >
+                        {approvalUnit.classificationLabel}
+                      </Badge>
+                      <Badge
+                        variant="secondary"
+                        className="border-0 bg-white/10 text-[10px] text-white/85"
+                      >
+                        {approvalUnit.verdictLabel}
+                      </Badge>
+                    </div>
                   </div>
+
                   <p className="text-[11px] font-medium text-white/90">{canonicalAcceptance.summary}</p>
-                  <p className="text-[11px] text-white/70">{canonicalGuidance.summary}</p>
-                  <div className="grid gap-2 md:grid-cols-2 text-[10px] text-white/55">
-                    <p>
-                      固定指令:
-                      <span className="ml-1 text-white/75">{canonicalGuidance.expectedPrompt}</span>
-                    </p>
-                    <p>
-                      固定边界:
-                      <span className="ml-1 font-mono text-white/75">{canonicalGuidance.expectedBoundary}</span>
-                    </p>
+                  <p className="text-[11px] text-white/75">{approvalUnit.rationale}</p>
+
+                  {approvalUnit.classificationTone === 'exploratory' && (
+                    <div className="rounded border border-[#f59e0b]/20 bg-[#2a1f0d] px-3 py-2 text-[10px] text-[#fcd34d]">
+                      当前 run 只能记为 exploratory evidence，不等价于 canonical acceptance closure。
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 md:grid-cols-2 text-[10px] text-white/60">
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-white/35">当前批准对象</p>
+                        <p className="mt-1 text-white/80">{decisionRecord?.originalInstruction || '运行 review 后显示'}</p>
+                      </div>
+                      <div>
+                        <p className="text-white/35">Boundary / Surface</p>
+                        <p className="mt-1 text-white/80">{approvalUnit.targetSurface}</p>
+                      </div>
+                      {approvalUnit.targetFile && (
+                        <div>
+                          <p className="text-white/35">Target File</p>
+                          <p className="mt-1 break-all font-mono text-white/80">{approvalUnit.targetFile}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-white/35">当前下一步</p>
+                        <p className="mt-1 text-white/80">{approvalUnit.nextStep}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-white/35">为什么现在是这个状态</p>
+                        <p className="mt-1 text-white/80">
+                          {approvalUnit.blockedReason || canonicalGuidance.summary}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-white/35">Canonical 固定指令</p>
+                        <p className="mt-1 text-white/80">{canonicalGuidance.expectedPrompt}</p>
+                      </div>
+                      <div>
+                        <p className="text-white/35">Canonical 固定边界</p>
+                        <p className="mt-1 font-mono text-white/80">{canonicalGuidance.expectedBoundary}</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-white/80">
-                    当前下一步: {canonicalAcceptance.nextStep}
-                  </p>
-                  {gapFillInstruction.trim() !== TALENT_DRAW_CANONICAL_PROMPT && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 border-white/10 bg-transparent text-white/80 hover:bg-white/5"
-                      onClick={() => setGapFillInstruction(TALENT_DRAW_CANONICAL_PROMPT)}
-                    >
-                      填入 Talent Draw canonical 指令
-                    </Button>
+
+                  {(approvalUnit.blockedItems.length > 0 || readinessWarnings.length > 0) && (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {approvalUnit.blockedItems.length > 0 && (
+                        <div className="rounded border border-[#f59e0b]/15 bg-[#201911] p-3">
+                          <p className="text-[9px] uppercase tracking-[0.18em] text-white/40">Blocked 要先补什么</p>
+                          <ul className="mt-2 space-y-1 text-[10px] text-[#fcd34d]">
+                            {approvalUnit.blockedItems.map((item) => (
+                              <li key={item}>- {item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {readinessWarnings.length > 0 && (
+                        <div className="rounded border border-white/10 bg-[#10151c] p-3">
+                          <p className="text-[9px] uppercase tracking-[0.18em] text-white/40">Readiness 提醒</p>
+                          <ul className="mt-2 space-y-1 text-[10px] text-white/65">
+                            {readinessWarnings.map((warning, index) => (
+                              <li key={`${warning}-${index}`}>- {warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {!selectedBoundary && effectiveBoundary !== TALENT_DRAW_CANONICAL_BOUNDARY && (
-                    <p className="text-[10px] text-white/45">
-                      如需 canonical acceptance evidence，请选择 <span className="font-mono text-white/70">{TALENT_DRAW_CANONICAL_BOUNDARY}</span>。
-                    </p>
-                  )}
+
+                  <div className="grid gap-3 md:grid-cols-3 text-[10px] text-white/60">
+                    <div className="rounded border border-white/10 bg-[#10151c] p-3">
+                      <p className="text-white/35">已采用假设</p>
+                      <ul className="mt-2 space-y-1">
+                        {(approvalUnit.assumptions.length > 0 ? approvalUnit.assumptions : ['当前未记录']).map((item) => (
+                          <li key={item}>- {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded border border-white/10 bg-[#10151c] p-3">
+                      <p className="text-white/35">用户输入</p>
+                      <ul className="mt-2 space-y-1">
+                        {(approvalUnit.userInputs.length > 0 ? approvalUnit.userInputs : ['当前未记录']).map((item) => (
+                          <li key={item}>- {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded border border-white/10 bg-[#10151c] p-3">
+                      <p className="text-white/35">推断输入</p>
+                      <ul className="mt-2 space-y-1">
+                        {(approvalUnit.inferredInputs.length > 0 ? approvalUnit.inferredInputs : ['当前未记录']).map((item) => (
+                          <li key={item}>- {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[9px] uppercase tracking-[0.18em] text-white/40">Failure Categories</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(approvalUnit.failureCategories.length > 0 ? approvalUnit.failureCategories : ['当前未记录']).map((item) => (
+                        <Badge
+                          key={item}
+                          variant="secondary"
+                          className="border-0 bg-white/8 text-[10px] text-white/70"
+                        >
+                          {item}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {gapFillInstruction.trim() !== TALENT_DRAW_CANONICAL_PROMPT && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-white/10 bg-transparent text-white/80 hover:bg-white/5"
+                        onClick={() => setGapFillInstruction(TALENT_DRAW_CANONICAL_PROMPT)}
+                      >
+                        填入 Talent Draw canonical 指令
+                      </Button>
+                    )}
+                    {!selectedBoundary && effectiveBoundary !== TALENT_DRAW_CANONICAL_BOUNDARY && (
+                      <p className="text-[10px] text-white/45">
+                        如需 canonical acceptance evidence，请选择 <span className="font-mono text-white/70">{TALENT_DRAW_CANONICAL_BOUNDARY}</span>。
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2 rounded border border-white/5 bg-[#1c2028] p-3">
@@ -660,74 +994,6 @@ export function FeatureDetail() {
                   </div>
                 </div>
 
-                <div className="rounded border border-white/10 bg-[#10151c] p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">审批 / 确认单元</p>
-                    <span className="text-[10px] text-white/45">
-                      {decisionRecord?.decision ?? '等待评审'}
-                    </span>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2 text-[10px] text-white/60">
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-white/35">原始指令</p>
-                        <p className="mt-1 text-white/75">
-                          {decisionRecord?.originalInstruction || '运行 review 后显示'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-white/35">选中边界</p>
-                        <p className="mt-1 text-white/75">
-                          {decisionRecord?.selectedBoundaryLabel || decisionRecord?.selectedBoundary || effectiveBoundary || '未选择'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-white/35">精确下一步</p>
-                        <p className="mt-1 text-white/75">
-                          {decisionRecord?.exactNextStep || '运行 review 后显示下一步'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-white/35">已采用假设</p>
-                        <ul className="mt-1 space-y-1">
-                          {(decisionRecord?.assumptionsMade?.length ? decisionRecord.assumptionsMade : ['当前没有记录假设']).map((item) => (
-                            <li key={item}>- {item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-white/35">用户输入</p>
-                        <ul className="mt-1 space-y-1">
-                          {(decisionRecord?.userInputsUsed?.length ? decisionRecord.userInputsUsed : ['当前没有记录']).map((item) => (
-                            <li key={item}>- {item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-white/35">推断输入</p>
-                        <ul className="mt-1 space-y-1">
-                          {(decisionRecord?.inferredInputsUsed?.length ? decisionRecord.inferredInputsUsed : ['当前没有额外推断']).map((item) => (
-                            <li key={item}>- {item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(decisionRecord?.failureCategories?.length ? decisionRecord.failureCategories : ['暂无 failure taxonomy']).map((item) => (
-                      <Badge
-                        key={item}
-                        variant="secondary"
-                        className="border-0 bg-white/8 text-[10px] text-white/70"
-                      >
-                        {item}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="space-y-1">
                       <p className="text-[10px] uppercase tracking-wider text-white/35">业务逻辑指令</p>
                   <Textarea
@@ -743,7 +1009,7 @@ export function FeatureDetail() {
                     宿主: <span className="text-white/65 font-mono">{hostRoot || '（未连接宿主）'}</span>
                   </p>
                   <p>
-                    功能: <span className="text-white/65 font-mono">{selectedFeature.id}</span>
+                    功能: <span className="text-white/65 font-mono">{normalizedFeature.id}</span>
                   </p>
                   {effectiveBoundary && (
                     <p>
@@ -799,7 +1065,9 @@ export function FeatureDetail() {
                   )}
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">执行动作</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
                   {reviewActionSlots.map(({ title, action }) => (
                     <div
                       key={title}
@@ -819,6 +1087,7 @@ export function FeatureDetail() {
                       </p>
                     </div>
                   ))}
+                  </div>
                 </div>
                 {continuationState.showContinuationRail && (
                   <div className="rounded border border-white/10 bg-[#10151c] p-3 space-y-3">
@@ -863,8 +1132,8 @@ export function FeatureDetail() {
                         <div>
                           <p className="text-[11px] text-white/70">要点</p>
                           <ul className="mt-2 space-y-1 text-[10px] text-white/60">
-                            {review.highlights.length > 0 ? (
-                              review.highlights.map((item) => (
+                            {reviewHighlights.length > 0 ? (
+                              reviewHighlights.map((item) => (
                                 <li key={item} className="truncate text-white/60">
                                   – {item}
                                 </li>
@@ -877,7 +1146,7 @@ export function FeatureDetail() {
                         <div>
                           <p className="text-[11px] text-white/70">阶段</p>
                           <div className="mt-2 space-y-1">
-                            {review.stages.slice(0, 4).map((stage) => (
+                            {reviewStages.slice(0, 4).map((stage) => (
                               <div
                                 key={stage.id}
                                 className="rounded border border-white/10 bg-white/[0.02] px-2 py-1"
@@ -906,22 +1175,22 @@ export function FeatureDetail() {
                           </div>
                         </div>
                       </div>
-                      {review.blockers.length > 0 && (
+                      {reviewBlockers.length > 0 && (
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-white/40">阻塞项</p>
                           <ul className="mt-1 space-y-1 text-[10px] text-[#f87171]">
-                            {review.blockers.slice(0, 4).map((blocker) => (
+                            {reviewBlockers.slice(0, 4).map((blocker) => (
                               <li key={blocker}>- {blocker}</li>
                             ))}
                           </ul>
                         </div>
                       )}
                     </div>
-                    {review.generatedFiles?.length ? (
+                    {reviewGeneratedFiles.length ? (
                       <div className="rounded border border-white/10 bg-[#0d1219] p-3 space-y-2">
                         <p className="text-[11px] text-white/70">检查目标</p>
                         <ul className="space-y-1 text-[10px] text-white/60">
-                          {review.generatedFiles.map((file) => (
+                          {reviewGeneratedFiles.map((file) => (
                             <li key={file} className="flex items-center justify-between gap-2">
                               <span className="truncate">{file}</span>
                               <span className="text-[9px] text-white/40">变更</span>
@@ -961,30 +1230,17 @@ export function FeatureDetail() {
 
           {/* Actions */}
           <div className="pt-4 border-t border-white/5">
+            <div className="mb-3 rounded border border-white/10 bg-white/[0.02] px-3 py-2 text-[10px] text-white/45">
+              当前 Workbench 只保留真实 lifecycle 动作：Create / Update / Delete。预览和本地假重新生成已从主演示路径移除。
+            </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 h-9 bg-transparent border-white/10 text-white/70 hover:bg-white/5 hover:text-white"
-                onClick={() => regenerateFeature(selectedFeature.id)}
-              >
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                重新生成
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 h-9 bg-transparent border-white/10 text-white/70 hover:bg-white/5 hover:text-white"
-              >
-                <Eye className="h-3.5 w-3.5 mr-1.5" />
-                预览
-              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 h-9 bg-transparent border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/10"
+                    className="h-9 w-full bg-transparent border-[#ef4444]/30 text-[#ef4444] hover:bg-[#ef4444]/10"
+                    disabled={!hostRoot || isRunning}
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                     删除
@@ -994,7 +1250,7 @@ export function FeatureDetail() {
                   <AlertDialogHeader>
                     <AlertDialogTitle className="text-white">确认删除</AlertDialogTitle>
                     <AlertDialogDescription className="text-white/50">
-                      确定要删除 &quot;{selectedFeature.displayName}&quot; 吗？此操作不可撤销。
+                      确定要删除 &quot;{normalizedFeature.displayName}&quot; 吗？此操作不可撤销。
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -1003,7 +1259,7 @@ export function FeatureDetail() {
                     </AlertDialogCancel>
                     <AlertDialogAction
                       className="bg-[#ef4444] hover:bg-[#dc2626]"
-                      onClick={() => deleteFeature(selectedFeature.id)}
+                      onClick={() => void handleDeleteFeature()}
                     >
                       删除
                     </AlertDialogAction>
@@ -1011,6 +1267,15 @@ export function FeatureDetail() {
                 </AlertDialogContent>
               </AlertDialog>
             </div>
+            <ExecutionOutputPanel
+              isRunning={isRunning && currentCommand === 'delete'}
+              status={currentCommand === 'delete' ? status : 'idle'}
+              output={currentCommand === 'delete' ? output : []}
+              result={currentCommand === 'delete' ? result : null}
+              error={currentCommand === 'delete' ? error : null}
+              maxHeight="180px"
+              onClear={clearOutput}
+            />
           </div>
         </div>
       </ScrollArea>

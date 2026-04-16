@@ -1,8 +1,13 @@
 /**
  * Rune Weaver - Pattern Resolver
  *
- * 从 Blueprint 解析出 SelectedPattern[]
- * 只使用当前 Catalog 中真实存在的 Pattern
+ * Capability-fit-first resolver:
+ * ModuleNeed -> capability fit -> compatibility scoring -> hint tie-break.
+ *
+ * The shared ModuleNeed seam is not yet available in core/schema/types.ts,
+ * so this resolver consumes it opportunistically when present on the runtime
+ * Blueprint object and otherwise derives a provisional need surface from the
+ * existing Blueprint modules/mechanics without mutating the shared schema.
  */
 
 import {
@@ -12,42 +17,38 @@ import {
   SelectedPattern as BaseSelectedPattern,
   NormalizedMechanics,
 } from "../schema/types";
-import { isCanonicalPatternAvailable, CORE_PATTERN_IDS } from "./canonical-patterns";
+import {
+  getCanonicalPatternMeta,
+  getCanonicalPatterns,
+  isCanonicalPatternAvailable,
+} from "./canonical-patterns";
+import type { PatternMeta } from "./index.js";
 
-/**
- * 扩展的 SelectedPattern，包含解析元数据
- */
+type ResolutionSource = "need" | "hint-tiebreak" | "fallback";
+type NeedSource = "module-need" | "derived-module" | "derived-mechanic";
+
 export interface ResolvedPattern extends BaseSelectedPattern {
   priority: "required" | "preferred" | "fallback";
-  source: "hint" | "category" | "mechanic";
+  source: ResolutionSource;
+  moduleId?: string;
+  score?: number;
 }
 
-/**
- * 未解析的 Pattern 请求
- */
 export interface UnresolvedPattern {
   requestedId: string;
   reason: string;
   suggestedAlternative?: string;
+  moduleId?: string;
+  missingCapabilities?: string[];
 }
 
-/**
- * Pattern 解析结果
- */
 export interface PatternResolutionResult {
-  /** 选中的 patterns（只包含 catalog 中存在的） */
   patterns: ResolvedPattern[];
-  /** 未解析的 patterns */
   unresolved: UnresolvedPattern[];
-  /** 解析过程中的问题 */
   issues: ResolutionIssue[];
-  /** 是否完全解析（没有 unresolved 且没有 error） */
   complete: boolean;
 }
 
-/**
- * 解析问题
- */
 export interface ResolutionIssue {
   code: string;
   scope: "schema" | "blueprint" | "assembly" | "host";
@@ -57,470 +58,614 @@ export interface ResolutionIssue {
   moduleId?: string;
 }
 
-// ============================================================================
-// 当前 Catalog 中真实存在的 Pattern 集合
-// 来源: adapters/dota2/patterns/index.ts (通过 canonical-patterns.ts)
-// ============================================================================
-
-/**
- * 检查 pattern 是否在 catalog 中
- */
-function isPatternAvailable(patternId: string): boolean {
-  return isCanonicalPatternAvailable(patternId);
+interface RuntimeModuleNeed {
+  moduleId: string;
+  semanticRole: string;
+  requiredCapabilities: string[];
+  optionalCapabilities: string[];
+  requiredOutputs: string[];
+  stateExpectations: string[];
+  integrationHints: string[];
+  invariants: string[];
+  boundedVariability: string[];
+  explicitPatternHints: string[];
+  prohibitedTraits: string[];
+  sourceModule?: BlueprintModule;
+  source: NeedSource;
 }
 
-/**
- * 类别到默认 Pattern 的映射
- * 只包含 catalog 中存在的 pattern
- * 
- * 注意：effect 类别不再一刀切映射到 effect.dash
- * 而是根据语义在 resolveFromCategory 中动态选择
- */
-const CATEGORY_PATTERN_MAP: Record<
-  BlueprintModule["category"],
-  { patternId: string; priority: ResolvedPattern["priority"] } | null
-> = {
-  trigger: { patternId: CORE_PATTERN_IDS.INPUT_KEY_BINDING, priority: "required" },
-  data: { patternId: CORE_PATTERN_IDS.DATA_WEIGHTED_POOL, priority: "required" },
-  rule: { patternId: CORE_PATTERN_IDS.RULE_SELECTION_FLOW, priority: "required" },
-  // effect 类别不再一刀切映射，见 resolveEffectPattern 函数
-  effect: null,
-  resource: { patternId: CORE_PATTERN_IDS.RESOURCE_BASIC_POOL, priority: "required" },
-  ui: { patternId: CORE_PATTERN_IDS.UI_SELECTION_MODAL, priority: "preferred" },
-  // integration 类别在 catalog 中没有对应 pattern
-  integration: null,
-};
+interface CandidatePatternScore {
+  meta: PatternMeta;
+  score: number;
+  matchedOutputs: string[];
+  matchedStates: string[];
+  matchedIntegrationHints: string[];
+  matchedOptionalCapabilities: string[];
+}
 
-/**
- * 机制到 Pattern 的映射
- * 只包含 catalog 中存在的 pattern
- */
-const MECHANIC_PATTERN_MAP: Partial<
-  Record<keyof NormalizedMechanics, { patternId: string; priority: ResolvedPattern["priority"] }>
-> = {
-  // trigger -> input.key_binding (available)
-  trigger: { patternId: CORE_PATTERN_IDS.INPUT_KEY_BINDING, priority: "required" },
-  // candidatePool -> data.weighted_pool (available)
-  candidatePool: { patternId: CORE_PATTERN_IDS.DATA_WEIGHTED_POOL, priority: "required" },
-  // weightedSelection -> data.weighted_pool (same as candidatePool)
-  weightedSelection: { patternId: CORE_PATTERN_IDS.DATA_WEIGHTED_POOL, priority: "required" },
-  // playerChoice -> rule.selection_flow (player selection is part of selection flow)
-  playerChoice: { patternId: CORE_PATTERN_IDS.RULE_SELECTION_FLOW, priority: "required" },
-  // uiModal -> ui.selection_modal (available)
-  uiModal: { patternId: CORE_PATTERN_IDS.UI_SELECTION_MODAL, priority: "required" },
-  // outcomeApplication -> effect.modifier_applier (now available)
-  outcomeApplication: { patternId: CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER, priority: "required" },
-  // resourceConsumption -> resource.basic_pool (available)
-  resourceConsumption: { patternId: CORE_PATTERN_IDS.RESOURCE_BASIC_POOL, priority: "required" },
-};
+const MODULE_NEED_FAMILY_HINT = "family";
 
-/**
- * 解析 Blueprint 到 SelectedPattern[]
- */
 export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
   const patterns: ResolvedPattern[] = [];
   const unresolved: UnresolvedPattern[] = [];
   const issues: ResolutionIssue[] = [];
-  const patternIds = new Set<string>();
+  const selectedById = new Map<string, ResolvedPattern>();
 
-  // 策略 1: 从 patternHints 解析
-  for (const hint of blueprint.patternHints) {
-    const hintResult = resolveFromHint(hint, blueprint);
-    for (const p of hintResult.patterns) {
-      if (!patternIds.has(p.patternId)) {
-        patterns.push(p);
-        patternIds.add(p.patternId);
+  const needs = extractRuntimeModuleNeeds(blueprint, issues);
+
+  for (const need of needs) {
+    const result = resolveFromNeed(need, blueprint);
+
+    if (result.resolved) {
+      const existing = selectedById.get(result.resolved.patternId);
+      if (!existing) {
+        selectedById.set(result.resolved.patternId, result.resolved);
       } else {
-        issues.push({
-          code: "DUPLICATE_PATTERN",
-          scope: "assembly",
-          severity: "warning",
-          message: `Pattern '${p.patternId}' already selected from another source`,
+        existing.parameters = {
+          ...existing.parameters,
+          ...result.resolved.parameters,
+        };
+        existing.priority =
+          priorityValue(result.resolved.priority) > priorityValue(existing.priority)
+            ? result.resolved.priority
+            : existing.priority;
+        existing.score = Math.max(existing.score || 0, result.resolved.score || 0);
+      }
+    }
+
+    if (result.unresolved) {
+      unresolved.push(result.unresolved);
+      issues.push({
+        code: "MODULE_NEED_UNRESOLVED",
+        scope: "assembly",
+        severity: "warning",
+        message: result.unresolved.reason,
+        moduleId: need.moduleId,
+      });
+    }
+  }
+
+  // Keep legacy hints as diagnostics only if they reference missing patterns.
+  for (const hint of blueprint.patternHints || []) {
+    for (const patternId of hint.suggestedPatterns || []) {
+      if (!isCanonicalPatternAvailable(patternId)) {
+        unresolved.push({
+          requestedId: patternId,
+          reason: `Pattern hint '${patternId}' not found in current catalog`,
         });
       }
     }
-    unresolved.push(...hintResult.unresolved);
   }
 
-  // 策略 2: 从 modules 类别映射
-  for (const module of blueprint.modules) {
-    const categoryResult = resolveFromCategory(module);
-    if (categoryResult.pattern && !patternIds.has(categoryResult.pattern.patternId)) {
-      patterns.push(categoryResult.pattern);
-      patternIds.add(categoryResult.pattern.patternId);
-    }
-    if (categoryResult.unresolved) {
-      unresolved.push(categoryResult.unresolved);
-    }
-  }
+  const selectedPatterns = Array.from(selectedById.values()).sort((a, b) => {
+    const scoreDiff = (b.score || 0) - (a.score || 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return a.patternId.localeCompare(b.patternId);
+  });
 
-  // 策略 3: 从 normalizedMechanics 推断
-  const mechanicResult = resolveFromMechanics(blueprint.sourceIntent.normalizedMechanics);
-  for (const p of mechanicResult.patterns) {
-    if (!patternIds.has(p.patternId)) {
-      patterns.push(p);
-      patternIds.add(p.patternId);
-    }
-  }
-  unresolved.push(...mechanicResult.unresolved);
-
-  // T156: Deduplication - prefer specialized dota2.* patterns over generic effect.modifier_applier
-  // If both exist, remove the generic one
-  const hasDota2Effect = patterns.some(p => p.patternId.startsWith("dota2."));
-  if (hasDota2Effect) {
-    const genericIdx = patterns.findIndex(p => p.patternId === CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER);
-    if (genericIdx !== -1) {
-      patterns.splice(genericIdx, 1);
-      patternIds.delete(CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER);
-    }
-  }
-
-  // 检查是否为空
-  if (patterns.length === 0) {
+  if (selectedPatterns.length === 0) {
     issues.push({
       code: "NO_PATTERNS_RESOLVED",
       scope: "assembly",
       severity: "error",
-      message: "No patterns could be resolved from Blueprint",
-    });
-  }
-
-  // 检查 unresolved 情况
-  if (unresolved.length > 0) {
-    issues.push({
-      code: "UNRESOLVED_PATTERNS",
-      scope: "assembly",
-      severity: "warning",
-      message: `${unresolved.length} pattern(s) could not be resolved: ${unresolved.map(u => u.requestedId).join(", ")}`,
-    });
-  }
-
-  // 检查关键 pattern
-  const hasTrigger = patterns.some((p) => p.patternId.startsWith("input."));
-  const hasEffect = patterns.some((p) => p.patternId.startsWith("effect.") || p.patternId.startsWith("dota2."));
-
-  if (!hasTrigger && !hasEffect) {
-    issues.push({
-      code: "MISSING_CORE_PATTERN",
-      scope: "assembly",
-      severity: "warning",
-      message: "No input trigger or effect pattern resolved",
+      message: "No patterns could be resolved from capability-fit evaluation",
     });
   }
 
   return {
-    patterns,
+    patterns: selectedPatterns,
     unresolved,
     issues,
-    complete: patterns.length > 0 && unresolved.length === 0 && !issues.some((i) => i.severity === "error"),
+    complete:
+      selectedPatterns.length > 0 &&
+      unresolved.length === 0 &&
+      !issues.some((issue) => issue.severity === "error"),
   };
 }
 
-/**
- * 从 pattern hint 解析
- */
-function resolveFromHint(
-  hint: PatternHint,
+function resolveFromNeed(
+  need: RuntimeModuleNeed,
   blueprint: Blueprint
-): { patterns: ResolvedPattern[]; unresolved: UnresolvedPattern[] } {
-  const patterns: ResolvedPattern[] = [];
-  const unresolved: UnresolvedPattern[] = [];
+): { resolved: ResolvedPattern | null; unresolved: UnresolvedPattern | null } {
+  const candidates = getCanonicalPatterns()
+    .filter((pattern) => supportsRequiredCapabilities(pattern, need.requiredCapabilities))
+    .filter((pattern) => !violatesProhibitedTraits(pattern, need.prohibitedTraits))
+    .filter((pattern) => satisfiesInvariants(pattern, need.invariants));
 
-  for (const patternId of hint.suggestedPatterns) {
-    if (isPatternAvailable(patternId)) {
-      patterns.push({
-        patternId,
-        role: hint.category || "unknown",
-        parameters: extractParametersFromBlueprint(patternId, blueprint),
-        priority: "preferred",
-        source: "hint",
-      });
-    } else {
-      unresolved.push({
-        requestedId: patternId,
-        reason: `Pattern '${patternId}' not found in current catalog`,
-      });
-    }
-  }
-
-  return { patterns, unresolved };
-}
-
-/**
- * 从模块类别解析
- */
-function resolveFromCategory(module: BlueprintModule): {
-  pattern: ResolvedPattern | null;
-  unresolved: UnresolvedPattern | null;
-} {
-  // effect 类别特殊处理：根据语义智能选择
-  if (module.category === "effect") {
-    return resolveEffectPattern(module);
-  }
-
-  const mapping = CATEGORY_PATTERN_MAP[module.category];
-  
-  if (!mapping) {
+  if (candidates.length === 0) {
     return {
-      pattern: null,
+      resolved: null,
       unresolved: {
-        requestedId: `<${module.category}>`,
-        reason: `No pattern available for category '${module.category}' in current catalog`,
+        requestedId: `<module:${need.moduleId}>`,
+        moduleId: need.moduleId,
+        reason: `No admitted pattern satisfies required capabilities for module '${need.semanticRole}'`,
+        missingCapabilities: [...need.requiredCapabilities],
+        suggestedAlternative: "Add an admitted pattern family path or mark the mechanic unsupported",
       },
     };
   }
 
+  const scored = candidates.map((pattern) => scoreCandidate(pattern, need));
+  const bestScore = Math.max(...scored.map((candidate) => candidate.score));
+  const bestCandidates = scored.filter((candidate) => candidate.score === bestScore);
+
+  if (
+    bestScore === 0 &&
+    (need.requiredOutputs.length > 0 ||
+      need.stateExpectations.length > 0 ||
+      need.integrationHints.length > 0 ||
+      need.invariants.length > 0)
+  ) {
+    return {
+      resolved: null,
+      unresolved: {
+        requestedId: `<module:${need.moduleId}>`,
+        moduleId: need.moduleId,
+        reason:
+          `Patterns matched required capabilities for module '${need.semanticRole}' ` +
+          `but none satisfied output/state/integration compatibility strongly enough`,
+        suggestedAlternative:
+          "Refine the admitted pattern metadata or narrow the declared ModuleNeed compatibility surface",
+      },
+    };
+  }
+
+  const selected = applyHintTieBreak(bestCandidates, need.explicitPatternHints);
+  const source: ResolutionSource =
+    need.explicitPatternHints.includes(selected.meta.id) && bestCandidates.length > 1
+      ? "hint-tiebreak"
+      : "need";
+
   return {
-    pattern: {
-      patternId: mapping.patternId,
-      role: module.role,
-      parameters: module.parameters,
-      priority: mapping.priority,
-      source: "category",
+    resolved: {
+      patternId: selected.meta.id,
+      role: need.semanticRole,
+      parameters: extractParametersForNeed(need, blueprint, selected.meta.id),
+      priority: "required",
+      source,
+      moduleId: need.moduleId,
+      score: selected.score,
     },
     unresolved: null,
   };
 }
 
-/**
- * F173: Extract effect parameters from semantic description
- * Maps high-frequency effect semantics into pattern parameters
- */
-function extractEffectParameters(role: string, responsibilities: string[]): Record<string, unknown> {
-  const params: Record<string, unknown> = {};
-  const context = (role + " " + responsibilities.join(" ")).toLowerCase();
-
-  // F173-R1: Dash distance extraction
-  // Matches: "500 units", "500 distance", "500 距离", "向前冲刺500"
-  const distanceMatch = context.match(/(\d+)\s*(?:units?|distance|距离|码|米)/i) ||
-                        context.match(/(?:向前|向后|向\w+)?\s*(?:冲刺|位移|dash|move)\s*(\d+)/i);
-  if (distanceMatch) {
-    params.dashDistance = parseInt(distanceMatch[1]);
+function extractRuntimeModuleNeeds(
+  blueprint: Blueprint,
+  issues: ResolutionIssue[]
+): RuntimeModuleNeed[] {
+  const explicitNeeds = extractExplicitModuleNeeds(blueprint, issues);
+  if (explicitNeeds.length > 0) {
+    return explicitNeeds;
   }
 
-  // F173-R2: Heal/regen magnitude extraction
-  // Matches: "10 HP per second", "每秒恢复10点生命值", "10 health per second"
-  const healMatch = context.match(/(\d+)\s*(?:hp|health|生命值|生命)/i) ||
-                    context.match(/(?:恢复|回复|regen|heal)\s*(\d+)/i);
-  if (healMatch) {
-    params.healAmount = parseInt(healMatch[1]);
+  const derivedFromModules = blueprint.modules.map((module) =>
+    deriveNeedFromBlueprintModule(module, blueprint)
+  );
+  if (derivedFromModules.length > 0) {
+    issues.push({
+      code: "MODULE_NEED_DERIVED",
+      scope: "blueprint",
+      severity: "warning",
+      message:
+        "Blueprint does not expose canonical ModuleNeed[] at runtime yet; resolver derived provisional needs from Blueprint modules",
+    });
+    return derivedFromModules;
   }
 
-  // F173-R3: Periodic interval extraction
-  // Matches: "per second", "每秒", "every 1 second", "interval"
-  const intervalMatch = context.match(/(\d+(?:\.\d+)?)\s*(?:second|秒)/i) ||
-                        context.match(/(?:per|every|每)\s*(\d+(?:\.\d+)?)\s*(?:second|秒)/i);
-  if (intervalMatch) {
-    params.tickInterval = parseFloat(intervalMatch[1] || intervalMatch[2] || "1");
-  }
-
-  // F173-R4: Duration extraction
-  // Matches: "for 5 seconds", "持续5秒", "duration 5"
-  const durationMatch = context.match(/(?:for|持续|duration)\s*(\d+(?:\.\d+)?)\s*(?:second|秒)/i) ||
-                        context.match(/(\d+)\s*(?:second|秒)\s*(?:duration|持续)/i);
-  if (durationMatch) {
-    params.duration = parseFloat(durationMatch[1]);
-  }
-
-  // F173-R5: Cooldown extraction (if mentioned in effect context)
-  const cooldownMatch = context.match(/cooldown\s*(\d+(?:\.\d+)?)/i) ||
-                        context.match(/(?:冷却|cd)\s*(\d+(?:\.\d+)?)/i);
-  if (cooldownMatch) {
-    params.cooldown = parseFloat(cooldownMatch[1]);
-  }
-
-  // F173-R6: Mana cost extraction (if mentioned in effect context)
-  const manaMatch = context.match(/mana\s*(\d+)/i) ||
-                    context.match(/(?:法力|蓝量)\s*(\d+)/i) ||
-                    context.match(/(\d+)\s*(?:mana|法力)/i);
-  if (manaMatch) {
-    params.manaCost = parseInt(manaMatch[1] || manaMatch[2]);
-  }
-
-  return params;
+  return deriveNeedsFromMechanics(blueprint.sourceIntent.normalizedMechanics);
 }
 
-/**
- * 解析 effect 类别模块到具体 pattern
- * 根据语义智能选择，不再一刀切映射到 effect.dash
- * F173: Now extracts parameters from effect semantics
- */
-function resolveEffectPattern(module: BlueprintModule): {
-  pattern: ResolvedPattern | null;
-  unresolved: UnresolvedPattern | null;
-} {
-  const roleLower = module.role.toLowerCase();
-  const responsibilitiesLower = module.responsibilities.map(r => r.toLowerCase()).join(" ");
-  const contextLower = roleLower + " " + responsibilitiesLower;
+function extractExplicitModuleNeeds(
+  blueprint: Blueprint,
+  issues: ResolutionIssue[]
+): RuntimeModuleNeed[] {
+  const runtimeNeeds = (blueprint as Blueprint & { moduleNeeds?: unknown }).moduleNeeds;
+  if (!Array.isArray(runtimeNeeds)) return [];
 
-  // F173: Extract effect parameters from semantic description
-  const extractedParams = extractEffectParameters(module.role, module.responsibilities);
-  const mergedParams = { ...module.parameters, ...extractedParams };
+  const legacyHints = collectGlobalHintIds(blueprint.patternHints);
 
-  // 1. 位移/冲刺语义 -> effect.dash
-  const dashKeywords = ["冲刺", "位移", "dash", "blink", "jump", "leap", "突进", "move", "rapid", "speed", "快速移动", "向前"];
-  const isDashRelated = dashKeywords.some(k => contextLower.includes(k));
-  if (isDashRelated) {
-    return {
-      pattern: {
-        patternId: CORE_PATTERN_IDS.EFFECT_DASH,
-        role: module.role,
-        parameters: mergedParams,
-        priority: "required",
-        source: "category",
-      },
-      unresolved: null,
-    };
-  }
+  return runtimeNeeds
+    .filter((need) => typeof need === "object" && !!need)
+    .map((need, index) => {
+      const runtimeNeed = need as Record<string, unknown>;
+      const normalized: RuntimeModuleNeed = {
+        moduleId: readString(runtimeNeed.moduleId) || `module_need_${index}`,
+        semanticRole: readString(runtimeNeed.semanticRole) || `module_need_${index}`,
+        requiredCapabilities: normalizeStringArray(runtimeNeed.requiredCapabilities),
+        optionalCapabilities: normalizeStringArray(runtimeNeed.optionalCapabilities),
+        requiredOutputs: normalizeStringArray(runtimeNeed.requiredOutputs),
+        stateExpectations: normalizeStringArray(runtimeNeed.stateExpectations),
+        integrationHints: normalizeStringArray(runtimeNeed.integrationHints),
+        invariants: normalizeStringArray(runtimeNeed.invariants),
+        boundedVariability: normalizeStringArray(runtimeNeed.boundedVariability),
+        explicitPatternHints: mergeUniqueStrings(
+          normalizeStringArray(runtimeNeed.explicitPatternHints),
+          legacyHints
+        ),
+        prohibitedTraits: normalizeStringArray(runtimeNeed.prohibitedTraits),
+        source: "module-need",
+      };
 
-  // 1.5. 短时增益/移速增益/BUFF 语义 -> dota2.short_time_buff
-  // 在通用 modifier_applier 之前检测，因为 "buff" 关键词也会被 modifier 检测捕获
-  const buffKeywords = [
-    "增益", "buff", "加速", "移速", "movespeed", "speed", "speed bonus", 
-    "移动速度", "速度提升", "短期", "持续", "duration", "秒", "6秒", "5秒",
-    "正面效果", "positive", "增强", "强化", "正向"
-  ];
-  const isBuffRelated = buffKeywords.some(k => contextLower.includes(k));
+      if (normalized.requiredCapabilities.length === 0) {
+        issues.push({
+          code: "MODULE_NEED_MISSING_CAPABILITY",
+          scope: "blueprint",
+          severity: "warning",
+          message:
+            `ModuleNeed '${normalized.moduleId}' has no requiredCapabilities; ` +
+            "resolver may honest-block until Lane B emits stronger semantics",
+          moduleId: normalized.moduleId,
+        });
+      }
 
-  // T146-R1: 负面/减益关键词 - 如果存在这些关键词，即使有 buff 关键词也应该排除
-  // 因为 short_time_buff 是正向 buff，不是 debuff/dot
-  const debuffNegativeKeywords = [
-    "减益", "debuff", "负面", "负面效果", "对敌人", "敌人", "enemy", 
-    "伤害", "damage", "dot", "持续伤害", "中毒", "冰冻", "眩晕", 
-    "stun", "沉默", "silence", "脆弱", "weak", "减速", "slow"
-  ];
-  const hasDebuffNegativeSignal = debuffNegativeKeywords.some(k => contextLower.includes(k));
+      return normalized;
+    });
+}
 
-  // 只有正向 buff 信号且没有负面减益信号时才命中 short_time_buff
-  if (isBuffRelated && !hasDebuffNegativeSignal) {
-    return {
-      pattern: {
-        patternId: CORE_PATTERN_IDS.DOTA2_SHORT_TIME_BUFF,
-        role: module.role,
-        parameters: mergedParams,
-        priority: "required",
-        source: "category",
-      },
-      unresolved: null,
-    };
-  }
+function deriveNeedFromBlueprintModule(
+  module: BlueprintModule,
+  blueprint: Blueprint
+): RuntimeModuleNeed {
+  const context = buildModuleContext(module);
+  const requiredCapabilities = deriveRequiredCapabilities(module, blueprint.sourceIntent.normalizedMechanics, context);
+  const requiredOutputs = deriveRequiredOutputs(module, context);
+  const stateExpectations = deriveStateExpectations(module, context);
+  const integrationHints = deriveIntegrationHints(module, context);
+  const invariants = deriveInvariants(module, context);
+  const globalHints = collectGlobalHintIds(blueprint.patternHints, module.category);
 
-  // 2. 资源消耗/扣除语义 -> effect.resource_consume
-  const resourceKeywords = ["消耗", "扣除", "cost", "consume", "消耗法力", "消耗能量", "resource", "mana", "energy", "冷却", "cooldown"];
-  const isResourceRelated = resourceKeywords.some(k => contextLower.includes(k));
-  if (isResourceRelated) {
-    return {
-      pattern: {
-        patternId: CORE_PATTERN_IDS.EFFECT_RESOURCE_CONSUME,
-        role: module.role,
-        parameters: mergedParams,
-        priority: "required",
-        source: "category",
-      },
-      unresolved: null,
-    };
-  }
-
-  // 3. 修改器/效果应用语义 -> effect.modifier_applier
-  const modifierKeywords = ["应用", "modifier", "buff", "debuff", "效果", "天赋", "apply", "增益", "减益", "强化", "bind", "绑定", "key", "键", "execute", "执行", "action", "动作", "capture", "捕获", "input", "输入", "configuration", "配置"];
-  const isModifierRelated = modifierKeywords.some(k => contextLower.includes(k));
-  if (isModifierRelated) {
-    return {
-      pattern: {
-        patternId: CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER,
-        role: module.role,
-        parameters: mergedParams,
-        priority: "required",
-        source: "category",
-      },
-      unresolved: null,
-    };
-  }
-
-  // 4. 无法识别语义 -> 标记为 weak match / fallback
-  // 默认尝试 effect.modifier_applier 作为通用效果应用器
-  // 但标记为 fallback 提示可能需要人工确认
-  // F173: 即使 fallback 也携带提取的参数，可能有助于后续处理
   return {
-    pattern: {
-      patternId: CORE_PATTERN_IDS.EFFECT_MODIFIER_APPLIER,
-      role: module.role,
-      parameters: mergedParams,
-      priority: "fallback",
-      source: "category",
-    },
-    unresolved: {
-      requestedId: `<effect:${module.role}>`,
-      reason: `Effect module '${module.role}' has unrecognized semantics. ` +
-              `Used 'effect.modifier_applier' as fallback. ` +
-              `Please review if this is the correct pattern.`,
-      suggestedAlternative: "Consider adding more specific keywords to role/responsibilities",
-    },
+    moduleId: module.id,
+    semanticRole: module.role,
+    requiredCapabilities,
+    optionalCapabilities: deriveOptionalCapabilities(module, blueprint.sourceIntent.normalizedMechanics, context),
+    requiredOutputs,
+    stateExpectations,
+    integrationHints,
+    invariants,
+    boundedVariability: [],
+    explicitPatternHints: mergeUniqueStrings(module.patternIds || [], globalHints),
+    prohibitedTraits: deriveProhibitedTraits(module, context),
+    sourceModule: module,
+    source: "derived-module",
   };
 }
 
-/**
- * 从 normalizedMechanics 解析
- */
-function resolveFromMechanics(
-  mechanics: NormalizedMechanics
-): { patterns: ResolvedPattern[]; unresolved: UnresolvedPattern[] } {
-  const patterns: ResolvedPattern[] = [];
-  const unresolved: UnresolvedPattern[] = [];
+function deriveNeedsFromMechanics(mechanics: NormalizedMechanics): RuntimeModuleNeed[] {
+  const needs: RuntimeModuleNeed[] = [];
 
-  for (const [key, value] of Object.entries(mechanics)) {
-    if (value) {
-      const mechanicKey = key as keyof NormalizedMechanics;
-      const mapping = MECHANIC_PATTERN_MAP[mechanicKey];
-      
-      if (mapping) {
-        patterns.push({
-          patternId: mapping.patternId,
-          role: mechanicKey,
-          parameters: {},
-          priority: mapping.priority,
-          source: "mechanic",
-        });
-      } else {
-        unresolved.push({
-          requestedId: `<mechanic:${mechanicKey}>`,
-          reason: `No pattern available for mechanic '${mechanicKey}' in current catalog`,
-        });
-      }
-    }
+  if (mechanics.trigger) {
+    needs.push({
+      moduleId: "mechanic_trigger",
+      semanticRole: "trigger",
+      requiredCapabilities: ["input.trigger.capture"],
+      optionalCapabilities: [],
+      requiredOutputs: ["server.runtime"],
+      stateExpectations: [],
+      integrationHints: ["input.binding"],
+      invariants: [],
+      boundedVariability: [],
+      explicitPatternHints: [],
+      prohibitedTraits: [],
+      source: "derived-mechanic",
+    });
   }
 
-  return { patterns, unresolved };
+  if (mechanics.weightedSelection || mechanics.candidatePool) {
+    needs.push({
+      moduleId: "mechanic_candidate_pool",
+      semanticRole: "candidate_pool",
+      requiredCapabilities: ["data.pool.weighted"],
+      optionalCapabilities: ["selection.candidate_pool"],
+      requiredOutputs: ["shared.runtime"],
+      stateExpectations: ["selection.pool_state"],
+      integrationHints: ["selection.candidate_source"],
+      invariants: [],
+      boundedVariability: [],
+      explicitPatternHints: [],
+      prohibitedTraits: [],
+      source: "derived-mechanic",
+    });
+  }
+
+  if (mechanics.playerChoice) {
+    needs.push({
+      moduleId: "mechanic_selection_flow",
+      semanticRole: "selection_flow",
+      requiredCapabilities: ["selection.flow.player_confirmed"],
+      optionalCapabilities: ["selection.flow.pool_commit"],
+      requiredOutputs: ["server.runtime"],
+      stateExpectations: ["selection.commit_state"],
+      integrationHints: ["selection.ui_surface"],
+      invariants: [],
+      boundedVariability: [],
+      explicitPatternHints: [],
+      prohibitedTraits: [],
+      source: "derived-mechanic",
+    });
+  }
+
+  if (mechanics.outcomeApplication) {
+    needs.push({
+      moduleId: "mechanic_outcome_application",
+      semanticRole: "outcome_application",
+      requiredCapabilities: ["effect.modifier.apply"],
+      optionalCapabilities: [],
+      requiredOutputs: ["server.runtime", "host.config.kv"],
+      stateExpectations: [],
+      integrationHints: ["ability.execution"],
+      invariants: [],
+      boundedVariability: [],
+      explicitPatternHints: [],
+      prohibitedTraits: [],
+      source: "derived-mechanic",
+    });
+  }
+
+  if (mechanics.resourceConsumption) {
+    needs.push({
+      moduleId: "mechanic_resource_consumption",
+      semanticRole: "resource_consumption",
+      requiredCapabilities: ["effect.resource.consume"],
+      optionalCapabilities: [],
+      requiredOutputs: ["server.runtime"],
+      stateExpectations: ["resource.current_value"],
+      integrationHints: ["resource.pool"],
+      invariants: [],
+      boundedVariability: [],
+      explicitPatternHints: [],
+      prohibitedTraits: [],
+      source: "derived-mechanic",
+    });
+  }
+
+  return needs;
 }
 
-/**
- * 从 Blueprint 提取 Pattern 参数
- */
-function extractParametersFromBlueprint(
-  patternId: string,
-  blueprint: Blueprint
-): Record<string, unknown> {
-  const params: Record<string, unknown> = {};
+function deriveRequiredCapabilities(
+  module: BlueprintModule,
+  mechanics: NormalizedMechanics,
+  context: string
+): string[] {
+  switch (module.category) {
+    case "trigger":
+      return ["input.trigger.capture"];
+    case "data":
+      return ["data.pool.weighted"];
+    case "rule":
+      return ["selection.flow.player_confirmed"];
+    case "resource":
+      return ["resource.pool.numeric"];
+    case "ui":
+      if (includesAny(context, ["resource", "mana", "energy", "bar"])) {
+        return ["ui.resource.bar"];
+      }
+      if (includesAny(context, ["key", "按键", "cooldown", "hint"])) {
+        return ["ui.input.key_hint"];
+      }
+      return ["ui.selection.modal"];
+    case "effect":
+      if (includesAny(context, ["dash", "冲刺", "位移", "blink", "jump", "leap", "突进"])) {
+        return ["effect.displacement.dash"];
+      }
+      if (includesAny(context, ["consume", "cost", "消耗", "mana", "energy", "resource", "扣除"])) {
+        return ["effect.resource.consume"];
+      }
+      if (
+        includesAny(context, ["buff", "增益", "movespeed", "移速", "speed bonus"]) &&
+        !includesAny(context, ["debuff", "减益", "damage", "伤害", "slow", "stun"])
+      ) {
+        return ["ability.buff.short_duration"];
+      }
+      if (mechanics.outcomeApplication || includesAny(context, ["modifier", "apply", "应用", "效果"])) {
+        return ["effect.modifier.apply"];
+      }
+      return ["effect.unspecified"];
+    case "integration":
+      return ["integration.bridge"];
+    default:
+      return [`${module.category}.unspecified`];
+  }
+}
 
-  if (patternId.startsWith("input.")) {
-    const triggerModule = blueprint.modules.find((m) => m.category === "trigger");
-    if (triggerModule?.parameters) {
-      Object.assign(params, triggerModule.parameters);
-    }
-  } else if (patternId.startsWith("effect.")) {
-    const effectModule = blueprint.modules.find((m) => m.category === "effect");
-    if (effectModule?.parameters) {
-      Object.assign(params, effectModule.parameters);
-    }
-  } else if (patternId.startsWith("data.")) {
-    const dataModule = blueprint.modules.find((m) => m.category === "data");
-    if (dataModule?.parameters) {
-      Object.assign(params, dataModule.parameters);
+function deriveOptionalCapabilities(
+  module: BlueprintModule,
+  mechanics: NormalizedMechanics,
+  context: string
+): string[] {
+  const optional: string[] = [];
+
+  if (module.category === "data" && (mechanics.weightedSelection || mechanics.candidatePool)) {
+    optional.push("selection.candidate_pool");
+  }
+
+  if (module.category === "rule") {
+    optional.push("selection.flow.pool_commit");
+    if (includesAny(context, ["effect", "modifier", "奖励", "reward"])) {
+      optional.push("selection.flow.effect_mapping");
     }
   }
 
-  // T138-R1: If no parameters found from modules, use blueprint-level parameters
-  // This provides a fallback for ability parameters like cooldown, mana, range
+  if (module.category === "effect" && includesAny(context, ["self", "自身", "自己", "hero"])) {
+    optional.push("effect.modifier.apply_self");
+  }
+
+  if (module.category === "resource" && includesAny(context, ["regen", "回复", "恢复"])) {
+    optional.push("resource.pool.regen");
+  }
+
+  return optional;
+}
+
+function deriveRequiredOutputs(module: BlueprintModule, context: string): string[] {
+  const outputs = normalizeStringArray(module.outputs);
+  if (outputs.length > 0) {
+    return outputs.flatMap(mapOutputSignal);
+  }
+
+  switch (module.category) {
+    case "data":
+    case "resource":
+      return ["shared.runtime"];
+    case "ui":
+      return ["ui.surface"];
+    case "effect":
+      if (includesAny(context, ["buff", "增益", "modifier", "ability", "lua"])) {
+        return ["server.runtime", "host.config.kv"];
+      }
+      if (includesAny(context, ["dash", "冲刺", "位移"])) {
+        return ["server.runtime", "host.config.kv"];
+      }
+      return ["server.runtime"];
+    default:
+      return ["server.runtime"];
+  }
+}
+
+function deriveStateExpectations(module: BlueprintModule, context: string): string[] {
+  switch (module.category) {
+    case "data":
+      return includesAny(context, ["session", "remaining", "owned", "choice", "状态"])
+        ? ["selection.pool_state"]
+        : [];
+    case "rule":
+      return ["selection.commit_state"];
+    case "resource":
+      return ["resource.current_value", "resource.max_value"];
+    case "effect":
+      if (includesAny(context, ["duration", "持续", "stack", "层数", "modifier"])) {
+        return ["modifier.duration_state"];
+      }
+      return [];
+    default:
+      return [];
+  }
+}
+
+function deriveIntegrationHints(module: BlueprintModule, context: string): string[] {
+  switch (module.category) {
+    case "trigger":
+      return ["input.binding", "event.dispatch"];
+    case "data":
+      return ["selection.candidate_source"];
+    case "rule":
+      return ["selection.ui_surface", "selection.candidate_source"];
+    case "resource":
+      return ["resource.ui_surface", "resource.cost_source"];
+    case "ui":
+      return includesAny(context, ["resource", "mana", "energy"])
+        ? ["resource.ui_surface"]
+        : ["selection.ui_surface"];
+    case "effect":
+      return includesAny(context, ["modifier", "buff", "ability"])
+        ? ["ability.execution", "modifier.runtime"]
+        : ["ability.execution"];
+    default:
+      return [];
+  }
+}
+
+function deriveInvariants(module: BlueprintModule, context: string): string[] {
+  if (module.category === "effect" && includesAny(context, ["dash", "冲刺", "位移"])) {
+    return ["distance and speed must remain positive"];
+  }
+  if (module.category === "data" && includesAny(context, ["session", "remaining", "owned", "choice"])) {
+    return ["session state tracking must be explicit when enabled"];
+  }
+  return [];
+}
+
+function deriveProhibitedTraits(module: BlueprintModule, context: string): string[] {
+  if (module.category === "effect" && includesAny(context, ["debuff", "减益", "damage", "伤害"])) {
+    return ["self_targeted_effect"];
+  }
+  return [];
+}
+
+function scoreCandidate(pattern: PatternMeta, need: RuntimeModuleNeed): CandidatePatternScore {
+  const matchedOutputs = need.requiredOutputs.filter((output) =>
+    patternSupportsSignal(pattern.semanticOutputs, output)
+  );
+  const matchedStates = need.stateExpectations.filter((state) =>
+    patternSupportsSignal(pattern.stateAffordances, state)
+  );
+  const matchedIntegrationHints = need.integrationHints.filter((hint) =>
+    patternSupportsSignal(pattern.integrationHints, hint)
+  );
+  const matchedOptionalCapabilities = need.optionalCapabilities.filter((capability) =>
+    pattern.capabilities.includes(capability)
+  );
+
+  const score =
+    matchedOutputs.length * 4 +
+    matchedStates.length * 3 +
+    matchedIntegrationHints.length * 2 +
+    matchedOptionalCapabilities.length;
+
+  return {
+    meta: pattern,
+    score,
+    matchedOutputs,
+    matchedStates,
+    matchedIntegrationHints,
+    matchedOptionalCapabilities,
+  };
+}
+
+function applyHintTieBreak(
+  candidates: CandidatePatternScore[],
+  hints: string[]
+): CandidatePatternScore {
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  const hinted = candidates.find((candidate) => hints.includes(candidate.meta.id));
+  if (hinted) {
+    return hinted;
+  }
+
+  return [...candidates].sort((a, b) => a.meta.id.localeCompare(b.meta.id))[0];
+}
+
+function supportsRequiredCapabilities(pattern: PatternMeta, requiredCapabilities: string[]): boolean {
+  return requiredCapabilities.every((capability) => pattern.capabilities.includes(capability));
+}
+
+function violatesProhibitedTraits(pattern: PatternMeta, prohibitedTraits: string[]): boolean {
+  if (!pattern.traits || prohibitedTraits.length === 0) return false;
+  return prohibitedTraits.some((trait) => pattern.traits?.includes(trait));
+}
+
+function satisfiesInvariants(pattern: PatternMeta, invariants: string[]): boolean {
+  if (invariants.length === 0) return true;
+  return invariants.every((invariant) => pattern.invariants?.includes(invariant));
+}
+
+function extractParametersForNeed(
+  need: RuntimeModuleNeed,
+  blueprint: Blueprint,
+  patternId: string
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  const sourceModule =
+    need.sourceModule || blueprint.modules.find((module) => module.id === need.moduleId);
+
+  if (sourceModule?.parameters) {
+    Object.assign(params, sourceModule.parameters);
+  }
+
+  if (patternId.startsWith("effect.")) {
+    Object.assign(
+      params,
+      extractEffectParameters(
+        sourceModule?.role || need.semanticRole,
+        sourceModule?.responsibilities || []
+      )
+    );
+  }
+
   if (Object.keys(params).length === 0 && blueprint.parameters) {
     Object.assign(params, blueprint.parameters);
   }
@@ -528,40 +673,155 @@ function extractParametersFromBlueprint(
   return params;
 }
 
-/**
- * 合并重复的 Pattern
- */
-export function mergeDuplicatePatterns(
-  patterns: ResolvedPattern[]
-): ResolvedPattern[] {
+function buildModuleContext(module: BlueprintModule): string {
+  return [module.role, ...(module.responsibilities || []), ...(module.inputs || []), ...(module.outputs || [])]
+    .join(" ")
+    .toLowerCase();
+}
+
+function collectGlobalHintIds(hints: PatternHint[] = [], category?: string): string[] {
+  const filtered = hints.filter((hint) => {
+    if (!category) return true;
+    return !hint.category || hint.category === category;
+  });
+
+  return mergeUniqueStrings(
+    ...filtered.map((hint) => hint.suggestedPatterns || [])
+  );
+}
+
+function mergeUniqueStrings(...values: string[][]): string[] {
+  return Array.from(new Set(values.flat().filter(Boolean)));
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function patternSupportsSignal(values: string[] | undefined, signal: string): boolean {
+  if (!values || values.length === 0) return false;
+
+  const normalizedSignal = normalizeSignal(signal);
+  return values.some((value) => {
+    const normalizedValue = normalizeSignal(value);
+    return (
+      normalizedValue === normalizedSignal ||
+      normalizedValue.includes(normalizedSignal) ||
+      normalizedSignal.includes(normalizedValue)
+    );
+  });
+}
+
+function mapOutputSignal(output: string): string[] {
+  const normalized = normalizeSignal(output);
+  if (!normalized) return [];
+
+  if (normalized.includes("ui")) return ["ui.surface"];
+  if (normalized.includes("shared")) return ["shared.runtime"];
+  if (normalized.includes("lua")) return ["host.runtime.lua"];
+  if (normalized.includes("kv") || normalized.includes("config")) return ["host.config.kv"];
+  if (normalized.includes("server") || normalized.includes("ts") || normalized.includes("runtime")) {
+    return ["server.runtime"];
+  }
+  return [output];
+}
+
+function normalizeSignal(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, ".");
+}
+
+function includesAny(context: string, terms: string[]): boolean {
+  return terms.some((term) => context.includes(term.toLowerCase()));
+}
+
+function extractEffectParameters(role: string, responsibilities: string[]): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  const context = (role + " " + responsibilities.join(" ")).toLowerCase();
+
+  const distanceMatch =
+    context.match(/(\d+)\s*(?:units?|distance|距离|码|米)/i) ||
+    context.match(/(?:向前|向后|向\w+)?\s*(?:冲刺|位移|dash|move)\s*(\d+)/i);
+  if (distanceMatch) {
+    params.dashDistance = parseInt(distanceMatch[1], 10);
+  }
+
+  const healMatch =
+    context.match(/(\d+)\s*(?:hp|health|生命值|生命)/i) ||
+    context.match(/(?:恢复|回复|regen|heal)\s*(\d+)/i);
+  if (healMatch) {
+    params.healAmount = parseInt(healMatch[1], 10);
+  }
+
+  const intervalMatch =
+    context.match(/(\d+(?:\.\d+)?)\s*(?:second|秒)/i) ||
+    context.match(/(?:per|every|每)\s*(\d+(?:\.\d+)?)\s*(?:second|秒)/i);
+  if (intervalMatch) {
+    params.tickInterval = parseFloat(intervalMatch[1] || intervalMatch[2] || "1");
+  }
+
+  const durationMatch =
+    context.match(/(?:for|持续|duration)\s*(\d+(?:\.\d+)?)\s*(?:second|秒)/i) ||
+    context.match(/(\d+)\s*(?:second|秒)\s*(?:duration|持续)/i);
+  if (durationMatch) {
+    params.duration = parseFloat(durationMatch[1]);
+  }
+
+  const cooldownMatch =
+    context.match(/cooldown\s*(\d+(?:\.\d+)?)/i) ||
+    context.match(/(?:冷却|cd)\s*(\d+(?:\.\d+)?)/i);
+  if (cooldownMatch) {
+    params.cooldown = parseFloat(cooldownMatch[1]);
+  }
+
+  const manaMatch =
+    context.match(/mana\s*(\d+)/i) ||
+    context.match(/(?:法力|蓝量)\s*(\d+)/i) ||
+    context.match(/(\d+)\s*(?:mana|法力)/i);
+  if (manaMatch) {
+    params.manaCost = parseInt(manaMatch[1] || manaMatch[2], 10);
+  }
+
+  return params;
+}
+
+function priorityValue(priority: ResolvedPattern["priority"]): number {
+  const values: Record<ResolvedPattern["priority"], number> = {
+    required: 3,
+    preferred: 2,
+    fallback: 1,
+  };
+  return values[priority] || 0;
+}
+
+export function mergeDuplicatePatterns(patterns: ResolvedPattern[]): ResolvedPattern[] {
   const patternMap = new Map<string, ResolvedPattern>();
 
-  for (const p of patterns) {
-    const existing = patternMap.get(p.patternId);
+  for (const pattern of patterns) {
+    const existing = patternMap.get(pattern.patternId);
     if (!existing) {
-      patternMap.set(p.patternId, p);
-    } else {
-      if (priorityValue(p.priority) > priorityValue(existing.priority)) {
-        patternMap.set(p.patternId, {
-          ...p,
-          parameters: { ...existing.parameters, ...p.parameters },
-        });
-      } else {
-        patternMap.set(p.patternId, {
-          ...existing,
-          parameters: { ...existing.parameters, ...p.parameters },
-        });
-      }
+      patternMap.set(pattern.patternId, pattern);
+      continue;
     }
+
+    if (priorityValue(pattern.priority) > priorityValue(existing.priority)) {
+      patternMap.set(pattern.patternId, {
+        ...pattern,
+        parameters: { ...existing.parameters, ...pattern.parameters },
+      });
+      continue;
+    }
+
+    existing.parameters = { ...existing.parameters, ...pattern.parameters };
+    existing.score = Math.max(existing.score || 0, pattern.score || 0);
   }
 
   return Array.from(patternMap.values());
-}
-
-/**
- * 优先级数值化
- */
-function priorityValue(priority: ResolvedPattern["priority"]): number {
-  const values: Record<string, number> = { required: 3, preferred: 2, fallback: 1 };
-  return values[priority] || 0;
 }

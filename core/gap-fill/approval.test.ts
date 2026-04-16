@@ -88,6 +88,16 @@ function main(): void {
   assert.strictEqual(changedTarget.valid, false);
   assert.ok(changedTarget.issues.some((issue) => issue.includes("content has changed")));
 
+  const changedTargetAllowed = validateGapFillApprovalRecord({
+    record,
+    hostRoot: "D:/Rune Weaver",
+    boundary,
+    targetFile: { ...targetFile, content: `${targetFile.content}\nconst changed = true;` },
+    allowTargetFileHashChange: true,
+  });
+  assert.strictEqual(changedTargetAllowed.valid, true);
+  assert.deepStrictEqual(changedTargetAllowed.issues, []);
+
   const wrongHost = validateGapFillApprovalRecord({
     record,
     hostRoot: "D:/Other Host",

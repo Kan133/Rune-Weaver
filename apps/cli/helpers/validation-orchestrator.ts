@@ -20,6 +20,7 @@ import type { UpdateDiffResult, SelectiveUpdateResult } from "../../../adapters/
 import type { RollbackPlan, RollbackExecutionResult } from "../../../adapters/dota2/rollback/index.js";
 import { checkHostEntryBridge } from "../../../adapters/dota2/bridge/index.js";
 import { loadWorkspace } from "../../../core/workspace/index.js";
+import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 
 export interface HostValidationResult {
   success: boolean;
@@ -135,7 +136,7 @@ export function validateHost(
   }
 
   if (deferredEntries && deferredEntries.length > 0) {
-    checks.push(`ℹ️  ${deferredEntries.length} deferred entries not executed (expected - KV generator not implemented)`);
+    checks.push(`ℹ️  ${deferredEntries.length} deferred entries not executed (see deferred reasons)`);
   }
 
   details.plannedFilesCount = plannedFiles.length;
@@ -175,7 +176,7 @@ export function validateHost(
     workspaceFeature?.selectedPatterns?.includes("rule.selection_flow");
 
   if (requiresSeededPool) {
-    const poolSeedCheck = checkSelectionPoolSeedData(hostRoot, stableFeatureId);
+    const poolSeedCheck = checkSelectionPoolSeedData(hostRoot, stableFeatureId, workspaceFeature);
     if (poolSeedCheck.ok) {
       checks.push("✅ Selection pool contains initial entries");
     } else {
@@ -383,16 +384,12 @@ function detectActiveKeyBindingConflict(
   const keyToFeatures = new Map<string, string[]>();
 
   for (const feature of activeFeatures) {
-    const keyBindingPath = join(
-      hostRoot,
-      "game/scripts/src/rune_weaver/generated/server",
-      `${feature.featureId}_input_input_key_binding.ts`
-    );
-    if (!existsSync(keyBindingPath)) {
+    const keyBindingFile = findFeatureGeneratedFile(feature, isGeneratedKeyBindingFile);
+    if (!keyBindingFile) {
       continue;
     }
 
-    const content = readFileSync(keyBindingPath, "utf8");
+    const content = readFileSync(join(hostRoot, keyBindingFile), "utf8");
     const match = content.match(/configuredKey:\s*string\s*=\s*"([^"]+)"/);
     if (!match) {
       continue;
@@ -418,22 +415,21 @@ function detectActiveKeyBindingConflict(
 
 function checkSelectionPoolSeedData(
   hostRoot: string,
-  stableFeatureId: string
+  stableFeatureId: string,
+  workspaceFeature?: RuneWeaverFeatureRecord
 ): { ok: true } | { ok: false; message: string } {
-  const poolPath = join(
-    hostRoot,
-    "game/scripts/src/rune_weaver/generated/shared",
-    `${stableFeatureId}_data_data_weighted_pool.ts`
-  );
+  const poolFile = workspaceFeature
+    ? findFeatureGeneratedFile(workspaceFeature, isGeneratedWeightedPoolFile)
+    : undefined;
 
-  if (!existsSync(poolPath)) {
+  if (!poolFile) {
     return {
       ok: false,
-      message: `Selection flow expects a weighted pool, but ${stableFeatureId}_data_data_weighted_pool.ts is missing`,
+      message: `Selection flow expects a weighted pool, but no generated weighted pool source is recorded for '${stableFeatureId}'`,
     };
   }
 
-  const content = readFileSync(poolPath, "utf8");
+  const content = readFileSync(join(hostRoot, poolFile), "utf8");
   const hasTodoMarker = content.includes("TODO: Add initial talent entries");
   const addCallCount = (content.match(/\.add\(/g) || []).length;
   const seededAddCalls = hasTodoMarker ? addCallCount : Math.max(0, addCallCount - 1);
@@ -446,4 +442,19 @@ function checkSelectionPoolSeedData(
   }
 
   return { ok: true };
+}
+
+function findFeatureGeneratedFile(
+  feature: Pick<RuneWeaverFeatureRecord, "generatedFiles">,
+  matcher: (file: string) => boolean
+): string | undefined {
+  return feature.generatedFiles.find(matcher);
+}
+
+function isGeneratedKeyBindingFile(file: string): boolean {
+  return file.includes("/generated/server/") && file.endsWith("_input_key_binding.ts");
+}
+
+function isGeneratedWeightedPoolFile(file: string): boolean {
+  return file.includes("/generated/shared/") && file.endsWith("_data_weighted_pool.ts");
 }

@@ -8,7 +8,19 @@
 import { useState, useCallback } from 'react';
 
 // CLI 命令类型
-export type CLICommand = 'init' | 'run' | 'demo-prepare' | 'doctor' | 'validate' | 'install' | 'dev' | 'repair-build' | 'launch' | 'gap-fill';
+export type CLICommand =
+  | 'init'
+  | 'run'
+  | 'update'
+  | 'delete'
+  | 'demo-prepare'
+  | 'doctor'
+  | 'validate'
+  | 'install'
+  | 'dev'
+  | 'repair-build'
+  | 'launch'
+  | 'gap-fill';
 
 // 执行状态
 export type ExecutionStatus = 'idle' | 'running' | 'success' | 'failure';
@@ -17,9 +29,9 @@ export type ExecutionStatus = 'idle' | 'running' | 'success' | 'failure';
 export interface CLIExecuteOptions {
   command: CLICommand;
   hostRoot: string;
-  prompt?: string; // for 'run' command
-  write?: boolean; // for 'run' command - whether to actually write files
-  force?: boolean; // for 'run' command - force override readiness gate
+  prompt?: string; // for prompt-driven commands such as 'run' and 'update'
+  write?: boolean; // for prompt-driven commands - whether to actually write files
+  force?: boolean; // for prompt-driven commands - force override readiness gate
   featureId?: string;
   boundaryId?: string;
   instruction?: string;
@@ -144,7 +156,9 @@ export interface UseCLIExecutorReturn {
   // 操作
   execute: (options: CLIExecuteOptions) => Promise<void>;
   executeInit: (hostRoot: string, addonName?: string) => Promise<void>;
-  executeRun: (hostRoot: string, prompt: string, write?: boolean) => Promise<void>;
+  executeRun: (hostRoot: string, prompt: string, write?: boolean, featureId?: string) => Promise<void>;
+  executeUpdate: (hostRoot: string, featureId: string, prompt: string, write?: boolean) => Promise<void>;
+  executeDelete: (hostRoot: string, featureId: string, write?: boolean) => Promise<void>;
   executeDemoPrepare: (hostRoot: string, addonName?: string, mapName?: string) => Promise<void>;
   executeDoctor: (hostRoot: string) => Promise<void>;
   executeValidate: (hostRoot: string) => Promise<void>;
@@ -172,6 +186,10 @@ interface ExecuteAPIResponse {
   success: boolean;
   result?: CLIExecutionResult;
   error?: string;
+}
+
+export function commandRequiresPrompt(command: CLICommand): boolean {
+  return command === 'run' || command === 'update';
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -460,8 +478,14 @@ export function useCLIExecutor(): UseCLIExecutorReturn {
       return;
     }
 
-    if (command === 'run' && !prompt) {
-      setError('Prompt is required for run command');
+    if (commandRequiresPrompt(command) && !prompt) {
+      setError(`Prompt is required for ${command} command`);
+      setStatus('failure');
+      return;
+    }
+
+    if ((command === 'update' || command === 'delete') && !featureId) {
+      setError(`Feature ID is required for ${command} command`);
       setStatus('failure');
       return;
     }
@@ -625,8 +649,41 @@ export function useCLIExecutor(): UseCLIExecutorReturn {
    * @param prompt - 功能需求描述
    * @param write - 是否实际写入文件（默认为 dry-run 模式）
    */
-  const executeRun = useCallback(async (hostRoot: string, prompt: string, write: boolean = false) => {
-    await execute({ command: 'run', hostRoot, prompt, write });
+  const executeRun = useCallback(async (
+    hostRoot: string,
+    prompt: string,
+    write: boolean = false,
+    featureId?: string,
+  ) => {
+    await execute({ command: 'run', hostRoot, prompt, write, featureId });
+  }, [execute]);
+
+  /**
+   * 执行 update 命令
+   *
+   * @param hostRoot - 宿主项目根目录
+   * @param featureId - 需要更新的 feature ID
+   * @param prompt - 更新指令
+   * @param write - 是否实际写入文件（默认为 dry-run 模式）
+   */
+  const executeUpdate = useCallback(async (
+    hostRoot: string,
+    featureId: string,
+    prompt: string,
+    write: boolean = false,
+  ) => {
+    await execute({ command: 'update', hostRoot, featureId, prompt, write });
+  }, [execute]);
+
+  /**
+   * 执行 delete 命令
+   */
+  const executeDelete = useCallback(async (
+    hostRoot: string,
+    featureId: string,
+    write: boolean = true,
+  ) => {
+    await execute({ command: 'delete', hostRoot, featureId, write });
   }, [execute]);
 
   /**
@@ -726,6 +783,8 @@ export function useCLIExecutor(): UseCLIExecutorReturn {
     execute,
     executeInit,
     executeRun,
+    executeUpdate,
+    executeDelete,
     executeDemoPrepare,
     executeDoctor,
     executeValidate,

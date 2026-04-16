@@ -10,11 +10,15 @@ import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import type { AssemblyPlan, Blueprint, IntentSchema } from "../../../../core/schema/types.js";
 import type { PatternResolutionResult } from "../../../../core/patterns/resolver.js";
 import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../../../core/schema/types.js";
-import type { FeatureMode } from "../planning.js";
+import type { Dota2BlueprintBuildResult, FeatureMode } from "../planning.js";
 
 export interface RegenerateCommandDeps {
-  createIntentSchema: (prompt: string, hostRoot: string) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
-  buildBlueprint: (schema: IntentSchema) => { blueprint: Blueprint | null; issues: string[] };
+  createIntentSchema: (
+    prompt: string,
+    hostRoot: string,
+    context?: { mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null }
+  ) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
+  buildBlueprint: (schema: IntentSchema) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
     blueprint: Blueprint,
@@ -36,6 +40,13 @@ export async function runRegenerateCommand(
   options: Dota2CLIOptions,
   deps: RegenerateCommandDeps,
 ): Promise<boolean> {
+  const getIntentReadiness = (schema: { readiness?: string; isReadyForBlueprint?: boolean }): "ready" | "weak" | "blocked" => {
+    if (schema.readiness === "ready" || schema.readiness === "weak" || schema.readiness === "blocked") {
+      return schema.readiness;
+    }
+    return schema.isReadyForBlueprint ? "ready" : "blocked";
+  };
+
   console.log("=".repeat(70));
   console.log("🧙 Rune Weaver - Regenerate Feature");
   console.log("=".repeat(70));
@@ -71,17 +82,24 @@ export async function runRegenerateCommand(
   console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
   console.log(`   Status: ${existingFeature.status}`);
 
-  const { schema } = await deps.createIntentSchema(options.prompt, options.hostRoot);
+  const { schema } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
+    mode: "regenerate",
+    featureId: existingFeature.featureId,
+    existingFeature,
+  });
   if (!schema) {
     console.error("\n❌ Failed to create IntentSchema");
     return false;
   }
+  console.log(`   IntentSchema Readiness: ${getIntentReadiness(schema)}`);
 
-  const { blueprint, issues: blueprintIssues } = deps.buildBlueprint(schema);
+  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount } = deps.buildBlueprint(schema);
   if (!blueprint) {
-    console.error(`\n❌ Failed to build Blueprint: ${blueprintIssues.join(", ")}`);
+    console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
     return false;
   }
+  console.log(`   FinalBlueprint Status: ${blueprintStatus}`);
+  console.log(`   FinalBlueprint ModuleNeeds: ${moduleNeedsCount}`);
 
   const resolutionResult = deps.resolvePatternsFromBlueprint(blueprint);
   if (resolutionResult.patterns.length === 0) {

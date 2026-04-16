@@ -13,6 +13,11 @@ export function FeatureList() {
   const selectedGroupId = useFeatureStore((state) => state.selectedGroupId);
   const selectedFeatureId = useFeatureStore((state) => state.selectedFeatureId);
   const searchQuery = useFeatureStore((state) => state.searchQuery);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const isWorkspaceConnected = useFeatureStore((state) => state.isWorkspaceConnected);
+  const workspace = useFeatureStore((state) => state.workspace);
+  const workspaceIssues = useFeatureStore((state) => state.workspaceIssues);
+  const allFeatures = useFeatureStore((state) => state.features);
   const selectFeature = useFeatureStore((state) => state.selectFeature);
   const setSearchQuery = useFeatureStore((state) => state.setSearchQuery);
   const getFilteredFeatures = useFeatureStore((state) => state.getFilteredFeatures);
@@ -33,7 +38,14 @@ export function FeatureList() {
           <Button
             size="sm"
             onClick={startWizard}
-            className="h-8 px-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white text-sm"
+            disabled={!connectedHostRoot}
+            className={cn(
+              'h-8 px-3 text-sm',
+              connectedHostRoot
+                ? 'bg-[#6366f1] hover:bg-[#4f46e5] text-white'
+                : 'bg-[#6366f1]/20 text-white/40 cursor-not-allowed hover:bg-[#6366f1]/20',
+            )}
+            title={connectedHostRoot ? '通过真实 CLI 创建 feature' : '请先连接宿主'}
           >
             <Wand2 className="h-3.5 w-3.5 mr-1" />
             Create
@@ -81,8 +93,31 @@ export function FeatureList() {
             <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
               <Search className="h-5 w-5 text-white/30" />
             </div>
-            <p className="text-sm text-white/50">未找到 features</p>
-            <p className="text-xs text-white/30 mt-1">尝试其他搜索词</p>
+            {!connectedHostRoot ? (
+              <>
+                <p className="text-sm text-white/50">未连接宿主</p>
+                <p className="text-xs text-white/30 mt-1">先在左侧输入宿主路径并点击“连接宿主”</p>
+              </>
+            ) : !isWorkspaceConnected ? (
+              <>
+                <p className="text-sm text-white/50">宿主有效，但还没有 workspace</p>
+                <p className="text-xs text-white/30 mt-1">
+                  {workspaceIssues[0] || '请先对当前宿主执行 init，再重新连接'}
+                </p>
+              </>
+            ) : allFeatures.length === 0 ? (
+              <>
+                <p className="text-sm text-white/50">已连接，但还没有 features</p>
+                <p className="text-xs text-white/30 mt-1">
+                  当前 workspace 是空的，可以直接使用 Create 生成第一个 feature
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-white/50">未找到匹配的 features</p>
+                <p className="text-xs text-white/30 mt-1">尝试其他搜索词或分组筛选</p>
+              </>
+            )}
           </div>
         ) : (
           <motion.div
@@ -107,10 +142,14 @@ export function FeatureList() {
       {/* Footer */}
       <div className="p-3 border-t border-white/5">
         <p className="text-xs text-white/30 text-center">
-          当前显示 {filteredFeatures.length} / {groups.find((g) => g.id === selectedGroupId)?.count || 0}
+          {connectedHostRoot
+            ? `当前连接：${workspace?.addonName || connectedHostRoot}`
+            : '当前尚未连接宿主'}
         </p>
         <p className="text-[11px] text-white/20 text-center mt-1">
-          可拖动此栏右侧边缘调整宽度
+          {connectedHostRoot
+            ? `当前显示 ${filteredFeatures.length} / ${groups.find((g) => g.id === selectedGroupId)?.count || 0}`
+            : '连接后会在这里显示真实 feature 目录'}
         </p>
       </div>
     </div>

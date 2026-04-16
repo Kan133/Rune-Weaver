@@ -9,6 +9,8 @@ import {
   deriveGapFillContinuationState,
   isTalentDrawCanonicalGapFill,
 } from "../workbench-ui/src/lib/gapFillCanonical.js";
+import { buildGapFillApprovalUnit } from "../workbench-ui/src/lib/gapFillApprovalUnit.js";
+import { normalizeFeatureDisplay } from "../workbench-ui/src/lib/normalizeFeatureDisplay.js";
 import type {
   ClarificationResult,
   ConflictCheckResult,
@@ -234,6 +236,265 @@ function testCanonicalGuidanceAndContinuation(): void {
   );
 }
 
+function testGapFillApprovalUnitStates(): void {
+  const canonicalNeedsConfirmationGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "needs_confirmation",
+    approvalFile: "tmp/approval.json",
+  });
+  const canonicalNeedsConfirmationAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "needs_confirmation",
+  });
+  const needsConfirmationUnit = buildGapFillApprovalUnit({
+    review: {
+      title: "review",
+      summary: "summary",
+      status: "warning",
+      stages: [],
+      blockers: [],
+      highlights: [],
+      recommendedActions: [],
+      generatedFiles: ["game/scripts/src/rune_weaver/talent_draw.ts"],
+      gapFillStatus: "needs_confirmation",
+    },
+    decisionRecord: {
+      originalInstruction: TALENT_DRAW_CANONICAL_PROMPT,
+      selectedBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+      selectedBoundaryLabel: "Talent Draw Effect Mapping",
+      assumptionsMade: ["Keep bridge unchanged."],
+      userInputsUsed: [TALENT_DRAW_CANONICAL_PROMPT],
+      inferredInputsUsed: [],
+      decision: "require_confirmation",
+      failureCategories: ["approval_required"],
+      exactNextStep: "先确认审批单元，再应用补丁。",
+    },
+    readiness: {
+      hostReady: true,
+      workspaceConsistent: true,
+      blockingItems: [],
+      advisoryItems: [],
+    },
+    guidance: canonicalNeedsConfirmationGuidance,
+    acceptance: canonicalNeedsConfirmationAcceptance,
+    effectiveBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+  });
+  assert(needsConfirmationUnit.classificationTone === "canonical", "needs_confirmation unit should remain canonical when frozen input matches");
+  assert(needsConfirmationUnit.verdictLabel === "需要确认", "needs_confirmation unit should surface confirmation verdict");
+  assert(needsConfirmationUnit.targetFile?.includes("talent_draw.ts"), "approval unit should surface target file from generated files");
+
+  const readyGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "ready_to_apply",
+    validationSucceeded: true,
+    hostReady: true,
+  });
+  const readyAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "ready_to_apply",
+    validationSucceeded: true,
+    hostReady: true,
+    continuationVisible: true,
+  });
+  const readyUnit = buildGapFillApprovalUnit({
+    review: {
+      title: "review",
+      summary: "summary",
+      status: "success",
+      stages: [],
+      blockers: [],
+      highlights: [],
+      recommendedActions: [],
+      generatedFiles: ["game/scripts/src/rune_weaver/talent_draw.ts"],
+      gapFillStatus: "ready_to_apply",
+    },
+    decisionRecord: {
+      originalInstruction: TALENT_DRAW_CANONICAL_PROMPT,
+      selectedBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+      assumptionsMade: [],
+      userInputsUsed: [TALENT_DRAW_CANONICAL_PROMPT],
+      inferredInputsUsed: [],
+      decision: "auto_apply",
+      failureCategories: [],
+      exactNextStep: "先应用补丁，再执行校验结果。",
+    },
+    readiness: {
+      hostReady: true,
+      workspaceConsistent: true,
+      blockingItems: [],
+      advisoryItems: [],
+    },
+    guidance: readyGuidance,
+    acceptance: readyAcceptance,
+    effectiveBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+  });
+  assert(readyUnit.verdictLabel === "允许应用", "ready canonical unit should show apply-allowed verdict");
+  assert(readyUnit.rationale.includes("repair-build"), "acceptance-ready unit should point to downstream CLI continuation");
+
+  const policyGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "blocked_by_policy",
+  });
+  const policyAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "blocked_by_policy",
+  });
+  const policyUnit = buildGapFillApprovalUnit({
+    review: {
+      title: "review",
+      summary: "summary",
+      status: "failure",
+      stages: [],
+      blockers: [],
+      highlights: [],
+      recommendedActions: [],
+      gapFillStatus: "blocked_by_policy",
+    },
+    decisionRecord: {
+      originalInstruction: TALENT_DRAW_CANONICAL_PROMPT,
+      selectedBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+      assumptionsMade: [],
+      userInputsUsed: [TALENT_DRAW_CANONICAL_PROMPT],
+      inferredInputsUsed: [],
+      decision: "reject",
+      failureCategories: ["policy_reject"],
+    },
+    readiness: {
+      hostReady: true,
+      workspaceConsistent: true,
+      blockingItems: [],
+      advisoryItems: [],
+    },
+    guidance: policyGuidance,
+    acceptance: policyAcceptance,
+    effectiveBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+  });
+  assert(policyUnit.verdictLabel === "策略阻塞", "policy-blocked unit should surface policy block verdict");
+  assert(policyUnit.blockedReason?.includes("受保护结构"), "policy-blocked unit should explain protected-structure reason");
+
+  const hostGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "blocked_by_host",
+  });
+  const hostAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: TALENT_DRAW_CANONICAL_BOUNDARY,
+    instruction: TALENT_DRAW_CANONICAL_PROMPT,
+    status: "blocked_by_host",
+  });
+  const hostUnit = buildGapFillApprovalUnit({
+    review: {
+      title: "review",
+      summary: "summary",
+      status: "warning",
+      stages: [],
+      blockers: [],
+      highlights: [],
+      recommendedActions: [],
+      gapFillStatus: "blocked_by_host",
+    },
+    decisionRecord: {
+      originalInstruction: TALENT_DRAW_CANONICAL_PROMPT,
+      selectedBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+      assumptionsMade: [],
+      userInputsUsed: [TALENT_DRAW_CANONICAL_PROMPT],
+      inferredInputsUsed: [],
+      decision: "auto_apply",
+      failureCategories: ["host_readiness"],
+    },
+    readiness: {
+      hostReady: false,
+      workspaceConsistent: true,
+      blockingItems: ["先补齐宿主构建产物。"],
+      advisoryItems: [],
+    },
+    guidance: hostGuidance,
+    acceptance: hostAcceptance,
+    effectiveBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+  });
+  assert(hostUnit.verdictLabel === "宿主阻塞", "host-blocked unit should surface host block verdict");
+  assert(hostUnit.blockedItems[0] === "先补齐宿主构建产物。", "host-blocked unit should preserve blocking items");
+
+  const exploratoryGuidance = buildCanonicalGapFillGuidance({
+    boundaryId: "weighted_pool.selection_policy",
+    instruction: "改一下权重池逻辑",
+    status: "ready_to_apply",
+  });
+  const exploratoryAcceptance = deriveCanonicalAcceptanceStatus({
+    boundaryId: "weighted_pool.selection_policy",
+    instruction: "改一下权重池逻辑",
+    status: "ready_to_apply",
+  });
+  const exploratoryUnit = buildGapFillApprovalUnit({
+    review: {
+      title: "review",
+      summary: "summary",
+      status: "warning",
+      stages: [],
+      blockers: [],
+      highlights: [],
+      recommendedActions: [],
+      gapFillStatus: "ready_to_apply",
+    },
+    decisionRecord: {
+      originalInstruction: "改一下权重池逻辑",
+      selectedBoundary: "weighted_pool.selection_policy",
+      assumptionsMade: [],
+      userInputsUsed: ["改一下权重池逻辑"],
+      inferredInputsUsed: [],
+      decision: "auto_apply",
+      failureCategories: [],
+    },
+    readiness: {
+      hostReady: true,
+      workspaceConsistent: true,
+      blockingItems: [],
+      advisoryItems: [],
+    },
+    guidance: exploratoryGuidance,
+    acceptance: exploratoryAcceptance,
+    effectiveBoundary: "weighted_pool.selection_policy",
+  });
+  assert(exploratoryUnit.classificationTone === "exploratory", "exploratory unit should remain visually exploratory");
+  assert(exploratoryUnit.evidenceLabel.includes("not acceptance-equivalent"), "exploratory unit should stay explicitly non-acceptance");
+}
+
+function testNormalizeFeatureDisplay(): void {
+  const emptyNormalized = normalizeFeatureDisplay(null);
+  assert(emptyNormalized === null, "normalizer should return null for the empty-state feature slot");
+
+  const normalized = normalizeFeatureDisplay({
+    id: "feature_partial",
+    displayName: "Partial Feature",
+    systemId: "feature_partial",
+    group: "skill",
+    parentId: null,
+    status: "draft",
+    revision: Number.NaN,
+    updatedAt: "invalid-date" as unknown as Date,
+    reviewSignals: {
+      proposalStatus: {
+        ready: false,
+        percentage: 40,
+        message: "partial",
+      },
+    },
+  } as any);
+
+  assert(normalized !== null, "normalizer should return a display model for partial features");
+  assert(normalized?.updatedAt === null, "invalid updatedAt should be downgraded instead of crashing the view");
+  assert(normalized?.revision === 1, "invalid revision should fall back to v1");
+  assert(Array.isArray(normalized?.childrenIds) && normalized?.childrenIds.length === 0, "missing childrenIds should normalize to an empty array");
+  assert(normalized?.hostRealization.syncStatus === "pending", "missing host realization should fall back to pending");
+  assert(normalized?.reviewSignals.gapFillSummary.autoFilled === 0, "missing nested review signals should fall back to zeroed values");
+}
+
 export function runTests(): boolean {
   const tests: Array<{ name: string; fn: () => void }> = [
     { name: "extract known inputs", fn: testExtractKnownInputs },
@@ -242,6 +503,8 @@ export function runTests(): boolean {
     { name: "generate feature review", fn: testGenerateFeatureReview },
     { name: "canonical gap-fill contract", fn: testCanonicalGapFillContract },
     { name: "canonical guidance and continuation", fn: testCanonicalGuidanceAndContinuation },
+    { name: "gap-fill approval unit states", fn: testGapFillApprovalUnitStates },
+    { name: "normalize feature display", fn: testNormalizeFeatureDisplay },
   ];
 
   let passed = 0;

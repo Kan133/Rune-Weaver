@@ -32,6 +32,7 @@ import {
   writeScreenshotsReadme,
   createMissingReviewInstructions,
   computeCanonicalEvidenceCompleteness,
+  buildAcceptanceSummary,
   writeManifest,
   type ManifestFileEntry,
   type Manifest,
@@ -279,6 +280,7 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
     host: hostPath,
     status,
+    acceptanceSummaryPath: "acceptance-summary.json",
     canonicalDemo: {
       classification: "canonical-acceptance",
       prompt: TALENT_DRAW_CANONICAL_PROMPT,
@@ -298,6 +300,29 @@ async function main(): Promise<void> {
   await writeManifest(manifest);
   log("  Written: manifest.json");
 
+  const acceptanceSummary = buildAcceptanceSummary({
+    latestDir: LATEST_DIR,
+    canonicalPrompt: TALENT_DRAW_CANONICAL_PROMPT,
+    canonicalBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,
+    continuationOrder: [...TALENT_DRAW_CANONICAL_CONTINUATION_ORDER],
+    evidenceCompleteness,
+    manifest,
+  });
+  const acceptanceSummaryJson = JSON.stringify(acceptanceSummary, null, 2);
+  const acceptanceSummaryPath = join(LATEST_DIR, "acceptance-summary.json");
+  await writeFile(acceptanceSummaryPath, acceptanceSummaryJson, "utf-8");
+  manifestFiles.push({
+    path: "acceptance-summary.json",
+    status: "written",
+    sizeBytes: Buffer.byteLength(acceptanceSummaryJson, "utf-8"),
+  });
+  await writeManifest({
+    ...manifest,
+    files: manifestFiles,
+  });
+  log("  Written: acceptance-summary.json");
+  log("  Updated: manifest.json");
+
   log("");
   log("=".repeat(60));
   log("Summary");
@@ -308,6 +333,9 @@ async function main(): Promise<void> {
   log(`Files written: ${manifestFiles.length}`);
   log(`Output directory: ${LATEST_DIR}`);
   log(`Canonical evidence completeness: ${evidenceCompleteness.status}`);
+  log(`Acceptance judgment: ${acceptanceSummary.finalJudgment}`);
+  log(`Handoff readiness: ${acceptanceSummary.handoffReadiness.status}`);
+  log(`Proof-point gate: ${acceptanceSummary.proofPointGate.status}`);
   log(
     `Missing manual evidence: ${
       evidenceCompleteness.missingManualEvidence.length > 0

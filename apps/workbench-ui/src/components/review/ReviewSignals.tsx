@@ -1,13 +1,21 @@
+import React from 'react';
 import { CheckCircle2, AlertTriangle, Info, FileWarning } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import type { Feature } from '@/types/feature';
+import { normalizeFeatureDisplay } from '@/lib/normalizeFeatureDisplay';
 
 interface ReviewSignalsProps {
   feature: Feature;
 }
 
 export function ReviewSignals({ feature }: ReviewSignalsProps) {
-  const { reviewSignals } = feature;
+  const normalizedFeature = normalizeFeatureDisplay(feature);
+
+  if (!normalizedFeature) {
+    return null;
+  }
+
+  const { reviewSignals } = normalizedFeature;
 
   return (
     <div className="space-y-4">

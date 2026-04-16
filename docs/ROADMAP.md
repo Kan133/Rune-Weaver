@@ -30,7 +30,7 @@ Read alongside:
 - [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md)
 - [talent-draw-case/CANONICAL-CASE-TALENT-DRAW.md](/D:/Rune%20Weaver/docs/talent-draw-case/CANONICAL-CASE-TALENT-DRAW.md)
 - [talent-draw-case/LIFECYCLE-PROOF.md](/D:/Rune%20Weaver/docs/talent-draw-case/LIFECYCLE-PROOF.md)
-- [../TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/TALENT-DRAW-E2E-LESSONS.md)
+- [hosts/dota2/TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md)
 
 If this file conflicts with current executable reality, trust the executable evidence and update this roadmap.
 

@@ -94,19 +94,26 @@ Lane A should reduce risk through registry/routing first, not by rewriting these
 | [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md) | already marked `Superseded` and points to archive | classify as archive-only; optionally remove from root `docs/` later or explicitly mark as redirect stub | it is no longer an execution queue |
 | [TASK-COMPLETION.md](/D:/Rune%20Weaver/docs/TASK-COMPLETION.md) | already marked `Superseded` and points to archive | classify as archive-only; optionally remove from root `docs/` later or explicitly mark as redirect stub | it is no longer a current tracker |
 
-### 3.1a Archived in the current control-plane pass
+### 3.1a Session-sync archive example already in place
 
 | Document set | Current reality | Applied action | Reason |
 |--------------|-----------------|----------------|--------|
 | superseded `docs/session-sync/dota2-mainline-*` and `docs/session-sync/war3-mainline-*` notes | older lane snapshots were still visible beside current live coordination docs | moved to [archive/docs/2026-04-session-sync-history/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-session-sync-history/README.md) | prevents workers from treating older step/blocker notes as parallel live plans |
 
-### 3.1b Root cleanup and host classification applied
+### 3.1b Repo-root stray docs resolved in the current wave
 
-| Change | Applied action | Reason |
-|--------|----------------|--------|
-| Dota2-only root docs | moved under [docs/hosts/dota2](/D:/Rune%20Weaver/docs/hosts/dota2) and registered through the control plane | keeps `docs/` root focused on cross-host control and baseline surfaces |
-| War3-only root docs | moved under [docs/hosts/war3](/D:/Rune%20Weaver/docs/hosts/war3) and registered through the control plane | prevents host-specific planning/reference docs from competing with cross-host baseline docs in the root |
-| superseded root planning docs | moved to [archive/docs/2026-04-root-doc-cleanup/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-root-doc-cleanup/README.md) | removes obsolete secondary execution queues from the active root-doc surface |
+| Document | Final placement | Governance outcome |
+|----------|-----------------|--------------------|
+| [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md) | `docs/hosts/dota2/` | moved into the Dota2 host surface as `active-reference | current | read-by-task` because it still supports the frozen Talent Draw canonical acceptance path |
+| [TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md) | `docs/hosts/dota2/` | moved into the Dota2 host surface as `active-reference | needs-refresh | read-by-task` so it remains available for host/runtime debugging without floating as generic repo-root truth |
+| [WAR3-LUA-EVALUATION-BRIEFING.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-LUA-EVALUATION-BRIEFING.md) | `docs/hosts/war3/` | moved into the War3 host planning surface as `planning | current | planning-only`; it remains historical feasibility context, not current War3 execution truth |
+
+Control-plane follow-up applied in the same wave:
+
+- registry coverage added for all three docs
+- routing updated so Dota2 acceptance/host tasks can discover the two moved Dota2 docs safely
+- routing updated so War3 host work can find the moved briefing only as planning context
+- index updated so repo entry no longer leaves these docs floating outside the control plane
 
 ### 3.2 Important nuance
 
@@ -152,6 +159,22 @@ Recommended rule:
 | [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md) | intent schema and blueprint contracts will change if richer intent objects and normalizer contracts are added |
 | [PATTERN-MODEL.md](/D:/Rune%20Weaver/docs/PATTERN-MODEL.md) | current pattern description likely needs capability/trait-based routing language |
 | [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md) | if proposal/normalizer becomes official, the orchestration contract should say exactly where LLM is allowed to help |
+
+### 4.3 Packet-era active-reference docs now treated as stale-risk
+
+These docs still matter for acceptance/demo/validation work, but their packet-era wording can leak outdated current-step or authoritative-entry assumptions if agents read them without a fresh control-plane cross-check.
+
+| Document | Current stale-risk | Governance action in this wave | Deferred follow-up |
+|----------|--------------------|-------------------------------|--------------------|
+| [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md) | still says checklist scope applies to packet-era case framing | keep `active-reference`, downgrade registry freshness to `needs-refresh`, and route agents through fresh queue/session-sync first | later prose tighten around canonical frozen acceptance path |
+| [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md) | case inventory still framed around Packet A/B/C/D | keep `active-reference`, downgrade registry freshness to `needs-refresh`, and warn agents not to treat packet naming as same-day blocker truth | later prose refresh after acceptance packet terminology is retired |
+| [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md) | explicitly says Packet A authoritative create path is not finally decided | keep `active-reference`, downgrade registry freshness to `needs-refresh`, and require cross-check with current queue/shared plan/session-sync | later rewrite only after current validation entrance language is stable |
+| [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md) | still says Packet A path pending decision and mixes stable commands with stale acceptance framing | keep `active-reference`, downgrade registry freshness to `needs-refresh`, and warn agents to separate command existence from current acceptance truth | later prose refresh of acceptance-oriented command sections |
+| [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) | demo-safe framing can be mistaken for current same-day capability/blocker truth | keep `active-reference`, downgrade registry freshness to `needs-refresh`, and require cross-check with current queue/shared plan/session-sync | later demo narrative refresh after canonical acceptance closure stabilizes |
+
+This is a control-plane demotion only.
+
+This wave does not rewrite those docs in full or change their truth class.
 
 ---
 

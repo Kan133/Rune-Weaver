@@ -7,6 +7,7 @@ import type {
   GapFillFailureCategory,
   GapFillPatchPlan,
   GapFillPlanMetadata,
+  GapFillTargetFile,
   GapFillValidationCheck,
   GapFillValidationIssue,
   GapFillValidationResult,
@@ -106,6 +107,7 @@ export function validateAppliedGapFill(input: {
   patchPlan?: GapFillPatchPlan;
   applyResult?: GapFillApplyResult;
   decision?: GapFillDecisionResult;
+  currentTargetFile?: GapFillTargetFile;
 }): GapFillValidationResult {
   const checks: GapFillValidationCheck[] = [];
   const issues: string[] = [];
@@ -222,6 +224,24 @@ export function validateAppliedGapFill(input: {
     );
   }
 
+  const patchIsPresent = validatePatchPresence(input.currentTargetFile, input.patchPlan);
+  checks.push(
+    buildCheck(
+      "applied_patch_present",
+      patchIsPresent.passed,
+      patchIsPresent.message,
+      patchIsPresent.details,
+    ),
+  );
+  if (!patchIsPresent.passed) {
+    recordIssue(
+      "apply_target_mismatch",
+      patchIsPresent.message,
+      undefined,
+      patchIsPresent.details,
+    );
+  }
+
   const failureCategories = collectFailureCategories(input.decision, input.applyResult);
   for (const detail of issueDetails) {
     failureCategories.push(detail.category);
@@ -245,4 +265,114 @@ export function validateAppliedGapFill(input: {
     planMetadata,
     recommendedNextStep,
   };
+}
+
+interface ParsedTargetRange {
+  startLine: number;
+  endLine: number;
+}
+
+const LINE_TARGET_PATTERN = /^line\s+0*(\d{1,6})$/i;
+const LINES_TARGET_PATTERN = /^lines\s+0*(\d{1,6})-0*(\d{1,6})$/i;
+
+function validatePatchPresence(
+  currentTargetFile: GapFillTargetFile | undefined,
+  patchPlan: GapFillPatchPlan | undefined,
+): { passed: boolean; message: string; details?: string[] } {
+  if (!currentTargetFile || !patchPlan) {
+    return {
+      passed: true,
+      message: "Current target file was not supplied for patch-presence validation.",
+    };
+  }
+
+  const currentLines = currentTargetFile.content.split(/\r?\n/);
+  const mismatches: string[] = [];
+
+  for (const operation of patchPlan.operations) {
+    const range = parseTargetRange(operation.target);
+    if (!range) {
+      mismatches.push(`Unsupported target format during validation: ${operation.target}`);
+      continue;
+    }
+
+    if (operation.kind === "replace") {
+      const expectedLines = operation.replacement?.split(/\r?\n/) ?? [];
+      const actualLines = currentLines.slice(
+        range.startLine - 1,
+        range.startLine - 1 + expectedLines.length,
+      );
+      if (!sameLines(actualLines, expectedLines)) {
+        mismatches.push(`Replacement content for ${operation.target} is not present in the current file.`);
+      }
+      continue;
+    }
+
+    if (operation.kind === "insert_before") {
+      const expectedLines = operation.replacement?.split(/\r?\n/) ?? [];
+      const actualLines = currentLines.slice(range.startLine - 1, range.startLine - 1 + expectedLines.length);
+      if (!sameLines(actualLines, expectedLines)) {
+        mismatches.push(`Inserted content before ${operation.target} is not present in the current file.`);
+      }
+      continue;
+    }
+
+    if (operation.kind === "insert_after") {
+      const expectedLines = operation.replacement?.split(/\r?\n/) ?? [];
+      const actualLines = currentLines.slice(range.endLine, range.endLine + expectedLines.length);
+      if (!sameLines(actualLines, expectedLines)) {
+        mismatches.push(`Inserted content after ${operation.target} is not present in the current file.`);
+      }
+      continue;
+    }
+
+    if (operation.kind === "delete") {
+      const excerptLines = operation.excerpt?.split(/\r?\n/) ?? [];
+      const actualLines = currentLines.slice(range.startLine - 1, range.endLine);
+      if (excerptLines.length > 0 && sameLines(actualLines, excerptLines)) {
+        mismatches.push(`Delete operation ${operation.target} still matches the pre-apply excerpt.`);
+      }
+    }
+  }
+
+  if (mismatches.length > 0) {
+    return {
+      passed: false,
+      message: "Current target file does not reflect the approved patch plan.",
+      details: mismatches,
+    };
+  }
+
+  return {
+    passed: true,
+    message: "Current target file reflects the approved patch plan.",
+  };
+}
+
+function parseTargetRange(target: string): ParsedTargetRange | null {
+  const lineMatch = target.match(LINE_TARGET_PATTERN);
+  if (lineMatch) {
+    const line = Number(lineMatch[1]);
+    return line > 0 ? { startLine: line, endLine: line } : null;
+  }
+
+  const linesMatch = target.match(LINES_TARGET_PATTERN);
+  if (linesMatch) {
+    const startLine = Number(linesMatch[1]);
+    const endLine = Number(linesMatch[2]);
+    if (startLine <= 0 || endLine < startLine) {
+      return null;
+    }
+    return { startLine, endLine };
+  }
+
+  return null;
+}
+
+function sameLines(actual: string[], expected: string[]): boolean {
+  if (actual.length !== expected.length) {
+    return false;
+  }
+
+  return actual.every((line, index) => line === expected[index]);
 }

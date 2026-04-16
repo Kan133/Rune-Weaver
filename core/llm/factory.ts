@@ -7,7 +7,11 @@ import { resolve } from "path";
 import { LLMConfigError } from "./errors";
 import {
   LLMClient,
+  LLMExecutionConfig,
+  LLMThinkingMode,
   LLMProviderKind,
+  LLMWorkflowKind,
+  OpenAICompatibleThinkingPayloadMode,
   AnthropicConfig,
   OpenAICompatibleConfig,
 } from "./types";
@@ -50,6 +54,208 @@ export function isLLMConfigured(projectRoot: string = process.cwd()): boolean {
 
 export function readLLMEnvironment(projectRoot: string = process.cwd()): Record<string, string> {
   return loadEnv(projectRoot);
+}
+
+const WORKFLOW_ENV_PREFIX: Record<LLMWorkflowKind, string> = {
+  wizard: "LLM_WIZARD",
+  blueprint: "LLM_BLUEPRINT",
+  "dota2-planning": "LLM_DOTA2_PLANNING",
+  "gap-fill": "LLM_GAP_FILL",
+  "workbench-gap-fill": "LLM_WORKBENCH_GAP_FILL",
+};
+
+const DEFAULT_WORKFLOW_THINKING: Record<LLMWorkflowKind, LLMThinkingMode> = {
+  wizard: "enabled",
+  blueprint: "disabled",
+  "dota2-planning": "enabled",
+  "gap-fill": "disabled",
+  "workbench-gap-fill": "disabled",
+};
+
+const DEFAULT_WORKFLOW_TEMPERATURE: Record<LLMWorkflowKind, number> = {
+  wizard: 1,
+  blueprint: 0.6,
+  "dota2-planning": 1,
+  "gap-fill": 0.6,
+  "workbench-gap-fill": 0.6,
+};
+
+const DEFAULT_OPENAI_COMPAT_THINKING_PAYLOAD_MODE: OpenAICompatibleThinkingPayloadMode = "auto";
+const KIMI_THINKING_MODEL_PATTERN = /^kimi-k2\.5/i;
+
+export function readLLMExecutionConfig(
+  projectRoot: string = process.cwd(),
+  workflow: LLMWorkflowKind,
+): LLMExecutionConfig {
+  const env = readLLMEnvironment(projectRoot);
+  const provider = env.LLM_PROVIDER as LLMProviderKind | undefined;
+  const model = readExecutionModel(env, provider);
+  const prefix = WORKFLOW_ENV_PREFIX[workflow];
+  const thinking = readThinkingMode(env[`${prefix}_THINKING`]) ?? DEFAULT_WORKFLOW_THINKING[workflow];
+  const temperature = readWorkflowTemperature(env[`${prefix}_TEMPERATURE`], workflow);
+  const openAICompatThinkingPayloadMode = readOpenAICompatibleThinkingPayloadMode(
+    env.OPENAI_COMPAT_THINKING_PAYLOAD
+  );
+  const providerOptions = buildProviderOptions(
+    provider,
+    model,
+    thinking,
+    openAICompatThinkingPayloadMode
+  );
+
+  validateWorkflowConfig({
+    provider,
+    model,
+    workflow,
+    thinking,
+    temperature,
+    providerOptions,
+  });
+
+  return {
+    model,
+    temperature,
+    thinking,
+    providerOptions,
+  };
+}
+
+export function maskLLMApiKey(apiKey: string | undefined): string | undefined {
+  if (!apiKey) {
+    return undefined;
+  }
+
+  if (apiKey.length <= 8) {
+    return `${apiKey.slice(0, 2)}***${apiKey.slice(-2)}`;
+  }
+
+  return `${apiKey.slice(0, 4)}***${apiKey.slice(-4)}`;
+}
+
+function readThinkingMode(raw: string | undefined): LLMThinkingMode | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  if (raw === "enabled" || raw === "disabled") {
+    return raw;
+  }
+
+  throw new LLMConfigError(
+    `Unsupported thinking mode '${raw}'. Expected 'enabled' or 'disabled'.`,
+  );
+}
+
+function readOpenAICompatibleThinkingPayloadMode(
+  raw: string | undefined
+): OpenAICompatibleThinkingPayloadMode {
+  if (!raw) {
+    return DEFAULT_OPENAI_COMPAT_THINKING_PAYLOAD_MODE;
+  }
+
+  if (raw === "auto" || raw === "type-object" || raw === "none") {
+    return raw;
+  }
+
+  throw new LLMConfigError(
+    `Unsupported OPENAI_COMPAT_THINKING_PAYLOAD '${raw}'. Expected 'auto', 'type-object', or 'none'.`,
+  );
+}
+
+function readWorkflowTemperature(
+  raw: string | undefined,
+  workflow: LLMWorkflowKind,
+): number {
+  if (!raw) {
+    return DEFAULT_WORKFLOW_TEMPERATURE[workflow];
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    throw new LLMConfigError(`Invalid temperature '${raw}' for workflow '${workflow}'.`);
+  }
+
+  return parsed;
+}
+
+function readExecutionModel(
+  env: Record<string, string>,
+  provider: LLMProviderKind | undefined
+): string | undefined {
+  if (provider === "anthropic") {
+    return env.ANTHROPIC_MODEL;
+  }
+
+  if (provider === "openai-compatible") {
+    return env.OPENAI_MODEL;
+  }
+
+  return env.OPENAI_MODEL || env.ANTHROPIC_MODEL;
+}
+
+function shouldSendThinkingPayload(
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  mode: OpenAICompatibleThinkingPayloadMode
+): boolean {
+  if (provider !== "openai-compatible") {
+    return false;
+  }
+
+  if (mode === "none") {
+    return false;
+  }
+
+  if (mode === "type-object") {
+    return true;
+  }
+
+  return !!model && KIMI_THINKING_MODEL_PATTERN.test(model);
+}
+
+function buildProviderOptions(
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  thinking: LLMThinkingMode,
+  thinkingPayloadMode: OpenAICompatibleThinkingPayloadMode
+): Record<string, unknown> | undefined {
+  if (!shouldSendThinkingPayload(provider, model, thinkingPayloadMode)) {
+    return undefined;
+  }
+
+  return {
+    thinking: { type: thinking },
+  };
+}
+
+function validateWorkflowConfig(input: {
+  provider: LLMProviderKind | undefined;
+  model: string | undefined;
+  workflow: LLMWorkflowKind;
+  thinking: LLMThinkingMode;
+  temperature: number;
+  providerOptions?: Record<string, unknown>;
+}): void {
+  if (
+    input.provider !== "openai-compatible" ||
+    !input.model ||
+    !KIMI_THINKING_MODEL_PATTERN.test(input.model) ||
+    !(input.providerOptions && "thinking" in input.providerOptions)
+  ) {
+    return;
+  }
+
+  if (input.thinking === "enabled" && input.temperature !== 1) {
+    throw new LLMConfigError(
+      `Workflow '${input.workflow}' uses ${input.model} with thinking=enabled, which requires temperature=1.`,
+    );
+  }
+
+  if (input.thinking === "disabled" && input.temperature !== 0.6) {
+    throw new LLMConfigError(
+      `Workflow '${input.workflow}' uses ${input.model} with thinking=disabled, which requires temperature=0.6.`,
+    );
+  }
 }
 
 function readOpenAICompatibleConfig(
@@ -101,40 +307,36 @@ function readOptionalPositiveNumber(
 function loadEnv(projectRoot: string): Record<string, string> {
   const result: Record<string, string> = {};
 
-  for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === "string") {
+  const envPath = resolve(projectRoot, ".env");
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, "utf-8");
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = line.indexOf("=");
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = line.slice(0, separatorIndex).trim();
+      let value = line.slice(separatorIndex + 1).trim();
+
+      if (
+        (value.startsWith("\"") && value.endsWith("\"")) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
       result[key] = value;
     }
   }
 
-  const envPath = resolve(projectRoot, ".env");
-  if (!existsSync(envPath)) {
-    return result;
-  }
-
-  const content = readFileSync(envPath, "utf-8");
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    const key = line.slice(0, separatorIndex).trim();
-    let value = line.slice(separatorIndex + 1).trim();
-
-    if (
-      (value.startsWith("\"") && value.endsWith("\"")) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    if (!(key in result)) {
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string") {
       result[key] = value;
     }
   }

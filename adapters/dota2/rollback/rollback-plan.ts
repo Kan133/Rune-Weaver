@@ -31,6 +31,7 @@ const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
   "game/scripts/vscripts/rune_weaver/",
   "content/panorama/src/rune_weaver/",
+  "content/panorama/layout/custom_game/rune_weaver/generated/",
 ];
 
 const BRIDGE_POINTS = [
@@ -50,9 +51,9 @@ export function generateRollbackPlan(
   const bridgeEffectsToRefresh: string[] = [];
 
   for (const filePath of feature.generatedFiles) {
-    if (isRwOwnedPath(filePath)) {
-      if (!isBridgePoint(filePath)) {
-        filesToDelete.push(filePath);
+    for (const ownedPath of expandRollbackOwnedFiles(filePath)) {
+      if (isRwOwnedPath(ownedPath) && !isBridgePoint(ownedPath) && !filesToDelete.includes(ownedPath)) {
+        filesToDelete.push(ownedPath);
       }
     }
 
@@ -227,4 +228,39 @@ function extractAbilityName(filePath: string): string | null {
   const normalized = filePath.replace(/\\/g, "/");
   const match = normalized.match(/game\/scripts\/vscripts\/rune_weaver\/abilities\/([^/]+)\.lua$/);
   return match?.[1] || null;
+}
+
+function expandRollbackOwnedFiles(filePath: string): string[] {
+  const normalized = filePath.replace(/\\/g, "/");
+  const files = [normalized];
+
+  const generatedLuaPath = toGeneratedLuaCompanionPath(normalized);
+  if (generatedLuaPath) {
+    files.push(generatedLuaPath);
+  }
+
+  const compiledCssPath = toCompiledPanoramaCssPath(normalized);
+  if (compiledCssPath) {
+    files.push(compiledCssPath);
+  }
+
+  return files;
+}
+
+function toGeneratedLuaCompanionPath(filePath: string): string | undefined {
+  const match = filePath.match(/^game\/scripts\/src\/rune_weaver\/generated\/(server|shared)\/(.+)\.ts$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return `game/scripts/vscripts/rune_weaver/generated/${match[1]}/${match[2]}.lua`;
+}
+
+function toCompiledPanoramaCssPath(filePath: string): string | undefined {
+  const match = filePath.match(/^content\/panorama\/src\/rune_weaver\/generated\/ui\/(.+)\.less$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return `content/panorama/layout/custom_game/rune_weaver/generated/ui/${match[1]}.css`;
 }

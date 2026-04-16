@@ -21,6 +21,7 @@ export interface Manifest {
   generatedAt: string;
   host: string;
   status: "PASS" | "WARN" | "FAIL";
+  acceptanceSummaryPath?: string;
   canonicalDemo: {
     classification: "canonical-acceptance";
     prompt: string;
@@ -42,4 +43,51 @@ export interface Manifest {
     validate: number;
   };
   files: ManifestFileEntry[];
+}
+
+export interface AcceptanceSummary {
+  generatedAt: string;
+  classification: "canonical" | "exploratory";
+  promptBoundaryMatch: boolean;
+  canonical: {
+    prompt: string;
+    boundary: string;
+    continuationOrder: string[];
+  };
+  observed: {
+    prompt: string;
+    boundary: string;
+    source: "canonical_contract" | "gap_fill_approval";
+  };
+  lifecycleCheckpoints: {
+    canonicalContractPresent: boolean;
+    manifestPresent: boolean;
+    reviewArtifactPresent: boolean;
+    doctorOutputPresent: boolean;
+    validateOutputPresent: boolean;
+    generatedFilesPresent: boolean;
+    gapFillApprovalPresent: boolean;
+    requiredScreenshotsPresent: boolean;
+    runtimeVideoPresent: boolean;
+  };
+  missingManualEvidence: string[];
+  missingAutoEvidence: string[];
+  consistencyChecks: {
+    manifestReferencesAcceptanceSummary: boolean;
+    manifestTracksCanonicalContract: boolean;
+    manifestTracksReviewState: boolean;
+    approvalEvidenceStateConsistent: boolean;
+  };
+  handoffReadiness: {
+    status: "ready" | "not_ready";
+    reasons: string[];
+  };
+  proofPointGate: {
+    status: "open" | "blocked";
+    reason: string;
+  };
+  finalJudgment:
+    | "canonical_acceptance_ready"
+    | "canonical_incomplete"
+    | "exploratory";
 }

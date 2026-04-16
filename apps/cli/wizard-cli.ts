@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { dirname, resolve } from "path";
-import { createLLMClientFromEnv } from "../../core/llm/factory.js";
+import { createLLMClientFromEnv, readLLMExecutionConfig } from "../../core/llm/factory.js";
 import { runWizardToIntentSchema } from "../../core/wizard/intent-schema.js";
 import { validateIntentSchema, getValidationSummary } from "../../core/validation/schema-validator.js";
 import type { IntentSchema } from "../../core/schema/types.js";
@@ -78,13 +78,15 @@ async function runWizardCommand(options: WizardCLIOptions): Promise<WizardCLIRes
 
   try {
     const client = createLLMClientFromEnv(process.cwd());
+    const llmConfig = readLLMExecutionConfig(process.cwd(), "wizard");
     
     const result = await runWizardToIntentSchema({
       client,
       input: {
         rawText: options.rawText,
-        temperature: options.temperature ?? 1,
-        model: options.model,
+        temperature: options.temperature ?? llmConfig.temperature,
+        model: options.model ?? llmConfig.model,
+        providerOptions: llmConfig.providerOptions,
       },
     });
 

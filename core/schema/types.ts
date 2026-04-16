@@ -14,15 +14,112 @@ import type { HostDescriptor } from "../host/types.js";
 
 export type { HostDescriptor } from "../host/types.js";
 
+export type IntentReadiness = "ready" | "weak" | "blocked";
+
+export interface IntentActor {
+  id: string;
+  role: string;
+  label: string;
+}
+
+export interface IntentRequirement {
+  id: string;
+  kind: "trigger" | "state" | "rule" | "effect" | "resource" | "ui" | "integration";
+  summary: string;
+  actors?: string[];
+  inputs?: string[];
+  outputs?: string[];
+  invariants?: string[];
+  parameters?: Record<string, unknown>;
+  priority?: "must" | "should" | "could";
+}
+
+export interface IntentStateContract {
+  states: Array<{
+    id: string;
+    summary: string;
+    owner?: "feature" | "session" | "external";
+    lifetime?: "ephemeral" | "session" | "persistent";
+    mutationMode?: "create" | "update" | "consume" | "expire" | "remove";
+  }>;
+}
+
+export interface IntentFlowContract {
+  triggerSummary?: string;
+  sequence?: string[];
+  supportsCancel?: boolean;
+  supportsRetry?: boolean;
+  requiresConfirmation?: boolean;
+}
+
+export interface IntentSelectionContract {
+  mode?: "deterministic" | "weighted" | "filtered" | "user-chosen" | "hybrid";
+  cardinality?: "single" | "multiple";
+  repeatability?: "one-shot" | "repeatable" | "persistent";
+  duplicatePolicy?: "allow" | "avoid" | "forbid";
+  inventory?: {
+    enabled: boolean;
+    capacity: number;
+    storeSelectedItems: boolean;
+    blockDrawWhenFull: boolean;
+    fullMessage: string;
+    presentation: "persistent_panel";
+  };
+}
+
+export interface IntentEffectContract {
+  operations: Array<"apply" | "remove" | "stack" | "expire" | "consume" | "restore">;
+  targets?: string[];
+  durationSemantics?: "instant" | "timed" | "persistent";
+}
+
+export interface IntentIntegrationContract {
+  expectedBindings: Array<{
+    id: string;
+    kind: "entry-point" | "event-hook" | "bridge-point" | "ui-surface" | "data-source";
+    summary: string;
+    required?: boolean;
+  }>;
+}
+
+export interface IntentInvariant {
+  id: string;
+  summary: string;
+  severity: "error" | "warning";
+}
+
+export interface IntentUncertainty {
+  id: string;
+  summary: string;
+  affects: Array<"intent" | "blueprint" | "pattern" | "realization">;
+  severity: "low" | "medium" | "high";
+}
+
+export interface RequiredClarification {
+  id: string;
+  question: string;
+  blocksFinalization: boolean;
+}
+
 export interface IntentSchema {
   version: string;
   host: HostDescriptor;
   request: UserRequestSummary;
   classification: IntentClassification;
+  readiness?: IntentReadiness;
+  actors?: IntentActor[];
   requirements: IntentRequirements;
   constraints: IntentConstraints;
+  stateModel?: IntentStateContract;
+  flow?: IntentFlowContract;
+  selection?: IntentSelectionContract;
+  effects?: IntentEffectContract;
+  integrations?: IntentIntegrationContract;
   uiRequirements?: UIRequirementSummary;
   normalizedMechanics: NormalizedMechanics;
+  acceptanceInvariants?: IntentInvariant[];
+  uncertainties?: IntentUncertainty[];
+  requiredClarifications?: RequiredClarification[];
   openQuestions: string[];
   resolvedAssumptions: string[];
   isReadyForBlueprint: boolean;
@@ -46,6 +143,7 @@ export interface IntentClassification {
 
 export interface IntentRequirements {
   functional: string[];
+  typed?: IntentRequirement[];
   interactions?: string[];
   dataNeeds?: string[];
   outputs?: string[];
@@ -106,6 +204,12 @@ export interface Blueprint {
   readyForAssembly: boolean;
   /** T138-R1: Parameters extracted from prompt (cooldown, mana, range, etc.) */
   parameters?: Record<string, unknown>;
+  /** Step 2 migration: normalized blueprint readiness */
+  status?: NormalizedBlueprintStatus;
+  /** Step 2 migration: canonical pattern-facing seam */
+  moduleNeeds?: ModuleNeed[];
+  /** Step 2 migration: legacy-compatible proposal linkage */
+  proposalId?: string;
 }
 
 export interface BlueprintSourceIntent {
@@ -143,6 +247,73 @@ export interface PatternHint {
   category?: string;
   suggestedPatterns: string[];
   rationale?: string;
+}
+
+export type ProposalStatus = "draft" | "needs_review" | "usable" | "blocked";
+
+export interface ProposalModule {
+  id: string;
+  role: string;
+  category: BlueprintModule["category"];
+  proposedPatternIds: string[];
+  proposedParameters?: Record<string, unknown>;
+  missingPatterns?: boolean;
+  missingIntegration?: boolean;
+  missingOwnership?: boolean;
+  missingCapability?: boolean;
+}
+
+export interface ProposalConnection {
+  from: string;
+  to: string;
+  purpose?: string;
+  connectionType?: string;
+}
+
+export interface BlueprintProposal {
+  id: string;
+  source: "llm" | "fallback" | "rule";
+  status: ProposalStatus;
+  sourceIntent: {
+    goal: string;
+    intentKind: IntentClassification["intentKind"];
+  };
+  proposedModules: ProposalModule[];
+  proposedConnections: ProposalConnection[];
+  confidence: "high" | "medium" | "low";
+  notes: string[];
+  issues: string[];
+  uncertainties?: string[];
+  blockedBy?: string[];
+  candidatePatternFamilies?: string[];
+}
+
+export interface ModuleNeed extends Record<string, unknown> {
+  moduleId: string;
+  semanticRole: string;
+  requiredCapabilities: string[];
+  optionalCapabilities?: string[];
+  requiredOutputs?: string[];
+  stateExpectations?: string[];
+  integrationHints?: string[];
+  invariants?: string[];
+  boundedVariability?: string[];
+  explicitPatternHints?: string[];
+  prohibitedTraits?: string[];
+}
+
+export type NormalizedBlueprintStatus = "ready" | "weak" | "blocked";
+
+export interface BlueprintNormalizationReport {
+  status: NormalizedBlueprintStatus;
+  notes: string[];
+  issues: ValidationIssue[];
+  blockers: string[];
+}
+
+export interface FinalBlueprint extends Blueprint {
+  status: NormalizedBlueprintStatus;
+  moduleNeeds: ModuleNeed[];
 }
 
 export interface ValidationContract {

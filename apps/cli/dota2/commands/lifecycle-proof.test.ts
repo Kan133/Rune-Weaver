@@ -39,6 +39,16 @@ async function runTests(): Promise<void> {
   assert.strictEqual(plan[13].kind, "manual-runtime");
   assert(plan.some((step) => step.command.join(" ").includes("demo:talent-draw:refresh")));
 
+  const inventoryPlan = buildLifecycleProofConfig({
+    ...options,
+    scenario: "talent-draw-inventory-update",
+  }).plan;
+  assert.strictEqual(inventoryPlan.length, 14, "Inventory lifecycle proof should keep the same bounded harness shape");
+  assert(
+    inventoryPlan[3].command.join(" ").includes("Talent inventory full"),
+    "Inventory lifecycle proof should use the canonical inventory update prompt",
+  );
+
   const success = await runLifecycleProofCommand(options);
   assert.strictEqual(success, true, "Plan-only lifecycle proof should succeed as a planning command");
   assert.strictEqual(existsSync(output), true, "Plan-only run should still write an artifact");

@@ -71,8 +71,13 @@ async function main(): Promise<void> {
       targetFile,
       llmConfigured: true,
       llmProvider: "openai-compatible",
+      llmBaseUrl: "https://api.moonshot.cn/v1",
       llmModel: "gpt-4.1",
+      llmThinking: "disabled",
       llmTemperature: 0.2,
+      llmConfigSource: ".env",
+      llmApiKeyPresent: true,
+      llmApiKeyFingerprint: "sk-t***1234",
       runResult,
       applyRequested: true,
       applyResult,
@@ -85,11 +90,17 @@ async function main(): Promise<void> {
     assert.deepStrictEqual(artifact.allowed, boundary.allowed);
     assert.deepStrictEqual(artifact.forbidden, boundary.forbidden);
     assert.strictEqual(artifact.llm.provider, "openai-compatible");
+    assert.strictEqual(artifact.llm.baseUrl, "https://api.moonshot.cn/v1");
     assert.strictEqual(artifact.llm.model, "gpt-4.1");
+    assert.strictEqual(artifact.llm.thinking, "disabled");
+    assert.strictEqual(artifact.llm.configSource, ".env");
+    assert.strictEqual(artifact.llm.apiKeyPresent, true);
+    assert.strictEqual(artifact.llm.apiKeyFingerprint, "sk-t***1234");
     assert.strictEqual(artifact.decision.decision, "auto_apply");
     assert.strictEqual(artifact.dryRun.summary, runResult.summary);
     assert.deepStrictEqual(artifact.dryRun.patchPlan, runResult.patchPlan);
     assert.deepStrictEqual(artifact.runnerIssues, []);
+    assert.deepStrictEqual(artifact.runnerIssueDetails, []);
     assert.strictEqual(artifact.apply.requested, true);
     assert.strictEqual(artifact.apply.success, true);
     assert.deepStrictEqual(artifact.apply.issues, []);
@@ -101,8 +112,13 @@ async function main(): Promise<void> {
       targetFile,
       llmConfigured: true,
       llmProvider: "openai-compatible",
+      llmBaseUrl: "https://api.moonshot.cn/v1",
       llmModel: "gpt-4.1",
+      llmThinking: "disabled",
       llmTemperature: 0.2,
+      llmConfigSource: ".env",
+      llmApiKeyPresent: true,
+      llmApiKeyFingerprint: "sk-t***1234",
       runResult,
       applyRequested: true,
       applyResult,
@@ -119,6 +135,8 @@ async function main(): Promise<void> {
     assert.strictEqual(saved.dryRun.summary, runResult.summary);
     assert.strictEqual(saved.apply.requested, true);
     assert.strictEqual(saved.apply.success, true);
+    assert.strictEqual(saved.llm.baseUrl, "https://api.moonshot.cn/v1");
+    assert.strictEqual(saved.llm.apiKeyFingerprint, "sk-t***1234");
 
     console.log("gap-fill artifact test passed");
   } finally {

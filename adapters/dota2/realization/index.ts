@@ -22,126 +22,53 @@ import {
   summarizeRealization,
   type HostRealizationRule,
 } from "../../../core/host/realization-engine.js";
+import {
+  getCanonicalPatternMeta,
+  getPatternPreferredFamily,
+} from "../../../core/patterns/canonical-patterns.js";
 
 /**
  * Dota2 realization policy mapping
  * Maps pattern combinations and module roles to realization types.
  */
 const DOTA2_PATTERN_CLASSIFIER = {
-  isUI: (pattern: string): boolean => pattern.startsWith("ui."),
+  isUI: (pattern: string): boolean =>
+    getPatternPreferredFamily(pattern) === "ui-surface" ||
+    getCanonicalPatternMeta(pattern)?.semanticOutputs?.some((output) => output.includes("ui.surface")) === true,
   isRuntime: (pattern: string): boolean =>
-    ["input.key_binding", "rule.selection_flow", "effect.dash"].includes(pattern),
-  isShared: (pattern: string): boolean => pattern === "data.weighted_pool",
+    ["runtime-primary", "modifier-runtime", "composite-static-runtime"].includes(
+      getPatternPreferredFamily(pattern) || ""
+    ),
+  isShared: (pattern: string): boolean =>
+    getPatternPreferredFamily(pattern) === "runtime-shared" ||
+    getCanonicalPatternMeta(pattern)?.semanticOutputs?.some((output) => output.includes("shared.runtime")) === true,
+  getPreferredFamily: (pattern: string): string | undefined => getPatternPreferredFamily(pattern),
+  outputKindToOutput: (target: string) => {
+    switch (target) {
+      case "ability_kv":
+        return "kv";
+      case "panorama_tsx":
+      case "panorama_less":
+        return "ui";
+      case "shared_ts":
+      case "server_ts":
+      case "modifier_ts":
+        return "ts";
+      case "lua_ability":
+        return "lua";
+      case "bridge_refresh":
+        return "bridge";
+      default:
+        return undefined;
+    }
+  },
 };
 
 /**
- * Default rules following docs/DOTA2-HOST-REALIZATION-POLICY.md mapping table
+ * Dota2 keeps no pattern-id-led common-path rules here.
+ * Real exceptions should be added narrowly when metadata/family inference is insufficient.
  */
-const DOTA2_REALIZATION_RULES: HostRealizationRule[] = [
-  // T143-R1: Lua-backed ability patterns -> kv+lua (produces both lua runtime and kv static shell)
-  {
-    patterns: ["dota2.short_time_buff"],
-    role: "gameplay-core",
-    realizationType: "kv+lua",
-    confidence: "high",
-    hostTargets: ["lua_ability", "ability_kv"],
-    rationale: [
-      "ability_lua system uses Lua for ability + same-file modifier",
-      "KV provides static ability definition shell",
-      "Produces two routed outputs: lua runtime + kv config",
-    ],
-  },
-  // T143: Keep standalone lua for pure lua cases (no kv output needed)
-  {
-    patterns: [],
-    role: "gameplay-core",
-    realizationType: "lua",
-    confidence: "low",
-    hostTargets: ["lua_ability"],
-    rationale: ["pure lua output without kv static shell"],
-  },
-  // UI patterns -> ui
-  {
-    patterns: ["ui.selection_modal"],
-    role: "ui-surface",
-    realizationType: "ui",
-    confidence: "high",
-    hostTargets: ["panorama_tsx", "panorama_less"],
-    rationale: ["user-facing selection flow requires UI output"],
-  },
-  {
-    patterns: ["ui.key_hint"],
-    role: "ui-surface",
-    realizationType: "ui",
-    confidence: "high",
-    hostTargets: ["panorama_tsx", "panorama_less"],
-    rationale: ["key hint display requires UI output"],
-  },
-  {
-    patterns: ["ui.resource_bar"],
-    role: "ui-surface",
-    realizationType: "ui",
-    confidence: "high",
-    hostTargets: ["panorama_tsx", "panorama_less"],
-    rationale: ["resource bar display requires UI output"],
-  },
-  // gameplay patterns
-  {
-    patterns: ["effect.dash"],
-    role: "gameplay-core",
-    realizationType: "kv+ts",
-    confidence: "high",
-    hostTargets: ["ability_kv", "modifier_ts"],
-    rationale: [
-      "ability shell fits host-native static configuration",
-      "dash movement logic requires runtime script behavior",
-    ],
-  },
-  {
-    patterns: ["effect.modifier_applier"],
-    role: "gameplay-core",
-    realizationType: "kv+lua",
-    confidence: "high",
-    hostTargets: ["lua_ability", "ability_kv"],
-    rationale: [
-      "modifier_applier uses ability_lua base class",
-      "KV provides static ability definition shell",
-      "Lua provides runtime ability + modifier implementation",
-    ],
-  },
-  {
-    patterns: ["input.key_binding"],
-    role: "gameplay-core",
-    realizationType: "ts",
-    confidence: "high",
-    hostTargets: ["server_ts"],
-    rationale: ["custom input capture and trigger orchestration are runtime concerns"],
-  },
-  {
-    patterns: ["rule.selection_flow"],
-    role: "gameplay-core",
-    realizationType: "ts",
-    confidence: "high",
-    hostTargets: ["server_ts"],
-    rationale: ["choice flow and nontrivial orchestration exceed static config"],
-  },
-  {
-    patterns: ["resource.basic_pool"],
-    role: "gameplay-core",
-    realizationType: "kv",
-    confidence: "medium",
-    hostTargets: ["ability_kv"],
-    rationale: ["static resource properties bias toward KV"],
-  },
-  {
-    patterns: ["data.weighted_pool"],
-    role: "shared-support",
-    realizationType: "shared-ts",
-    confidence: "medium",
-    hostTargets: ["shared_ts"],
-    rationale: ["data structure may need to be shared across surfaces"],
-  },
-];
+const DOTA2_REALIZATION_RULES: HostRealizationRule[] = [];
 
 /**
  * Determine host targets from realization type
@@ -179,6 +106,10 @@ function buildRationale(
   realizationType: RealizationType
 ): string[] {
   const rationale: string[] = [];
+  const preferredFamilies = module.selectedPatterns
+    .map((pattern) => getPatternPreferredFamily(pattern))
+    .filter((family): family is string => !!family);
+  const uniqueFamilies = Array.from(new Set(preferredFamilies));
 
   if (realizationType === "kv") {
     rationale.push("static ability properties fit host-native KV configuration");
@@ -200,18 +131,19 @@ function buildRationale(
     rationale.push("module requires only bridge registration refresh");
   }
 
-  // Add pattern-based rationale
-  module.selectedPatterns.forEach((p) => {
-    if (p === "input.key_binding") {
-      rationale.push("input handling is a runtime concern");
-    }
-    if (p === "effect.dash") {
-      rationale.push("dash effect combines static config and runtime behavior");
-    }
-    if (p === "ui.selection_modal") {
-      rationale.push("selection modal is a UI-facing surface");
-    }
-  });
+  if (uniqueFamilies.length > 0) {
+    rationale.push(`family fit: ${uniqueFamilies.join(", ")}`);
+  }
+
+  if (module.outputs?.some((output) => output.kind === "kv")) {
+    rationale.push("routed outputs require KV generation");
+  }
+  if (module.outputs?.some((output) => output.kind === "lua")) {
+    rationale.push("routed outputs require Lua generation");
+  }
+  if (module.outputs?.some((output) => output.kind === "ui")) {
+    rationale.push("routed outputs require Panorama UI generation");
+  }
 
   return rationale;
 }

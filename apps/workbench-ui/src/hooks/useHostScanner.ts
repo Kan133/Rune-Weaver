@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import type { RuneWeaverWorkspace } from '@/types/workspace';
 
 // 扫描结果类型
 export interface HostScanResult {
@@ -40,6 +41,7 @@ export interface HostStatusResult {
   supported: boolean;
   hostType: 'dota2-x-template' | 'unknown';
   rwStatus: IntegrationStatus;
+  workspace?: RuneWeaverWorkspace;
   issues: HostIssue[];
   checkedAt: string;
 }
@@ -82,8 +84,8 @@ export interface UseHostScannerReturn {
   fullyReady: boolean;
   
   // 操作
-  scan: (hostRoot: string) => Promise<void>;
-  checkStatus: (hostRoot: string) => Promise<void>;
+  scan: (hostRoot: string) => Promise<HostScanResult | null>;
+  checkStatus: (hostRoot: string) => Promise<HostStatusResult | null>;
   refresh: (hostRoot: string) => Promise<void>;
   
   // 重置
@@ -91,7 +93,7 @@ export interface UseHostScannerReturn {
 }
 
 // API 响应类型
-interface ScanAPIResponse {
+export interface ScanAPIResponse {
   success: boolean;
   result?: {
     valid: boolean;
@@ -103,10 +105,54 @@ interface ScanAPIResponse {
   error?: string;
 }
 
-interface StatusAPIResponse {
+export interface StatusAPIResponse {
   success: boolean;
   result?: HostStatusResult;
   error?: string;
+}
+
+export async function fetchHostScan(hostRoot: string): Promise<HostScanResult> {
+  const response = await fetch('/api/host/scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hostRoot }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data: ScanAPIResponse = await response.json();
+  if (!data.success || !data.result) {
+    throw new Error(data.error || 'Scan failed');
+  }
+
+  return {
+    valid: data.result.valid,
+    hostType: data.result.hostType,
+    errors: data.result.errors || [],
+    warnings: data.result.warnings || [],
+    capabilities: data.result.capabilities || [],
+  };
+}
+
+export async function fetchHostStatus(hostRoot: string): Promise<HostStatusResult | null> {
+  const response = await fetch('/api/host/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hostRoot }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data: StatusAPIResponse = await response.json();
+  if (!data.success || !data.result) {
+    throw new Error(data.error || 'Status check failed');
+  }
+
+  return data.result;
 }
 
 /**
@@ -136,54 +182,28 @@ export function useHostScanner(): UseHostScannerReturn {
   const scan = useCallback(async (hostRoot: string) => {
     if (!hostRoot) {
       setScanErrors(['Host root path is required']);
-      return;
+      return null;
     }
 
     setIsScanning(true);
     setScanErrors([]);
 
     try {
-      // 调用后端 API 扫描项目
-      const response = await fetch('/api/host/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostRoot }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data: ScanAPIResponse = await response.json();
-
-      if (data.success && data.result) {
-        setScanResult({
-          valid: data.result.valid,
-          hostType: data.result.hostType,
-          errors: data.result.errors || [],
-          warnings: data.result.warnings || [],
-          capabilities: data.result.capabilities || [],
-        });
-      } else {
-        setScanErrors([data.error || 'Scan failed']);
-        setScanResult({
-          valid: false,
-          hostType: 'unknown',
-          errors: [data.error || 'Scan failed'],
-          warnings: [],
-          capabilities: [],
-        });
-      }
+      const result = await fetchHostScan(hostRoot);
+      setScanResult(result);
+      return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setScanErrors([errorMessage]);
-      setScanResult({
+      const failedResult = {
         valid: false,
         hostType: 'unknown',
         errors: [errorMessage],
         warnings: [],
         capabilities: [],
-      });
+      } satisfies HostScanResult;
+      setScanResult(failedResult);
+      return failedResult;
     } finally {
       setIsScanning(false);
     }
@@ -196,34 +216,22 @@ export function useHostScanner(): UseHostScannerReturn {
   const checkStatus = useCallback(async (hostRoot: string) => {
     if (!hostRoot) {
       setStatusErrors(['Host root path is required']);
-      return;
+      return null;
     }
 
     setIsCheckingStatus(true);
     setStatusErrors([]);
 
     try {
-      // 调用后端 API 检查状态
-      const response = await fetch('/api/host/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostRoot }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const result = await fetchHostStatus(hostRoot);
+      if (result) {
+        setHostStatus(result);
       }
-
-      const data: StatusAPIResponse = await response.json();
-
-      if (data.success && data.result) {
-        setHostStatus(data.result);
-      } else {
-        setStatusErrors([data.error || 'Status check failed']);
-      }
+      return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setStatusErrors([errorMessage]);
+      return null;
     } finally {
       setIsCheckingStatus(false);
     }

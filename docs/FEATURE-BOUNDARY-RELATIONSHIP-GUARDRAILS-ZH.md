@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: evaluating future feature-boundary and relationship-governance design
 > Do not use for: current execution baseline, current conflict-governance truth, or worker task ordering
 
@@ -170,6 +170,64 @@ feature 内部的子能力面，用于表达较复杂 feature 的内部结构。
 - 你要继续更新它，还是创建一个新 feature
 
 这条能力对小白用户尤其重要。
+
+---
+
+## Feature 边界判断的输出不止一种
+
+未来的 feature boundary resolution 不应只输出：
+
+- `new feature`
+- `update existing feature`
+- `possible existing feature match`
+
+还应同时输出 source-model 落点判断：
+
+- `family-owned`
+- `generic-core`
+
+这意味着系统需要同时回答两类问题：
+
+1. 这次请求在 lifecycle 上更像：
+   - 新 feature
+   - 现有 feature 的 update
+   - 相关 feature，仍需治理判断
+2. 这次请求在 authoring 上更像：
+   - 已知 feature family 的 source model
+   - 还是 generic-core source model
+
+这两类判断不能混成一句“这是不是新 feature”。
+
+---
+
+## Feature 内部对象默认先留在 feature 内
+
+复杂 feature 往往会带一组业务对象集合，例如：
+
+- `TalentDefinition[]`
+- `ShopItem[]`
+- `WaveDefinition[]`
+
+这些对象默认应被视为：
+
+- feature-owned source model 的内部对象
+
+而不是：
+
+- 自动升级成新的独立 feature
+
+只有当这些内部对象开始需要下面这些能力时，才应考虑升级：
+
+- 独立 lifecycle
+- 独立 ownership
+- 被多个 feature 独立复用
+- 被 review / governance 当作独立主对象管理
+
+在那之前，更合理的做法是：
+
+- 保持它们是当前 feature 的内部对象
+- 必要时把它们提升为外部 capability 引用
+- 而不是过早把每个对象都切成新 feature
 
 ---
 

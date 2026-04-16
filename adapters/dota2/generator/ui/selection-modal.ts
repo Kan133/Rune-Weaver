@@ -27,6 +27,36 @@ export interface SelectionModalParams {
   title?: string;
   description?: string;
   dismissBehavior?: "selection_only" | "manual" | "auto";
+  layoutPreset?: "card_tray";
+  selectionMode?: "single";
+  inventory?: {
+    enabled: boolean;
+    capacity: number;
+    storeSelectedItems: boolean;
+    blockDrawWhenFull: boolean;
+    fullMessage: string;
+    presentation: "persistent_panel";
+  };
+}
+
+function resolveLayoutPreset(value: unknown): "card_tray" {
+  if (value === undefined || value === null || value === "card_tray") {
+    return "card_tray";
+  }
+
+  throw new Error(
+    `ui.selection_modal currently only supports layoutPreset "card_tray"; received ${JSON.stringify(value)}`
+  );
+}
+
+function resolveSelectionMode(value: unknown): "single" {
+  if (value === undefined || value === null || value === "single") {
+    return "single";
+  }
+
+  throw new Error(
+    `ui.selection_modal currently only supports selectionMode "single"; received ${JSON.stringify(value)}`
+  );
 }
 
 export function generateSelectionModalComponent(
@@ -43,6 +73,17 @@ export function generateSelectionModalComponent(
   const title = caseParams.title || "Choose Your Talent";
   const description = caseParams.description || "Select one of the following talents";
   const dismissBehavior = caseParams.dismissBehavior || "selection_only";
+  const layoutPreset = resolveLayoutPreset(caseParams.layoutPreset);
+  const selectionMode = resolveSelectionMode(caseParams.selectionMode);
+  const inventory = caseParams.inventory;
+  const hasInventory = inventory?.enabled === true;
+  const inventoryCapacity = hasInventory ? Math.max(1, Math.floor(inventory?.capacity || 15)) : 0;
+  const inventoryFullMessage = hasInventory && inventory?.fullMessage
+    ? inventory.fullMessage
+    : "Talent inventory full";
+  const inventoryPresentation = hasInventory && inventory?.presentation
+    ? inventory.presentation
+    : "persistent_panel";
   const hasPlaceholderSupport = minDisplayCount > 0 && placeholderConfig !== undefined;
   const cssBaseName = entry.targetPath.split("/").pop()?.replace(".tsx", "").toLowerCase() || componentName.toLowerCase();
 
@@ -57,6 +98,20 @@ export function generateSelectionModalComponent(
   const minDisplayCount = ${minDisplayCount};
 `
     : "";
+
+  const inventoryConfigCode = hasInventory
+    ? `
+  const inventoryEnabled = true;
+  const inventoryCapacity = ${inventoryCapacity};
+  const inventoryFullMessage = "${inventoryFullMessage}";
+  const inventoryPresentation = "${inventoryPresentation}";
+`
+    : `
+  const inventoryEnabled = false;
+  const inventoryCapacity = 0;
+  const inventoryFullMessage = "Talent inventory full";
+  const inventoryPresentation = "persistent_panel";
+`;
 
   const placeholderPaddingLogic = hasPlaceholderSupport
     ? `
@@ -81,9 +136,6 @@ export function generateSelectionModalComponent(
 `
     : "";
 
-  const payloadShapeRenderCode = generatePayloadShapeRender(payloadShape);
-  const dismissBehaviorLogic = generateDismissBehaviorLogic(dismissBehavior);
-
   return `/**
  * ${componentName}
  * Generated selection modal
@@ -93,7 +145,10 @@ export function generateSelectionModalComponent(
  * - choiceCount: ${choiceCount}
  * - payloadShape: "${payloadShape}"
  * - dismissBehavior: "${dismissBehavior}"
+ * - layoutPreset: "${layoutPreset}"
+ * - selectionMode: "${selectionMode}"
  * ${hasPlaceholderSupport ? `- minDisplayCount: ${minDisplayCount}` : ""}
+ * ${hasInventory ? `- inventory: ${inventoryPresentation} (${inventoryCapacity} slots)` : ""}
  */
 
 import React, { useEffect, useRef, useState } from "react";
@@ -111,6 +166,15 @@ interface SelectionItem {
   rarity?: string;
   disabled?: boolean;
   isPlaceholder?: boolean;
+}
+
+interface InventoryPayload {
+  enabled?: boolean;
+  capacity?: number;
+  items?: unknown;
+  isFull?: boolean;
+  fullMessage?: string;
+  presentation?: string;
 }
 
 interface ${componentName}Props {
@@ -139,7 +203,7 @@ export function ${componentName}(props: ${componentName}Props) {
   const sendCustomEvent = (eventName: string, payload: Record<string, unknown>) => {
     (GameEvents.SendCustomGameEventToServer as any)(eventName, payload);
   };
-${placeholderConfigCode}
+${placeholderConfigCode}${inventoryConfigCode}
   // GAP_FILL_BOUNDARY: ui.selection_modal.payload_adapter
   // Allowed: item normalization, placeholder padding, defensive fallback values, card presentation formatting.
   // Forbidden: root mount changes, transport event changes, LESS/HUD wiring changes.
@@ -178,7 +242,7 @@ ${placeholderConfigCode}
           disabled: typeof item.disabled === "boolean" ? item.disabled : false,
           isPlaceholder: typeof item.isPlaceholder === "boolean" ? item.isPlaceholder : false,
         };
-      })
+      });
   };
 
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
@@ -186,6 +250,8 @@ ${placeholderConfigCode}
   const [modalItems, setModalItems] = useState<SelectionItem[]>(() => normalizeSelectionItems(items));
   const [modalTitle, setModalTitle] = useState(title);
   const [modalDescription, setModalDescription] = useState(description);
+  const [inventoryItems, setInventoryItems] = useState<SelectionItem[]>([]);
+  const [inventoryIsFull, setInventoryIsFull] = useState(false);
 
   // Use refs for stable effect dependencies
   const titleRef = useRef(title);
@@ -217,6 +283,17 @@ ${placeholderConfigCode}
     setModalDescription(description);
   }, [description]);
 
+${hasInventory ? `
+  const applyInventoryPayload = (payload?: InventoryPayload) => {
+    if (!inventoryEnabled || !payload) {
+      return;
+    }
+
+    const normalizedItems = normalizeSelectionItems(payload.items);
+    setInventoryItems(normalizedItems.slice(0, inventoryCapacity));
+    setInventoryIsFull(payload.isFull === true || normalizedItems.length >= inventoryCapacity);
+  };
+` : ""}
   useEffect(() => {
     console.log("[Rune Weaver] ${componentName} mounted for feature ${featureId}");
 
@@ -238,6 +315,7 @@ ${placeholderConfigCode}
       options?: unknown;
       title?: string;
       description?: string;
+      inventory?: InventoryPayload;
     }) => {
       if (data.featureId && data.featureId !== featureIdRef.current) {
         return;
@@ -249,9 +327,19 @@ ${placeholderConfigCode}
       setModalDescription(data.description || descriptionRef.current);
       setSelectedIndex(-1);
       setIsVisible(true);
-    });
+${hasInventory ? "      applyInventoryPayload(data.inventory);\n" : ""}    });
 
-    const confirmSub = GameEvents.Subscribe("rune_weaver_selection_confirmed", (data: { featureId?: string }) => {
+${hasInventory ? `
+    const inventorySub = GameEvents.Subscribe("rune_weaver_selection_inventory_state", (data: {
+      featureId?: string;
+      inventory?: InventoryPayload;
+    }) => {
+      if (data.featureId && data.featureId !== featureIdRef.current) {
+        return;
+      }
+      applyInventoryPayload(data.inventory);
+    });
+` : ""}    const confirmSub = GameEvents.Subscribe("rune_weaver_selection_confirmed", (data: { featureId?: string }) => {
       if (data.featureId && data.featureId !== featureIdRef.current) {
         return;
       }
@@ -262,23 +350,27 @@ ${placeholderConfigCode}
     return () => {
       setKeyDownCallback(triggerKeyRef.current, () => {});
       GameEvents.Unsubscribe(showSelectionSub);
-      GameEvents.Unsubscribe(confirmSub);
+${hasInventory ? "      GameEvents.Unsubscribe(inventorySub);\n" : ""}      GameEvents.Unsubscribe(confirmSub);
     };
   }, []);
-${placeholderPaddingLogic}${dismissBehaviorLogic}
+${placeholderPaddingLogic}
   const displayItems = ${hasPlaceholderSupport ? "padWithPlaceholders(modalItems)" : "modalItems"};
+  const inventorySlots = inventoryEnabled
+    ? Array.from({ length: inventoryCapacity }, (_, index) => inventoryItems[index] ?? null)
+    : [];
 
   // Get selected item for debug logging and validation
-  const selectedItem = selectedIndex >= 0 && selectedIndex < displayItems.length 
-    ? displayItems[selectedIndex] 
+  const selectedItem = selectedIndex >= 0 && selectedIndex < displayItems.length
+    ? displayItems[selectedIndex]
     : null;
 
   // Check if confirm should be disabled
-  const isConfirmDisabled = selectedIndex === -1 || 
-    selectedItem?.disabled === true || 
+  const isConfirmDisabled = selectedIndex === -1 ||
+    selectedItem?.disabled === true ||
     selectedItem?.isPlaceholder === true;
+  const shouldRenderModal = isVisible && displayItems.length > 0;
 
-  if (!isVisible || displayItems.length === 0) {
+  if (!shouldRenderModal && !inventoryEnabled) {
     return null;
   }
 
@@ -338,92 +430,98 @@ ${placeholderPaddingLogic}${dismissBehaviorLogic}
   };
 
   return (
-    <Panel className="${cssBaseName}-overlay">
-        <Panel className="${cssBaseName}-modal">
-          <Panel className="modal-header">
-            <Label text={modalTitle} />
-          <Label className="modal-description" text={modalDescription || ""} />
-        </Panel>
+    <Panel className="${cssBaseName}-root">
+      {inventoryEnabled && (
+        <Panel className="${cssBaseName}-inventory-panel">
+          <Panel className="inventory-header">
+            <Label
+              className={\`inventory-title \${inventoryIsFull ? "full" : ""}\`}
+              text={inventoryIsFull ? inventoryFullMessage : "Talent Inventory"}
+            />
+            <Label className="inventory-subtitle" text={\`\${inventoryItems.length} / \${inventoryCapacity}\`} />
+          </Panel>
 
-        <Panel className="modal-content">
-          {displayItems.map((item, index) => (
-            <Panel
-              key={item.id}
-              className={\`selection-card \${selectedIndex === index ? "selected" : ""} \${item.disabled ? "disabled" : ""} \${item.isPlaceholder ? "placeholder" : ""}\`}
-              onactivate={() => handleSelect(index)}
-            >
-              <Label className="card-name" text={item.name} />
-              <Label className="card-description" text={item.description || ""} />
-              ${payloadShape === "card_with_rarity"
-                ? `<Label className={\`card-tier \${item.tier ? \`tier-\${item.tier.toLowerCase()}\` : "tier-none"}\`} text={item.tier || ""} />`
+          <Panel className="inventory-grid">
+            {inventorySlots.map((item, index) => (
+              <Panel
+                key={item?.id || \`inventory_slot_\${index}\`}
+                className={\`inventory-slot \${item ? "filled" : "empty"}\`}
+              >
+                {item ? (
+                  <>
+                    <Label className="inventory-slot-name" text={item.name} />
+                    <Label
+                      className={\`inventory-slot-tier \${item.tier ? \`tier-\${item.tier.toLowerCase()}\` : "tier-none"}\`}
+                      text={item.tier || ""}
+                    />
+                  </>
+                ) : (
+                  <Label className="inventory-slot-placeholder" text="Empty" />
+                )}
+              </Panel>
+            ))}
+          </Panel>
+        </Panel>
+      )}
+
+      {shouldRenderModal && (
+        <Panel className="${cssBaseName}-overlay">
+          <Panel className="${cssBaseName}-modal">
+            <Panel className="modal-header">
+              <Label text={modalTitle} />
+              <Label className="modal-description" text={modalDescription || ""} />
+            </Panel>
+
+            <Panel className="modal-content">
+              {displayItems.map((item, index) => (
+                <Panel
+                  key={item.id}
+                  className={\`selection-card \${selectedIndex === index ? "selected" : ""} \${item.disabled ? "disabled" : ""} \${item.isPlaceholder ? "placeholder" : ""}\`}
+                  onactivate={() => handleSelect(index)}
+                >
+                  ${payloadShape === "simple_text"
+                    ? `
+                  <Label className="card-name" text={item.name} />
+                  {item.description && <Label className="card-description" text={item.description} />}
+`
+                    : payloadShape === "card_with_rarity"
+                      ? `
+                  {item.icon && <Image src={item.icon} />}
+                  <Label className="card-name" text={item.name} />
+                  <Label className="card-description" text={item.description || ""} />
+                  <Label className={\`card-tier \${item.tier ? \`tier-\${item.tier.toLowerCase()}\` : "tier-none"}\`} text={item.tier || ""} />
+`
+                      : `
+                  {item.icon && <Image src={item.icon} />}
+                  <Label className="card-name" text={item.name} />
+                  <Label className="card-description" text={item.description || ""} />
+`}
+                </Panel>
+              ))}
+            </Panel>
+
+            <Panel className="modal-footer">
+              <Panel
+                className={\`btn-confirm \${isConfirmDisabled ? "disabled" : ""}\`}
+                onactivate={handleConfirm}
+              >
+                <Label text="确认选择" />
+              </Panel>
+              ${dismissBehavior === "manual" || dismissBehavior === "auto"
+                ? `
+              <Panel className="btn-dismiss" onactivate={handleDismiss}>
+                <Label text="关闭" />
+              </Panel>
+`
                 : ""}
             </Panel>
-          ))}
-        </Panel>
-
-        <Panel className="modal-footer">
-          <Panel
-            className={\`btn-confirm \${isConfirmDisabled ? "disabled" : ""}\`}
-            onactivate={handleConfirm}
-          >
-            <Label text="确认选择" />
           </Panel>
-          ${dismissBehavior === "manual" || dismissBehavior === "auto"
-            ? `
-          <Panel className="btn-dismiss" onactivate={handleDismiss}>
-            <Label text="关闭" />
-          </Panel>
-`
-            : ""}
         </Panel>
-      </Panel>
+      )}
     </Panel>
   );
 }
 
 export default ${componentName};
 `;
-}
-
-function generatePayloadShapeRender(payloadShape: string): string {
-  switch (payloadShape) {
-    case "simple_text":
-      return `
-              <Label className="card-name" text={item.name} />
-              {item.description && <Label className="card-description" text={item.description} />}
-`;
-    case "card_with_rarity":
-      return `
-              {item.icon && <Image src={item.icon} />}
-              <Label className="card-name" text={item.name} />
-              <Label className="card-description" text={item.description} />
-              {item.tier && <Label className={\`card-tier tier-\${item.tier.toLowerCase()}\`} text={item.tier} />}
-`;
-    case "card":
-    default:
-      return `
-              {item.icon && <Image src={item.icon} />}
-              <Label className="card-name" text={item.name} />
-              <Label className="card-description" text={item.description} />
-`;
-  }
-}
-
-function generateDismissBehaviorLogic(dismissBehavior: string): string {
-  switch (dismissBehavior) {
-    case "selection_only":
-      return `
-  // Dismiss behavior: selection_only
-`;
-    case "manual":
-      return `
-  // Dismiss behavior: manual
-`;
-    case "auto":
-      return `
-  // Dismiss behavior: auto
-`;
-    default:
-      return "";
-  }
 }

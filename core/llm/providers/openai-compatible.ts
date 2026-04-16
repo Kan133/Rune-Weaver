@@ -84,7 +84,7 @@ export class OpenAICompatibleClient implements LLMClient {
     const rawText = extractTextFromResponse(response);
 
     try {
-      const object = JSON.parse(extractJsonObject(rawText)) as T;
+      const object = parseStructuredJson<T>(rawText);
       return {
         object,
         rawText,
@@ -101,7 +101,7 @@ export class OpenAICompatibleClient implements LLMClient {
     }
   }
 
-  private async postChatCompletions(payload: Record<string, unknown>) {
+  protected async postChatCompletions(payload: Record<string, unknown>) {
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
     let httpResponse: Response;
@@ -224,6 +224,82 @@ function extractJsonObject(text: string): string {
   }
 
   throw new LLMResponseParseError("Could not locate JSON object in response", text);
+}
+
+function parseStructuredJson<T>(rawText: string): T {
+  const jsonText = extractJsonObject(rawText);
+
+  try {
+    return JSON.parse(jsonText) as T;
+  } catch (error) {
+    const repairedJsonText = repairCommonJsonIssues(jsonText);
+    if (repairedJsonText !== jsonText) {
+      try {
+        return JSON.parse(repairedJsonText) as T;
+      } catch {
+        // Fall through to the original parse error below so the message stays honest.
+      }
+    }
+
+    throw error;
+  }
+}
+
+function repairCommonJsonIssues(jsonText: string): string {
+  let repaired = jsonText.trim().replace(/,\s*([}\]])/g, "$1");
+  repaired = closeUnterminatedJsonStructures(repaired);
+  return repaired;
+}
+
+function closeUnterminatedJsonStructures(text: string): string {
+  const stack: string[] = [];
+  let inString = false;
+  let escaping = false;
+
+  for (const char of text) {
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === "{") {
+      stack.push("}");
+      continue;
+    }
+
+    if (char === "[") {
+      stack.push("]");
+      continue;
+    }
+
+    if ((char === "}" || char === "]") && stack[stack.length - 1] === char) {
+      stack.pop();
+    }
+  }
+
+  if (inString) {
+    text += "\"";
+  }
+
+  if (stack.length > 0) {
+    text += stack.reverse().join("");
+  }
+
+  return text;
 }
 
 function mapUsage(

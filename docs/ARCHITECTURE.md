@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: aligning current execution layering and cross-cutting architectural boundary rules
 > Do not use for: current product completion status or roadmap sequencing by itself
 
@@ -39,6 +39,10 @@ Important:
 - `HostRealizationPlan` is a real architectural layer
 - `GeneratorRoutingPlan` is a real architectural layer
 - generators should not be treated as a direct continuation of `AssemblyPlan`
+
+> Planning-only note
+> Complex, object-rich features may later introduce optional feature-boundary / source-model specialization between `IntentSchema` and deterministic blueprint normalization.
+> That seam is not part of the current accepted mainline pipeline and must remain planning-only until it is separately ratified into baseline docs.
 
 ## Accepted Cross-Cutting Direction
 

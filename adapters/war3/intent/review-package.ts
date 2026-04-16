@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import {
+  buildWar3ShadowDraftBundle,
   generateMidZoneShopSkeletonModuleDraft,
-  generateMidZoneShopTstlBootstrapDraft,
-  generateMidZoneShopTstlFeatureModuleDraft,
+  type War3ShadowDraftBundle,
 } from "../generator/index.js";
 import type {
   War3CurrentSliceArtifactInput,
@@ -17,9 +17,16 @@ import {
 import { runWar3CurrentSliceBlueprintTrialFromBridge } from "./blueprint-trial.js";
 import {
   buildWar3CurrentSliceAssemblySidecar,
-  createMidZoneShopSkeletonInputFromAssemblySidecar,
   type War3CurrentSliceAssemblySidecar,
 } from "./war3-assembly-sidecar.js";
+import {
+  buildWar3ShadowRealizationPlan,
+  type War3ShadowRealizationPlan,
+} from "./shadow-realization-plan.js";
+import {
+  buildWar3ShadowSiteEvidenceReview,
+  type War3ShadowSiteEvidenceReview,
+} from "./shadow-site-evidence-review.js";
 import {
   buildWar3WritePreviewArtifact,
   type War3WritePreviewArtifact,
@@ -36,6 +43,9 @@ export type War3ReviewPackage = {
   packageName: string;
   bridge: ReturnType<typeof buildWar3CurrentSliceIntentBridge>;
   sidecar: War3CurrentSliceAssemblySidecar;
+  shadowRealizationPlan?: War3ShadowRealizationPlan;
+  shadowDraftBundle?: War3ShadowDraftBundle;
+  shadowSiteEvidenceReview?: War3ShadowSiteEvidenceReview;
   writePreviewArtifact: War3WritePreviewArtifact;
   skeletonModule: {
     filename: string;
@@ -315,21 +325,59 @@ function sanitizePathSegment(value: string): string {
     .toLowerCase() || "war3-slice";
 }
 
+function getFilenameFromPathHint(pathHint: string, fallback: string): string {
+  const normalized = pathHint.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  return segments[segments.length - 1] || fallback;
+}
+
+function createCompatibilityTstlHostDraftFromShadowBundle(
+  shadowDraftBundle: War3ShadowDraftBundle,
+): War3ReviewPackage["tstlHostDraft"] {
+  return {
+    bootstrap: {
+      filename: getFilenameFromPathHint(
+        shadowDraftBundle.draftFiles.bootstrap.pathHint,
+        "bootstrap.ts",
+      ),
+      content: shadowDraftBundle.draftFiles.bootstrap.content,
+    },
+    featureModule: {
+      filename: getFilenameFromPathHint(
+        shadowDraftBundle.draftFiles.featureModule.pathHint,
+        "setupMidZoneShop.ts",
+      ),
+      content: shadowDraftBundle.draftFiles.featureModule.content,
+    },
+    hostBindingReview: {
+      filename: getFilenameFromPathHint(
+        shadowDraftBundle.draftFiles.hostBindingReview.pathHint,
+        "current-slice.json",
+      ),
+      content: shadowDraftBundle.draftFiles.hostBindingReview.content,
+    },
+  };
+}
+
 export function buildWar3CurrentSliceReviewPackage(
   artifact: War3CurrentSliceArtifactInput,
 ): War3ReviewPackage {
   const bridge = buildWar3CurrentSliceIntentBridge(artifact);
   const blueprintTrial = runWar3CurrentSliceBlueprintTrialFromBridge(bridge);
   const sidecar = buildWar3CurrentSliceAssemblySidecar(blueprintTrial);
-  const generatorInput = createMidZoneShopSkeletonInputFromAssemblySidecar(sidecar);
+  const shadowRealizationPlan = buildWar3ShadowRealizationPlan(sidecar);
+  const generatorInput = shadowRealizationPlan.adapterLocalDraftSeed.generatorInput;
   const skeletonContent = generateMidZoneShopSkeletonModuleDraft(generatorInput);
-  const tstlBootstrapContent = generateMidZoneShopTstlBootstrapDraft(generatorInput);
-  const tstlFeatureModuleContent = generateMidZoneShopTstlFeatureModuleDraft(generatorInput);
+  const shadowDraftBundle = buildWar3ShadowDraftBundle(shadowRealizationPlan);
+  const shadowSiteEvidenceReview = buildWar3ShadowSiteEvidenceReview({
+    plan: shadowRealizationPlan,
+    bundle: shadowDraftBundle,
+  });
   const writePreviewArtifact = buildWar3WritePreviewArtifact({
     sidecar,
+    shadowRealizationPlan,
+    shadowDraftBundle,
     skeletonContent,
-    tstlBootstrapContent,
-    tstlFeatureModuleContent,
     moduleName: generatorInput.moduleName,
   });
 
@@ -342,43 +390,26 @@ export function buildWar3CurrentSliceReviewPackage(
     packageName,
     bridge,
     sidecar,
+    shadowRealizationPlan,
+    shadowDraftBundle,
+    shadowSiteEvidenceReview,
     writePreviewArtifact,
     skeletonModule: {
       filename: `${generatorInput.moduleName}.ts`,
       content: skeletonContent,
     },
-    tstlHostDraft: {
-      bootstrap: {
-        filename: "bootstrap.ts",
-        content: tstlBootstrapContent,
-      },
-      featureModule: {
-        filename: `${generatorInput.moduleName}.ts`,
-        content: tstlFeatureModuleContent,
-      },
-      hostBindingReview: {
-        filename: "current-slice.json",
-        content: JSON.stringify(
-          {
-            schemaVersion: "war3-tstl-host-binding-review/current-slice-v1",
-            hostBindingManifest: sidecar.hostBindingManifest,
-            hostBindingDraft: sidecar.hostBindingDraft,
-            hostTargetHints: sidecar.hostTargetHints,
-            notes: [
-              "This file is a review-only host-binding handoff for the TSTL skeleton.",
-            ],
-          },
-          null,
-          2,
-        ),
-      },
-    },
+    tstlHostDraft: createCompatibilityTstlHostDraftFromShadowBundle(shadowDraftBundle),
   };
 
-  reviewPackage.implementationDraftPlan = buildWar3ImplementationDraftPlan(
-    reviewPackage,
-    validateWar3CurrentSliceReviewPackage(reviewPackage),
-  );
+  reviewPackage.implementationDraftPlan = buildWar3ImplementationDraftPlan({
+    packageName,
+    host: bridge.hostBinding.host,
+    sidecar,
+    shadowRealizationPlan,
+    shadowDraftBundle,
+    shadowSiteEvidenceReview,
+    validation: validateWar3CurrentSliceReviewPackage(reviewPackage),
+  });
 
   return reviewPackage;
 }
@@ -581,25 +612,41 @@ function validateWar3TstlDraftArtifacts(
   const bootstrapContent = reviewPackage.tstlHostDraft.bootstrap.content;
   const hostBindingReviewContent = reviewPackage.tstlHostDraft.hostBindingReview.content;
   const bindingDraft = reviewPackage.writePreviewArtifact.hostBindingDraft;
+  const runtimeHookSiteReview = reviewPackage.shadowSiteEvidenceReview?.sites.find(
+    (site) => site.siteId === "runtime-hook-bootstrap-call-site",
+  );
+  const shopTargetSiteReview = reviewPackage.shadowSiteEvidenceReview?.sites.find(
+    (site) => site.siteId === "shop-target-declaration-site",
+  );
+  const triggerAreaSiteReview = reviewPackage.shadowSiteEvidenceReview?.sites.find(
+    (site) => site.siteId === "trigger-area-realization-site",
+  );
+  const hostBindingSurfaceReview = reviewPackage.shadowSiteEvidenceReview?.sites.find(
+    (site) => site.siteId === "host-binding-review-surface",
+  );
 
   const bootstrapHasRuntimeHook =
-    bootstrapContent.includes("bootstrapHost") &&
-    bootstrapContent.includes(bindingDraft.runtimeHook.targetPathHint);
+    (bootstrapContent.includes("bootstrapHost") &&
+      bootstrapContent.includes(bindingDraft.runtimeHook.targetPathHint)) ||
+    runtimeHookSiteReview?.draftCheck.status === "all-markers-present";
   const featureHasTriggerAreaDraft =
-    featureContent.includes("hostBindingDraft") &&
-    featureContent.includes(bindingDraft.triggerArea.sourceAnchorSemanticName) &&
-    featureContent.includes("realizationSitePathHint");
+    ((featureContent.includes("hostBindingDraft") &&
+      featureContent.includes(bindingDraft.triggerArea.sourceAnchorSemanticName) &&
+      featureContent.includes("realizationSitePathHint")) ||
+      triggerAreaSiteReview?.draftCheck.status === "all-markers-present");
   const featureHasShopTargetDraft =
-    featureContent.includes(bindingDraft.shopTarget.bindingSymbol) &&
-    featureContent.includes("declarationSitePathHint");
+    ((featureContent.includes(bindingDraft.shopTarget.bindingSymbol) &&
+      featureContent.includes("declarationSitePathHint")) ||
+      shopTargetSiteReview?.draftCheck.status === "all-markers-present");
   const featureHasRuntimeHookDraft =
     featureContent.includes(bindingDraft.runtimeHook.targetPathHint) &&
     featureContent.includes("integrationStatus");
   const hostBindingReviewHasDraft =
-    hostBindingReviewContent.includes("\"hostBindingDraft\"") &&
-    hostBindingReviewContent.includes(bindingDraft.triggerArea.sourceAnchorSemanticName) &&
-    hostBindingReviewContent.includes(bindingDraft.shopTarget.bindingSymbol) &&
-    hostBindingReviewContent.includes(bindingDraft.runtimeHook.targetPathHint);
+    ((hostBindingReviewContent.includes("\"hostBindingDraft\"") &&
+      hostBindingReviewContent.includes(bindingDraft.triggerArea.sourceAnchorSemanticName) &&
+      hostBindingReviewContent.includes(bindingDraft.shopTarget.bindingSymbol) &&
+      hostBindingReviewContent.includes(bindingDraft.runtimeHook.targetPathHint)) ||
+      hostBindingSurfaceReview?.draftCheck.status === "all-markers-present");
 
   const checkedArtifacts: War3TstlDraftValidationResult["checkedArtifacts"] = [
     {
@@ -609,6 +656,9 @@ function validateWar3TstlDraftArtifacts(
       notes: bootstrapHasRuntimeHook
         ? [
             "Bootstrap draft preserves the runtime-hook path hint and bootstrap entry seam.",
+            ...(runtimeHookSiteReview?.draftCheck.status === "all-markers-present"
+              ? ["Bootstrap draft also preserves explicit runtime-hook site-review markers."]
+              : []),
           ]
         : [
             "Bootstrap draft did not clearly preserve the runtime-hook path hint.",
@@ -624,9 +674,15 @@ function validateWar3TstlDraftArtifacts(
         featureHasTriggerAreaDraft
           ? "Feature draft exposes trigger-area slot semantics."
           : "Feature draft is missing explicit trigger-area slot semantics.",
+        ...(triggerAreaSiteReview?.draftCheck.status === "all-markers-present"
+          ? ["Feature draft preserves the trigger-area realization site-review markers."]
+          : []),
         featureHasShopTargetDraft
           ? "Feature draft exposes shop-target slot semantics."
           : "Feature draft is missing explicit shop-target slot semantics.",
+        ...(shopTargetSiteReview?.draftCheck.status === "all-markers-present"
+          ? ["Feature draft preserves the shop-target declaration site-review markers."]
+          : []),
         featureHasRuntimeHookDraft
           ? "Feature draft exposes runtime-hook slot semantics."
           : "Feature draft is missing explicit runtime-hook slot semantics.",
@@ -639,6 +695,9 @@ function validateWar3TstlDraftArtifacts(
       notes: hostBindingReviewHasDraft
         ? [
             "Host-binding review artifact carries the exported hostBindingDraft structure.",
+            ...(hostBindingSurfaceReview?.draftCheck.status === "all-markers-present"
+              ? ["Host-binding review artifact preserves the cross-file site-contract markers."]
+              : []),
           ]
         : [
             "Host-binding review artifact does not clearly carry the exported hostBindingDraft structure.",
@@ -1029,6 +1088,7 @@ export function validateWar3CurrentSliceReviewPackage(
   const runtimeHookValidation = validateWar3RuntimeHookAgainstHostRoot(reviewPackage);
   const shopTargetValidation = validateWar3ShopTargetAgainstHostRoot(reviewPackage);
   const triggerAreaValidation = validateWar3TriggerAreaAgainstHostRoot(reviewPackage);
+  const shadowSiteEvidenceReview = reviewPackage.shadowSiteEvidenceReview;
 
   if (reviewPackage.bridge.blockers.length > 0) {
     issues.push({
@@ -1051,6 +1111,20 @@ export function validateWar3CurrentSliceReviewPackage(
       severity: "error",
       code: "WRITE_PREVIEW_MANIFEST_DRIFT",
       message: "Write preview host-binding manifest drifted from bridge host-binding manifest.",
+    });
+  }
+
+  if (
+    reviewPackage.shadowRealizationPlan &&
+    shadowSiteEvidenceReview &&
+    reviewPackage.shadowRealizationPlan.siteContracts.length !== shadowSiteEvidenceReview.sites.length
+  ) {
+    issues.push({
+      severity: "error",
+      code: "SHADOW_SITE_EVIDENCE_COUNT_MISMATCH",
+      message:
+        `shadowRealizationPlan.siteContracts=${reviewPackage.shadowRealizationPlan.siteContracts.length} ` +
+        `does not match shadowSiteEvidenceReview.sites=${shadowSiteEvidenceReview.sites.length}.`,
     });
   }
 
@@ -1198,6 +1272,23 @@ export function validateWar3CurrentSliceReviewPackage(
     });
   }
 
+  if (shadowSiteEvidenceReview) {
+    for (const site of shadowSiteEvidenceReview.sites) {
+      if (site.draftCheck.status === "all-markers-present") {
+        continue;
+      }
+
+      issues.push({
+        severity: "warning",
+        code: `SHADOW_SITE_${site.siteId.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_MARKERS_${site.draftCheck.status.toUpperCase().replace(/-/g, "_")}`,
+        message:
+          `Shadow site '${site.siteId}' is ${site.draftCheck.status}: ` +
+          `present=${site.draftCheck.presentMarkers.join(", ") || "(none)"}; ` +
+          `missing=${site.draftCheck.missingMarkers.join(", ") || "(none)"}.`,
+      });
+    }
+  }
+
   if (runtimeHookValidation.status === "workspace-unrecognized") {
     issues.push({
       severity: "warning",
@@ -1285,6 +1376,9 @@ export function readWar3ReviewPackageFromDir(packageDir: string): War3ReviewPack
     files?: {
       bridge?: string;
       sidecar?: string;
+      shadowRealizationPlan?: string;
+      shadowDraftBundle?: string;
+      shadowSiteEvidenceReview?: string;
       writePreview?: string;
       implementationDraftPlan?: string;
       skeletonModule?: string;
@@ -1296,6 +1390,12 @@ export function readWar3ReviewPackageFromDir(packageDir: string): War3ReviewPack
 
   const bridgeFile = packageSummary.files?.bridge || "bridge.json";
   const sidecarFile = packageSummary.files?.sidecar || "sidecar.json";
+  const shadowRealizationPlanFile =
+    packageSummary.files?.shadowRealizationPlan || "shadow-realization-plan.json";
+  const shadowDraftBundleFile =
+    packageSummary.files?.shadowDraftBundle || "shadow-draft-bundle.json";
+  const shadowSiteEvidenceReviewFile =
+    packageSummary.files?.shadowSiteEvidenceReview || "shadow-site-evidence-review.json";
   const writePreviewFile = packageSummary.files?.writePreview || "write-preview.json";
   const skeletonFilename = packageSummary.files?.skeletonModule || "setupMidZoneShop.ts";
   const tstlBootstrapFilename = packageSummary.files?.tstlBootstrapDraft || "tstl-draft/src/host/bootstrap.ts";
@@ -1333,6 +1433,27 @@ export function readWar3ReviewPackageFromDir(packageDir: string): War3ReviewPack
     },
   };
 
+  if (existsSync(join(packageDir, shadowRealizationPlanFile))) {
+    reviewPackage.shadowRealizationPlan = parseReviewPackageJsonFile(
+      packageDir,
+      shadowRealizationPlanFile,
+    );
+  }
+
+  if (existsSync(join(packageDir, shadowDraftBundleFile))) {
+    reviewPackage.shadowDraftBundle = parseReviewPackageJsonFile(
+      packageDir,
+      shadowDraftBundleFile,
+    );
+  }
+
+  if (existsSync(join(packageDir, shadowSiteEvidenceReviewFile))) {
+    reviewPackage.shadowSiteEvidenceReview = parseReviewPackageJsonFile(
+      packageDir,
+      shadowSiteEvidenceReviewFile,
+    );
+  }
+
   if (existsSync(join(packageDir, implementationDraftPlanFilename))) {
     reviewPackage.implementationDraftPlan = parseReviewPackageJsonFile(
       packageDir,
@@ -1365,6 +1486,15 @@ export function exportWar3ReviewPackage(
     files: {
       bridge: "bridge.json",
       sidecar: "sidecar.json",
+      ...(reviewPackage.shadowRealizationPlan
+        ? { shadowRealizationPlan: "shadow-realization-plan.json" }
+        : {}),
+      ...(reviewPackage.shadowDraftBundle
+        ? { shadowDraftBundle: "shadow-draft-bundle.json" }
+        : {}),
+      ...(reviewPackage.shadowSiteEvidenceReview
+        ? { shadowSiteEvidenceReview: "shadow-site-evidence-review.json" }
+        : {}),
       writePreview: "write-preview.json",
       implementationDraftPlan: "implementation-draft-plan.json",
       skeletonModule: reviewPackage.skeletonModule.filename,
@@ -1377,6 +1507,27 @@ export function exportWar3ReviewPackage(
   writeFileSync(join(packageDir, "package.json"), JSON.stringify(summary, null, 2), "utf-8");
   writeFileSync(join(packageDir, "bridge.json"), JSON.stringify(reviewPackage.bridge, null, 2), "utf-8");
   writeFileSync(join(packageDir, "sidecar.json"), JSON.stringify(reviewPackage.sidecar, null, 2), "utf-8");
+  if (reviewPackage.shadowRealizationPlan) {
+    writeFileSync(
+      join(packageDir, "shadow-realization-plan.json"),
+      JSON.stringify(reviewPackage.shadowRealizationPlan, null, 2),
+      "utf-8",
+    );
+  }
+  if (reviewPackage.shadowDraftBundle) {
+    writeFileSync(
+      join(packageDir, "shadow-draft-bundle.json"),
+      JSON.stringify(reviewPackage.shadowDraftBundle, null, 2),
+      "utf-8",
+    );
+  }
+  if (reviewPackage.shadowSiteEvidenceReview) {
+    writeFileSync(
+      join(packageDir, "shadow-site-evidence-review.json"),
+      JSON.stringify(reviewPackage.shadowSiteEvidenceReview, null, 2),
+      "utf-8",
+    );
+  }
   writeFileSync(
     join(packageDir, "write-preview.json"),
     JSON.stringify(reviewPackage.writePreviewArtifact, null, 2),
@@ -1425,6 +1576,15 @@ export function exportWar3ReviewPackage(
     "- `package.json`: package summary and file index",
     "- `bridge.json`: intent-like meaning plus host-binding split",
     "- `sidecar.json`: War3-local post-Blueprint / pre-Assembly seam",
+    ...(reviewPackage.shadowRealizationPlan
+      ? ["- `shadow-realization-plan.json`: adapter-local shadow realization plan for the bounded War3 lane"]
+      : []),
+    ...(reviewPackage.shadowDraftBundle
+      ? ["- `shadow-draft-bundle.json`: bounded review-oriented draft file set derived from the shadow realization plan"]
+      : []),
+    ...(reviewPackage.shadowSiteEvidenceReview
+      ? ["- `shadow-site-evidence-review.json`: deterministic declaration-site / realization-site marker checks derived from the shadow draft bundle"]
+      : []),
     "- `write-preview.json`: review artifact bundle with host-binding manifest",
     "- `implementation-draft-plan.json`: narrow implementation-draft consumer artifact derived from hostBindingDraft",
     `- \`${reviewPackage.skeletonModule.filename}\`: generated TypeScript-to-Lua skeleton draft`,

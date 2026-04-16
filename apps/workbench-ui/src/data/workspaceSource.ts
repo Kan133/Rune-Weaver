@@ -138,20 +138,6 @@ export async function loadWorkspaceFromSource(
 
   if (!workspace) {
     issues.push(`Failed to load workspace from ${effectiveSource.path}`);
-
-    // Try fallback to default sample
-    if (effectiveSource.path !== DEFAULT_WORKSPACE_SOURCE.path) {
-      const fallbackResult = await loadWorkspaceWithMeta(DEFAULT_WORKSPACE_SOURCE.path);
-      if (fallbackResult.workspace) {
-        issues.push(`Fallback to default sample workspace`);
-        return {
-          workspace: fallbackResult.workspace,
-          source: DEFAULT_WORKSPACE_SOURCE,
-          issues,
-          bridgeMeta: fallbackResult.bridgeMeta,
-        };
-      }
-    }
   }
 
   return { workspace, source: effectiveSource, issues, bridgeMeta };

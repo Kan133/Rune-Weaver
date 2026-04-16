@@ -4,7 +4,7 @@
  * 展示 CLI 实时输出（stdout/stderr）、执行结果和 artifact 摘要
  */
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Terminal, 
   CheckCircle2, 

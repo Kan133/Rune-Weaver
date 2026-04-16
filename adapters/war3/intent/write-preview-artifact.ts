@@ -1,5 +1,7 @@
-import type { War3CurrentSliceAssemblySidecar } from "./war3-assembly-sidecar.js";
 import { countWar3CurrentSliceOpenBindings } from "./current-slice-bridge.js";
+import type { War3CurrentSliceAssemblySidecar } from "./war3-assembly-sidecar.js";
+import type { War3ShadowRealizationPlan } from "./shadow-realization-plan.js";
+import type { War3ShadowDraftBundle } from "../generator/shadow-draft-bundle.js";
 
 export type War3WritePreviewArtifact = {
   schemaVersion: "war3-write-preview/current-slice-v1";
@@ -33,15 +35,18 @@ export type War3WritePreviewArtifact = {
       pathHint: string;
       content: string;
       status: "review-only";
+      linkedSiteIds: string[];
     };
     featureModule: {
       pathHint: string;
       content: string;
       status: "review-only";
+      linkedSiteIds: string[];
     };
     hostBindingReview: {
       pathHint: string;
       status: "review-only";
+      linkedSiteIds: string[];
       notes: string[];
     };
     notes: string[];
@@ -51,9 +56,9 @@ export type War3WritePreviewArtifact = {
 
 export function buildWar3WritePreviewArtifact(input: {
   sidecar: War3CurrentSliceAssemblySidecar;
+  shadowRealizationPlan: War3ShadowRealizationPlan;
+  shadowDraftBundle: War3ShadowDraftBundle;
   skeletonContent: string;
-  tstlBootstrapContent: string;
-  tstlFeatureModuleContent: string;
   moduleName?: string;
 }): War3WritePreviewArtifact {
   return {
@@ -61,7 +66,7 @@ export function buildWar3WritePreviewArtifact(input: {
     generatedAt: new Date().toISOString(),
     summary: {
       sliceKind: "mid-zone-shop",
-      blueprintId: input.sidecar.sourceBlueprintId,
+      blueprintId: input.shadowRealizationPlan.sourceBlueprintId,
       targetBindingSymbol: input.sidecar.effectSemantics.targetBindingSymbol,
       unresolvedBindingCount: countWar3CurrentSliceOpenBindings(input.sidecar.hostBindingManifest),
     },
@@ -73,43 +78,48 @@ export function buildWar3WritePreviewArtifact(input: {
       hostTargetHints: input.sidecar.hostTargetHints,
     },
     skeletonModule: {
-      moduleName: input.moduleName || "setupMidZoneShop",
+      moduleName:
+        input.moduleName || input.shadowRealizationPlan.adapterLocalDraftSeed.generatorInput.moduleName,
       content: input.skeletonContent,
     },
     hostTargetReview: {
       schemaVersion: "war3-write-preview-host-target-review/current-slice-v1",
-      hints: input.sidecar.hostTargetHints,
+      hints: input.shadowRealizationPlan.adapterLocalDraftSeed.hostBindingReviewPayload.hostTargetHints,
       notes: [
         "These TSTL target hints remain review-only and are not direct write instructions.",
+        "They are threaded from the adapter-local shadow realization plan.",
       ],
     },
     hostBindingDraft: input.sidecar.hostBindingDraft,
     tstlHostDraft: {
       schemaVersion: "war3-tstl-host-draft/current-slice-v1",
       bootstrapModule: {
-        pathHint: input.sidecar.hostTargetHints.entries.runtimeHook.path,
-        content: input.tstlBootstrapContent,
+        pathHint: input.shadowDraftBundle.draftFiles.bootstrap.pathHint,
+        content: input.shadowDraftBundle.draftFiles.bootstrap.content,
         status: "review-only",
+        linkedSiteIds: [...input.shadowDraftBundle.draftFiles.bootstrap.linkedSiteIds],
       },
       featureModule: {
-        pathHint: input.sidecar.hostTargetHints.entries.featureModule.path,
-        content: input.tstlFeatureModuleContent,
+        pathHint: input.shadowDraftBundle.draftFiles.featureModule.pathHint,
+        content: input.shadowDraftBundle.draftFiles.featureModule.content,
         status: "review-only",
+        linkedSiteIds: [...input.shadowDraftBundle.draftFiles.featureModule.linkedSiteIds],
       },
       hostBindingReview: {
-        pathHint: input.sidecar.hostTargetHints.entries.hostBindingReview.path,
+        pathHint: input.shadowDraftBundle.draftFiles.hostBindingReview.pathHint,
         status: "review-only",
-        notes: [...input.sidecar.hostTargetHints.entries.hostBindingReview.notes],
+        linkedSiteIds: [...input.shadowDraftBundle.draftFiles.hostBindingReview.linkedSiteIds],
+        notes: [...input.shadowDraftBundle.draftFiles.hostBindingReview.notes],
       },
       notes: [
-        "These TSTL host drafts are companion review artifacts only.",
+        "These TSTL host drafts are compatibility review artifacts derived from the shadow draft bundle.",
         "They align with the current TSTL skeleton seams without claiming direct write readiness.",
         "Use hostBindingDraft to keep slot-level TSTL review semantics explicit beside the generated draft modules.",
       ],
     },
     notes: [
       "This preview artifact is review-oriented and does not claim War3 host write readiness.",
-      "Use the hostBindingManifest to keep unresolved runtime wiring visible beside the generated module draft.",
+      "Its TSTL draft surfaces are derived from the adapter-local shadow realization plan and shadow draft bundle.",
     ],
   };
 }
