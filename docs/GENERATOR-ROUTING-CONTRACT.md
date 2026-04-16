@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-15
 > Read when: changing or reviewing generator-family routing rules
 > Do not use for: proof that every routing path is already product-grade or current milestone status
 
@@ -72,6 +72,13 @@ The current recommended first-pass routing is:
 | `shared-ts` | `Dota2TSGenerator` |
 | `bridge-only` | bridge refresh / bridge integration step |
 | `kv+ts` | split output across `Dota2KVGenerator` and `Dota2TSGenerator` |
+
+Current narrow Dota2 truth:
+
+- `integration.state_sync_bridge` now uses an honest `bridge-only` route
+- the current result is deliberately elided rather than placeholder-only materialization
+- no standalone bridge file is emitted for that narrow slice
+- this fixes stale routing truth, but does not promote `integration/bridge` into a fully admitted generic family
 
 ## `kv+ts` Interpretation
 

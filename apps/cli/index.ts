@@ -21,6 +21,7 @@ import { runBlueprintCLI, showBlueprintHelp } from "./blueprint-cli.js";
 import { runAssemblyCLI, showAssemblyHelp } from "./assembly-cli.js";
 import { runDota2CLI, showDota2Help } from "./dota2-cli.js";
 import { runPatternCLI, showPatternHelp } from "./pattern-cli.js";
+import { readLLMExecutionConfig } from "../../core/llm/factory.js";
 
 // ============================================================================
 // CLI 配置与参数解�?
@@ -169,6 +170,9 @@ function parseArgs(): CLIOptions {
         break;
       case "--map":
         options.mapName = args[++i];
+        break;
+      case "--scenario":
+        options.scenario = args[++i];
         break;
       case "--skip-install":
         options.skipInstall = true;
@@ -568,6 +572,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       safe: options.safe,
       addonName: options.addonName,
       mapName: options.mapName,
+      scenario: options.scenario,
     };
 
     return await runDota2CLI(dota2Options);
@@ -730,6 +735,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
     verbose: options.verbose,
     addonName: options.addonName,
     mapName: options.mapName,
+    scenario: options.scenario,
   };
 
   return await runDota2CLI(dota2Options);
@@ -768,13 +774,15 @@ async function runInteractiveMode(): Promise<void> {
 
     rl.close();
 
+    const llmConfig = readLLMExecutionConfig(process.cwd(), "wizard");
     // 使用 blueprint 命令运行
     const success = await runBlueprintCLI({
       command: "generate",
       rawText: rawText.trim(),
       json: false,
       verbose: false,
-      temperature: 1, // Kimi k2.5 需�?temperature=1
+      temperature: llmConfig.temperature,
+      model: llmConfig.model,
     });
 
     process.exit(success ? 0 : 1);

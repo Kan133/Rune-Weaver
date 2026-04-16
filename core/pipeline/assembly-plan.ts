@@ -9,6 +9,7 @@ import {
   Blueprint,
   AssemblyPlan,
   AssemblyModule,
+  BlueprintModule,
   HostRealizationOutput,
   ValidationIssue,
   SelectedPattern,
@@ -18,6 +19,14 @@ import {
   RealizationRole,
 } from "../schema/types";
 import { resolvePatterns, PatternResolutionResult, ResolvedPattern } from "../patterns/resolver";
+import {
+  getCanonicalPatternMeta,
+  getPatternHostBinding,
+  getPatternPreferredFamily,
+  isCanonicalPatternAvailable,
+  patternSupportsSemanticOutput,
+  patternUsesPreferredFamily,
+} from "../patterns/canonical-patterns";
 
 // ============================================================================
 // Assembly Plan 专用类型
@@ -280,20 +289,7 @@ export class AssemblyPlanBuilder {
    * 检查 pattern 是否在 catalog 中
    */
   private isPatternInCatalog(patternId: string): boolean {
-    // 当前 catalog 中的 10 个 patterns
-    const catalogPatterns = [
-      "input.key_binding",
-      "data.weighted_pool",
-      "rule.selection_flow",
-      "effect.dash",
-      "effect.modifier_applier",
-      "effect.resource_consume",
-      "resource.basic_pool",
-      "ui.selection_modal",
-      "ui.key_hint",
-      "ui.resource_bar",
-    ];
-    return catalogPatterns.includes(patternId);
+    return isCanonicalPatternAvailable(patternId);
   }
 
   /**
@@ -364,65 +360,23 @@ export class AssemblyPlanBuilder {
     // 如果 Blueprint 有模块，使用 Blueprint 模块结构
     if (blueprint.modules && blueprint.modules.length > 0) {
       for (const bpModule of blueprint.modules) {
-        // T151: Collect patterns for this module
-        // Priority: 1) explicit patternIds[] from Blueprint, 2) category-based inference
-        let modulePatterns: string[];
+        let modulePatterns = resolutionResult.patterns
+          .filter((pattern) => pattern.moduleId === bpModule.id)
+          .map((pattern) => pattern.patternId);
 
-        if (bpModule.patternIds && bpModule.patternIds.length > 0) {
-          // T151: Use explicit patternIds[] if provided
+        if (modulePatterns.length === 0 && bpModule.patternIds && bpModule.patternIds.length > 0) {
           const explicitPatternIds = new Set(bpModule.patternIds);
           modulePatterns = resolutionResult.patterns
-            .filter(p => explicitPatternIds.has(p.patternId))
-            .map(p => p.patternId);
-        } else {
-          // Fall back to category-based inference
-          modulePatterns = resolutionResult.patterns
-            .filter((p) => {
-              // 基于 pattern category 或参数推断 module 归属
-              // 这里用简单启发式：trigger 模块关联 input.key_binding，effect 模块关联 effect.* 等
-              if (bpModule.category === "trigger" && p.patternId === "input.key_binding") return true;
-              if (bpModule.category === "effect" && p.patternId.startsWith("effect.")) return true;
-              // T150: Add dota2.* patterns - they are also effect-like gameplay patterns
-              if (bpModule.category === "effect" && p.patternId.startsWith("dota2.")) return true;
-              if (bpModule.category === "resource" && p.patternId.startsWith("resource.")) return true;
-              if (bpModule.category === "data" && p.patternId.startsWith("data.")) return true;
-              if (bpModule.category === "rule" && p.patternId.startsWith("rule.")) return true;
-              if (bpModule.category === "ui" && p.patternId.startsWith("ui.")) return true;
-              return false;
-            })
-            .map((p) => p.patternId);
+            .filter((pattern) => explicitPatternIds.has(pattern.patternId))
+            .map((pattern) => pattern.patternId);
         }
 
         if (modulePatterns.length === 0) continue;
 
-        // 推断 role
-        let role: RealizationRole = "gameplay-core";
-        if (bpModule.category === "ui") role = "ui-surface";
-        else if (bpModule.category === "data") role = "shared-support";
+        const role = inferModuleRole(bpModule.category, modulePatterns);
+        const outputKinds = inferOutputKinds(modulePatterns);
+        const realizationHints = inferRealizationHints(modulePatterns);
 
-        // 推断 outputKinds
-        const outputKinds: ("server" | "shared" | "ui" | "bridge")[] = [];
-        if (modulePatterns.some((p) => p.startsWith("ui."))) outputKinds.push("ui");
-        else if (modulePatterns.some((p) => p.startsWith("data."))) outputKinds.push("shared");
-        else outputKinds.push("server");
-
-        // 推断 realizationHints
-        const realizationHints: AssemblyModule["realizationHints"] = {};
-        // T150: effect category includes both effect.* and dota2.* patterns
-        const isEffectPattern = modulePatterns.some(p => p.startsWith("effect.")) || 
-                               modulePatterns.some(p => p.startsWith("dota2."));
-        if (bpModule.category === "effect" || isEffectPattern) {
-          realizationHints.kvCapable = true;
-          realizationHints.runtimeHeavy = true;
-        }
-        if (modulePatterns.includes("input.key_binding") || modulePatterns.includes("rule.selection_flow")) {
-          realizationHints.runtimeHeavy = true;
-        }
-        if (modulePatterns.some((p) => p.startsWith("ui."))) {
-          realizationHints.uiRequired = true;
-        }
-
-        // T149: Generate explicit outputs[] based on pattern analysis
         const outputs = generateAssemblyOutputs(modulePatterns, outputKinds);
 
         modules.push({
@@ -441,17 +395,15 @@ export class AssemblyPlanBuilder {
       const allPatterns = resolutionResult.patterns.map((p) => p.patternId);
 
       // 分类 patterns
-      const uiPatterns = allPatterns.filter((p) => p.startsWith("ui."));
-      const sharedPatterns = allPatterns.filter((p) => p.startsWith("data."));
+      const uiPatterns = allPatterns.filter((patternId) => this.isUIPattern(patternId));
+      const sharedPatterns = allPatterns.filter((patternId) => this.isSharedPattern(patternId));
       const gameplayPatterns = allPatterns.filter(
-        (p) => !p.startsWith("ui.") && !p.startsWith("data.")
+        (patternId) => !this.isUIPattern(patternId) && !this.isSharedPattern(patternId)
       );
 
       // T112-R1: Fallback modules have lower confidence and explicit isFallback marker
       if (gameplayPatterns.length > 0) {
         const outputKinds: ("server" | "shared" | "ui" | "bridge")[] = ["server"];
-        // T150: Check for dota2.* patterns which should also be kvCapable
-        const hasDota2Patterns = gameplayPatterns.some(p => p.startsWith("dota2."));
         modules.push({
           id: "gameplay-core",
           role: "gameplay-core",
@@ -459,11 +411,8 @@ export class AssemblyPlanBuilder {
           outputKinds,
           outputs: generateAssemblyOutputs(gameplayPatterns, outputKinds),
           realizationHints: {
-            // T150: dota2.* patterns are also kvCapable
-            kvCapable: gameplayPatterns.some((p) => p.startsWith("effect.")) || hasDota2Patterns,
-            runtimeHeavy: gameplayPatterns.some(
-              (p) => p === "input.key_binding" || p === "rule.selection_flow"
-            ) || hasDota2Patterns,
+            kvCapable: gameplayPatterns.some((patternId) => this.isConfigPattern(patternId)),
+            runtimeHeavy: gameplayPatterns.some((patternId) => this.isServerPattern(patternId)),
             // T112-R1: Mark as fallback - this is not first-class realization
             isFallback: true,
           },
@@ -725,29 +674,41 @@ export class AssemblyPlanBuilder {
    * 判断是否为服务端 Pattern
    */
   private isServerPattern(patternId: string): boolean {
-    const serverPrefixes = ["input.", "effect.", "rule.", "resource."];
-    return serverPrefixes.some((p) => patternId.startsWith(p));
+    const preferredFamily = getDota2Binding(patternId)?.preferredFamily;
+    if (
+      preferredFamily &&
+      ["runtime-primary", "modifier-runtime", "composite-static-runtime"].includes(preferredFamily)
+    ) {
+      return true;
+    }
+
+    return (
+      patternHasSemanticOutput(patternId, "server.runtime") ||
+      patternHasSemanticOutput(patternId, "host.runtime")
+    );
   }
 
   /**
    * 判断是否为共享 Pattern
    */
   private isSharedPattern(patternId: string): boolean {
-    return patternId.startsWith("data.");
+    const preferredFamily = getDota2Binding(patternId)?.preferredFamily;
+    return preferredFamily === "runtime-shared" || patternHasSemanticOutput(patternId, "shared.runtime");
   }
 
   /**
    * 判断是否为 UI Pattern
    */
   private isUIPattern(patternId: string): boolean {
-    return patternId.startsWith("ui.");
+    const preferredFamily = getDota2Binding(patternId)?.preferredFamily;
+    return preferredFamily === "ui-surface" || patternHasSemanticOutput(patternId, "ui.surface");
   }
 
   /**
  * 判断是否为配置 Pattern
  */
   private isConfigPattern(patternId: string): boolean {
-    return patternId.includes("config") || patternId.includes("kv");
+    return patternHasSemanticOutput(patternId, "host.config.kv") || patternHasOutputType(patternId, "kv");
   }
 }
 
@@ -765,108 +726,19 @@ function generateAssemblyOutputs(
 ): HostRealizationOutput[] {
   const outputs: HostRealizationOutput[] = [];
 
-  // Process each pattern to determine outputs
   for (const pattern of modulePatterns) {
-    // Dota2-specific patterns map to specific outputs
-    if (pattern === "dota2.short_time_buff") {
-      // kv+lua: both lua ability and kv config
-      if (!outputs.some(o => o.target === "lua_ability")) {
-        outputs.push({
-          kind: "lua",
-          target: "lua_ability",
-          rationale: ["Dota2 short_time_buff pattern maps to lua ability output"],
-        });
-      }
-      if (!outputs.some(o => o.target === "ability_kv")) {
-        outputs.push({
-          kind: "kv",
-          target: "ability_kv",
-          rationale: ["Dota2 short_time_buff pattern requires kv config"],
-        });
-      }
+    const patternMeta = getCanonicalPatternMeta(pattern);
+    const hostBinding = getPatternHostBinding(pattern, "dota2");
+    if (!patternMeta || !hostBinding) {
       continue;
     }
 
-    // UI patterns
-    if (pattern.startsWith("ui.")) {
-      if (!outputs.some(o => o.target === "panorama_ui")) {
-        outputs.push({
-          kind: "ui",
-          target: "panorama_ui",
-          rationale: [`UI pattern ${pattern} maps to panorama UI output`],
-        });
+    for (const outputType of hostBinding.outputTypes) {
+      const generated = mapOutputTypeToAssemblyOutput(outputType, pattern);
+      if (!generated) continue;
+      if (!outputs.some((output) => output.kind === generated.kind && output.target === generated.target)) {
+        outputs.push(generated);
       }
-      continue;
-    }
-
-    // Data/Shared patterns
-    if (pattern.startsWith("data.")) {
-      if (!outputs.some(o => o.target === "shared_data")) {
-        outputs.push({
-          kind: "ts",
-          target: "shared_data",
-          rationale: [`Data pattern ${pattern} maps to shared data output`],
-        });
-      }
-      continue;
-    }
-
-    // Rule patterns - typically server-side
-    if (pattern.startsWith("rule.")) {
-      if (!outputs.some(o => o.target === "server_ts")) {
-        outputs.push({
-          kind: "ts",
-          target: "server_ts",
-          rationale: [`Rule pattern ${pattern} maps to server TS output`],
-        });
-      }
-      continue;
-    }
-
-    // Input patterns - typically server-side
-    if (pattern.startsWith("input.")) {
-      if (!outputs.some(o => o.target === "server_input")) {
-        outputs.push({
-          kind: "ts",
-          target: "server_input",
-          rationale: [`Input pattern ${pattern} maps to server input handling`],
-        });
-      }
-      continue;
-    }
-
-    // Effect patterns - could be kv+ts or kv depending on specifics
-    if (pattern.startsWith("effect.")) {
-      // Check for kv-capable effect patterns
-      if (pattern === "effect.dash" || pattern === "effect.modifier_applier") {
-        if (!outputs.some(o => o.target === "ability_kv")) {
-          outputs.push({
-            kind: "kv",
-            target: "ability_kv",
-            rationale: [`Effect pattern ${pattern} maps to ability KV`],
-          });
-        }
-        if (!outputs.some(o => o.target === "server_ts")) {
-          outputs.push({
-            kind: "ts",
-            target: "server_ts",
-            rationale: [`Effect pattern ${pattern} maps to server TS`],
-          });
-        }
-      }
-      continue;
-    }
-
-    // Resource patterns
-    if (pattern.startsWith("resource.")) {
-      if (!outputs.some(o => o.target === "server_resource")) {
-        outputs.push({
-          kind: "ts",
-          target: "server_resource",
-          rationale: [`Resource pattern ${pattern} maps to server resource`],
-        });
-      }
-      continue;
     }
   }
 
@@ -897,6 +769,152 @@ function generateAssemblyOutputs(
   }
 
   return outputs;
+}
+
+function inferModuleRole(
+  category: BlueprintModule["category"],
+  modulePatterns: string[]
+): RealizationRole {
+  if (
+    category === "ui" ||
+    modulePatterns.some(
+      (pattern) =>
+        patternUsesPreferredFamily(pattern, "ui-surface") ||
+        patternSupportsSemanticOutput(pattern, "ui.surface")
+    )
+  ) {
+    return "ui-surface";
+  }
+
+  if (
+    category === "data" ||
+    category === "resource" ||
+    modulePatterns.some((pattern) => patternUsesPreferredFamily(pattern, "runtime-shared"))
+  ) {
+    return "shared-support";
+  }
+
+  if (
+    category === "integration" ||
+    modulePatterns.some(
+      (pattern) =>
+        patternUsesPreferredFamily(pattern, "bridge-support") ||
+        patternSupportsSemanticOutput(pattern, "bridge")
+    )
+  ) {
+    return "bridge-support";
+  }
+
+  return "gameplay-core";
+}
+
+function inferOutputKinds(
+  modulePatterns: string[]
+): ("server" | "shared" | "ui" | "bridge")[] {
+  const kinds = new Set<"server" | "shared" | "ui" | "bridge">();
+
+  for (const pattern of modulePatterns) {
+    const preferredFamily = getPatternPreferredFamily(pattern);
+
+    if (patternSupportsSemanticOutput(pattern, "ui.surface") || preferredFamily === "ui-surface") {
+      kinds.add("ui");
+    }
+    if (patternSupportsSemanticOutput(pattern, "shared.runtime") || preferredFamily === "runtime-shared") {
+      kinds.add("shared");
+    }
+    if (patternSupportsSemanticOutput(pattern, "bridge") || preferredFamily === "bridge-support") {
+      kinds.add("bridge");
+    }
+    if (
+      patternSupportsSemanticOutput(pattern, "server.runtime") ||
+      patternSupportsSemanticOutput(pattern, "host.config") ||
+      patternSupportsSemanticOutput(pattern, "host.runtime") ||
+      ["runtime-primary", "modifier-runtime", "composite-static-runtime"].includes(preferredFamily || "")
+    ) {
+      kinds.add("server");
+    }
+  }
+
+  if (kinds.size === 0) {
+    kinds.add("server");
+  }
+
+  return Array.from(kinds);
+}
+
+function inferRealizationHints(modulePatterns: string[]): AssemblyModule["realizationHints"] {
+  const hints: AssemblyModule["realizationHints"] = {};
+  const preferredFamilies = modulePatterns
+    .map((pattern) => getPatternPreferredFamily(pattern))
+    .filter((family): family is string => !!family);
+
+  if (preferredFamilies.includes("ui-surface")) {
+    hints.uiRequired = true;
+  }
+  if (
+    preferredFamilies.includes("runtime-primary") ||
+    preferredFamilies.includes("modifier-runtime") ||
+    preferredFamilies.includes("composite-static-runtime")
+  ) {
+    hints.runtimeHeavy = true;
+  }
+  if (
+    preferredFamilies.includes("modifier-runtime") ||
+    preferredFamilies.includes("composite-static-runtime") ||
+    modulePatterns.some((pattern) => patternSupportsSemanticOutput(pattern, "host.config.kv"))
+  ) {
+    hints.kvCapable = true;
+  }
+
+  return hints;
+}
+
+function mapOutputTypeToAssemblyOutput(
+  outputType: string,
+  patternId: string
+): HostRealizationOutput | null {
+  const preferredFamily = getPatternPreferredFamily(patternId);
+
+  switch (outputType) {
+    case "lua":
+      return {
+        kind: "lua",
+        target: "lua_ability",
+        rationale: [`Pattern ${patternId} declares lua runtime output`],
+      };
+    case "kv":
+      return {
+        kind: "kv",
+        target: "ability_kv",
+        rationale: [`Pattern ${patternId} declares host config output`],
+      };
+    case "tsx":
+    case "less":
+      return {
+        kind: "ui",
+        target: "panorama_ui",
+        rationale: [`Pattern ${patternId} declares UI surface output`],
+      };
+    case "typescript":
+      if (preferredFamily === "bridge-support") {
+        return {
+          kind: "bridge",
+          target: "bridge_refresh",
+          rationale: [`Pattern ${patternId} declares bridge-support runtime output`],
+        };
+      }
+      return {
+        kind: "ts",
+        target:
+          preferredFamily === "runtime-shared" ||
+          patternSupportsSemanticOutput(patternId, "shared.runtime")
+            ? "shared_ts"
+            : "server_ts",
+        rationale: [`Pattern ${patternId} declares TypeScript runtime output`],
+      };
+    default:
+      return null;
+  }
 }
 
 // ============================================================================
@@ -943,4 +961,16 @@ export function createAssemblyPlan(
       ],
     };
   }
+}
+
+function getDota2Binding(patternId: string) {
+  return getPatternHostBinding(patternId, "dota2");
+}
+
+function patternHasSemanticOutput(patternId: string, signal: string): boolean {
+  return patternSupportsSemanticOutput(patternId, signal);
+}
+
+function patternHasOutputType(patternId: string, outputType: string): boolean {
+  return getDota2Binding(patternId)?.outputTypes.includes(outputType) ?? false;
 }

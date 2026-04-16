@@ -58,10 +58,10 @@ It is:
 
 Current execution priorities:
 
-- turn feature-scoped Gap Fill into a clearer product UX
-- extend the current plan/review flow into approval/apply
+- keep the current feature-scoped Gap Fill path stable as a real CLI-backed flow
+- carry the proven review/apply/validate chain into the next bounded mechanism case
 - keep blueprint / pattern / generator as structure and Gap Fill as business-logic refinement
-- choose the next honest proof point after the UX slice stabilizes
+- choose the next honest proof point from the now-stable chain instead of reopening Talent Draw-only closure work by default
 
 Still deferred:
 
@@ -94,11 +94,10 @@ What already exists:
 
 What is still incomplete:
 
-- Workbench Gap Fill still exposes raw boundary ids
-- approval/apply is not yet a first-class UI path
-- result/review UX is still engineering-heavy
-- older workspaces may still require manual boundary choice through backward-compatibility fallbacks
-- Workbench remains thinner than the README story and must not be mistaken for a second executor
+- Approval/apply/validate now exists as a structured product flow and has been exercised successfully on a real host, but Dota2 still has only one fully exercised mechanism path.
+- Fresh-host manual Talent Draw evidence still exists as historical closure work, but it is no longer the day-to-day mainline blocker for routing new worker effort.
+- Older workspaces may still require manual boundary choice through backward-compatibility fallbacks.
+- Workbench remains thinner than the README story and must not be mistaken for a second executor.
 
 ## Working Mode
 
@@ -223,9 +222,9 @@ Do not use workbench as proof of product-grade lifecycle behavior.
 > Use [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) and the latest session-sync notes when same-day freshness matters.
 
 1. replace raw boundary ids with clearer boundary labels and selection guidance
-2. surface CLI command preview and approval/apply next-step guidance in Workbench
-3. keep the review/result UX lighter without inventing a second executor
-4. choose the next honest skeleton-plus-fill proof point after the UX slice stabilizes
+2. keep the review/apply/validate path stable on real hosts without inventing a second executor
+3. open the next bounded Dota2 mechanism case on the same real chain
+4. only after a second case is honest and stable should broader gap-fill surface work resume
 
 Use [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md) for the active worker-task queue.
 

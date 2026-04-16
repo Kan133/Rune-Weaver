@@ -8,6 +8,9 @@
 // 导入基础类型
 import type {
   Blueprint,
+  BlueprintNormalizationReport,
+  BlueprintProposal,
+  FinalBlueprint,
   ValidationIssue,
   PatternHint,
 } from "../schema/types";
@@ -47,6 +50,9 @@ export interface BlueprintBuilderConfig {
 export interface BlueprintBuildResult {
   success: boolean;
   blueprint?: Blueprint;
+  finalBlueprint?: FinalBlueprint;
+  blueprintProposal?: BlueprintProposal;
+  normalizationReport?: BlueprintNormalizationReport;
   issues: ValidationIssue[];
 }
 

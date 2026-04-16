@@ -166,17 +166,26 @@ Rule:
 
 ## 7. Acceptance Evidence / Canonical Walkthrough Verification
 
+Packet-era warning:
+
+- [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md), [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md), [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md), [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md), and [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) still contain packet-era wording and can lag same-day current-slice or blocker truth
+- before using those docs to drive acceptance, validation, or demo decisions, cross-check against [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md), [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md), and the latest relevant session-sync note under `docs/session-sync/`
+- if the packet-era docs imply a different current blocker, current step, or authoritative acceptance entrance, stop and escalate instead of treating them as fresher than session-sync
+
 Read in this order:
 
 1. [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
 2. [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
-3. [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md)
-4. [ACCEPTANCE-EVIDENCE-TEMPLATE.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-EVIDENCE-TEMPLATE.md)
-5. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
+3. [ACCEPTANCE-EVIDENCE-TEMPLATE.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-EVIDENCE-TEMPLATE.md)
+4. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
 
 Add when relevant:
 
-- canonical case docs
+- [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)
+- the latest relevant session-sync note under `docs/session-sync/`
+- [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md)
+- [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md)
+  - when the task is the frozen Dota2 Talent Draw canonical skeleton-plus-fill acceptance pass rather than generic acceptance work
 - [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md)
 - [CANONICAL-WALKTHROUGH.md](/D:/Rune%20Weaver/docs/CANONICAL-WALKTHROUGH.md)
 - [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md)
@@ -251,6 +260,10 @@ Add when relevant:
 
 - [ASSEMBLY-HOST-MAPPING.md](/D:/Rune%20Weaver/docs/hosts/dota2/ASSEMBLY-HOST-MAPPING.md)
 - [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md)
+- [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md)
+  - use when executing the frozen Talent Draw acceptance pass or checking the expected evidence pack
+- [TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md)
+  - `needs-refresh`; use only for Dota2 host/runtime debugging context after current host docs and session-sync confirm the active slice
 - [UI-SAFER-PROFILE.md](/D:/Rune%20Weaver/docs/hosts/dota2/UI-SAFER-PROFILE.md)
 - [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md)
 - [DOTA-DATA-INGESTION.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA-DATA-INGESTION.md)
@@ -277,6 +290,8 @@ Add when relevant:
 
 - [WAR3-KK-TSTL-PROVISIONAL-HOST-WORKSPACE-CONTRACT.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-KK-TSTL-PROVISIONAL-HOST-WORKSPACE-CONTRACT.md)
   - planning-only; use when explicitly planning War3 workspace contract evolution
+- [WAR3-LUA-EVALUATION-BRIEFING.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-LUA-EVALUATION-BRIEFING.md)
+  - planning-only; use for historical Lua-host feasibility/tooling context, not current write-ready or runtime-proven War3 truth
 - [WAR3-SLICE-INTENT-HOST-BINDING.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-SLICE-INTENT-HOST-BINDING.md)
   - planning-only; use when comparing War3 slice artifacts against shared seams
 - [WAR3-UX-FLOW-DRAFT.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-UX-FLOW-DRAFT.md)

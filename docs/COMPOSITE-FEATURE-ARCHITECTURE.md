@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: planning future composite-feature architecture beyond the current MVP baseline
 > Do not use for: current shipped architecture, current lifecycle scope, or current module-need seam authority
 
@@ -73,6 +73,32 @@ If "talent drafting" becomes one giant pattern, Rune Weaver will blur:
 - effect realization
 
 That would make future composition harder, not easier.
+
+### Companion Rule: Business Object Models Belong To Feature Source Model
+
+Composite features may still need feature-owned business object collections.
+Those collections should not be treated as pattern catalogs.
+
+Recommended split:
+
+- `Pattern` owns mechanic contracts
+- composite planning owns module composition
+- feature source model owns feature-specific business objects
+
+For a future thin `TalentDrawAdapter`, that means:
+
+- `talents[]` belongs to `TalentDrawFeatureModel`
+- `TalentDrawAdapter` compiles that source model into:
+  - `input.key_binding`
+  - `data.weighted_pool`
+  - `rule.selection_flow`
+  - `ui.selection_modal`
+- the adapter does not collapse Talent Draw into one giant top-level pattern
+
+Planning-only note:
+
+- current mainline truth still uses case-owned canonical Talent Draw parameters
+- this document describes the next stable direction, not a current implemented contract
 
 ## Architectural Decision 2: Pattern Is Not The Same As Generator Archetype
 

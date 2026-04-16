@@ -1,5 +1,13 @@
 # Dota2 Gap Fill E2E 检查清单
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: on-phase-change
+> Last verified: 2026-04-14
+> Read when: running the frozen Dota2 Talent Draw canonical skeleton-plus-fill acceptance pass and collecting the required evidence pack
+> Do not use for: cross-host policy, broad Dota2 roadmap truth, or replacing the active execution queue
+
 这份清单用于人工验证当前 Dota2 Gap Fill 主链，目标是确认 Talent Draw canonical skeleton+fill 路径可以稳定走完：
 
 `create skeleton -> gap-fill review -> confirmation/apply -> validate -> repair-build -> launch`

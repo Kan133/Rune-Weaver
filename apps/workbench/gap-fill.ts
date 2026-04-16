@@ -1,4 +1,5 @@
 import type { LLMClient } from "../../core/llm/types.js";
+import { readLLMExecutionConfig } from "../../core/llm/factory.js";
 import type { BlueprintProposal, GapFillEntry, GapFillResult, GapKind, ProposedModule } from "./types.js";
 
 const REAL_LLM_GAP_KINDS: GapKind[] = ["title", "description"];
@@ -306,10 +307,13 @@ Suggest a concise, appropriate value for "${gap.targetField}" that fits the Dota
 Respond with only the value, no explanation.`;
 
   try {
+    const llmConfig = readLLMExecutionConfig(process.cwd(), "workbench-gap-fill");
     const result = await client.generateText({
       messages: [{ role: "user", content: prompt }],
+      model: llmConfig.model,
+      temperature: llmConfig.temperature,
       maxTokens: 100,
-      providerOptions: { thinking: { type: "disabled" } },
+      providerOptions: llmConfig.providerOptions,
     });
 
     const suggestedValue = result.text.trim();

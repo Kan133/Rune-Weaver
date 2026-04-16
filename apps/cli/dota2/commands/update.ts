@@ -14,13 +14,17 @@ import { generateKVContentWithIndex, performUpdateHostValidation } from "../../h
 import { saveReviewArtifact } from "../review-artifacts.js";
 import { createUpdateReviewArtifact } from "../update-artifact.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
-import type { FeatureMode } from "../planning.js";
+import type { Dota2BlueprintBuildResult, FeatureMode } from "../planning.js";
 import { printHostValidationStage, runDota2RuntimeValidation } from "./lifecycle-runner.js";
 import { normalizeUpdateWritePlanEntries } from "../update-entry-normalizer.js";
 
 export interface UpdateCommandDeps {
-  createIntentSchema: (prompt: string, hostRoot: string) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
-  buildBlueprint: (schema: IntentSchema) => { blueprint: Blueprint | null; issues: string[] };
+  createIntentSchema: (
+    prompt: string,
+    hostRoot: string,
+    context?: { mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null }
+  ) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
+  buildBlueprint: (schema: IntentSchema) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
     blueprint: Blueprint,
@@ -42,6 +46,31 @@ export async function runUpdateCommand(
   options: Dota2CLIOptions,
   deps: UpdateCommandDeps,
 ): Promise<boolean> {
+  const extractSourceModelRefFromWritePlan = (writePlan: { entries: Array<{ sourcePattern: string; metadata?: Record<string, unknown> }> }) => {
+    const candidate = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model")?.metadata?.sourceModelRef;
+    if (
+      candidate &&
+      typeof candidate === "object" &&
+      typeof (candidate as Record<string, unknown>).adapter === "string" &&
+      typeof (candidate as Record<string, unknown>).version === "number" &&
+      typeof (candidate as Record<string, unknown>).path === "string"
+    ) {
+      return {
+        adapter: (candidate as Record<string, unknown>).adapter as string,
+        version: (candidate as Record<string, unknown>).version as number,
+        path: (candidate as Record<string, unknown>).path as string,
+      };
+    }
+    return undefined;
+  };
+
+  const getIntentReadiness = (schema: { readiness?: string; isReadyForBlueprint?: boolean }): "ready" | "weak" | "blocked" => {
+    if (schema.readiness === "ready" || schema.readiness === "weak" || schema.readiness === "blocked") {
+      return schema.readiness;
+    }
+    return schema.isReadyForBlueprint ? "ready" : "blocked";
+  };
+
   const buildArtifact = (artifact: ReturnType<typeof createUpdateReviewArtifact>) =>
     new LifecycleArtifactBuilder(artifact);
 
@@ -146,7 +175,11 @@ export async function runUpdateCommand(
   console.log("Stage 1: IntentSchema");
   console.log("=".repeat(70));
 
-  const { schema, usedFallback } = await deps.createIntentSchema(options.prompt, options.hostRoot);
+  const { schema, usedFallback } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
+    mode: "update",
+    featureId: existingFeature.featureId,
+    existingFeature,
+  });
   if (!schema) {
     console.error("\n❌ Failed to create IntentSchema");
     artifact.stages.intentSchema = { success: false, summary: "Failed to create IntentSchema", issues: ["Failed to create IntentSchema"] };
@@ -164,36 +197,52 @@ export async function runUpdateCommand(
       .filter(([, value]) => value === true)
       .map(([key]) => key),
   };
-  artifact.stages.intentSchema = { success: true, summary: `IntentSchema created (${usedFallback ? "fallback" : "LLM"})`, issues: [], usedFallback };
+  artifact.stages.intentSchema = {
+    success: true,
+    summary: `IntentSchema created (${usedFallback ? "fallback" : "LLM"}, readiness: ${getIntentReadiness(schema)})`,
+    issues: [],
+    usedFallback,
+  };
   console.log(`  ✅ IntentSchema created (${usedFallback ? "fallback" : "LLM"})`);
   console.log(`     Goal: ${schema.request.goal}`);
   console.log(`     Intent Kind: ${schema.classification.intentKind}`);
+  console.log(`     Readiness: ${getIntentReadiness(schema)}`);
   console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
 
   console.log("\n" + "=".repeat(70));
   console.log("Stage 2: Blueprint");
   console.log("=".repeat(70));
 
-  const { blueprint, issues: blueprintIssues } = deps.buildBlueprint(schema);
+  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount } = deps.buildBlueprint(schema);
   if (!blueprint) {
-    console.error(`\n❌ Failed to build Blueprint: ${blueprintIssues.join(", ")}`);
-    artifact.stages.blueprint = { success: false, summary: "Failed to build Blueprint", moduleCount: 0, patternHints: [], issues: blueprintIssues };
+    console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
+    artifact.stages.blueprint = {
+      success: false,
+      summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
+      moduleCount: 0,
+      patternHints: [],
+      issues: blueprintIssues,
+    };
     artifact.finalVerdict.weakestStage = "blueprint";
-    artifact.finalVerdict.remainingRisks.push(...blueprintIssues);
+    artifact.finalVerdict.remainingRisks.push(
+      ...(blueprintIssues.length > 0 ? blueprintIssues : [`FinalBlueprint ${blueprintStatus}`])
+    );
     saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
     return false;
   }
 
   artifact.stages.blueprint = {
     success: true,
-    summary: "Blueprint created",
+    summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
     moduleCount: blueprint.modules.length,
     patternHints: blueprint.patternHints.flatMap((hint) => hint.suggestedPatterns),
-    issues: [],
+    issues: blueprintIssues,
   };
-  console.log("  ✅ Blueprint created");
+  console.log("  ✅ FinalBlueprint created");
   console.log(`     ID: ${blueprint.id}`);
+  console.log(`     Status: ${blueprintStatus}`);
   console.log(`     Modules: ${blueprint.modules.length}`);
+  console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
   console.log(`     Pattern Hints: ${blueprint.patternHints.length}`);
 
   console.log("\n" + "=".repeat(70));
@@ -384,7 +433,7 @@ export async function runUpdateCommand(
   console.log(`     Entries: ${writePlan.entries.length}`);
 
   if (writePlan.stats.deferred > 0) {
-    console.log(`     ⚠️  Deferred entries: ${writePlan.stats.deferred} (KV side not yet implemented)`);
+    console.log(`     ⚠️  Deferred entries: ${writePlan.stats.deferred} (see deferred warnings)`);
   }
 
   const familyHints = writePlan.entries.reduce((acc: Record<string, number>, entry: any) => {
@@ -458,7 +507,7 @@ export async function runUpdateCommand(
 
   const contentMap = new Map<string, string>();
   const stableFeatureId = existingFeature.featureId;
-  for (const entry of writePlan.entries) {
+  for (const entry of writePlan.entries.filter((candidate: any) => !candidate.deferred)) {
     const content = entry.contentType === "kv"
       ? generateKVContentWithIndex(entry, 0)
       : deps.generateCodeContent(entry, stableFeatureId);
@@ -515,10 +564,11 @@ export async function runUpdateCommand(
     const updatedFeature: RuneWeaverFeatureRecord = {
       ...existingFeature,
       revision: existingFeature.revision + 1,
-      blueprintId: existingFeature.blueprintId,
+      blueprintId: blueprint.id,
       entryBindings: extractEntryBindings(plan.bridgeUpdates),
       generatedFiles: generatedFilesForUpdate,
       selectedPatterns: resolutionResult.patterns.map((pattern) => pattern.patternId),
+      sourceModel: extractSourceModelRefFromWritePlan(writePlan) || existingFeature.sourceModel,
       updatedAt: new Date().toISOString(),
     };
 

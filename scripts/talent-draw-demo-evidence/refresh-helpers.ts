@@ -7,3 +7,4 @@ export * from "./refresh/workspace.js";
 export * from "./refresh/artifact.js";
 export * from "./refresh/manual-evidence.js";
 export * from "./refresh/manifest.js";
+export * from "./refresh/acceptance-summary.js";

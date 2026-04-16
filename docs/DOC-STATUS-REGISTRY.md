@@ -101,7 +101,7 @@ Minimum machine-readable header automation scope:
 | [RW-MAINLINE-ORCHESTRATION-PLAN.md](/D:/Rune%20Weaver/docs/RW-MAINLINE-ORCHESTRATION-PLAN.md) | active-reference | current | read-by-task | cross-track orchestration guardrail |
 | [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) | active-reference | current | read-by-task | freshest cross-track current state, blockers, and attention split |
 | [SESSION-SYNC-PROTOCOL.md](/D:/Rune%20Weaver/docs/session-sync/SESSION-SYNC-PROTOCOL.md) | active-reference | current | read-by-task | session-sync note shape and shared-plan refresh rules |
-| [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md) | active-reference | current | read-by-task | execution checklist for canonical acceptance work |
+| [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md) | active-reference | needs-refresh | read-by-task | execution checklist for canonical acceptance work; packet-era wording may lag current shared truth, so cross-check same-day state against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [ACCEPTANCE-EVIDENCE-TEMPLATE.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-EVIDENCE-TEMPLATE.md) | active-reference | current | read-by-task | reporting template for acceptance evidence |
 | [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md) | active-reference | current | read-by-task | accepted Wizard / IntentSchema / Blueprint stage chain and authority boundary |
 | [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md) | active-reference | current | read-by-task | provider/client guidance plus current LLM placement and proposal-stage boundary |
@@ -116,10 +116,10 @@ Minimum machine-readable header automation scope:
 | [BLUEPRINT-CLI-USAGE.md](/D:/Rune%20Weaver/docs/BLUEPRINT-CLI-USAGE.md) | active-reference | current | read-by-task | current blueprint CLI entry points and IO expectations |
 | [BLUEPRINT-PATTERN-RESOLUTION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PATTERN-RESOLUTION.md) | active-reference | current | read-by-task | Blueprint-to-pattern resolution behavior |
 | [BLUEPRINT-VALIDATION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-VALIDATION.md) | active-reference | current | read-by-task | blueprint validation and review criteria |
-| [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md) | active-reference | current | read-by-task | canonical acceptance case definitions |
+| [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md) | active-reference | needs-refresh | read-by-task | canonical acceptance case definitions; packet-era case framing still helps, but same-day current slice and blocker truth must come from `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [CANONICAL-WALKTHROUGH.md](/D:/Rune%20Weaver/docs/CANONICAL-WALKTHROUGH.md) | active-reference | current | read-by-task | canonical demo / handoff walkthrough |
 | [CLEAN-STATE-PROTOCOL.md](/D:/Rune%20Weaver/docs/CLEAN-STATE-PROTOCOL.md) | active-reference | current | read-by-task | clean-state preparation before verification |
-| [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md) | active-reference | current | read-by-task | validated command entry points and recipes |
+| [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md) | active-reference | needs-refresh | read-by-task | validated command entry points and recipes; packet-era acceptance wording may lag current shared truth, so use only after cross-checking live queue/blocker status against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [DEVELOPMENT-GUIDE.md](/D:/Rune%20Weaver/docs/DEVELOPMENT-GUIDE.md) | active-reference | current | read-by-task | implementation-oriented development guide |
 | [ENGINEERING-GUARDRAILS.md](/D:/Rune%20Weaver/docs/ENGINEERING-GUARDRAILS.md) | active-reference | current | read-by-task | engineering anti-drift guardrails |
 | [FAILURE-CLASSIFICATION.md](/D:/Rune%20Weaver/docs/FAILURE-CLASSIFICATION.md) | active-reference | current | read-by-task | failure-classification vocabulary for validation work |
@@ -127,7 +127,7 @@ Minimum machine-readable header automation scope:
 | [HOST-REALIZATION-SCHEMA.md](/D:/Rune%20Weaver/docs/HOST-REALIZATION-SCHEMA.md) | active-reference | current | read-by-task | `HostRealizationPlan` data shape |
 | [TECHNICAL-REFERENCE-LAYER.md](/D:/Rune%20Weaver/docs/TECHNICAL-REFERENCE-LAYER.md) | active-reference | current | read-by-task | entry point for deeper technical reference docs |
 | [VALIDATION-AUTOMATION-BOUNDARY.md](/D:/Rune%20Weaver/docs/VALIDATION-AUTOMATION-BOUNDARY.md) | active-reference | current | read-by-task | validation automation boundary rules |
-| [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md) | active-reference | current | read-by-task | validation execution playbook |
+| [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md) | active-reference | needs-refresh | read-by-task | validation execution playbook; packet-era validation flow remains useful, but same-day authoritative path and blocker truth must be cross-checked against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 
 ---
 
@@ -146,6 +146,8 @@ Minimum machine-readable header automation scope:
 | [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md) | active-reference | needs-refresh | read-by-task | Dota2-oriented pattern authoring guide |
 | [UI-SAFER-PROFILE.md](/D:/Rune%20Weaver/docs/hosts/dota2/UI-SAFER-PROFILE.md) | active-reference | current | read-by-task | Dota2 Panorama safer-generation profile |
 | [X-TEMPLATE-ONBOARDING.md](/D:/Rune%20Weaver/docs/hosts/dota2/X-TEMPLATE-ONBOARDING.md) | active-reference | current | read-by-task | x-template onboarding flow for Dota2 |
+| [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md) | active-reference | current | read-by-task | canonical Dota2 Talent Draw skeleton-plus-fill acceptance checklist and evidence-closure support |
+| [TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md) | active-reference | needs-refresh | read-by-task | Dota2 host/runtime lessons from the Talent Draw canonical case; useful for debugging and hardening, but cross-check generic claims against current host docs and session-sync |
 | [WAR3-MAP-WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-MAP-WORKSPACE-MODEL.md) | active-reference | current | read-by-task | War3 map-workspace model |
 | [WAR3-HANDOFF-PROBE.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-HANDOFF-PROBE.md) | active-reference | current | read-by-task | current War3 handoff probe boundary |
 | [WAR3-TSTL-SKELETON.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-TSTL-SKELETON.md) | active-reference | current | read-by-task | current War3 TSTL skeleton reference |
@@ -162,7 +164,8 @@ Volatile coordination note:
 
 | Document | Status | Freshness | Agent action | Use |
 |----------|--------|-----------|--------------|-----|
-| [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) | active-reference | current | read-by-task | demo-safe walkthrough and presentation paths |
+| [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) | active-reference | needs-refresh | read-by-task | demo-safe walkthrough and presentation paths; packet-era demo framing may lag current shared truth, so cross-check live scope/blockers against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
+| [PRODUCT-GUIDE-FOR-AI-PM-ZH.md](/D:/Rune%20Weaver/docs/PRODUCT-GUIDE-FOR-AI-PM-ZH.md) | active-reference | current | read-by-task | public AI-PM-facing product introduction, workflow framing, and feature-first explanation |
 | [PRODUCT.md](/D:/Rune%20Weaver/docs/PRODUCT.md) | planning | current | planning-only | long-term product thesis and boundary framing |
 | [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md) | planning | needs-refresh | planning-only | roadmap sequencing and product milestones; current-step language may lag fresh session-sync truth |
 | [PHASE-ROADMAP-ZH.md](/D:/Rune%20Weaver/docs/PHASE-ROADMAP-ZH.md) | planning | needs-refresh | planning-only | Chinese explanation of phase model and milestone meaning; current-position language may lag fresh session-sync truth |
@@ -211,6 +214,7 @@ Volatile coordination note:
 | [DOTA2-CLI-SPLIT-PLAN.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-CLI-SPLIT-PLAN.md) | planning | current | planning-only | future Dota2 CLI refactor planning |
 | [DOTA2-CODEGEN-FEATURE-MANAGEMENT-PLAN-ZH.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-CODEGEN-FEATURE-MANAGEMENT-PLAN-ZH.md) | planning | current | planning-only | historical Dota2 mainline planning context |
 | [WAR3-KK-TSTL-PROVISIONAL-HOST-WORKSPACE-CONTRACT.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-KK-TSTL-PROVISIONAL-HOST-WORKSPACE-CONTRACT.md) | planning | current | planning-only | provisional War3 KK workspace contract |
+| [WAR3-LUA-EVALUATION-BRIEFING.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-LUA-EVALUATION-BRIEFING.md) | planning | current | planning-only | historical War3 Lua-host feasibility and tooling briefing; planning context only, not current mainline truth |
 | [WAR3-SLICE-INTENT-HOST-BINDING.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-SLICE-INTENT-HOST-BINDING.md) | planning | current | planning-only | War3 slice comparison between intent-like meaning and host binding |
 | [WAR3-UX-FLOW-DRAFT.md](/D:/Rune%20Weaver/docs/hosts/war3/WAR3-UX-FLOW-DRAFT.md) | planning | current | planning-only | War3 host UX draft |
 

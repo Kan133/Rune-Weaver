@@ -16,6 +16,12 @@ export interface EntryBinding {
   symbol?: string;
 }
 
+export interface FeatureSourceModelRef {
+  adapter: string;
+  version: number;
+  path: string;
+}
+
 export interface RuneWeaverFeatureRecord {
   featureId: string;
   featureName?: string;
@@ -26,6 +32,7 @@ export interface RuneWeaverFeatureRecord {
   selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
+  sourceModel?: FeatureSourceModelRef;
   dependsOn?: string[];
   integrationPoints?: string[];  // 存储集成点标识，如 ["input.key_binding:Q"]
   gapFillBoundaries?: string[];
@@ -67,6 +74,7 @@ export interface FeatureWriteResult {
   selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
+  sourceModel?: FeatureSourceModelRef;
   gapFillBoundaries?: string[];
 }
 

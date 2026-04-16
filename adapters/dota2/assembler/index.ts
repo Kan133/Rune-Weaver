@@ -7,6 +7,8 @@
  * - content/panorama/src/rune_weaver/
  */
 
+import { posix as pathPosix } from "path";
+
 import { AssemblyPlan, HostRealizationPlan, SelectedPattern, GeneratorRoutingPlan } from "../../../core/schema/types";
 import {
   calculateHostWriteExecutionOrder,
@@ -21,6 +23,7 @@ import type {
   HostRouteContextUnit,
 } from "../../../core/host/routing.js";
 import { getPatternMeta } from "../patterns";
+import { getPatternRouteKinds } from "../../../core/patterns/canonical-patterns.js";
 
 /**
  * T112-R2: Generator family hint for transitional routing
@@ -39,7 +42,7 @@ export type WriteOperation = HostWriteOperation;
 export interface WritePlanEntry extends HostWritePlanEntry {
   /** T112-R2: Generator family hint for transitional routing */
   generatorFamilyHint?: GeneratorFamilyHint;
-  /** T112-R2: Marks entry as deferred (generator not yet implemented) */
+  /** Marks entry as deferred by route or realization blockers */
   deferred?: boolean;
   /** T112-R2: Reason for deferral if applicable */
   deferredReason?: string;
@@ -67,7 +70,7 @@ export interface WritePlan extends HostWritePlan {
   routeContext?: RouteContext;
   /** T112-R1: Realization context (backward compatible) */
   realizationContext?: RealizationContext;
-  /** T112-R2: Warnings for deferred entries (KV not yet implemented) */
+  /** Warnings for deferred entries */
   deferredWarnings?: string[];
 }
 
@@ -99,6 +102,7 @@ function normalizeHostTarget(
 ): "dota2.server" | "dota2.panorama" | "dota2.shared" | "dota2.config" {
   const mapping: Record<string, "dota2.server" | "dota2.panorama" | "dota2.shared" | "dota2.config"> = {
     "shared_ts": "dota2.shared",
+    "server_shared_ts": "dota2.shared",
     "server_ts": "dota2.server",
     "modifier_ts": "dota2.server",
     "panorama_tsx": "dota2.panorama",
@@ -195,6 +199,10 @@ export function createWritePlan(
     );
     entries.push(...patternEntries);
   }
+
+  applyResourceCostHonestyDeferrals(entries);
+  applyResourceCostComposition(entries);
+  applyResourceCostCallerInvocation(entries);
 
   // 生成执行顺序
   const executionOrder = calculateExecutionOrder(entries);
@@ -386,18 +394,26 @@ function findMatchingRoute(
 
   // Fallback: If no exact match, use heuristic based on routeKind
   // This handles cases where patterns aren't directly mapped to routes yet
-  const patternMeta = getPatternMeta(binding.patternId);
-  const isUIPattern = binding.patternId.startsWith("ui.");
-  const isKVPattern = patternMeta?.outputTypes.includes("kv");
+  const routeKinds = new Set(getPatternRouteKinds(binding.patternId));
 
-  if (isUIPattern) {
+  if (routeKinds.has("ui")) {
     return routeContext.routes.find(r => r.routeKind === "ui" && !r.blocked)
       || routeContext.routes.find(r => r.routeKind === "ui");
   }
 
-  if (isKVPattern) {
+  if (routeKinds.has("lua")) {
+    return routeContext.routes.find(r => r.routeKind === "lua" && !r.blocked)
+      || routeContext.routes.find(r => r.routeKind === "lua");
+  }
+
+  if (routeKinds.has("kv")) {
     return routeContext.routes.find(r => r.routeKind === "kv")
       || routeContext.routes.find(r => r.routeKind === "ts");
+  }
+
+  if (routeKinds.has("bridge")) {
+    return routeContext.routes.find(r => r.routeKind === "bridge" && !r.blocked)
+      || routeContext.routes.find(r => r.routeKind === "bridge");
   }
 
   return routeContext.routes.find(r => r.routeKind === "ts" && !r.blocked)
@@ -461,9 +477,8 @@ function determineGeneratorFamilyHint(
 }
 
 /**
- * T112-R2: Check if realization indicates a KV-side that should be deferred
- * T118: Updated - KV generator is now implemented, so KV outputs are no longer deferred
- * Note: Only defer if outputType is not supported or unit has inherent blockers
+ * Check whether realization metadata requires deferring a specific output.
+ * Current generalized routing treats KV as a first-class generator family.
  */
 function shouldDeferKVRelated(
   unit: RealizationContextUnit | undefined,
@@ -490,6 +505,297 @@ function shouldDeferKVRelated(
   }
 
   return { deferred: false };
+}
+
+function shouldElideBridgeSupportEntry(
+  binding: SelectedPattern,
+  generatorFamilyHint: GeneratorFamilyHint | undefined
+): { deferred: boolean; reason?: string } {
+  if (binding.patternId !== "integration.state_sync_bridge") {
+    return { deferred: false };
+  }
+
+  if (generatorFamilyHint !== "bridge-support") {
+    return { deferred: false };
+  }
+
+  return {
+    deferred: true,
+    reason:
+      "Selection-state bridge output is intentionally elided: runtime/UI sync is already absorbed by the admitted selection flow, so no standalone bridge file is emitted.",
+  };
+}
+
+function shouldDeferGenericModifierApplier(
+  binding: SelectedPattern
+): { deferred: boolean; reason?: string } {
+  if (binding.patternId !== "effect.modifier_applier") {
+    return { deferred: false };
+  }
+
+  return {
+    deferred: true,
+    reason:
+      "effect.modifier_applier remains deferred: current lua/kv modifier generation is only honest for specialized same-file ability modifier slices such as dota2.short_time_buff, not broad generic modifier application.",
+  };
+}
+
+function shouldDeferDashEffect(
+  binding: SelectedPattern
+): { deferred: boolean; reason?: string } {
+  if (binding.patternId !== "effect.dash") {
+    return { deferred: false };
+  }
+
+  return {
+    deferred: true,
+    reason:
+      "effect.dash remains deferred: current dash realization/routing still implies a kv+ts ability shell and companion modifier surface, but write generation only produces nominal TS stubs and does not honestly materialize the required ability-shell + motion-modifier path yet.",
+  };
+}
+
+function stringifyPatternScalar(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+
+  return undefined;
+}
+
+function resolveShortTimeBuffAbilityCooldown(
+  binding: SelectedPattern,
+  metadata?: Record<string, unknown>
+): string | undefined {
+  const bindingParameters = binding.parameters || {};
+
+  return (
+    stringifyPatternScalar(bindingParameters.cooldownSeconds) ||
+    stringifyPatternScalar(bindingParameters.cooldown) ||
+    stringifyPatternScalar(bindingParameters.abilityCooldown) ||
+    stringifyPatternScalar(metadata?.abilityCooldown) ||
+    stringifyPatternScalar(metadata?.cooldownSeconds) ||
+    stringifyPatternScalar(metadata?.cooldown)
+  );
+}
+
+function normalizeResourceIdentifier(value: unknown, fallback: string = "mana"): string {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toLowerCase()
+    : fallback;
+}
+
+function normalizeTriggerKey(value: unknown, fallback: string = "F4"): string {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toUpperCase()
+    : fallback;
+}
+
+function toOptionalPositiveNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeResourceFailBehavior(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toLowerCase()
+    : "block";
+}
+
+function appendContentSummaryTag(contentSummary: string, tag: string): string {
+  return contentSummary.includes(tag) ? contentSummary : `${contentSummary} ${tag}`;
+}
+
+function markEntryDeferred(entry: WritePlanEntry, reason: string, tag: string): void {
+  entry.deferred = true;
+  entry.deferredReason = reason;
+  entry.contentSummary = appendContentSummaryTag(entry.contentSummary, tag);
+}
+
+function ensureRelativeJsImport(fromTargetPath: string, toTargetPath: string): string {
+  const fromDir = pathPosix.dirname(fromTargetPath);
+  const jsTargetPath = toTargetPath.replace(/\.ts$/i, ".js");
+  const relativePath = pathPosix.relative(fromDir, jsTargetPath).replace(/\\/g, "/");
+  return relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
+}
+
+function toGeneratedClassName(targetPath: string): string {
+  const baseName = targetPath.split("/").pop()?.replace(/\.ts$/i, "") || "module";
+  return baseName
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join("");
+}
+
+function isPrimaryRuntimeEntry(entry: WritePlanEntry): boolean {
+  return !entry.targetPath.endsWith("_ability.ts") && !entry.targetPath.endsWith("_modifier.ts");
+}
+
+function findMatchingResourcePoolEntry(
+  entries: WritePlanEntry[],
+  resourceType: string,
+  options?: { includeDeferred?: boolean }
+): WritePlanEntry | undefined {
+  const includeDeferred = options?.includeDeferred ?? false;
+
+  return entries.find(
+    (entry) =>
+      entry.sourcePattern === "resource.basic_pool" &&
+      (includeDeferred || !entry.deferred) &&
+      normalizeResourceIdentifier(
+        entry.parameters?.resourceId ?? entry.parameters?.resourceType,
+        "mana"
+      ) === resourceType
+  );
+}
+
+function applyResourceCostHonestyDeferrals(entries: WritePlanEntry[]): void {
+  for (const entry of entries) {
+    if (entry.deferred) {
+      continue;
+    }
+
+    if (entry.sourcePattern === "resource.basic_pool") {
+      const regenRate = toOptionalPositiveNumber(entry.parameters?.regen) || 0;
+      if (regenRate > 0) {
+        const resourceType = normalizeResourceIdentifier(
+          entry.parameters?.resourceId ?? entry.parameters?.resourceType,
+          "mana"
+        );
+        markEntryDeferred(
+          entry,
+          `resource.basic_pool auto-regen remains deferred in the current resource/cost slice (resourceType: "${resourceType}", regen: ${regenRate})`,
+          "[deferred: auto-regen not supported in current resource/cost slice]"
+        );
+      }
+      continue;
+    }
+
+    if (entry.sourcePattern === "effect.resource_consume") {
+      const rawFailBehavior = normalizeResourceFailBehavior(entry.parameters?.failBehavior);
+      if (rawFailBehavior !== "block" && rawFailBehavior !== "report") {
+        const resourceType = normalizeResourceIdentifier(entry.parameters?.resourceType, "mana");
+        markEntryDeferred(
+          entry,
+          `effect.resource_consume only admits failBehavior "block" or "report" in the current resource/cost slice (resourceType: "${resourceType}", failBehavior: "${rawFailBehavior}")`,
+          "[deferred: unsupported failBehavior for current resource/cost slice]"
+        );
+      }
+    }
+  }
+}
+
+function applyResourceCostComposition(entries: WritePlanEntry[]): void {
+  for (const entry of entries) {
+    if (entry.sourcePattern !== "effect.resource_consume" || entry.deferred) {
+      continue;
+    }
+
+    const consumerResourceType = normalizeResourceIdentifier(entry.parameters?.resourceType, "mana");
+    const matchingPool = findMatchingResourcePoolEntry(entries, consumerResourceType);
+
+    if (!matchingPool) {
+      const deferredPool = findMatchingResourcePoolEntry(entries, consumerResourceType, {
+        includeDeferred: true,
+      });
+      const deferredReason =
+        deferredPool?.sourcePattern === "resource.basic_pool"
+          ? `effect.resource_consume requires a same-feature resource.basic_pool companion without auto-regen in the current resource/cost slice (resourceType: "${consumerResourceType}")`
+          : `effect.resource_consume requires a same-feature resource.basic_pool companion for automatic composition in the current resource/cost slice (resourceType: "${consumerResourceType}")`;
+      const deferredTag =
+        deferredPool?.sourcePattern === "resource.basic_pool"
+          ? "[deferred: companion pool shape not supported]"
+          : "[deferred: missing compatible resource.basic_pool companion]";
+      markEntryDeferred(entry, deferredReason, deferredTag);
+      continue;
+    }
+
+    entry.metadata = {
+      ...(entry.metadata || {}),
+      resourcePoolImportPath: ensureRelativeJsImport(entry.targetPath, matchingPool.targetPath),
+      resourcePoolTargetPath: matchingPool.targetPath,
+      resourcePoolClassName: toGeneratedClassName(matchingPool.targetPath),
+      resourcePoolResourceId: consumerResourceType,
+      resourceCostComposition: "feature-local-auto-bind",
+    };
+    entry.contentSummary = `${entry.contentSummary} [auto-compose: resource.basic_pool(${consumerResourceType})]`;
+  }
+}
+
+function applyResourceCostCallerInvocation(entries: WritePlanEntry[]): void {
+  const keyBindingEntries = entries.filter(
+    (entry) =>
+      entry.sourcePattern === "input.key_binding" &&
+      !entry.deferred &&
+      isPrimaryRuntimeEntry(entry)
+  );
+  const consumerEntries = entries.filter(
+    (entry) =>
+      entry.sourcePattern === "effect.resource_consume" &&
+      !entry.deferred &&
+      entry.metadata?.resourceCostComposition === "feature-local-auto-bind"
+  );
+
+  if (consumerEntries.length === 0) {
+    return;
+  }
+
+  if (keyBindingEntries.length !== 1 || consumerEntries.length !== 1) {
+    const ambiguousCallerReason =
+      keyBindingEntries.length === 0
+        ? undefined
+        : `effect.resource_consume requires an unambiguous same-feature input.key_binding caller in the current admitted slice (keyBindings: ${keyBindingEntries.length}, consumers: ${consumerEntries.length})`;
+
+    for (const consumerEntry of consumerEntries) {
+      const resourceType = normalizeResourceIdentifier(consumerEntry.parameters?.resourceType, "mana");
+      consumerEntry.deferred = true;
+      consumerEntry.deferredReason =
+        keyBindingEntries.length === 0
+          ? `effect.resource_consume requires a same-feature input.key_binding caller to expose the current admitted invocation path (resourceType: "${resourceType}")`
+          : `${ambiguousCallerReason} (resourceType: "${resourceType}")`;
+      consumerEntry.contentSummary =
+        `${consumerEntry.contentSummary} [deferred: canonical caller missing or ambiguous]`;
+    }
+    return;
+  }
+
+  const [keyBindingEntry] = keyBindingEntries;
+  const [consumerEntry] = consumerEntries;
+  const resourceType = normalizeResourceIdentifier(consumerEntry.parameters?.resourceType, "mana");
+  const triggerKey = normalizeTriggerKey(
+    keyBindingEntry.parameters?.triggerKey ?? keyBindingEntry.parameters?.key,
+    "F4"
+  );
+
+  keyBindingEntry.metadata = {
+    ...(keyBindingEntry.metadata || {}),
+    resourceInvocationImportPath: ensureRelativeJsImport(
+      keyBindingEntry.targetPath,
+      consumerEntry.targetPath
+    ),
+    resourceInvocationTargetPath: consumerEntry.targetPath,
+    resourceInvocationClassName: toGeneratedClassName(consumerEntry.targetPath),
+    resourceInvocationMode: "resource-consume-configured",
+    resourceInvocationResourceType: resourceType,
+  };
+  keyBindingEntry.contentSummary =
+    `${keyBindingEntry.contentSummary} [auto-call: effect.resource_consume(${resourceType})]`;
+  consumerEntry.contentSummary =
+    `${consumerEntry.contentSummary} [canonical caller: input.key_binding(${triggerKey})]`;
 }
 
 /**
@@ -534,12 +840,20 @@ function generateEntriesForPattern(
 
     // T112-R2: Determine if this specific output should be deferred
     const outputDeferral = shouldDeferKVRelated(matchingUnit, outputType);
+    const bridgeElision = shouldElideBridgeSupportEntry(binding, routeFamilyHint);
+    const modifierApplierDeferral = shouldDeferGenericModifierApplier(binding);
+    const dashDeferral = shouldDeferDashEffect(binding);
 
     // T115: If route is blocked, that takes precedence
-    const entryDeferred = isBlocked || outputDeferral.deferred;
+    const entryDeferred =
+      isBlocked ||
+      outputDeferral.deferred ||
+      bridgeElision.deferred ||
+      modifierApplierDeferral.deferred ||
+      dashDeferral.deferred;
     const entryDeferredReason = isBlocked
       ? `Route ${matchingRoute?.id} is blocked`
-      : outputDeferral.reason;
+      : outputDeferral.reason || bridgeElision.reason || modifierApplierDeferral.reason || dashDeferral.reason;
 
     // 使用 route 的 hostTarget（如果有），否则使用 patternMeta.hostTarget
     const effectiveHostTarget = matchingRoute 
@@ -577,6 +891,16 @@ function generateEntriesForPattern(
       entry.metadata = abilityParams;
     }
 
+    if (outputType === "kv" && binding.patternId === "dota2.short_time_buff") {
+      const abilityCooldown = resolveShortTimeBuffAbilityCooldown(binding, entry.metadata);
+      if (abilityCooldown) {
+        entry.metadata = {
+          ...(entry.metadata || {}),
+          abilityCooldown,
+        };
+      }
+    }
+
     if ((outputType === "kv" || outputType === "lua") && binding.patternId === "effect.modifier_applier") {
       const effectAbilityName = (binding.parameters?.abilityName as string)
         || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -598,7 +922,7 @@ function generateEntriesForPattern(
     // explicitly set to "dot", the assembler produces DOT-specific metadata
     // (OnIntervalThink, dotDamage, dotInterval). This discriminator lives in
     // binding.parameters, NOT in patternId. Pattern catalog is NOT modified.
-    if (outputType === "lua") {
+    if (outputType === "lua" && binding.patternId === "dota2.short_time_buff") {
       const abilityName = (binding.parameters?.abilityName as string)
         || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
       const modifierName = (binding.parameters?.modifierName as string)

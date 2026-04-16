@@ -2,15 +2,66 @@
   "workspace": {
     "version": "0.1.0",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:\\testB",
-    "addonName": "talent_draw_demo",
-    "initializedAt": "2026-04-12T16:20:48.847Z",
-    "features": []
+    "hostRoot": "D:\\test3",
+    "addonName": "test3",
+    "initializedAt": "2026-04-14T12:32:20.038Z",
+    "features": [
+      {
+        "featureId": "talent_draw_demo",
+        "intentKind": "standalone-system",
+        "status": "active",
+        "revision": 7,
+        "blueprintId": "standalone_system_yffo",
+        "selectedPatterns": [
+          "effect.modifier_applier",
+          "ui.selection_modal",
+          "data.weighted_pool",
+          "input.key_binding",
+          "rule.selection_flow"
+        ],
+        "generatedFiles": [
+          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+          "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
+          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/features/talent_draw_demo/talent-draw.source.json"
+        ],
+        "entryBindings": [
+          {
+            "target": "server",
+            "file": "game/scripts/src/modules/index.ts",
+            "kind": "import"
+          },
+          {
+            "target": "ui",
+            "file": "content/panorama/src/hud/script.tsx",
+            "kind": "mount"
+          }
+        ],
+        "sourceModel": {
+          "adapter": "talent-draw",
+          "version": 1,
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/talent-draw.source.json"
+        },
+        "integrationPoints": [
+          "input.key_binding:F4"
+        ],
+        "gapFillBoundaries": [
+          "ui.selection_modal.payload_adapter",
+          "weighted_pool.selection_policy",
+          "selection_flow.effect_mapping"
+        ],
+        "createdAt": "2026-04-16T12:18:47.513Z",
+        "updatedAt": "2026-04-16T15:58:09.842Z"
+      }
+    ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-13T06:05:11.805Z",
+    "exportedAt": "2026-04-16T15:58:09.844Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\testB",
+    "sourceHostRoot": "D:\\test3",
     "version": "0.1"
   }
 }

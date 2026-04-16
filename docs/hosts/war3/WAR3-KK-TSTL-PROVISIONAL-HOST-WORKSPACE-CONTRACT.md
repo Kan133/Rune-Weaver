@@ -277,6 +277,8 @@ Additional judgment:
 - `war3map.lua` should still be treated as output evidence
 - Classic Lua project workflow remains important, but it should not replace the TSTL authoring seam
 - `warcraft.json` is useful workflow evidence, not yet a required RW file
+- for the current RW skeleton package, `warcraft.json` should be treated as deliberate non-adoption for now rather than a missing file to backfill
+- for the current RW skeleton package, `maps/demo.w3x` remains an RW review-oriented map path choice and not proof that upstream naming alignment is settled
 
 ## Host Binding Expectations
 
@@ -365,6 +367,9 @@ For a provisional TSTL host workspace, the minimum expected files should be:
 - generated definitions / globals folder
 - host bootstrap helpers
 - typed wrappers for regions / units / handles
+- an explicit definitions-generation placeholder seam such as `tools/defs-seam.js` targeting `src/generated/bindings`
+- a read-only intake seed over review artifacts, so future validator/handoff work can consume a bounded input without implying validated host integration
+- a bounded review-package -> probe-input -> probe-summary loop, so War3 can test one narrow downstream consumer without claiming runtime execution or validator integration
 
 ## Current Risk Statement
 
@@ -390,6 +395,14 @@ The strongest current public community Lua/JAPI references are:
 - `map-luamaker`: https://gitee.com/zmwcodediy/map-luamaker
 
 So this contract is useful for planning and validation targeting, but not yet strong enough to claim production host certainty.
+
+Current bounded-lane note:
+
+- the RW TSTL skeleton now reaches a local demo-probe loop through:
+  - review package export / validation
+  - planning-only probe input build
+  - bounded probe-result summary
+- this improves downstream review truth, but it is still not KK runtime proof and not a write-ready host path
 
 ## Upgrade Path
 

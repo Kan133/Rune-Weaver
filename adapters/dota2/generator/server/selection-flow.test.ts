@@ -216,6 +216,32 @@ function testDeferredApplyMode() {
   console.log("✓ Test 10 passed\n");
 }
 
+// Test 11: inventory extension stays inside selection flow runtime
+function testInventoryExtension() {
+  console.log("Test 11: inventory extension support");
+
+  const entry = createMockEntry({
+    choiceCount: 3,
+    inventory: {
+      enabled: true,
+      capacity: 15,
+      storeSelectedItems: true,
+      blockDrawWhenFull: true,
+      fullMessage: "Talent inventory full",
+      presentation: "persistent_panel",
+    },
+  });
+
+  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
+
+  assert(code.includes("selectedInventory"), "Should contain selectedInventory state");
+  assert(code.includes("rune_weaver_selection_inventory_state"), "Should emit inventory state event");
+  assert(code.includes("Talent inventory full"), "Should embed the full-state message");
+  assert(code.includes("Inventory full for player"), "Should block draw before opening modal when full");
+
+  console.log("✓ Test 11 passed\n");
+}
+
 // Run all tests
 console.log("=== Selection Flow Generator Tests ===\n");
 testBasicGeneration();
@@ -228,4 +254,5 @@ testEventListenersRegistration();
 testBackwardCompatibility();
 testImmediateApplyMode();
 testDeferredApplyMode();
+testInventoryExtension();
 console.log("=== All tests passed ===");

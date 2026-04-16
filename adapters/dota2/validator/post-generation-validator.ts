@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { loadWorkspace } from "../../../core/workspace/index.js";
+import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 
 export interface PostGenerationValidationResult {
   valid: boolean;
@@ -759,16 +760,12 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
       continue;
     }
 
-    const keyBindingPath = join(
-      hostRoot,
-      "game/scripts/src/rune_weaver/generated/server",
-      `${feature.featureId}_input_input_key_binding.ts`
-    );
-    if (!existsSync(keyBindingPath)) {
+    const keyBindingFile = findFeatureGeneratedFile(feature, isGeneratedKeyBindingFile);
+    if (!keyBindingFile) {
       continue;
     }
 
-    const content = readFileSync(keyBindingPath, "utf8");
+    const content = readFileSync(join(hostRoot, keyBindingFile), "utf8");
     const match = content.match(/configuredKey:\s*string\s*=\s*"([^"]+)"/);
     if (!match) {
       continue;
@@ -827,17 +824,13 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
       continue;
     }
 
-    const poolPath = join(
-      hostRoot,
-      "game/scripts/src/rune_weaver/generated/shared",
-      `${feature.featureId}_data_data_weighted_pool.ts`
-    );
-    if (!existsSync(poolPath)) {
+    const poolFile = findFeatureGeneratedFile(feature, isGeneratedWeightedPoolFile);
+    if (!poolFile) {
       emptySeedFeatures.push(`${feature.featureId}: missing weighted pool source`);
       continue;
     }
 
-    const content = readFileSync(poolPath, "utf8");
+    const content = readFileSync(join(hostRoot, poolFile), "utf8");
     const hasTodoMarker = content.includes("TODO: Add initial talent entries");
     const addCallCount = (content.match(/\.add\(/g) || []).length;
     const seededAddCalls = hasTodoMarker ? addCallCount : Math.max(0, addCallCount - 1);
@@ -862,6 +855,21 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
     passed: true,
     message: "All active selection features have seeded weighted pools",
   };
+}
+
+function findFeatureGeneratedFile(
+  feature: Pick<RuneWeaverFeatureRecord, "generatedFiles">,
+  matcher: (file: string) => boolean
+): string | undefined {
+  return feature.generatedFiles.find(matcher);
+}
+
+function isGeneratedKeyBindingFile(file: string): boolean {
+  return file.includes("/generated/server/") && file.endsWith("_input_key_binding.ts");
+}
+
+function isGeneratedWeightedPoolFile(file: string): boolean {
+  return file.includes("/generated/shared/") && file.endsWith("_data_weighted_pool.ts");
 }
 
 /**

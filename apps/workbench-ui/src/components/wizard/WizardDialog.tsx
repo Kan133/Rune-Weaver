@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFeatureStore } from '@/hooks/useFeatureStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { resolveCanonicalTalentDrawFeatureId } from '../../../../../adapters/dota2/cases/talent-draw';
 
 interface ExecuteAPIResponse {
   success: boolean;
@@ -84,8 +85,9 @@ export function WizardDialog() {
   const addWizardMessage = useFeatureStore((state) => state.addWizardMessage);
   const setWizardStep = useFeatureStore((state) => state.setWizardStep);
   const setDraftFeature = useFeatureStore((state) => state.setDraftFeature);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
   const hostConfig = useFeatureStore((state) => state.hostConfig);
-  const reloadCurrentSource = useFeatureStore((state) => state.reloadCurrentSource);
+  const reloadConnectedWorkspace = useFeatureStore((state) => state.reloadConnectedWorkspace);
 
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -109,18 +111,18 @@ export function WizardDialog() {
       setDraftFeature({ displayName: normalizePromptForCLI(inputValue) });
       setInputValue('');
 
-      if (!hostConfig.hostRoot || !hostConfig.hostValid) {
+      if (!connectedHostRoot || !hostConfig.hostValid) {
         addWizardMessage({
           role: 'assistant',
           content:
-            '当前还没有有效的宿主路径。请先在左侧完成宿主扫描，然后再从这里创建 feature。',
+            '当前还没有已连接的有效宿主。请先在左侧输入路径并点击“连接宿主”，再从这里创建 feature。',
         });
         return;
       }
 
       addWizardMessage({
         role: 'assistant',
-        content: `我会把这段需求直接交给真实的 dota2 CLI 主链去生成并写入宿主。\n\n宿主：${hostConfig.hostRoot}\n模式：write\n\n确认后我会开始生成。`,
+        content: `我会把这段需求直接交给真实的 dota2 CLI 主链去生成并写入宿主。\n\n宿主：${connectedHostRoot}\n模式：write\n\n确认后我会开始生成。`,
       });
       setWizardStep('confirmation');
       return;
@@ -138,13 +140,15 @@ export function WizardDialog() {
     setWizardStep('generating');
 
     try {
+      const featureId = resolveCanonicalTalentDrawFeatureId(promptDraft);
       const response = await fetch('/api/cli/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           command: 'run',
-          hostRoot: hostConfig.hostRoot,
+          hostRoot: connectedHostRoot,
           prompt: promptDraft,
+          featureId,
           write: true,
           force: false,
         }),
@@ -234,7 +238,7 @@ export function WizardDialog() {
         );
       }
 
-      await reloadCurrentSource();
+      await reloadConnectedWorkspace(featureId || null);
       const reviewSummary = resultPayload.review
         ? [
             resultPayload.review.title,

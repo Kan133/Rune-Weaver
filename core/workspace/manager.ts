@@ -20,6 +20,7 @@ import {
   FeatureWriteResult,
   DuplicateFeaturePolicy,
   EntryBinding,
+  FeatureSourceModelRef,
 } from "./types.js";
 
 const WORKSPACE_FILE_NAME = "rune-weaver.workspace.json";
@@ -201,6 +202,7 @@ export function addFeatureToWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
+    sourceModel: result.sourceModel,
     integrationPoints,
     gapFillBoundaries: result.gapFillBoundaries,
     createdAt: now,
@@ -236,6 +238,7 @@ export function updateFeatureInWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
+    sourceModel: result.sourceModel || existing.sourceModel,
     integrationPoints: integrationPoints || existing.integrationPoints,
     gapFillBoundaries: result.gapFillBoundaries || existing.gapFillBoundaries,
     updatedAt: now,
@@ -367,6 +370,7 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
   const raw = rawFeature as Record<string, unknown>;
   const now = new Date().toISOString();
   const generatedFiles = ((raw.generatedFiles as string[]) || []).filter((file): file is string => typeof file === "string");
+  const sourceModel = normalizeSourceModelRef(raw.sourceModel);
 
   return {
     featureId: (raw.featureId as string) || "",
@@ -377,6 +381,7 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
     selectedPatterns: (raw.selectedPatterns as string[]) || [],
     generatedFiles,
     entryBindings: normalizeEntryBindings(raw.entryBindings, generatedFiles),
+    sourceModel,
     integrationPoints: (raw.integrationPoints as string[]) || undefined,
     gapFillBoundaries: (raw.gapFillBoundaries as string[]) || undefined,
     dependsOn: (raw.dependsOn as string[]) || undefined,
@@ -405,6 +410,27 @@ function normalizeEntryBindings(rawBindings: unknown, generatedFiles: string[]):
   }
 
   return inferBridgeBindingsFromGeneratedFiles(generatedFiles);
+}
+
+function normalizeSourceModelRef(rawSourceModel: unknown): FeatureSourceModelRef | undefined {
+  if (!rawSourceModel || typeof rawSourceModel !== "object") {
+    return undefined;
+  }
+
+  const raw = rawSourceModel as Record<string, unknown>;
+  if (
+    typeof raw.adapter !== "string" ||
+    typeof raw.version !== "number" ||
+    typeof raw.path !== "string"
+  ) {
+    return undefined;
+  }
+
+  return {
+    adapter: raw.adapter,
+    version: raw.version,
+    path: raw.path,
+  };
 }
 
 /**

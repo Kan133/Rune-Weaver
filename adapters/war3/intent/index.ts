@@ -41,6 +41,24 @@ export {
   type War3CurrentSliceAssemblySidecarTrial,
 } from "./war3-assembly-sidecar.js";
 export {
+  buildWar3ShadowRealizationPlan,
+  type War3ShadowConsumedBinding,
+  type War3ShadowHostBindingReviewPayload,
+  type War3ShadowRealizationClass,
+  type War3ShadowRealizationDraftSeed,
+  type War3ShadowRealizationFileRole,
+  type War3ShadowRealizationPlan,
+  type War3ShadowSiteContract,
+  type War3ShadowSiteKind,
+  type War3ShadowRealizationUnit,
+} from "./shadow-realization-plan.js";
+export {
+  buildWar3ShadowSiteEvidenceReview,
+  type War3ShadowSiteEvidenceDraftCheck,
+  type War3ShadowSiteEvidenceReview,
+  type War3ShadowSiteEvidenceReviewSite,
+} from "./shadow-site-evidence-review.js";
+export {
   buildWar3WritePreviewArtifact,
   type War3WritePreviewArtifact,
 } from "./write-preview-artifact.js";

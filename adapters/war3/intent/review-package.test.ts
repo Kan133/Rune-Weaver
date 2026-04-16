@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import {
@@ -247,10 +247,19 @@ function runTests() {
     });
     const reviewPackage = buildWar3CurrentSliceReviewPackage(createArtifact(workspace.hostRoot));
     const packageDir = exportWar3ReviewPackage(reviewPackage, TEST_DIR);
+    unlinkSync(join(packageDir, "shadow-realization-plan.json"));
+    unlinkSync(join(packageDir, "shadow-draft-bundle.json"));
+    unlinkSync(join(packageDir, "shadow-site-evidence-review.json"));
     unlinkSync(join(packageDir, "implementation-draft-plan.json"));
     const reread = readWar3ReviewPackageFromDir(packageDir);
     const validation = validateWar3CurrentSliceReviewPackage(reread);
-    if (!reread.implementationDraftPlan && validation.valid) {
+    if (
+      !reread.shadowRealizationPlan &&
+      !reread.shadowDraftBundle &&
+      !reread.shadowSiteEvidenceReview &&
+      !reread.implementationDraftPlan &&
+      validation.valid
+    ) {
       console.log("PASS Test 4: missing implementation-draft plan is tolerated");
       passed++;
     } else {
@@ -285,19 +294,68 @@ function runTests() {
     });
     const reviewPackage = buildWar3CurrentSliceReviewPackage(createArtifact(workspace.hostRoot));
     const packageDir = exportWar3ReviewPackage(reviewPackage, TEST_DIR);
+    const shadowPlanExists = existsSync(join(packageDir, "shadow-realization-plan.json"));
+    const shadowBundleExists = existsSync(join(packageDir, "shadow-draft-bundle.json"));
+    const shadowSiteEvidenceExists = existsSync(join(packageDir, "shadow-site-evidence-review.json"));
     const implementationPlan = JSON.parse(
       readFileSync(join(packageDir, "implementation-draft-plan.json"), "utf-8"),
     );
+    const shadowPlan = JSON.parse(
+      readFileSync(join(packageDir, "shadow-realization-plan.json"), "utf-8"),
+    );
+    const shadowBundle = JSON.parse(
+      readFileSync(join(packageDir, "shadow-draft-bundle.json"), "utf-8"),
+    );
+    const shadowSiteEvidence = JSON.parse(
+      readFileSync(join(packageDir, "shadow-site-evidence-review.json"), "utf-8"),
+    );
     if (
+      shadowPlanExists &&
+      shadowBundleExists &&
+      shadowSiteEvidenceExists &&
+      reviewPackage.shadowDraftBundle &&
+      reviewPackage.shadowRealizationPlan &&
+      reviewPackage.shadowSiteEvidenceReview &&
+      reviewPackage.tstlHostDraft.bootstrap.content ===
+        reviewPackage.shadowDraftBundle.draftFiles.bootstrap.content &&
+      reviewPackage.tstlHostDraft.featureModule.content ===
+        reviewPackage.shadowDraftBundle.draftFiles.featureModule.content &&
+      reviewPackage.tstlHostDraft.hostBindingReview.content ===
+        reviewPackage.shadowDraftBundle.draftFiles.hostBindingReview.content &&
+      shadowPlan.realizationUnits.length === 3 &&
+      shadowPlan.siteContracts.length === 4 &&
+      Object.keys(shadowBundle.draftFiles).length === 3 &&
+      shadowSiteEvidence.sites.length === 4 &&
+      shadowSiteEvidence.sites.every((site: { draftCheck: { status: string } }) =>
+        site.draftCheck.status === "all-markers-present",
+      ) &&
       implementationPlan.entries.length === 3 &&
       implementationPlan.evidenceLevel === "binding-draft" &&
+      implementationPlan.entries.every((entry: { sourceEvidence: string[] }) =>
+        entry.sourceEvidence.some((source) => source.startsWith("shadowRealizationPlan:")) &&
+        entry.sourceEvidence.some((source) => source.startsWith("shadowDraftBundle:")) &&
+        entry.sourceEvidence.some((source) => source.startsWith("shadowSiteEvidenceReview:")),
+      ) &&
       implementationPlan.readiness.readyForImplementationDraft === false
     ) {
-      console.log("PASS Test 5: implementation-draft plan is exported");
+      console.log("PASS Test 5: shadow artifacts and implementation-draft plan are exported");
       passed++;
     } else {
-      console.log("FAIL Test 5: implementation-draft plan is exported");
-      console.log("  Plan:", JSON.stringify(implementationPlan, null, 2));
+      console.log("FAIL Test 5: shadow artifacts and implementation-draft plan are exported");
+      console.log(
+        "  Exported:",
+        JSON.stringify(
+          {
+            shadowPlanExists,
+            shadowBundleExists,
+            shadowPlan,
+            shadowBundle,
+            implementationPlan,
+          },
+          null,
+          2,
+        ),
+      );
       failed++;
     }
     teardown();

@@ -52,9 +52,6 @@ export function generateWeightedPoolCode(
   const duplicatePolicy = caseParams?.duplicatePolicy || "allow";
   const poolStateTracking = caseParams?.poolStateTracking || "none";
 
-  // GAP_FILL_BOUNDARY: weighted_pool.selection_policy
-  // Allowed: draw policy details, duplicate handling, session-aware filtering.
-  // Forbidden: pool contract changes, host routing changes, undeclared persistence semantics.
   // Generate entries initialization code
   const entriesCode = entries && entries.length > 0
     ? entries.map(e => `    { id: "${e.id}", label: "${e.label}", description: "${e.description}", weight: ${e.weight}, tier: "${e.tier || 'R'}" }`).join(',\n')
@@ -103,36 +100,49 @@ export function generateWeightedPoolCode(
     }
 
     const result: T[] = [];
-    const drawnIds = new Set<string>();${hasSessionState ? `
-    const availableItems = this.items.filter(item => 
+    const drawnIds = new Set<string>();
+    const drawnTiers = new Set<number>();${hasSessionState ? `
+    let availableItems = this.items.filter(item => 
       this.sessionState.remainingTalentIds.includes((item.item as any).id)
     );` : `
-    const availableItems = [...this.items];`}
+    let availableItems = [...this.items];`}
 
     if (availableItems.length === 0) {
       print(\`[Rune Weaver] ${className}: No available items in session pool\`);
       return [];
     }
 
-    for (let i = 0; i < count && availableItems.length > 0; i++) {
-      // Check duplicate policy
-      if ("${duplicatePolicy}" === "forbid" && drawnIds.size >= availableItems.length) {
-        print(\`[Rune Weaver] ${className}: Cannot draw more unique items (duplicatePolicy="forbid")\`);
-        break;
+    // Phase 1: Try to draw one from each distinct tier to avoid duplicate rarity in same round
+    const tierGroups = new Map<number, WeightedItem<T>[]>();
+    for (const item of availableItems) {
+      const tier = item.tier || 0;
+      if (!tierGroups.has(tier)) {
+        tierGroups.set(tier, []);
       }
+      tierGroups.get(tier)!.push(item);
+    }
 
-      // Calculate total weight of current available items for each draw
-      const currentTotalWeight = availableItems.reduce((sum, item) => sum + item.weight, 0);
-      
-      if (currentTotalWeight <= 0) {
-        print(\`[Rune Weaver] ${className}: No weight available in pool\`);
-        break;
-      }
+    // Sort tiers by priority (higher tier = higher priority for diversity)
+    const sortedTiers = Array.from(tierGroups.keys()).sort((a, b) => b - a);
 
-      let random = RandomFloat(0, currentTotalWeight);
+    for (const tier of sortedTiers) {
+      if (result.length >= count) break;
+      if (drawnTiers.has(tier)) continue;
+
+      const tierItems = tierGroups.get(tier)!.filter(item => {
+        const itemId = (item.item as any).id;
+        return !drawnIds.has(itemId);
+      });
+
+      if (tierItems.length === 0) continue;
+
+      const tierTotalWeight = tierItems.reduce((sum, item) => sum + item.weight, 0);
+      if (tierTotalWeight <= 0) continue;
+
+      let random = RandomFloat(0, tierTotalWeight);
       let drawnItem: WeightedItem<T> | null = null;
 
-      for (const item of availableItems) {
+      for (const item of tierItems) {
         random -= item.weight;
         if (random <= 0) {
           drawnItem = item;
@@ -142,18 +152,11 @@ export function generateWeightedPoolCode(
 
       if (drawnItem) {
         const itemId = (drawnItem.item as any).id;
-        
-        // Check for duplicates if policy is "forbid"
-        if ("${duplicatePolicy}" === "forbid" && drawnIds.has(itemId)) {
-          // Skip this draw and try again
-          i--;
-          continue;
-        }
-
         result.push(drawnItem.item);
         drawnIds.add(itemId);
+        drawnTiers.add(tier);
 
-        // Remove from available items for this draw session
+        // Remove from available items
         const index = availableItems.indexOf(drawnItem);
         if (index > -1) {
           availableItems.splice(index, 1);
@@ -169,6 +172,9 @@ ${hasSessionState ? `    // Update currentChoiceIds in session state
 `
     : "";
 
+  // GAP_FILL_BOUNDARY: weighted_pool.selection_policy
+  // Allowed: draw policy details, duplicate handling, session-aware filtering.
+  // Forbidden: pool contract changes, host routing changes, undeclared persistence semantics.
   // Generate commitSelection method if session state is enabled
   const commitSelectionMethod = hasSessionState
     ? `
@@ -280,7 +286,7 @@ ${entriesCode}
   }
 
   private tierToNumber(tier: string): number {
-    const tierMap: Record<string, number> = { 'R': 1, 'SR': 2, 'SSR': 3, 'UR': 4 };
+    const tierMap: Record<string, number> = { 'R': 1, 'SR': 2, 'SSR': 4, 'UR': 7 };
     return tierMap[tier] || 1;
   }
 

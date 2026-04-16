@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: checking which Lane B items remain residual after baseline wording landed
 > Do not use for: restating accepted baseline architecture or overriding authoritative docs
 > Owner: Lane B
@@ -124,6 +124,9 @@ Use this pipeline:
 User Request
   -> Intent Understanding
   -> IntentSchema
+  -> Feature Boundary Resolver
+  -> Feature Source Model
+  -> optional Feature Family Adapter
   -> Optional BlueprintProposal (LLM sidecar)
   -> BlueprintNormalizer / Contract Checks / Policy Checks
   -> Final Blueprint
@@ -141,6 +144,12 @@ This keeps the final executable architecture deterministic while still letting L
 - parameter placement suggestion
 - uncertainty explanation
 
+Planning-only note:
+
+- `Feature Boundary Resolver`, `Feature Source Model`, and `Feature Family Adapter` are not current baseline layers
+- they are a proposed pre-blueprint specialization seam for complex, object-rich features
+- they must not be described as current executable authority until baseline docs are explicitly updated
+
 ---
 
 ## 4. LLM Placement Decision
@@ -152,6 +161,7 @@ The recommended role for LLM at the blueprint stage is:
 - propose modules
 - propose connections
 - suggest candidate pattern families
+- surface feature-boundary candidates such as `familyCandidate`, `containedObjects`, and `sourceModelHints`
 - surface ambiguity and uncertainty
 - suggest missing parameters or constraints
 
@@ -174,6 +184,9 @@ This split preserves both goals:
 
 This is not a brand-new idea for the codebase.
 The repo already has a workbench-side `BlueprintProposal` direction, so the architecture can standardize and promote that concept instead of inventing a second parallel model.
+
+If future feature-boundary / source-model shaping is adopted, candidate extraction must still stay inside Wizard / Intent assistance.
+It must not create a new authoritative LLM stage between `IntentSchema` and `FinalBlueprint`.
 
 ---
 
@@ -239,6 +252,80 @@ This allows the pipeline to say:
 - "we must request clarification before continuing"
 
 That is better than pretending all prompts can be normalized into a fully confident blueprint.
+
+### 5.4 Feature Boundary Resolver
+
+Some requests describe a feature with internal business objects, not just loose mechanic hints.
+For those requests, the planning path needs one extra bounded seam before blueprint shaping.
+
+Planning-only direction:
+
+- `Feature Boundary Resolver` reads `IntentSchema` plus Wizard-side candidate hints
+- it decides whether the request is best understood as:
+  - a new feature
+  - an update to an existing feature
+  - a related-feature candidate that still needs governance review
+- it also decides whether the request should land in:
+  - a known `family-owned` source model
+  - or a `generic-core` source model fallback
+- it decides whether contained business objects should remain internal objects or be promoted into:
+  - external capability candidates
+  - or separate feature candidates
+
+Authority rule:
+
+- LLM may suggest `familyCandidate`, `containedObjects`, and `sourceModelHints`
+- deterministic boundary resolution keeps final authority over lifecycle landing, source-model landing, and legality
+
+### 5.5 Feature Source Model
+
+`Feature Source Model` is the proposed authoring artifact for one feature before deterministic blueprint compilation.
+
+It is responsible for:
+
+- feature-owned business objects
+- feature-owned policy/config fields
+- feature-level update merge inputs
+- preserving rich authoring intent that should not be collapsed into pattern parameters too early
+
+It is not:
+
+- a second workspace registry
+- a replacement for `FinalBlueprint`
+- a replacement for `Pattern`
+- a substitute for host realization or write planning
+
+Planning rule:
+
+- workspace remains the lifecycle/registry authority
+- source model is a feature-owned authoring artifact under the same feature lifecycle boundary
+
+### 5.6 Optional Feature Family Adapter
+
+Not every feature needs a dedicated family adapter.
+
+Recommended split:
+
+- simple features may compile from `IntentSchema` directly into deterministic blueprinting
+- object-rich or repeatedly updated features may use an optional `Feature Family Adapter`
+
+`Feature Family Adapter` is responsible for:
+
+- validating the family-owned source model shape
+- deciding what stays as internal business objects
+- compiling that source model into deterministic blueprint inputs
+- defining family-specific update merge rules without changing lifecycle authority
+
+It must not:
+
+- replace workspace ownership/lifecycle governance
+- widen pattern authority by itself
+- silently admit new pattern families during update
+
+Fallback rule:
+
+- if a request does not match a known family, it should not fail only because family matching is missing
+- the bounded fallback is `generic-core` source model shaping plus normal deterministic blueprinting
 
 ---
 
@@ -325,6 +412,9 @@ To keep the architecture clean, responsibilities should be split like this:
 | Layer | Responsibility |
 |-------|----------------|
 | IntentSchema | preserve user demand in semantic form |
+| Feature Boundary Resolver | decide lifecycle landing, source-model landing, and contained-object boundary without becoming a new write authority |
+| Feature Source Model | hold feature-owned authoring data before deterministic blueprint compilation |
+| optional Feature Family Adapter | validate a known family-owned source model and compile it into blueprint inputs without becoming a new lifecycle authority |
 | BlueprintProposal | suggest a candidate structure |
 | BlueprintNormalizer | decide what is legal, canonical, and executable |
 | Final Blueprint | represent deterministic implementation skeleton |
@@ -366,6 +456,56 @@ For this planning wave:
 - Lane B owns semantic population of `ModuleNeed`
 - Lane C consumes `ModuleNeed`
 - only one canonical `ModuleNeed` field set should exist
+
+### 7.2 Talent Draw Transition Rule
+
+Talent Draw is the first bounded example of why this extra seam is needed.
+
+Current authoritative truth:
+
+- Talent Draw pool content authority still lives in the current case-owned canonical parameters
+- `6 -> 20 talents` is currently a case-source change, not a current `update` contract capability
+- current `update` does not own talent-catalog expansion
+- current `update` also does not own:
+  - second trigger changes
+  - selection-contract changes such as `3 -> 5 choices`
+  - generic inventory framework work
+  - broad effect-family expansion
+
+Future thin `TalentDrawAdapter` target:
+
+- `TalentDrawFeatureModel` owns `talents[]`
+- `TalentDrawAdapter` compiles `talents[] + pool policy + inventory policy` into deterministic blueprint inputs
+- `update` may then edit the same `featureId`'s source model rather than only refreshing case-owned constants
+
+Thin v1 contract:
+
+- input fields:
+  - `triggerKey`
+  - `choiceCount`
+  - frozen `inventory`
+  - `talents[]`
+- each `talent` must carry at least:
+  - `id`
+  - `label`
+  - `description`
+  - `tier`
+  - `weight`
+  - `effectSpec`
+
+Thin v1 `update` may allow:
+
+- add / remove / edit `talents[]`
+- edit already-frozen inventory contract fields
+
+Thin v1 `update` must not allow:
+
+- feature family switching
+- selected pattern set expansion
+- `F4 -> F5` trigger-contract changes
+- `3 -> 5 choices` selection-contract changes
+- new effect-family / new-pattern admission
+- generic inventory, persistence, second-trigger, or subfeature-graph work
 
 ---
 

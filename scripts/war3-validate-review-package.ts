@@ -27,6 +27,21 @@ async function main(): Promise<void> {
   console.log(`Valid: ${validation.valid ? "yes" : "no"}`);
   console.log(`Ready for implementation draft: ${validation.readyForImplementationDraft ? "yes" : "no"}`);
   console.log(`Open bindings: ${validation.openBindingCount}`);
+  if (reviewPackage.shadowRealizationPlan) {
+    console.log(
+      `Shadow realization units: ${reviewPackage.shadowRealizationPlan.realizationUnits.length}`,
+    );
+  }
+  if (reviewPackage.shadowDraftBundle) {
+    console.log(
+      `Shadow draft files: ${Object.keys(reviewPackage.shadowDraftBundle.draftFiles).length}`,
+    );
+  }
+  if (reviewPackage.shadowSiteEvidenceReview) {
+    console.log(
+      `Shadow site evidence contracts: ${reviewPackage.shadowSiteEvidenceReview.sites.length}`,
+    );
+  }
   console.log(`Workspace flavor: ${validation.workspaceValidation.flavor}`);
   console.log(`Workspace readiness: ${validation.workspaceValidation.readiness}`);
   if (validation.workspaceValidation.evidencePaths.length > 0) {

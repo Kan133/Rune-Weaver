@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: checking which IntentSchema vNext details remain residual after baseline wording landed
 > Do not use for: restating accepted baseline schema wording in parallel
 > Owner: Lane B
@@ -279,6 +279,34 @@ interface RequiredClarification {
 }
 ```
 
+### 4.10 Feature Boundary And Source Model Hints
+
+Purpose:
+
+- let Wizard preserve candidate family/source-model hints without turning them into final authority
+
+Suggested shape:
+
+```ts
+interface IntentContainedObjectHint {
+  kind: string;
+  summary: string;
+  cardinality?: "single" | "collection";
+}
+
+interface IntentSourceModelHints {
+  familyCandidate?: string;
+  containedObjects?: IntentContainedObjectHint[];
+  sourceModelHints?: string[];
+}
+```
+
+Authority rule:
+
+- these are candidate hints only
+- they do not replace deterministic feature-boundary resolution
+- they do not create a second authoritative planning object between `IntentSchema` and `FinalBlueprint`
+
 ---
 
 ## 5. Recommended vNext Envelope
@@ -306,6 +334,7 @@ interface IntentSchemaVNext {
   selection?: IntentSelectionContract;
   effects?: IntentEffectContract;
   integrations?: IntentIntegrationContract;
+  sourceModelHints?: IntentSourceModelHints;
   hardConstraints?: string[];
   acceptanceInvariants?: IntentInvariant[];
   uncertainties?: IntentUncertainty[];

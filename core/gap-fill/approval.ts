@@ -151,6 +151,7 @@ export function validateGapFillApprovalRecord(input: {
   boundary: GapFillBoundaryInfo;
   targetFile: GapFillTargetFile;
   patchPlan?: GapFillPatchPlan;
+  allowTargetFileHashChange?: boolean;
 }): GapFillApprovalValidationResult {
   const issues: string[] = [];
 
@@ -191,7 +192,7 @@ export function validateGapFillApprovalRecord(input: {
   }
 
   const currentTargetHash = hashString(input.targetFile.content);
-  if (input.record.targetFileHash !== currentTargetHash) {
+  if (!input.allowTargetFileHashChange && input.record.targetFileHash !== currentTargetHash) {
     issues.push("Target file content has changed since approval was recorded.");
   }
 

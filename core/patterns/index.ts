@@ -92,6 +92,12 @@ export interface PatternHostBinding {
   target: string;
   /** 输出文件类型 */
   outputTypes: string[];
+  /** Generalized host-realization family surface */
+  allowedFamilies?: string[];
+  /** Preferred family for common-path realization */
+  preferredFamily?: string;
+  /** Host-side required capabilities or infrastructure */
+  requiredHostCapabilities?: string[];
   /** 宿主特定参数映射 */
   paramMapping?: Record<string, string>;
   /** 宿主特定约束 */
@@ -138,6 +144,21 @@ export interface PatternMeta {
   
   /** 能力标签 */
   capabilities: string[];
+
+  /** Traits used for composition / realization filtering */
+  traits?: string[];
+
+  /** Semantic outputs the pattern can satisfy before host realization */
+  semanticOutputs?: string[];
+
+  /** State expectations or state surfaces the pattern can own/support */
+  stateAffordances?: string[];
+
+  /** Integration surfaces the pattern can participate in */
+  integrationHints?: string[];
+
+  /** Reviewable invariants used by resolver / admission */
+  invariants?: string[];
   
   /** 输入定义 */
   inputs: PatternPort[];
@@ -176,6 +197,7 @@ export interface PatternCatalog {
   getById(id: string): PatternMeta | undefined;
   getByCategory(category: string): PatternMeta[];
   getByCapability(capability: string): PatternMeta[];
+  getByTrait(trait: string): PatternMeta[];
   validatePattern(pattern: unknown): { valid: boolean; errors: string[] };
 }
 
@@ -272,6 +294,8 @@ export function createPatternCatalog(patterns: PatternMeta[]): PatternCatalog {
       patterns.filter((p) => p.category === category),
     getByCapability: (capability: string) =>
       patterns.filter((p) => p.capabilities.includes(capability)),
+    getByTrait: (trait: string) =>
+      patterns.filter((p) => p.traits?.includes(trait)),
     validatePattern: (pattern: unknown) => {
       const result = validatePatternForAdmission(pattern as Partial<PatternMeta>);
       return { valid: result.valid, errors: [...result.errors, ...result.warnings] };

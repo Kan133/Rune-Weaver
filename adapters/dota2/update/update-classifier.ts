@@ -98,6 +98,14 @@ function isBridgeFile(path: string): boolean {
          normalizedPath.includes("/hud/script.tsx");
 }
 
+function isFeatureSourceModelFile(classification: FileUpdateClassification): boolean {
+  const normalizedPath = normalizePath(classification.path);
+  return (
+    classification.newEntry?.sourcePattern === "rw.feature_source_model" ||
+    normalizedPath.endsWith("/talent-draw.source.json")
+  );
+}
+
 function classifyFileChange(
   oldPath: string,
   newPath: string,
@@ -205,7 +213,7 @@ export function classifyUpdateDiff(
     });
   }
   
-  for (const entry of newWritePlan.entries) {
+  for (const entry of newWritePlan.entries.filter((candidate) => !candidate.deferred)) {
     const normalizedRelativePath = normalizePath(entry.targetPath);
     newFiles.set(normalizedRelativePath, entry);
   }
@@ -272,7 +280,8 @@ export function classifyUpdateDiff(
   
   // refreshedFiles 是正常的 update 行为，不算"破坏性变化"
   // 只有 createdFiles 和 deletedFiles 才是"破坏性变化"
-  const destructiveChanges = createdFiles.length + deletedFiles.length;
+  const nonStructuralCreates = createdFiles.filter((file) => !isFeatureSourceModelFile(file));
+  const destructiveChanges = nonStructuralCreates.length + deletedFiles.length;
   const totalFiles = oldFiles.size;
   if (totalFiles > 0 && destructiveChanges / totalFiles > 0.8) {
     regenerateReasons.push(`High destructive change ratio (${Math.round(destructiveChanges / totalFiles * 100)}%), consider regenerate`);

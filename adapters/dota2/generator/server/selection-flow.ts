@@ -29,6 +29,14 @@ export interface SelectionFlowParams {
     enabled: boolean;
     rarityAttributeBonusMap?: Record<string, { attribute: string; value: number }>;
   };
+  inventory?: {
+    enabled: boolean;
+    capacity: number;
+    storeSelectedItems: boolean;
+    blockDrawWhenFull: boolean;
+    fullMessage: string;
+    presentation: "persistent_panel";
+  };
 }
 
 export function generateSelectionFlowCode(
@@ -44,12 +52,24 @@ export function generateSelectionFlowCode(
   const postSelectionPoolBehavior = caseParams.postSelectionPoolBehavior || "none";
   const trackSelectedItems = caseParams.trackSelectedItems || false;
   const effectApplication = caseParams.effectApplication;
+  const inventory = caseParams.inventory;
 
   // GAP_FILL_BOUNDARY: selection_flow.effect_mapping
   // Allowed: rarity-driven formula, case value mapping, option-to-effect translation.
   // Forbidden: event channel changes, session ownership model changes, pattern binding changes.
   const hasPoolStateManagement = postSelectionPoolBehavior !== "none";
   const hasEffectApplication = effectApplication?.enabled || false;
+  const hasInventory = inventory?.enabled === true;
+  const inventoryCapacity = hasInventory ? Math.max(1, Math.floor(inventory?.capacity || 15)) : 0;
+  const inventoryStoreSelectedItems = hasInventory ? inventory?.storeSelectedItems !== false : false;
+  const inventoryBlockDrawWhenFull = hasInventory ? inventory?.blockDrawWhenFull !== false : false;
+  const inventoryFullMessage = hasInventory && inventory?.fullMessage
+    ? inventory.fullMessage
+    : "Talent inventory full";
+  const inventoryPresentation = hasInventory && inventory?.presentation
+    ? inventory.presentation
+    : "persistent_panel";
+  const hasSessionState = hasPoolStateManagement || hasInventory;
   const hasValidRarityMap =
     hasEffectApplication &&
     effectApplication?.rarityAttributeBonusMap &&
@@ -64,30 +84,30 @@ export function generateSelectionFlowCode(
         .join(",\n")
     : "";
 
-  const sessionStateDeclaration = hasPoolStateManagement
+  const sessionStateDeclaration = hasSessionState
     ? `
   private playerSessionStates: Map<number, {
     remainingIds: string[];
     ownedIds: string[];
     currentChoiceIds: string[];
-  }> = new Map();
+${hasInventory ? `    selectedInventory: SelectionOption[];\n    inventoryFullNotified: boolean;\n` : ""}  }> = new Map();
 `
     : "";
 
-  const sessionStateMethods = hasPoolStateManagement
+  const sessionStateMethods = hasSessionState
     ? `
   initPlayerSession(playerId: number, allIds: string[]): void {
     this.playerSessionStates.set(playerId, {
       remainingIds: [...allIds],
       ownedIds: [],
       currentChoiceIds: [],
-    });
+${hasInventory ? `      selectedInventory: [],\n      inventoryFullNotified: false,\n` : ""}    });
     print(\`[Rune Weaver] ${className}: Initialized session for player \${playerId}\`);
   }
 
   getPlayerSession(
     playerId: number
-  ): { remainingIds: string[]; ownedIds: string[]; currentChoiceIds: string[] } | undefined {
+  ): { remainingIds: string[]; ownedIds: string[]; currentChoiceIds: string[];${hasInventory ? " selectedInventory: SelectionOption[]; inventoryFullNotified: boolean;" : ""} } | undefined {
     return this.playerSessionStates.get(playerId);
   }
 
@@ -115,6 +135,89 @@ export function generateSelectionFlowCode(
     if (!session) return;
     session.currentChoiceIds = [...choiceIds];
   }
+${hasInventory ? `
+
+  private getSelectedInventory(playerId: number): SelectionOption[] {
+    const session = this.playerSessionStates.get(playerId);
+    if (!session) {
+      return [];
+    }
+    return session.selectedInventory;
+  }
+
+  private isInventoryFull(playerId: number): boolean {
+    const session = this.playerSessionStates.get(playerId);
+    if (!session) {
+      return false;
+    }
+    return session.selectedInventory.length >= ${inventoryCapacity};
+  }
+
+  private appendToInventory(playerId: number, option: SelectionOption): void {
+    const session = this.playerSessionStates.get(playerId);
+    if (!session) {
+      return;
+    }
+
+    if (session.selectedInventory.some((item) => item.id === option.id)) {
+      return;
+    }
+
+    if (session.selectedInventory.length >= ${inventoryCapacity}) {
+      session.inventoryFullNotified = true;
+      return;
+    }
+
+    session.selectedInventory.push({
+      id: option.id,
+      name: option.name,
+      description: option.description,
+      icon: option.icon,
+      tier: option.tier,
+    });
+    session.inventoryFullNotified = session.selectedInventory.length >= ${inventoryCapacity};
+  }
+
+  private buildInventoryPayload(playerId: number): {
+    enabled: boolean;
+    capacity: number;
+    items: SelectionOption[];
+    isFull: boolean;
+    fullMessage: string;
+    presentation: string;
+  } {
+    const items = this.getSelectedInventory(playerId);
+    const isFull = items.length >= ${inventoryCapacity};
+    return {
+      enabled: true,
+      capacity: ${inventoryCapacity},
+      items,
+      isFull,
+      fullMessage: "${inventoryFullMessage}",
+      presentation: "${inventoryPresentation}",
+    };
+  }
+
+  private sendInventoryStateToClient(playerId: number): void {
+    if (!CustomGameEventManager) {
+      return;
+    }
+
+    const player = PlayerResource.GetPlayer(playerId as PlayerID);
+    if (!player) {
+      return;
+    }
+
+    (CustomGameEventManager.Send_ServerToPlayer as any)(
+      player,
+      "rune_weaver_selection_inventory_state",
+      {
+        featureId: "${featureId}",
+        inventory: this.buildInventoryPayload(playerId),
+      }
+    );
+  }
+` : ""}
 `
     : "";
 
@@ -182,7 +285,7 @@ export function generateSelectionFlowCode(
     : "";
 
   const trackSelectedCode = trackSelectedItems ? "this.addToOwned(playerId, selectedOption.id);" : "";
-  const commitSelectionLogic = hasPoolStateManagement
+  const poolCommitLogic = hasPoolStateManagement
     ? postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible"
       ? `
     this.removeFromRemaining(playerId, selectedOption.id);
@@ -197,6 +300,17 @@ export function generateSelectionFlowCode(
     ${trackSelectedCode}
 `
     : "";
+  const inventoryCommitLogic = hasInventory
+    ? inventoryStoreSelectedItems
+      ? `
+    this.appendToInventory(playerId, selectedOption);
+    this.sendInventoryStateToClient(playerId);
+`
+      : `
+    this.sendInventoryStateToClient(playerId);
+`
+    : "";
+  const commitSelectionLogic = `${poolCommitLogic}${inventoryCommitLogic}`;
 
   const effectApplicationCall = hasEffectApplication && applyMode === "immediate"
     ? `
@@ -207,6 +321,14 @@ export function generateSelectionFlowCode(
     selection.deferredEffect = selectedOption;
 `
       : "";
+
+  const inventoryHeader = hasInventory
+    ? `
+ * - inventory: enabled (${inventoryCapacity} slots, ${inventoryPresentation})
+ * - inventoryBlockDrawWhenFull: ${inventoryBlockDrawWhenFull}
+ * - inventoryFullMessage: "${inventoryFullMessage}"
+`
+    : "";
 
   return `/**
  * ${className}
@@ -219,7 +341,7 @@ export function generateSelectionFlowCode(
  * - applyMode: "${applyMode}"
  * - postSelectionPoolBehavior: "${postSelectionPoolBehavior}"
  * - trackSelectedItems: ${trackSelectedItems}
- * ${hasEffectApplication && applyMode === "immediate" ? "- Apply effect immediately" : ""}
+${inventoryHeader} * ${hasEffectApplication && applyMode === "immediate" ? "- Apply effect immediately" : ""}
  * ${hasEffectApplication && applyMode === "deferred" ? "- Apply effect on deferred confirmation" : ""}
  */
 
@@ -283,8 +405,8 @@ ${sessionStateMethods}
     });
     this.selectionCallbacks.set(playerId, onSelected);
 
-    ${hasPoolStateManagement ? "this.updateCurrentChoices(playerId, options.map((option) => option.id));" : ""}
-    this.sendToClient(playerId, options);
+    ${hasSessionState ? "this.updateCurrentChoices(playerId, options.map((option) => option.id));" : ""}
+${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    this.sendToClient(playerId, options);
   }
 
   onPlayerSelect(playerId: number, optionIndex: number): void {
@@ -339,7 +461,9 @@ ${effectApplicationCode}
           optionId: option.id,
           optionName: option.name,
           rarity: option.tier || "R",
-          timestamp: GameRules.GetGameTime(),
+          timestamp: GameRules.GetGameTime(),${hasInventory ? `
+          inventoryCount: this.getSelectedInventory(playerId).length,
+          inventoryFull: this.isInventoryFull(playerId),` : ""}
         }
       );
     }
@@ -350,7 +474,12 @@ ${effectApplicationCode}
       (GameRules as any).XNetTable.SetTableValue(
         "rune_weaver_selection",
         \`player_\${playerId}_feature_${featureId}\`,
-        { featureId: "${featureId}", options, status: "waiting" }
+        {
+          featureId: "${featureId}",
+          options,
+          status: "waiting",${hasInventory ? `
+          inventory: this.buildInventoryPayload(playerId),` : ""}
+        }
       );
     }
 
@@ -361,7 +490,8 @@ ${effectApplicationCode}
         choiceCount: ${choiceCount},
         selectionPolicy: "${selectionPolicy}",
         title: "Choose Your Talent",
-        description: "Press ${triggerKey} to open talent draw",
+        description: "Press ${triggerKey} to open talent draw",${hasInventory ? `
+        inventory: this.buildInventoryPayload(playerId),` : ""}
       };
       const player = PlayerResource.GetPlayer(playerId as PlayerID);
       print(\`[Rune Weaver] ${className}: Sending selection UI to player \${playerId}, options=\${options.length}, player=\${player ? "ok" : "missing"}\`);
@@ -400,7 +530,7 @@ ${effectApplicationCode}
     if (pool && typeof pool.drawForSelection === "function") {
       const candidates = normalizeCandidates(pool.drawForSelection(count) as PoolCandidate[]);
       ${
-        hasPoolStateManagement
+        hasSessionState
           ? `const candidateIds: string[] = [];
       for (const candidate of candidates as T[]) {
         candidateIds.push(candidate.id);
@@ -424,7 +554,7 @@ ${effectApplicationCode}
       return;
     }
 
-    ${hasPoolStateManagement ? `
+    ${hasSessionState ? `
     if (!this.getPlayerSession(playerId) && typeof this.initPlayerSession === "function") {
       const remainingIds: string[] =
         typeof pool.getRemainingTalentIds === "function"
@@ -438,11 +568,16 @@ ${effectApplicationCode}
               }
               return ids;
             })();
-      if (remainingIds.length > 0) {
-        this.initPlayerSession(playerId, remainingIds);
-      }
+      this.initPlayerSession(playerId, remainingIds);
     }
-` : ""}
+` : ""}${hasInventory ? `
+    this.sendInventoryStateToClient(playerId);
+${inventoryBlockDrawWhenFull ? `
+    if (this.isInventoryFull(playerId)) {
+      print(\`[Rune Weaver] ${className}: Inventory full for player \${playerId}, draw blocked before modal open\`);
+      return;
+    }
+` : ""}` : ""}
 
     const options = this.generateOptionsFromPool(playerId, pool, ${choiceCount});
     if (!options || options.length === 0) {

@@ -13,6 +13,10 @@ import {
   isRuntimeHeavy,
   type HostPatternClassifier,
 } from "./realization-utils.js";
+import {
+  patternHasCapabilityPrefix,
+  patternSupportsSemanticOutput,
+} from "../patterns/canonical-patterns.js";
 
 export interface HostRealizationRule {
   patterns: string[];
@@ -51,6 +55,9 @@ export function findMatchingRule(
   rules: HostRealizationRule[]
 ): HostRealizationRule | null {
   for (const rule of rules) {
+    if (rule.role && module.role && rule.role !== module.role) {
+      continue;
+    }
     const hasAllPatterns = rule.patterns.every((pattern) =>
       module.selectedPatterns.includes(pattern)
     );
@@ -199,6 +206,38 @@ export function inferRealizationTypeFromModule(
   module: AssemblyModule,
   classifier?: HostPatternClassifier
 ): RealizationType {
+  const preferredFamilies = module.selectedPatterns
+    .map((pattern) => classifier?.getPreferredFamily?.(pattern))
+    .filter((family): family is string => !!family);
+
+  if (preferredFamilies.includes("ui-surface")) {
+    return "ui";
+  }
+
+  if (preferredFamilies.includes("runtime-shared")) {
+    return "shared-ts";
+  }
+
+  if (preferredFamilies.includes("bridge-support")) {
+    return "bridge-only";
+  }
+
+  if (preferredFamilies.includes("modifier-runtime")) {
+    const hasLuaTarget =
+      module.outputs?.some((output) => output.kind === "lua") ||
+      module.selectedPatterns.some((pattern) => patternSupportsSemanticOutput(pattern, "host.runtime.lua"));
+    return hasLuaTarget ? "kv+lua" : "kv+ts";
+  }
+
+  if (preferredFamilies.includes("composite-static-runtime")) {
+    const hasLuaTarget = module.outputs?.some((output) => output.kind === "lua");
+    return hasLuaTarget ? "kv+lua" : "kv+ts";
+  }
+
+  if (preferredFamilies.includes("runtime-primary")) {
+    return "ts";
+  }
+
   if (hasUIRequirement(module)) {
     return "ui";
   }
@@ -222,8 +261,11 @@ export function inferRealizationTypeFromModule(
     return "ui";
   }
 
-  const hasEffectPatterns = module.selectedPatterns.some((pattern) =>
-    pattern.startsWith("effect.")
+  const hasEffectPatterns = module.selectedPatterns.some(
+    (pattern) =>
+      patternHasCapabilityPrefix(pattern, "effect.") ||
+      patternSupportsSemanticOutput(pattern, "host.config.kv") ||
+      patternSupportsSemanticOutput(pattern, "host.runtime.lua")
   );
   const hasRuntimePatterns = module.selectedPatterns.some((pattern) =>
     classifier?.isRuntime?.(pattern)
@@ -253,7 +295,12 @@ export function buildFallbackDecision(
 ): HostFallbackDecision {
   const allPatterns = assemblyPlan.selectedPatterns.map((pattern) => pattern.patternId);
   const hasUI = allPatterns.some((pattern) => params.classifier?.isUI?.(pattern));
-  const hasEffect = allPatterns.some((pattern) => pattern.startsWith("effect."));
+  const hasEffect = allPatterns.some(
+    (pattern) =>
+      patternHasCapabilityPrefix(pattern, "effect.") ||
+      patternSupportsSemanticOutput(pattern, "host.config.kv") ||
+      patternSupportsSemanticOutput(pattern, "host.runtime.lua")
+  );
   const hasData = allPatterns.some((pattern) => params.classifier?.isShared?.(pattern));
 
   let realizationType: RealizationType = "ts";

@@ -114,45 +114,53 @@ function SectionHeader({
 }
 
 // Host Config Section - Connected to real host scanner
-function HostConfigSection({ hostScanner }: { hostScanner: ReturnType<typeof useHostScanner> }) {
+function HostConfigSection({
+  hostScanner,
+  onConnect,
+  isConnecting,
+}: {
+  hostScanner: ReturnType<typeof useHostScanner>;
+  onConnect: () => Promise<void>;
+  isConnecting: boolean;
+}) {
   const [isOpen, setIsOpen] = useState(true);
-  const { hostConfig, setHostRoot, setHostScanResult } = useFeatureStore();
-  const { scan, isScanning, scanResult, scanErrors } = hostScanner;
+  const hostConfig = useFeatureStore((state) => state.hostConfig);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const isWorkspaceConnected = useFeatureStore((state) => state.isWorkspaceConnected);
+  const workspace = useFeatureStore((state) => state.workspace);
+  const setHostRoot = useFeatureStore((state) => state.setHostRoot);
+  const setHostScanResult = useFeatureStore((state) => state.setHostScanResult);
+  const { scanErrors, statusErrors } = hostScanner;
 
-  const handleHostRootChange = async (value: string) => {
+  const handleHostRootChange = (value: string) => {
     setHostRoot(value);
-
-    if (value) {
-      // Trigger real scan via API
-      await scan(value);
-    }
   };
-
-  // Sync scan result to store
-  useEffect(() => {
-    if (scanResult) {
-      setHostScanResult(
-        scanResult.valid,
-        scanResult.hostType,
-        scanResult.errors
-      );
-    }
-  }, [scanResult, setHostScanResult]);
+  const allErrors = Array.from(new Set([...hostConfig.scanErrors, ...scanErrors, ...statusErrors]));
+  const hasPendingDraftPath =
+    !!connectedHostRoot &&
+    !!hostConfig.hostRoot.trim() &&
+    hostConfig.hostRoot.trim() !== connectedHostRoot;
 
   const getStatusLabel = () => {
-    if (isScanning) return "扫描中...";
-    if (!hostConfig.hostRoot) return "未配置";
-    if (hostConfig.hostValid) return `有效 (${hostConfig.hostType})`;
-    if (scanErrors.length > 0) return "路径无效";
-    return "未配置";
+    if (isConnecting) return "连接中...";
+    if (connectedHostRoot && isWorkspaceConnected) {
+      return `已连接 (${workspace?.features.length ?? 0} features)`;
+    }
+    if (connectedHostRoot && hostConfig.hostValid) {
+      return '宿主有效，未发现 workspace';
+    }
+    if (hostConfig.hostRoot.trim()) {
+      return '等待连接';
+    }
+    return '未连接';
   };
 
-  const getStatus = (): "success" | "error" | "pending" | "idle" => {
-    if (isScanning) return "pending";
-    if (!hostConfig.hostRoot) return "idle";
-    if (hostConfig.hostValid) return "success";
-    if (scanErrors.length > 0) return "error";
-    return "idle";
+  const getStatus = (): "success" | "warning" | "error" | "pending" | "idle" => {
+    if (isConnecting) return 'pending';
+    if (connectedHostRoot && hostConfig.hostValid) return 'success';
+    if (allErrors.length > 0) return 'error';
+    if (hostConfig.hostRoot.trim()) return 'warning';
+    return 'idle';
   };
 
   const handlePickDirectory = async () => {
@@ -172,7 +180,9 @@ function HostConfigSection({ hostScanner }: { hostScanner: ReturnType<typeof use
             <label className="text-[10px] text-white/40 uppercase tracking-wider">
               宿主目录
             </label>
-            <span className="text-[9px] text-white/30">已接通</span>
+            <span className="text-[9px] text-white/30">
+              {connectedHostRoot ? '当前已连接' : '待连接'}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <Input
@@ -192,18 +202,38 @@ function HostConfigSection({ hostScanner }: { hostScanner: ReturnType<typeof use
             >
               手动填
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void onConnect()}
+              disabled={!hostConfig.hostRoot.trim() || isConnecting}
+              className="h-8 px-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+            >
+              {isConnecting ? '连接中' : connectedHostRoot ? '重新连接' : '连接宿主'}
+            </Button>
           </div>
           <p className="text-[9px] text-white/35">
-            目录选择器暂时不稳定，请直接粘贴 Windows 绝对路径。
+            先粘贴绝对路径，再点击“连接宿主”。Workbench 只会读取当前已连接宿主的真实 workspace。
           </p>
+          {connectedHostRoot && (
+            <div className="rounded border border-white/10 bg-white/5 px-2 py-1.5">
+              <p className="text-[9px] text-white/30 uppercase tracking-wider">当前连接宿主</p>
+              <p className="mt-1 text-[11px] text-white/70 break-all">{connectedHostRoot}</p>
+              {hasPendingDraftPath && (
+                <p className="mt-1 text-[10px] text-[#9e6a03]">
+                  输入框里是待连接的新路径；在点击“连接宿主”前，当前工作台仍然挂在上面的宿主上。
+                </p>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Scan Errors Display */}
-        {scanErrors.length > 0 && (
+        {allErrors.length > 0 && (
           <div className="p-2 rounded bg-[#da3633]/5 border border-[#da3633]/20">
-            <p className="text-[10px] text-[#da3633] font-medium mb-1">扫描错误：</p>
+            <p className="text-[10px] text-[#da3633] font-medium mb-1">连接错误：</p>
             <ul className="space-y-0.5">
-              {scanErrors.map((error, idx) => (
+              {allErrors.map((error, idx) => (
                 <li key={idx} className="text-[9px] text-white/50">{error}</li>
               ))}
             </ul>
@@ -337,38 +367,22 @@ function LaunchConfigSection() {
 }
 
 // Integration Status Section - Connected to real host-status scanner
-function IntegrationStatusSection({ hostScanner }: { hostScanner: ReturnType<typeof useHostScanner> }) {
+function IntegrationStatusSection({
+  hostScanner,
+  onRefreshConnection,
+  isRefreshingConnection,
+}: {
+  hostScanner: ReturnType<typeof useHostScanner>;
+  onRefreshConnection: () => Promise<void>;
+  isRefreshingConnection: boolean;
+}) {
   const [isOpen, setIsOpen] = useState(true);
-  const { hostConfig, setIntegrationStatus } = useFeatureStore();
-  const { checkStatus, hostStatus, isCheckingStatus, statusErrors } = hostScanner;
-
-  // Check status when host is valid
-  const refreshStatus = useCallback(async () => {
-    if (hostConfig.hostRoot && hostConfig.hostValid) {
-      await checkStatus(hostConfig.hostRoot);
-    }
-  }, [hostConfig.hostRoot, hostConfig.hostValid, checkStatus]);
-
-  // Sync host status to store
-  useEffect(() => {
-    if (hostStatus?.rwStatus) {
-      setIntegrationStatus({
-        initialized: hostStatus.rwStatus.initialized,
-        namespaceReady: hostStatus.rwStatus.namespaceReady,
-        workspaceReady: hostStatus.rwStatus.workspaceReady,
-        serverBridge: hostStatus.rwStatus.serverBridge.ready,
-        uiBridge: hostStatus.rwStatus.uiBridge.ready,
-        ready: hostStatus.rwStatus.ready,
-      });
-    }
-  }, [hostStatus, setIntegrationStatus]);
-
-  // Auto-check on mount if host is valid
-  useEffect(() => {
-    if (hostConfig.hostValid && !hostConfig.integrationStatus) {
-      refreshStatus();
-    }
-  }, [hostConfig.hostValid, hostConfig.integrationStatus, refreshStatus]);
+  const hostConfig = useFeatureStore((state) => state.hostConfig);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const isWorkspaceConnected = useFeatureStore((state) => state.isWorkspaceConnected);
+  const workspace = useFeatureStore((state) => state.workspace);
+  const workspaceIssues = useFeatureStore((state) => state.workspaceIssues);
+  const { statusErrors } = hostScanner;
 
   const statusItems = [
     { key: "initialized", label: "已初始化", hint: "项目已初始化" },
@@ -395,11 +409,11 @@ function IntegrationStatusSection({ hostScanner }: { hostScanner: ReturnType<typ
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-2">
         {/* Status Errors Display */}
-        {statusErrors.length > 0 && (
+        {(statusErrors.length > 0 || workspaceIssues.length > 0) && (
           <div className="p-2 rounded bg-[#da3633]/5 border border-[#da3633]/20 mb-2">
-            <p className="text-[10px] text-[#da3633] font-medium mb-1">状态检查错误：</p>
+            <p className="text-[10px] text-[#da3633] font-medium mb-1">工作区状态：</p>
             <ul className="space-y-0.5">
-              {statusErrors.map((error, idx) => (
+              {[...statusErrors, ...workspaceIssues].map((error, idx) => (
                 <li key={idx} className="text-[9px] text-white/50">{error}</li>
               ))}
             </ul>
@@ -408,9 +422,15 @@ function IntegrationStatusSection({ hostScanner }: { hostScanner: ReturnType<typ
         
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <RefreshCw className={cn("h-3 w-3 text-[#6366f1]", isCheckingStatus && "animate-spin")} />
+            <RefreshCw className={cn("h-3 w-3 text-[#6366f1]", isRefreshingConnection && "animate-spin")} />
             <span className="text-[9px] text-white/30">
-              {isCheckingStatus ? "检查中..." : "已接通宿主状态检查"}
+              {!connectedHostRoot
+                ? '先连接宿主'
+                : isRefreshingConnection
+                ? '刷新中...'
+                : isWorkspaceConnected
+                ? `已载入 ${workspace?.features.length ?? 0} 个 features`
+                : '宿主已连接，但尚未发现 workspace'}
             </span>
           </div>
           <Button
@@ -419,9 +439,9 @@ function IntegrationStatusSection({ hostScanner }: { hostScanner: ReturnType<typ
             className="h-5 px-2 text-[9px] text-white/40 hover:text-white/60"
             onClick={(e) => {
               e.stopPropagation();
-              refreshStatus();
+              void onRefreshConnection();
             }}
-            disabled={isCheckingStatus || !hostConfig.hostValid}
+            disabled={isRefreshingConnection || !connectedHostRoot}
           >
             刷新
           </Button>
@@ -471,8 +491,14 @@ function IntegrationStatusSection({ hostScanner }: { hostScanner: ReturnType<typ
 }
 
 // Next Action Section - Connected to real CLI executor
-function NextActionSection({ hostScanner }: { hostScanner: ReturnType<typeof useHostScanner> }) {
-  const { hostConfig } = useFeatureStore();
+function NextActionSection({
+  onRefreshConnection,
+}: {
+  onRefreshConnection: () => Promise<void>;
+}) {
+  const hostConfig = useFeatureStore((state) => state.hostConfig);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const workspace = useFeatureStore((state) => state.workspace);
   const {
     executeInit,
     executeInstall,
@@ -488,38 +514,43 @@ function NextActionSection({ hostScanner }: { hostScanner: ReturnType<typeof use
     error,
     clearOutput,
   } = useCLIExecutor();
-  const { checkStatus } = hostScanner;
-  const effectiveAddonName = hostConfig.addonName.trim() || deriveAddonNameFromHostRoot(hostConfig.hostRoot);
+  const effectiveHostRoot = connectedHostRoot || '';
+  const effectiveAddonName =
+    hostConfig.addonName.trim() || deriveAddonNameFromHostRoot(effectiveHostRoot || hostConfig.hostRoot);
   const effectiveMapName = hostConfig.mapName.trim() || "temp";
   const [launchPreflight, setLaunchPreflight] = useState<{ ready: boolean; missingArtifacts: string[] } | null>(null);
   const [preflightError, setPreflightError] = useState<string | null>(null);
 
-  const canInitialize = hostConfig.hostValid && !hostConfig.integrationStatus?.initialized && isValidAddonName(effectiveAddonName);
-  const canInspect = hostConfig.hostValid;
-  const canRepairBuild = hostConfig.hostValid && !!hostConfig.integrationStatus?.initialized;
-  const canLaunch = hostConfig.hostValid && !!hostConfig.integrationStatus?.initialized && !!launchPreflight?.ready;
+  const canInitialize =
+    !!effectiveHostRoot &&
+    hostConfig.hostValid &&
+    !hostConfig.integrationStatus?.initialized &&
+    isValidAddonName(effectiveAddonName);
+  const canInspect = !!effectiveHostRoot && hostConfig.hostValid;
+  const canRepairBuild = !!effectiveHostRoot && hostConfig.hostValid && !!hostConfig.integrationStatus?.initialized;
+  const canLaunch = canRepairBuild && !!launchPreflight?.ready;
 
   // Refresh host status after CLI operations that can change host readiness.
   useEffect(() => {
     if (
       result?.success &&
-      hostConfig.hostRoot &&
+      effectiveHostRoot &&
       (result.command === "init" || result.command === "install" || result.command === "repair-build")
     ) {
-      checkStatus(hostConfig.hostRoot);
+      void onRefreshConnection();
     }
-  }, [result, hostConfig.hostRoot, checkStatus]);
+  }, [effectiveHostRoot, onRefreshConnection, result]);
 
   useEffect(() => {
     const loadPreflight = async () => {
-      if (!hostConfig.hostRoot || !hostConfig.hostValid || !hostConfig.integrationStatus?.initialized) {
+      if (!effectiveHostRoot || !hostConfig.hostValid || !hostConfig.integrationStatus?.initialized) {
         setLaunchPreflight(null);
         setPreflightError(null);
         return;
       }
 
       try {
-        const next = await checkLaunchPreflight(hostConfig.hostRoot);
+        const next = await checkLaunchPreflight(effectiveHostRoot);
         setLaunchPreflight(next);
         setPreflightError(null);
       } catch (err) {
@@ -531,35 +562,35 @@ function NextActionSection({ hostScanner }: { hostScanner: ReturnType<typeof use
     void loadPreflight();
   }, [
     checkLaunchPreflight,
-    hostConfig.hostRoot,
     hostConfig.hostValid,
     hostConfig.integrationStatus?.initialized,
+    effectiveHostRoot,
     result,
   ]);
 
   const handleInitialize = async () => {
-    if (!hostConfig.hostRoot) return;
-    await executeInit(hostConfig.hostRoot, effectiveAddonName);
+    if (!effectiveHostRoot) return;
+    await executeInit(effectiveHostRoot, effectiveAddonName);
   };
 
   const handleDoctor = async () => {
-    if (!hostConfig.hostRoot) return;
-    await executeDoctor(hostConfig.hostRoot);
+    if (!effectiveHostRoot) return;
+    await executeDoctor(effectiveHostRoot);
   };
 
   const handleInstall = async () => {
-    if (!hostConfig.hostRoot) return;
-    await executeInstall(hostConfig.hostRoot);
+    if (!effectiveHostRoot) return;
+    await executeInstall(effectiveHostRoot);
   };
 
   const handleRepairBuild = async () => {
-    if (!hostConfig.hostRoot) return;
-    await executeRepairBuild(hostConfig.hostRoot);
+    if (!effectiveHostRoot) return;
+    await executeRepairBuild(effectiveHostRoot);
   };
 
   const handleLaunch = async () => {
-    if (!hostConfig.hostRoot) return;
-    await executeLaunch(hostConfig.hostRoot, effectiveAddonName, effectiveMapName);
+    if (!effectiveHostRoot) return;
+    await executeLaunch(effectiveHostRoot, workspace?.addonName || effectiveAddonName, effectiveMapName);
   };
 
   return (
@@ -677,12 +708,14 @@ function NextActionSection({ hostScanner }: { hostScanner: ReturnType<typeof use
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-1 text-[9px] text-white/40">
+        <div className="grid grid-cols-1 gap-1 text-[9px] text-white/40">
         <p>
           {canInitialize
             ? `初始化会使用 addon 名称 "${effectiveAddonName}".`
+            : !effectiveHostRoot
+            ? "请先连接一个有效宿主。"
             : !hostConfig.hostValid
-            ? "请先配置有效的项目路径。"
+            ? "当前连接宿主无效，请重新连接。"
             : !hostConfig.integrationStatus?.initialized
             ? "先完成初始化，再进行安装、修复构建和启动。"
             : "主链建议：安装依赖 -> 修复并构建 -> 运行诊断 -> 启动宿主。"}
@@ -690,7 +723,8 @@ function NextActionSection({ hostScanner }: { hostScanner: ReturnType<typeof use
         <p>
           启动预览：<span className="text-white/60 font-mono">yarn launch {effectiveAddonName || "<addon>"} {effectiveMapName}</span>
         </p>
-        <p>创建功能请使用中栏顶部的 Create。左栏只负责宿主接入、构建和启动。</p>
+        <p>当前连接宿主：<span className="text-white/60 font-mono">{effectiveHostRoot || '（未连接）'}</span></p>
+        <p>创建、更新、删除都走真实 CLI；左栏只负责宿主接入、构建和启动。</p>
       </div>
 
       {/* CLI Output Panel */}
@@ -731,9 +765,48 @@ function NextActionSection({ hostScanner }: { hostScanner: ReturnType<typeof use
 // Main Panel Component
 export function ProjectSetupPanel() {
   const [isExpanded, setIsExpanded] = useState(true);
-  
-  // 统一持有 useHostScanner 实例
   const hostScanner = useHostScanner();
+  const hostConfig = useFeatureStore((state) => state.hostConfig);
+  const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const setHostScanResult = useFeatureStore((state) => state.setHostScanResult);
+  const connectHostWorkspace = useFeatureStore((state) => state.connectHostWorkspace);
+  const clearConnectedWorkspace = useFeatureStore((state) => state.clearConnectedWorkspace);
+  const isConnecting = hostScanner.isScanning || hostScanner.isCheckingStatus;
+
+  const connectToHost = useCallback(async (targetHostRoot?: string) => {
+    const nextHostRoot = (targetHostRoot || hostConfig.hostRoot).trim();
+    if (!nextHostRoot) {
+      setHostScanResult(false, 'unknown', ['Host root path is required']);
+      clearConnectedWorkspace();
+      return;
+    }
+
+    const scanResult = await hostScanner.scan(nextHostRoot);
+    if (!scanResult) {
+      setHostScanResult(false, 'unknown', ['Scan failed']);
+      clearConnectedWorkspace();
+      return;
+    }
+
+    setHostScanResult(scanResult.valid, scanResult.hostType, scanResult.errors);
+    if (!scanResult.valid) {
+      clearConnectedWorkspace();
+      return;
+    }
+
+    const statusResult = await hostScanner.checkStatus(nextHostRoot);
+    if (!statusResult) {
+      clearConnectedWorkspace();
+      return;
+    }
+
+    connectHostWorkspace(statusResult);
+  }, [clearConnectedWorkspace, connectHostWorkspace, hostConfig.hostRoot, hostScanner, setHostScanResult]);
+
+  const refreshConnection = useCallback(async () => {
+    const targetHostRoot = connectedHostRoot || hostConfig.hostRoot;
+    await connectToHost(targetHostRoot);
+  }, [connectToHost, connectedHostRoot, hostConfig.hostRoot]);
 
   return (
     <div className="p-3 border-b border-white/10 bg-[#161b22]">
@@ -742,7 +815,7 @@ export function ProjectSetupPanel() {
         <CollapsibleTrigger className="w-full">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-wider text-white/40">
-              项目接入
+              Connected Host / Workspace
             </span>
             {isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5 text-white/40" />
@@ -757,20 +830,28 @@ export function ProjectSetupPanel() {
           <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-[#238636]/5 border border-[#238636]/20">
             <CheckCircle2 className="h-3 w-3 text-[#238636]" />
             <span className="text-[10px] text-[#238636]/80">
-              UI → CLI 桥接：所有操作通过 dota2-cli 执行
+              当前演示路径只读取已连接宿主的真实 workspace；Create / Update / Delete 全部通过 dota2-cli 执行
             </span>
           </div>
 
           {/* Configuration Sections */}
           <div className="space-y-2">
-            <HostConfigSection hostScanner={hostScanner} />
+            <HostConfigSection
+              hostScanner={hostScanner}
+              onConnect={refreshConnection}
+              isConnecting={isConnecting}
+            />
             <ProjectNamingSection />
             <LaunchConfigSection />
-            <IntegrationStatusSection hostScanner={hostScanner} />
+            <IntegrationStatusSection
+              hostScanner={hostScanner}
+              onRefreshConnection={refreshConnection}
+              isRefreshingConnection={isConnecting}
+            />
           </div>
 
           {/* Next Action */}
-          <NextActionSection hostScanner={hostScanner} />
+          <NextActionSection onRefreshConnection={refreshConnection} />
         </CollapsibleContent>
       </Collapsible>
     </div>

@@ -64,9 +64,11 @@ import {
   createIntentSchema,
   createWritePlan,
   getFeatureMode,
+  resolveStableFeatureId,
   resolveExistingFeatureContext,
   resolvePatternsFromBlueprint,
 } from "./dota2/planning.js";
+import type { Dota2BlueprintBuildResult } from "./dota2/planning.js";
 import { executeWrite } from "./dota2/write-executor.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +80,7 @@ export interface Dota2CLIOptions {
   prompt: string;
   hostRoot: string;
   featureId?: string;
+  scenario?: string;
   boundaryId?: string;
   instruction?: string;
   approvalFile?: string;
@@ -115,6 +118,7 @@ export interface Dota2ReviewArtifact {
     usedFallback: boolean;
     intentKind: string;
     uiNeeded: boolean;
+    readiness?: string;
     mechanics: string[];
   };
   stages: {
@@ -226,6 +230,7 @@ export function showDota2Help(): void {
   --approve <file>    批准并执行先前生成的 gap-fill approval record
   --addon-name <name> Dota2 addon 名称 (demo prepare/init 使用)
   --map <name>        Dota2 地图�?(demo prepare/launch 使用)
+  --scenario <id>     lifecycle/demo scenario id
   --dry-run           预演模式，不写入文件 (默认)
   --write             正式写入模式
   --force             强制覆盖 readiness gate
@@ -347,6 +352,13 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
   );
 }
 
+function getIntentReadiness(schema: { readiness?: string; isReadyForBlueprint?: boolean }): "ready" | "weak" | "blocked" {
+  if (schema.readiness === "ready" || schema.readiness === "weak" || schema.readiness === "blocked") {
+    return schema.readiness;
+  }
+  return schema.isReadyForBlueprint ? "ready" : "blocked";
+}
+
 async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifact> {
   console.log("=".repeat(70));
   console.log("🧙 Rune Weaver - Dota2 Pipeline");
@@ -462,11 +474,15 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 1: IntentSchema (try real Wizard first, fallback if needed)
-  const { schema, usedFallback } = await createIntentSchema(options.prompt, options.hostRoot);
+  const { schema, usedFallback } = await createIntentSchema(options.prompt, options.hostRoot, {
+    mode: featureMode,
+    featureId: options.featureId || existingFeatureContext.feature?.featureId,
+    existingFeature: existingFeatureContext.feature,
+  });
   artifact.stages.intentSchema = {
     success: schema !== null,
-    summary: schema?.request.goal || "",
-    issues: [],
+    summary: schema ? `${schema.request.goal} [${getIntentReadiness(schema)}]` : "",
+    issues: schema ? [`IntentSchema readiness: ${getIntentReadiness(schema)}`] : [],
     usedFallback,
   };
 
@@ -474,6 +490,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     usedFallback,
     intentKind: schema?.classification.intentKind || "unknown",
     uiNeeded: schema?.uiRequirements?.needed || false,
+    readiness: schema ? getIntentReadiness(schema) : undefined,
     mechanics: schema ? Object.entries(schema.normalizedMechanics)
       .filter(([, v]) => v === true)
       .map(([k]) => k) : [],
@@ -486,10 +503,10 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 2: Blueprint
-  const { blueprint, issues: blueprintIssues } = buildBlueprint(schema);
+  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount }: Dota2BlueprintBuildResult = buildBlueprint(schema);
   artifact.stages.blueprint = {
     success: blueprint !== null,
-    summary: blueprint?.summary || "",
+    summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
     moduleCount: blueprint?.modules.length || 0,
     patternHints: blueprint?.patternHints.flatMap((h) => h.suggestedPatterns) || [],
     issues: blueprintIssues,
@@ -497,11 +514,18 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
 
   if (!blueprint) {
     artifact.finalVerdict.weakestStage = "blueprint";
-    artifact.finalVerdict.remainingRisks = blueprintIssues;
+    artifact.finalVerdict.remainingRisks = blueprintIssues.length > 0
+      ? blueprintIssues
+      : [`FinalBlueprint ${blueprintStatus}`];
     return artifact;
   }
 
-  const stableFeatureId = existingFeatureContext.feature?.featureId || blueprint.id;
+  const stableFeatureId = resolveStableFeatureId({
+    existingFeatureId: existingFeatureContext.feature?.featureId,
+    explicitFeatureId: options.featureId,
+    prompt: options.prompt,
+    blueprintId: blueprint.id,
+  });
 
   // Stage 3: Pattern Resolution
   const resolutionResult = resolvePatternsFromBlueprint(blueprint);
@@ -644,7 +668,8 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     existingFeatureContext.feature,
     featureMode,
     hostRealizationPlan ?? undefined,
-    generatorRoutingPlan ?? undefined
+    generatorRoutingPlan ?? undefined,
+    stableFeatureId
   );
 
   // T120-R1: Use helper for generator stage assembly

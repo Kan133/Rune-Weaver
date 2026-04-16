@@ -2,6 +2,7 @@ import { ChevronRight, ChevronDown, FileCode2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFeatureStore } from '@/hooks/useFeatureStore';
 import type { Feature } from '@/types/feature';
+import { normalizeFeatureDisplay } from '@/lib/normalizeFeatureDisplay';
 
 interface FeatureTreeProps {
   features: Feature[];
@@ -20,17 +21,22 @@ export function FeatureTree({ features, level = 0 }: FeatureTreeProps) {
   return (
     <div className="space-y-0.5">
       {features.map((feature) => {
-        const isExpanded = expandedNodes.has(feature.id);
-        const hasChildren = feature.childrenIds.length > 0;
-        const children = allFeatures.filter((f) => feature.childrenIds.includes(f.id));
+        const normalizedFeature = normalizeFeatureDisplay(feature);
+        if (!normalizedFeature) {
+          return null;
+        }
+
+        const isExpanded = expandedNodes.has(normalizedFeature.id);
+        const hasChildren = normalizedFeature.childrenIds.length > 0;
+        const children = allFeatures.filter((f) => normalizedFeature.childrenIds.includes(f.id));
 
         return (
-          <div key={feature.id}>
+          <div key={normalizedFeature.id}>
             <button
-              onClick={() => selectFeature(feature.id)}
+              onClick={() => selectFeature(normalizedFeature.id)}
               className={cn(
                 'w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm transition-colors',
-                selectedFeatureId === feature.id
+                selectedFeatureId === normalizedFeature.id
                   ? 'bg-[#6366f1]/20 text-white'
                   : 'text-white/60 hover:bg-white/5 hover:text-white'
               )}
@@ -40,7 +46,7 @@ export function FeatureTree({ features, level = 0 }: FeatureTreeProps) {
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleNode(feature.id);
+                    toggleNode(normalizedFeature.id);
                   }}
                   className="p-0.5 rounded hover:bg-white/10 transition-colors"
                 >
@@ -53,13 +59,13 @@ export function FeatureTree({ features, level = 0 }: FeatureTreeProps) {
               ) : (
                 <span className="w-5" />
               )}
-              <FileCode2
-                className={cn(
-                  'h-3.5 w-3.5',
-                  selectedFeatureId === feature.id ? 'text-[#818cf8]' : 'text-white/30'
-                )}
-              />
-              <span className="truncate">{feature.displayName}</span>
+                <FileCode2
+                  className={cn(
+                    'h-3.5 w-3.5',
+                    selectedFeatureId === normalizedFeature.id ? 'text-[#818cf8]' : 'text-white/30'
+                  )}
+                />
+              <span className="truncate">{normalizedFeature.displayName}</span>
             </button>
             {isExpanded && hasChildren && (
               <FeatureTree features={children} level={level + 1} />

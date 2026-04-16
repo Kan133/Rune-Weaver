@@ -9,6 +9,12 @@ export interface EntryBinding {
   symbol?: string;
 }
 
+export interface FeatureSourceModelRef {
+  adapter: string;
+  version: number;
+  path: string;
+}
+
 export interface RuneWeaverFeatureRecord {
   featureId: string;
   featureName?: string;
@@ -19,6 +25,7 @@ export interface RuneWeaverFeatureRecord {
   selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
+  sourceModel?: FeatureSourceModelRef;
   dependsOn?: string[];
   integrationPoints?: string[];
   gapFillBoundaries?: string[];
@@ -31,6 +38,7 @@ export interface RuneWeaverWorkspace {
   hostType: "dota2-x-template";
   hostRoot: string;
   addonName: string;
+  mapName?: string;
   initializedAt: string;
   features: RuneWeaverFeatureRecord[];
 }

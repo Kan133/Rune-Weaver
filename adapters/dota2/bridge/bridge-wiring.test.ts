@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { join } from "path";
 import { tmpdir } from "os";
 
-import { injectHostEntryBridge, ensureBridgeFiles } from "./index.js";
+import { injectHostEntryBridge, ensureBridgeFiles, refreshBridge } from "./index.js";
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {
@@ -27,6 +27,12 @@ function createTempHost(): string {
   writeFileSync(
     join(hostRoot, "content", "panorama", "src", "hud", "script.tsx"),
     `import React from "react";\nimport { render } from "react-panorama-x";\n\nfunction Root() {\n  return (\n    <>\n      <Label text="host" />\n    </>\n  );\n}\n\nrender(<Root />, $.GetContextPanel());\n`,
+    "utf-8"
+  );
+
+  writeFileSync(
+    join(hostRoot, "content", "panorama", "src", "hud", "styles.less"),
+    `@import "../rune_weaver/generated/ui/stale_feature.less";\n\n.root {\n  width: 100%;\n}\n`,
     "utf-8"
   );
 
@@ -64,6 +70,21 @@ try {
   assert(serverEntryAgain.match(/activateRuneWeaverModules\(\);/g)?.length === 1, "server bridge call should not duplicate");
   assert(uiEntryAgain.match(/<RuneWeaverHUDRoot \/>/g)?.length === 1, "ui bridge mount should not duplicate");
   console.log("✓ Test 3 passed");
+
+  console.log("Test 4: refreshBridge removes stale generated LESS imports when workspace is empty");
+  const refreshResult = refreshBridge(hostRoot, {
+    version: "0.1.0",
+    hostType: "dota2-x-template",
+    hostRoot,
+    addonName: "bridge_test",
+    initializedAt: new Date().toISOString(),
+    features: [],
+  });
+  assert(refreshResult.success, "refreshBridge should succeed for empty workspace");
+  const hudStyles = readFileSync(join(hostRoot, "content", "panorama", "src", "hud", "styles.less"), "utf-8");
+  assert(!hudStyles.includes("stale_feature.less"), "stale generated LESS import should be removed");
+  assert(hudStyles.includes(".rune-weaver-root"), "root style block should still exist");
+  console.log("✓ Test 4 passed");
 
   console.log("=== All tests passed ===");
 } finally {

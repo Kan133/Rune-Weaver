@@ -49,11 +49,14 @@ function sanitizeLabel(label: string) {
 }
 
 const TOOL_FAILURE_PATTERNS = [
+  /Error code:\s*\d+/i,
   /Max number of steps reached/i,
   /login\s*(required|error)/i,
   /authentication\s*(required|error|failed)/i,
   /unauthorized/i,
   /rate\s*limit/i,
+  /membership\s+benefits/i,
+  /invalid_request_error/i,
   /connection\s*(error|refused|reset|timed out)/i,
   /spawn\s*error/i,
   /command\s*not\s*found/i,
@@ -157,6 +160,7 @@ async function main() {
 
   console.log(`Probe finished: ${status}`);
   console.log(`Outputs written to: ${base}.*`);
+  console.log(`Summary file: ${base}.summary.json`);
   if (status !== "model-output-success") {
     process.exit(1);
   }

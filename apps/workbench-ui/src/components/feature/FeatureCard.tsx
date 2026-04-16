@@ -2,6 +2,7 @@ import { FileCode2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import type { Feature } from '@/types/feature';
+import { normalizeFeatureDisplay } from '@/lib/normalizeFeatureDisplay';
 
 interface FeatureCardProps {
   feature: Feature;
@@ -10,6 +11,12 @@ interface FeatureCardProps {
 }
 
 export function FeatureCard({ feature, isSelected, onClick }: FeatureCardProps) {
+  const normalizedFeature = normalizeFeatureDisplay(feature);
+
+  if (!normalizedFeature) {
+    return null;
+  }
+
   return (
     <button
       onClick={onClick}
@@ -32,19 +39,19 @@ export function FeatureCard({ feature, isSelected, onClick }: FeatureCardProps) 
             'text-sm font-medium truncate',
             isSelected ? 'text-white' : 'text-white/80'
           )}>
-            {feature.displayName}
+            {normalizedFeature.displayName}
           </span>
         </div>
-        <StatusBadge status={feature.status} />
+        <StatusBadge status={normalizedFeature.status} />
       </div>
       <div className="mt-2 flex items-center gap-3 text-xs text-white/40">
-        <span className="font-mono">#{feature.systemId}</span>
+        <span className="font-mono">#{normalizedFeature.systemId}</span>
         <span>·</span>
-        <span>v{feature.revision}</span>
-        {feature.childrenIds.length > 0 && (
+        <span>v{normalizedFeature.revision}</span>
+        {normalizedFeature.childrenIds.length > 0 && (
           <>
             <span>·</span>
-            <span>{feature.childrenIds.length} 个子项</span>
+            <span>{normalizedFeature.childrenIds.length} 个子项</span>
           </>
         )}
       </div>

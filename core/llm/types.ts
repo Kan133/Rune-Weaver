@@ -47,6 +47,23 @@ export interface GenerateObjectResult<T> {
   usage?: LLMUsage;
 }
 
+export type LLMThinkingMode = "enabled" | "disabled";
+export type OpenAICompatibleThinkingPayloadMode = "auto" | "type-object" | "none";
+
+export type LLMWorkflowKind =
+  | "wizard"
+  | "blueprint"
+  | "dota2-planning"
+  | "gap-fill"
+  | "workbench-gap-fill";
+
+export interface LLMExecutionConfig {
+  model?: string;
+  temperature?: number;
+  providerOptions?: Record<string, unknown>;
+  thinking?: LLMThinkingMode;
+}
+
 export interface LLMClient {
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
   generateObject<T>(input: GenerateObjectInput<T>): Promise<GenerateObjectResult<T>>;

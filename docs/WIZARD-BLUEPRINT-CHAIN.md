@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: aligning the accepted Wizard / IntentSchema / Blueprint stage boundaries
 > Do not use for: execution priority, host realization policy, or old builder-only mapping truth by itself
 
@@ -44,6 +44,12 @@ Important:
 - `BlueprintProposal` is optional
 - `BlueprintNormalizer` is deterministic
 - `FinalBlueprint` remains the downstream-trustable blueprint seam
+
+Planning-only note:
+
+- future feature-boundary / source-model shaping, if adopted, sits after `IntentSchema` and before deterministic blueprint normalization
+- it is not part of the current accepted chain
+- it must not be treated as a second downstream executable authority beside `FinalBlueprint`
 
 ## 3. Stage Responsibilities
 

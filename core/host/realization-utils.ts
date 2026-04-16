@@ -7,6 +7,7 @@ export interface HostPatternClassifier {
   isUI?: (pattern: string) => boolean;
   isRuntime?: (pattern: string) => boolean;
   isShared?: (pattern: string) => boolean;
+  getPreferredFamily?: (pattern: string) => string | undefined;
   outputKindToOutput?: (
     target: string
   ) => HostRealizationOutput["kind"] | undefined;

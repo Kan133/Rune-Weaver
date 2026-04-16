@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-15
 > Read when: evaluating Dota2 host realization decisions or debugging Dota2-specific realization routing
 > Do not use for: cross-host realization taxonomy, final host authority beyond Dota2, or milestone-status claims
 
@@ -156,6 +156,13 @@ Some units may not generate feature-local files directly and may instead only re
 
 These should be marked as `bridge-only` rather than being forced into KV or TS buckets.
 
+Current narrow Dota2 truth:
+
+- `integration.state_sync_bridge` is the honest example today
+- it routes as `bridge-only`
+- it is deliberately elided rather than materialized as a standalone placeholder bridge file
+- this is a narrow slice honesty fix, not full admission of a broad generic bridge family
+
 ## Lua Cases (Narrow Scope — T125)
 
 The following may bias toward `lua`:
@@ -235,10 +242,11 @@ This table is the current recommended first-pass routing baseline.
 | `input.key_binding` | `ts` | Custom input capture and trigger orchestration are runtime concerns |
 | `effect.dash` | `kv+ts` | Ability shell often fits static config; dash behavior usually needs runtime logic |
 | `effect.modifier_applier` | `kv+ts` | Modifier registration may be host-native; custom behavior usually remains scripted |
-| `effect.resource_consume` | `kv` or `kv+ts` | Static cost/cooldown biases toward KV; custom runtime resource rules may escalate |
-| `resource.basic_pool` | `kv` or `kv+ts` | Static resource properties bias KV; custom runtime state may require hybrid |
+| `effect.resource_consume` | `kv` or `kv+ts` | Honest today only inside the narrow same-feature single-caller path with one compatible `resource.basic_pool`; broader caller/consumer shapes still defer |
+| `resource.basic_pool` | `kv` or `kv+ts` | Honest today only inside the narrow same-feature single-caller path with one `effect.resource_consume`; broad family admission is still false |
 | `rule.selection_flow` | `ts` | Choice flow and nontrivial orchestration exceed static config |
 | `data.weighted_pool` | `shared-ts` or `ts` | Depends on whether the data structure must be shared or is server-only |
+| `integration.state_sync_bridge` | `bridge-only` | Narrow current slice routes honestly but deliberately elides standalone bridge-file emission; bridge family remains partial overall |
 | `ui.selection_modal` | `ui` | Panorama-facing UI surface |
 | `ui.key_hint` | `ui` | Panorama-facing UI surface |
 | `ui.resource_bar` | `ui` | Panorama-facing UI surface |
@@ -297,6 +305,16 @@ Reason:
 Typical bias:
 
 - `kv` or `kv+ts`, depending on whether behavior is static or custom
+
+Current narrow honesty constraint:
+
+- `resource/cost` still remains `partial`
+- the current honest canonical path is:
+  - same-feature
+  - single `input.key_binding`
+  - single compatible `resource.basic_pool`
+  - single `effect.resource_consume`
+- no-caller, caller ambiguity, multiple consumers, and pool/resource mismatch remain deferred rather than broadly realized
 
 ### `rule.selection_flow`
 

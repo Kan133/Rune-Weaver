@@ -101,6 +101,15 @@ async function main(): Promise<void> {
   console.log(`Blueprint: ${reviewPackage.writePreviewArtifact.summary.blueprintId}`);
   console.log(`Target symbol: ${reviewPackage.writePreviewArtifact.summary.targetBindingSymbol}`);
   console.log(`Unresolved bindings: ${reviewPackage.writePreviewArtifact.summary.unresolvedBindingCount}`);
+  if (reviewPackage.shadowRealizationPlan) {
+    console.log(`Shadow realization units: ${reviewPackage.shadowRealizationPlan.realizationUnits.length}`);
+  }
+  if (reviewPackage.shadowDraftBundle) {
+    console.log(`Shadow draft files: ${Object.keys(reviewPackage.shadowDraftBundle.draftFiles).length}`);
+  }
+  if (reviewPackage.shadowSiteEvidenceReview) {
+    console.log(`Shadow site evidence contracts: ${reviewPackage.shadowSiteEvidenceReview.sites.length}`);
+  }
   if (reviewPackage.implementationDraftPlan) {
     console.log(`Implementation draft entries: ${reviewPackage.implementationDraftPlan.entries.length}`);
     console.log(

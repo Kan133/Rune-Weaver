@@ -47,6 +47,11 @@ function createDota2Pattern(params: {
   responsibilities: PatternResponsibility[];
   nonGoals: PatternNonGoal[];
   capabilities: string[];
+  traits?: string[];
+  semanticOutputs?: PatternMeta["semanticOutputs"];
+  stateAffordances?: PatternMeta["stateAffordances"];
+  integrationHints?: PatternMeta["integrationHints"];
+  invariants?: PatternMeta["invariants"];
   inputs: PatternMeta["inputs"];
   outputs: PatternMeta["outputs"];
   parameters?: PatternParam[];
@@ -56,6 +61,9 @@ function createDota2Pattern(params: {
   examples?: PatternExample[];
   hostTarget: Dota2PatternMeta["hostTarget"];
   outputTypes: Dota2PatternMeta["outputTypes"];
+  allowedFamilies?: string[];
+  preferredFamily?: string;
+  requiredHostCapabilities?: string[];
   dota2Params?: Dota2PatternMeta["dota2Params"];
 }): Dota2PatternMeta {
   // 自动构建 hostBindings
@@ -63,6 +71,9 @@ function createDota2Pattern(params: {
     hostId: "dota2",
     target: hostTargetMap[params.hostTarget],
     outputTypes: params.outputTypes,
+    allowedFamilies: params.allowedFamilies,
+    preferredFamily: params.preferredFamily,
+    requiredHostCapabilities: params.requiredHostCapabilities,
   }];
 
   return {
@@ -103,7 +114,11 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { text: "不处理鼠标点击/移动输入", alternative: "使用 input.mouse_binding" },
       { text: "不处理组合键（如 Ctrl+Q）", alternative: "使用 input.combo_binding" },
     ],
-    capabilities: ["key_detection", "event_emission"],
+    capabilities: ["input.trigger.capture", "input.binding.key", "event.emit.custom", "key_detection", "event_emission"],
+    traits: ["requires_runtime", "input_surface", "deterministic_parameterization"],
+    semanticOutputs: ["server.runtime"],
+    integrationHints: ["input.binding", "event.dispatch"],
+    invariants: ["bound key must resolve to a supported Dota2 key surface"],
     inputs: [{ name: "key", type: "string", required: true }],
     outputs: [{ name: "event", type: "event" }],
     parameters: [
@@ -133,6 +148,9 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.server",
     outputTypes: ["typescript"],
+    allowedFamilies: ["runtime-primary"],
+    preferredFamily: "runtime-primary",
+    requiredHostCapabilities: ["input-binding"],
     dota2Params: { requiresAbility: true },
   }),
 
@@ -156,7 +174,16 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { text: "不负责 selection-confirmed commit 行为", alternative: "由 rule.selection_flow 负责" },
       { text: "不删除静态 talent definitions", alternative: "静态定义不可变，只追踪会话状态" },
     ],
-    capabilities: ["weighted_selection", "tier_management", "random_draw", "session_state_tracking"],
+    capabilities: ["data.pool.weighted", "selection.pool.weighted_candidates", "selection.candidate_pool", "selection.weighted_sampling", "weighted_selection", "tier_management", "random_draw", "session_state_tracking"],
+    traits: ["stateful.session", "shared_runtime_candidate", "deterministic_parameterization"],
+    semanticOutputs: ["shared.runtime", "server.runtime"],
+    stateAffordances: ["selection.pool_state", "selection.remaining_items", "selection.owned_items"],
+    integrationHints: ["selection.candidate_source"],
+    invariants: [
+      "static entry definitions remain immutable",
+      "session state tracking must be explicit when enabled",
+      "candidate choices must remain distinct within the active selection set",
+    ],
     inputs: [
       { name: "tiers", type: "string[]", required: true },
       { name: "weights", type: "Record<string, number>", required: false },
@@ -201,6 +228,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.server",
     outputTypes: ["typescript"],
+    allowedFamilies: ["runtime-shared", "runtime-primary"],
+    preferredFamily: "runtime-shared",
   }),
 
   // ============================================================================
@@ -210,7 +239,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "rule.selection_flow",
     category: "rule",
     summary: "多选一选择流程",
-    description: "管理完整的多选一流程：展示候选项、接收选择、应用结果、提交池状态变更",
+    description: "管理完整的多选一流程：展示候选项、接收选择、应用结果、提交池状态变更，并可在当前切片内承载窄的 session-only 已选库存同步。",
     responsibilities: [
       { text: "从数据池获取候选项", core: true },
       { text: "展示选择界面（通过 UI Pattern）", core: true },
@@ -223,7 +252,12 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { text: "不渲染 UI", alternative: "使用 ui.selection_modal" },
       { text: "不处理跨局持久化", alternative: "MVP 只需单局持久化" },
     ],
-    capabilities: ["multi_choice", "player_selection", "result_apply", "pool_state_commit", "effect_mapping"],
+    capabilities: ["selection.flow.player_confirmed", "selection.flow.resolve_choice", "selection.flow.pool_commit", "selection.flow.effect_mapping", "multi_choice", "player_selection", "result_apply", "pool_state_commit", "effect_mapping"],
+    traits: ["requires_runtime", "choice_orchestration", "stateful.session"],
+    semanticOutputs: ["server.runtime"],
+    stateAffordances: ["selection.commit_state"],
+    integrationHints: ["selection.candidate_source", "selection.ui_surface"],
+    invariants: ["choice count must be satisfiable by the candidate set"],
     inputs: [
       { name: "candidates", type: "any[]", required: false },
       { name: "choiceCount", type: "number", required: true },
@@ -239,6 +273,12 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { name: "postSelectionPoolBehavior", type: "enum", required: false, description: "选择后池行为：none/remove_selected_from_remaining/remove_selected_and_keep_unselected_eligible", defaultValue: "none" },
       { name: "trackSelectedItems", type: "boolean", required: false, description: "是否追踪已选项目到 owned 列表", defaultValue: false },
       { name: "effectApplication", type: "object", required: false, description: "效果应用配置，包含 enabled 和 rarityAttributeBonusMap" },
+      {
+        name: "inventory",
+        type: "object",
+        required: false,
+        description: '当前 admitted 的窄库存扩展：session-only、persistent_panel、确认后入库、满仓时阻止继续抽取',
+      },
     ],
     constraints: [
       "choiceCount 必须大于 0",
@@ -246,6 +286,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       "如果 postSelectionPoolBehavior !== none，需要兼容的池状态源",
       "如果 trackSelectedItems = true，已选 id 必须追加到会话 owned 列表",
       "未选中的候选项必须保持 eligible（Talent Draw MVP）",
+      'inventory 当前仅支持 session-only + "persistent_panel" 的窄 Talent Draw 扩展，不扩展为通用库存框架',
     ],
     dependencies: [
       { patternId: "data.weighted_pool", relation: "optional", reason: "用于获取候选项和池状态" },
@@ -288,6 +329,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.server",
     outputTypes: ["typescript"],
+    allowedFamilies: ["runtime-primary"],
+    preferredFamily: "runtime-primary",
     dota2Params: { requiresAbility: false },
   }),
 
@@ -297,18 +340,25 @@ export const dota2Patterns: Dota2PatternMeta[] = [
   createDota2Pattern({
     id: "effect.dash",
     category: "effect",
-    summary: "冲刺位移效果",
-    description: "朝指定方向执行带有动画的位移",
+    summary: "冲刺位移效果（broad family deferred）",
+    description:
+      "保留冲刺位移的能力目录入口，但当前 broad family 仍属 deferred。" +
+      "现有下游生成尚未 honest materialize 所需的 ability-shell + motion-modifier path。",
     responsibilities: [
       { text: "计算位移目标位置", core: true },
       { text: "执行平滑位移（带速度控制）", core: true },
       { text: "播放冲刺特效", core: false },
     ],
     nonGoals: [
+      { text: "不宣称当前已经生成完整的 ability-shell + motion-modifier runtime；broad dash family 仍 deferred" },
       { text: "不处理无敌/免控状态", alternative: "配合 modifier.invulnerable" },
       { text: "不处理碰撞检测", alternative: "使用 effect.blink 实现无视地形" },
     ],
-    capabilities: ["displacement", "directional", "speed_control"],
+    capabilities: ["effect.displacement.dash", "effect.displacement.directional", "effect.motion.controlled", "displacement", "directional", "speed_control"],
+    traits: ["requires_runtime", "supports_static_config", "gameplay_effect"],
+    semanticOutputs: ["server.runtime", "host.config.kv"],
+    integrationHints: ["ability.execution", "modifier.runtime"],
+    invariants: ["distance and speed must remain positive"],
     inputs: [
       { name: "direction", type: "vector", required: false },
       { name: "distance", type: "number", required: true },
@@ -323,36 +373,47 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     constraints: [
       "distance 必须为正数",
       "speed 必须为正数",
+      "当前 broad dash family 仍 deferred；目录保留仅用于能力匹配与显式 honest boundary",
     ],
     examples: [
       {
         name: "向前冲刺",
-        description: "朝面对方向冲刺300距离",
+        description: "期望中的冲刺语义示例；当前 broad family 仍 deferred，不应视为已 honest materialize",
         params: { distance: 300, speed: 1200 },
         useCase: "位移技能",
       },
     ],
     hostTarget: "dota2.server",
     outputTypes: ["typescript"],
+    allowedFamilies: ["composite-static-runtime"],
+    preferredFamily: "composite-static-runtime",
     dota2Params: { requiresModifier: true },
   }),
 
   createDota2Pattern({
     id: "effect.modifier_applier",
     category: "effect",
-    summary: "修改器应用器",
-    description: "将指定的 modifier（增益/减益效果）应用到目标实体，支持持续时间和层数控制",
+    summary: "修改器应用器（broad family deferred）",
+    description:
+      "保留通用 modifier 应用语义的目录入口，但当前 broad family 仍属 deferred。" +
+      "现有 honest generated coverage 仍只落在更窄的 same-file short-duration buff slice。",
     responsibilities: [
       { text: "创建并应用 modifier 到目标", core: true },
       { text: "管理 modifier 持续时间和层数", core: true },
       { text: "支持刷新和叠加逻辑", core: true },
     ],
     nonGoals: [
+      { text: "不宣称当前已经 materialize broad generic modifier generation；该 family 仍 deferred" },
       { text: "不定义 modifier 的具体效果", alternative: "modifier 效果由具体定义决定" },
       { text: "不处理 modifier 的视觉效果", alternative: "使用 effect.visual_effect" },
       { text: "不管理 modifier 的触发逻辑", alternative: "使用 rule.trigger_condition" },
     ],
-    capabilities: ["modifier_application", "duration_control", "stack_management", "refresh_logic"],
+    capabilities: ["effect.modifier.apply", "effect.modifier.duration_control", "effect.modifier.stack_management", "modifier_application", "duration_control", "stack_management", "refresh_logic"],
+    traits: ["requires_runtime", "modifier_lifecycle", "supports_static_config"],
+    semanticOutputs: ["server.runtime", "host.config.kv", "host.runtime.lua"],
+    stateAffordances: ["modifier.duration_state", "modifier.stack_state"],
+    integrationHints: ["modifier.runtime", "ability.execution"],
+    invariants: ["modifier target and identifier must resolve before application"],
     inputs: [
       { name: "target", type: "entity", required: true },
       { name: "modifierId", type: "string", required: true },
@@ -373,6 +434,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       "modifierId 必须对应已定义的 modifier",
       "duration 为 -1 时表示永久 modifier",
       "stacks 必须为正整数",
+      "当前 broad modifier application family 仍 deferred；目录保留仅用于能力匹配与显式 honest boundary",
     ],
     validationHints: [
       {
@@ -385,19 +447,22 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     examples: [
       {
         name: "天赋效果应用",
-        description: "将选中的天赋效果应用到英雄",
+        description: "通用 modifier 应用的目标语义示例；当前 broad family 仍 deferred，不应视为已 honest generated support",
         params: { modifierId: "talent_bonus_strength", duration: -1, stacks: 1 },
         useCase: "天赋选择系统",
       },
       {
         name: "临时增益",
-        description: "给予英雄持续10秒的攻击力加成",
+        description: "更窄的短时自施加增益已由专门 same-file slice 承担；此处 broad family 仍 deferred",
         params: { modifierId: "buff_attack_damage", duration: 10, stacks: 1 },
         useCase: "战斗增益",
       },
     ],
     hostTarget: "dota2.server",
     outputTypes: ["lua", "kv"],
+    allowedFamilies: ["modifier-runtime", "composite-static-runtime"],
+    preferredFamily: "modifier-runtime",
+    requiredHostCapabilities: ["ability-lua", "modifier-runtime"],
     dota2Params: { requiresModifier: true },
   }),
 
@@ -405,7 +470,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "effect.resource_consume",
     category: "effect",
     summary: "资源消耗效果",
-    description: "执行资源（法力/能量等）扣除，支持不足检测",
+    description: "执行资源（法力/能量等）扣除，并在当前 admitted slice 内只承认 block/report 两种不足处理语义",
     responsibilities: [
       { text: "检查资源是否充足", core: true },
       { text: "扣除指定数量的资源", core: true },
@@ -413,9 +478,14 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     nonGoals: [
       { text: "不管理资源总量", alternative: "使用 resource.basic_pool" },
-      { text: "不处理资源回复", alternative: "使用 resource.regen" },
+      { text: "不扩展为开放式失败语义框架；当前 admitted slice 仅覆盖 block/report", alternative: "超出该范围的失败语义会 honest defer" },
     ],
-    capabilities: ["resource_deduction", "cost_validation", "insufficient_handling"],
+    capabilities: ["effect.resource.consume", "resource.cost.apply", "resource.cost.validate", "resource_deduction", "cost_validation", "insufficient_handling"],
+    traits: ["requires_runtime", "resource_consumer"],
+    semanticOutputs: ["server.runtime"],
+    stateAffordances: ["resource.current_value"],
+    integrationHints: ["resource.pool"],
+    invariants: ["resource amount must remain positive"],
     inputs: [
       { name: "amount", type: "number", required: true },
       { name: "resourceType", type: "string", required: false },
@@ -427,11 +497,18 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     parameters: [
       { name: "amount", type: "number", required: true, description: "消耗数量" },
       { name: "resourceType", type: "string", required: false, description: "资源类型", defaultValue: "mana" },
-      { name: "failBehavior", type: "enum", required: false, description: "不足时的行为", defaultValue: "block" },
+      {
+        name: "failBehavior",
+        type: "enum",
+        required: false,
+        description: '不足时的行为；当前 admitted slice 仅支持 "block" 或 "report"',
+        defaultValue: "block",
+      },
     ],
     constraints: [
       "amount 必须为正数",
       "resourceType 必须是已定义的资源类型",
+      'failBehavior 当前仅支持 "block" 或 "report"；其他值会在下游 honest defer',
     ],
     dependencies: [
       { patternId: "resource.basic_pool", relation: "requires", reason: "需要资源池提供当前值" },
@@ -446,6 +523,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.server",
     outputTypes: ["typescript"],
+    allowedFamilies: ["runtime-primary"],
+    preferredFamily: "runtime-primary",
   }),
 
   // ============================================================================
@@ -455,17 +534,22 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "resource.basic_pool",
     category: "resource",
     summary: "基础资源池",
-    description: "管理数值型资源（法力、能量、怒气等）的存储、消耗和回复",
+    description: "管理数值型资源（法力、能量、怒气等）的存储、上下限、消耗与恢复，不承诺自动回复或运行时 UI 同步",
     responsibilities: [
       { text: "存储当前值和最大值", core: true },
-      { text: "处理数值变化事件", core: true },
-      { text: "支持自动回复", core: false },
+      { text: "处理消耗与恢复后的数值变化", core: true },
+      { text: "暴露兼容的读取/消耗/恢复接口", core: true },
     ],
     nonGoals: [
-      { text: "不处理复杂资源类型（如充能层数）", alternative: "使用 resource.charge_pool" },
-      { text: "不处理资源转换（如法力转怒气）", alternative: "使用 resource.converter" },
+      { text: "不处理自动回复或计时驱动的资源恢复；当前 admitted slice 仅支持 regen = 0" },
+      { text: "不扩展为复杂资源框架（如充能层数、资源转换、经济系统）" },
     ],
-    capabilities: ["value_storage", "min_max_bounds", "change_events"],
+    capabilities: ["resource.pool.numeric", "resource.pool.track_state", "value_storage", "min_max_bounds", "change_events"],
+    traits: ["stateful.session", "shared_runtime_candidate"],
+    semanticOutputs: ["shared.runtime", "server.runtime"],
+    stateAffordances: ["resource.current_value", "resource.max_value"],
+    integrationHints: ["resource.ui_surface", "resource.cost_source"],
+    invariants: ["resource current value must stay within declared bounds"],
     inputs: [
       { name: "max", type: "number", required: true },
       { name: "initial", type: "number", required: false },
@@ -478,46 +562,122 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     parameters: [
       { name: "resourceId", type: "string", required: true, description: "资源标识" },
       { name: "maxValue", type: "number", required: true, description: "最大值" },
-      { name: "regen", type: "number", required: false, description: "回复速率", defaultValue: 0 },
+      {
+        name: "regen",
+        type: "number",
+        required: false,
+        description: "回复速率；为兼容输入面保留该字段，但当前 admitted slice 仅支持 0",
+        defaultValue: 0,
+      },
       { name: "visible", type: "boolean", required: false, description: "是否可见", defaultValue: true },
     ],
     constraints: [
       "max 必须为正数",
       "initial 如果提供必须在 [0, max] 范围内",
+      "regen 当前仅支持 0；非零值会在下游 honest defer",
     ],
     examples: [
       {
         name: "法力池",
-        description: "500点法力，每秒回复2点",
-        params: { resourceId: "mana", maxValue: 500, regen: 2 },
+        description: "500点法力，提供固定上限与本地数值读写",
+        params: { resourceId: "mana", maxValue: 500, regen: 0 },
         useCase: "英雄法力系统",
       },
     ],
     hostTarget: "dota2.shared",
     outputTypes: ["typescript"],
+    allowedFamilies: ["runtime-shared", "runtime-primary"],
+    preferredFamily: "runtime-shared",
   }),
 
   // ============================================================================
   // UI 类
   // ============================================================================
   createDota2Pattern({
+    id: "integration.state_sync_bridge",
+    category: "integration",
+    summary: "受限的选择状态同步桥边界",
+    description: "声明服务器运行时选择状态到 Panorama UI 的已 admitted 同步切片。当前 Dota2 路由会承认这条 bridge surface，但写出阶段会故意省略独立 bridge 文件；stateChannels / eventNames 仅作为兼容性标记，不扩展为自由配置桥接层。",
+    responsibilities: [
+      { text: "声明候选池与选择提交状态的已 admitted 同步边界", core: true },
+      { text: "为选择系统提供可审查的 bridge compatibility 标记", core: true },
+      { text: "保持 bridge slice 受限于既有 selection-state surface", core: true },
+    ],
+    nonGoals: [
+      { text: "不提供任意运行时对象到 UI 的自由桥接", alternative: "仅支持声明过的选择状态同步切片" },
+      { text: "不承担选择逻辑或候选池计算", alternative: "分别使用 rule.selection_flow 与 data.weighted_pool" },
+      { text: "不扩展为工作台或产品壳层消息总线", alternative: "保持为宿主选择系统所需的最小桥接面" },
+      { text: "不生成独立 bridge 文件", alternative: "当前 Dota2 写出路径对该切片采取 deliberate elision" },
+    ],
+    capabilities: ["integration.bridge.sync", "integration.bridge.selection_state"],
+    traits: ["requires_runtime", "bridge_surface", "stateful.session"],
+    semanticOutputs: ["bridge", "server.runtime"],
+    stateAffordances: ["selection.pool_state", "selection.commit_state"],
+    integrationHints: ["selection.ui_surface", "selection.candidate_source", "integration.bridge.sync"],
+    invariants: ["bridge payload must stay inside declared selection-state surfaces"],
+    inputs: [
+      { name: "stateChannels", type: "string[]", required: false },
+      { name: "eventNames", type: "string[]", required: false },
+    ],
+    outputs: [{ name: "bridge_refresh", type: "bridge" }],
+    parameters: [
+      {
+        name: "stateChannels",
+        type: "string[]",
+        required: false,
+        description: "兼容性标记；当前 admitted slice 仅记录已声明的选择状态通道，如 candidate_pool / selection_commit",
+      },
+      {
+        name: "eventNames",
+        type: "string[]",
+        required: false,
+        description: "兼容性标记；当前 admitted slice 不把事件名扩展为自由配置 bridge surface",
+      },
+    ],
+    constraints: [
+      "仅允许声明过的选择状态通道参与同步",
+      "桥接负载必须保持为 UI 可消费的受限选择状态摘要",
+      "stateChannels / eventNames 当前仅作为 compatibility hints；不会 materialize 成自由配置的桥接文件",
+      "当前 Dota2 admitted slice routed 但 deliberately elided；不生成 standalone bridge output",
+    ],
+    examples: [
+      {
+        name: "选择状态同步",
+        description: "声明候选池和已确认选择状态的受限同步边界；实际 Dota2 写出路径 routed 但 deliberately elided",
+        params: { stateChannels: ["candidate_pool", "selection_commit"] },
+        useCase: "玩家选择系统的运行时到 UI 状态同步",
+      },
+    ],
+    hostTarget: "dota2.server",
+    outputTypes: ["typescript"],
+    allowedFamilies: ["bridge-support"],
+    preferredFamily: "bridge-support",
+    requiredHostCapabilities: ["custom-game-events"],
+  }),
+
+  createDota2Pattern({
     id: "ui.selection_modal",
     category: "ui",
     summary: "选择弹窗",
-    description: "模态弹窗展示多个选项供玩家选择，支持卡片布局、动画和占位符槽位",
+    description: "模态弹窗展示多个选项供玩家单选，当前 admitted slice 仅覆盖 card_tray 布局、显式关闭行为和占位符槽位，并允许在同一组件内附带窄的 persistent inventory panel，不承诺暂停游戏或更广布局语义",
     responsibilities: [
       { text: "展示多个可选项卡片", core: true },
       { text: "接收玩家点击选择", core: true },
       { text: "支持固定可见槽位数量", core: true },
       { text: "支持占位符槽位显示（当候选项不足时）", core: true },
-      { text: "播放打开/选择动画", core: false },
+      { text: "提供当前切片内的选中/悬停视觉反馈", core: false },
     ],
     nonGoals: [
       { text: "不管理选择逻辑", alternative: "使用 rule.selection_flow" },
       { text: "不存储选择结果", alternative: "由调用方管理状态" },
       { text: "占位符槽位不可选择", alternative: "占位符仅用于显示，不触发选择事件" },
+      { text: "不暂停游戏或冻结宿主时间流", alternative: "当前 admitted slice 仅控制 UI 可见性与选择交互" },
     ],
-    capabilities: ["multi_card_display", "player_selection", "animation", "dismiss", "fixed_slot_count", "placeholder_slots"],
+    capabilities: ["ui.selection.modal", "ui.selection.card_display", "ui.selection.placeholder_slots", "multi_card_display", "player_selection", "animation", "dismiss", "fixed_slot_count", "placeholder_slots"],
+    traits: ["ui_surface", "supports_static_config"],
+    semanticOutputs: ["ui.surface"],
+    integrationHints: ["selection.ui_surface"],
+    invariants: ["placeholder entries must remain non-selectable"],
     inputs: [
       { name: "items", type: "any[]", required: false },
       { name: "layout", type: "'horizontal' | 'vertical' | 'grid'", required: false },
@@ -525,20 +685,41 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     outputs: [{ name: "selectedIndex", type: "number" }],
     parameters: [
       { name: "choiceCount", type: "number", required: true, description: "展示选项数量" },
-      { name: "layoutPreset", type: "enum", required: false, description: "布局预设", defaultValue: "card_tray" },
-      { name: "selectionMode", type: "enum", required: false, description: "选择模式", defaultValue: "single" },
+      {
+        name: "layoutPreset",
+        type: "enum",
+        required: false,
+        description: '布局预设；当前 admitted slice 仅支持 "card_tray"',
+        defaultValue: "card_tray",
+      },
+      {
+        name: "selectionMode",
+        type: "enum",
+        required: false,
+        description: '选择模式；当前 admitted slice 仅支持 "single"',
+        defaultValue: "single",
+      },
       { name: "dismissBehavior", type: "enum", required: false, description: "关闭行为", defaultValue: "selection_only" },
       { name: "payloadShape", type: "enum", required: false, description: "展示载荷类型：simple_text/card/card_with_rarity/custom", defaultValue: "card" },
       { name: "minDisplayCount", type: "number", required: false, description: "最小可见槽位数量", defaultValue: 0 },
       { name: "placeholderConfig", type: "object", required: false, description: "占位符槽位配置，包含 id/name/description/disabled" },
+      {
+        name: "inventory",
+        type: "object",
+        required: false,
+        description: '当前 admitted 的窄库存扩展：右侧 persistent_panel、固定槽位、满仓提示，不扩展为通用背包 UI',
+      },
     ],
     constraints: [
       "items 不能为空",
-      "modal 打开时会暂停游戏（默认）",
+      "当前 admitted slice 不自动暂停游戏或冻结宿主时间流",
+      'layoutPreset 当前仅支持 "card_tray"；其他值需要 honest defer 或后续专门实现',
+      'selectionMode 当前仅支持 "single"；多选语义尚未在当前 UI family 中 admitted',
       "minDisplayCount >= 0",
       "如果 minDisplayCount > choiceCount，警告除非明确需要固定槽位显示",
       "占位符配置必须至少包含 id 和 name",
       "占位符项目不可触发选择事件",
+      'inventory 当前仅支持 "persistent_panel" 呈现；不支持拖拽、删除、重排、第二切换键或跨局持久化',
     ],
     validationHints: [
       {
@@ -551,7 +732,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     examples: [
       {
         name: "天赋选择",
-        description: "横向排列的三个天赋卡，支持稀有度显示和占位符",
+        description: "card_tray 单选弹窗，展示三个天赋卡并支持稀有度显示和占位符",
         params: { 
           choiceCount: 3, 
           minDisplayCount: 3, 
@@ -568,6 +749,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.panorama",
     outputTypes: ["tsx", "less"],
+    allowedFamilies: ["ui-surface"],
+    preferredFamily: "ui-surface",
     dota2Params: { requiresPanel: true },
   }),
 
@@ -575,19 +758,24 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "ui.key_hint",
     category: "ui",
     summary: "按键提示",
-    description: "显示按键绑定提示，支持冷却指示",
+    description: "显示已声明按键的静态提示文本与键位，不承担运行时按键状态或冷却同步",
     responsibilities: [
       { text: "显示按键图标和名称", core: true },
-      { text: "显示冷却进度（如适用）", core: false },
+      { text: "显示与按键相关的静态提示文案", core: false },
     ],
     nonGoals: [
       { text: "不处理按键绑定逻辑", alternative: "使用 input.key_binding" },
+      { text: "不处理运行时按键状态反馈", alternative: "当前切片仅生成静态提示 UI" },
+      { text: "不显示冷却进度或技能状态", alternative: "当前 UI feedback/status family 还未 admitted 到这一步" },
       { text: "不显示复杂技能信息", alternative: "使用 ui.ability_tooltip" },
     ],
-    capabilities: ["key_display", "binding_show", "cooldown_indicator"],
+    capabilities: ["ui.input.key_hint", "key_display", "binding_show", "static_label_surface"],
+    traits: ["ui_surface", "supports_static_config"],
+    semanticOutputs: ["ui.surface"],
+    integrationHints: ["input.binding"],
     inputs: [
       { name: "key", type: "string", required: true },
-      { name: "abilityName", type: "string", required: false },
+      { name: "text", type: "string", required: false },
     ],
     outputs: [],
     parameters: [
@@ -597,6 +785,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     constraints: [
       "key 显示为 Dota2 键位图标",
+      "当前生成仅承载静态提示文案和键位展示",
     ],
     examples: [
       {
@@ -608,6 +797,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.panorama",
     outputTypes: ["tsx", "less"],
+    allowedFamilies: ["ui-surface"],
+    preferredFamily: "ui-surface",
     dota2Params: { requiresPanel: true },
   }),
 
@@ -615,17 +806,21 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "ui.resource_bar",
     category: "ui",
     summary: "资源条",
-    description: "显示数值型资源的当前/最大值，支持变化动画",
+    description: "显示数值型资源的当前/最大值静态展示壳层，不承担运行时资源同步或回复趋势绑定",
     responsibilities: [
       { text: "以条形图显示资源量", core: true },
-      { text: "播放数值变化动画", core: false },
-      { text: "显示回复趋势指示", core: false },
+      { text: "显示当前值与最大值文本", core: false },
     ],
     nonGoals: [
       { text: "不管理资源数值", alternative: "使用 resource.basic_pool" },
+      { text: "不绑定 CustomNetTables 或轮询宿主状态", alternative: "当前切片仅生成静态资源展示 UI" },
+      { text: "不显示回复趋势或动态动画", alternative: "当前 UI feedback/status family 还未 admitted 到这一步" },
       { text: "不显示复杂资源详情", alternative: "使用 ui.resource_detail" },
     ],
-    capabilities: ["value_display", "max_reference", "change_animation", "regen_indicator"],
+    capabilities: ["ui.resource.bar", "value_display", "max_reference", "static_value_surface"],
+    traits: ["ui_surface", "supports_static_config"],
+    semanticOutputs: ["ui.surface"],
+    integrationHints: ["resource.ui_surface"],
     inputs: [
       { name: "current", type: "number", required: false },
       { name: "max", type: "number", required: false },
@@ -639,7 +834,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     constraints: [
       "current 显示为 max 的百分比",
-      "支持数值变化动画",
+      "当前生成仅承载静态数值展示，不自动绑定运行时资源状态",
     ],
     examples: [
       {
@@ -651,6 +846,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     hostTarget: "dota2.panorama",
     outputTypes: ["tsx", "less"],
+    allowedFamilies: ["ui-surface"],
+    preferredFamily: "ui-surface",
     dota2Params: { requiresPanel: true },
   }),
 ];
@@ -683,11 +880,19 @@ const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
     { text: "不处理单位生成或 AI 行为", alternative: "使用 unit.spawn 或 unit.ai_behavior" },
   ],
   capabilities: [
+    "ability.buff.short_duration",
+    "timing.cooldown.local",
+    "effect.modifier.apply_self",
     "ability_lua_shell",
     "modifier_same_file",
     "kv_ability_definition",
     "hero_attachment",
   ],
+  traits: ["requires_runtime", "modifier_lifecycle", "supports_static_config", "self_targeted_effect"],
+  semanticOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+  stateAffordances: ["modifier.duration_state"],
+  integrationHints: ["ability.execution", "modifier.runtime", "hero.attachment"],
+  invariants: ["ability and modifier must remain in the same Lua file"],
   inputs: [
     { name: "abilityName", type: "string", required: true, description: "能力名称（如 rw_my_buff）" },
     {
@@ -728,6 +933,7 @@ const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
   constraints: [
     "需要 x-template 或兼容 Dota2 addon 宿主",
     "需要 vscripts 加载器支持 ability_lua BaseClass",
+    "scheduler/timer 当前仅 admitted same-effect local cooldown；delay / periodic / post-selection orchestration 仍 deferred",
   ],
   dependencies: [
     { patternId: "dota_ts_adapter", relation: "requires", reason: "_G registration for ability/modifier classes" },
@@ -770,6 +976,9 @@ const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
   hostTarget: "dota2.server",
   // T125-R2: KEY — this enables lua contentType emission from normal pipeline
   outputTypes: ["lua", "kv"],
+  allowedFamilies: ["modifier-runtime", "composite-static-runtime"],
+  preferredFamily: "modifier-runtime",
+  requiredHostCapabilities: ["ability-lua", "modifier-runtime"],
   dota2Params: {
     requiresAbility: true,
     requiresModifier: true,

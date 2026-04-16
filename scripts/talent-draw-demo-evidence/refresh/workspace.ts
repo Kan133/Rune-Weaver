@@ -20,7 +20,7 @@ function isTalentDrawLikeFeature(feature: {
   const hasSelectionUI = patterns.includes("ui.selection_modal");
   const hasEffect = patterns.includes("effect.modifier_applier");
   const hasF4Binding = integrationPoints.includes("input.key_binding:F4");
-  const hasPoolFile = generatedFiles.some((file) => file.includes("_data_data_weighted_pool"));
+  const hasPoolFile = generatedFiles.some((file) => file.endsWith("_data_weighted_pool.ts"));
 
   return hasSelectionFlow && hasWeightedPool && hasSelectionUI && hasEffect && hasF4Binding && hasPoolFile;
 }

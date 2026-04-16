@@ -1,4 +1,7 @@
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
+import {
+  TALENT_DRAW_CANONICAL_UPDATE_PROMPT,
+} from "../../../../adapters/dota2/cases/talent-draw.js";
 
 export interface DemoScenario {
   id: string;
@@ -63,6 +66,50 @@ const talentDrawScenario: DemoScenario = {
   evidenceCommand: (options) => ["npm", "run", "demo:talent-draw:refresh", "--", "--host", options.hostRoot],
 };
 
+const talentDrawInventoryUpdateScenario: DemoScenario = {
+  id: "talent-draw-inventory-update",
+  displayName: "Talent Draw Inventory Update",
+  maturity: "ready",
+  defaultFeatureId: "talent_draw_demo",
+  defaultAddonName: "talent_draw_demo",
+  defaultMapName: "temp",
+  updatePrompt: TALENT_DRAW_CANONICAL_UPDATE_PROMPT,
+  writeFeatureLabel: "Write or refresh Talent Draw v1 baseline",
+  createStepLabel: "Create/write Talent Draw v1",
+  deleteStepLabel: "Delete Talent Draw inventory demo",
+  recreateStepLabel: "Recreate Talent Draw v1",
+  createCommand: (options) => ["npm", "run", "demo:talent-draw", "--", "--host", options.hostRoot, "--write", "--force"],
+  recreateCommand: (options) => ["npm", "run", "demo:talent-draw", "--", "--host", options.hostRoot, "--write", "--force"],
+  updateCommand: (options) => [
+    "npm",
+    "run",
+    "cli",
+    "--",
+    "dota2",
+    "update",
+    TALENT_DRAW_CANONICAL_UPDATE_PROMPT,
+    "--host",
+    options.hostRoot,
+    "--feature",
+    options.featureId || "talent_draw_demo",
+    "--write",
+  ],
+  deleteCommand: (options) => [
+    "npm",
+    "run",
+    "cli",
+    "--",
+    "dota2",
+    "delete",
+    "--host",
+    options.hostRoot,
+    "--feature",
+    options.featureId || "talent_draw_demo",
+    "--write",
+  ],
+  evidenceCommand: (options) => ["npm", "run", "demo:talent-draw:refresh", "--", "--host", options.hostRoot],
+};
+
 const dashStrikeScenario: DemoScenario = {
   id: "dash-strike",
   displayName: "Dash Strike",
@@ -81,7 +128,11 @@ const dashStrikeScenario: DemoScenario = {
   deleteCommand: (options) => ["npm", "run", "cli", "--", "dota2", "delete", "--host", options.hostRoot, "--feature", options.featureId || "dash_strike_demo"],
 };
 
-const DEMO_SCENARIOS: DemoScenario[] = [talentDrawScenario, dashStrikeScenario];
+const DEMO_SCENARIOS: DemoScenario[] = [
+  talentDrawScenario,
+  talentDrawInventoryUpdateScenario,
+  dashStrikeScenario,
+];
 
 export function listDemoScenarios(): DemoScenario[] {
   return [...DEMO_SCENARIOS];
@@ -92,6 +143,11 @@ export function getDemoScenarioById(id: string): DemoScenario | undefined {
 }
 
 export function resolveDemoScenario(options: Dota2CLIOptions): DemoScenario {
+  const explicit = options.scenario ? getDemoScenarioById(options.scenario) : undefined;
+  if (explicit && explicit.maturity !== "planned") {
+    return explicit;
+  }
+
   const inferred = DEMO_SCENARIOS.find((scenario) =>
     options.featureId === scenario.defaultFeatureId ||
     options.addonName === scenario.defaultAddonName,

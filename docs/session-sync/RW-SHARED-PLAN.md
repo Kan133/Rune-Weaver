@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-mainline-transition
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: coordinating Dota2 and War3 mainlines or deciding the current cross-track attention split
 > Do not use for: replacing latest session-sync notes or subsystem contract docs by itself
 
@@ -30,47 +30,114 @@ If the latest same-day session-sync notes disagree with lower-frequency control 
 
 Current step:
 
-- Step 7. Productization / UX bridge
-- Current slice: freeze Talent Draw as the one canonical skeleton+fill acceptance path and close the fresh-host manual acceptance / evidence pass through `review -> confirmation/apply -> validate -> repair-build -> launch`
+- Step 2. Blueprint / pattern selection
+- Current slice: the family-by-family honesty-tightening subphase, the current-seam `package 2` bounded pass, the frozen-seam `package 4` coverage audit, package-6 acceptance execution, and the bounded Phase A `scheduler/timer` seam-expansion package have now all stage-closed for current grammar-v1. The next active Dota2 Step 2 work is to open the bounded `reward/progression` seam-expansion package deliberately, not to reopen frozen-seam package-2/package-4 work, rerun package-6 preflight, or widen `scheduler/timer` beyond its new admitted local-cooldown slice.
+- Narrow truth-sync already landed inside that slice:
+  - `integration.state_sync_bridge` now routes honestly as a deliberately elided `bridge-only` path with no standalone bridge file emitted
+  - `resource/cost` now has one honest narrow same-feature caller path, but the family still remains partial overall
 
 Primary blocker:
 
-- The canonical Dota2 path is now structurally clear, but a fresh-host manual acceptance pass is still open:
-  - runtime screenshots and video are still missing
-  - the evidence pack still depends on manual runtime capture
-  - the handoff-safe proof is not complete until the frozen canonical flow is rerun end to end on a fresh host
+- The current Dota2 core is still too case-led and too thin in upstream semantic emission and Dota2 pattern family coverage.
+- Package-level judgment after the latest audits:
+  - package 1 is landed enough for current v1
+  - package 2 is still incomplete overall, but its current-seam bounded pass is stage-closed and it is no longer the default active package
+  - package 3 is landed enough for current v1
+  - package 4 is still incomplete overall, but its frozen-seam coverage audit is stage-closed and no new bounded downstream package is open on the current seam
+  - package 5 is landed enough for current v1
+- Current boundary judgment:
+  - frozen-seam Step 2 is now at the implementation boundary, seam boundary, and grammar-v1 declared boundary together for same-size code motion
+  - package 6 has now executed and validated the frozen-seam boundary
+  - `scheduler/timer` now has one admitted truthful bounded path:
+    - timed self-apply effect
+    - same-effect local cooldown only
+    - routed through `dota2.short_time_buff`
+    - broader delay / periodic / post-selection scheduler orchestration remains outside the current seam
+  - the next controller task is to open the next deliberate seam/family expansion rather than reopen package-2/package-4 cleanup or broaden `scheduler/timer` ad hoc
+- Next structural read:
+  - current seam-expansion ranking is `reward/progression` first, then `spawn/emission`, then broad standalone `entity/session state`
+  - `scheduler/timer` is no longer the default active seam; its bounded cooldown-local package is stage-closed
+- Latest acceptance read:
+  - pass bucket now includes one admitted `scheduler/timer` local-cooldown path without adding a standalone scheduler module
+  - block bucket still matches expectation for delay / periodic / post-selection scheduler asks plus the unsupported reward/spawn families
+  - seam-gap bucket has moved on from `scheduler/timer`; `reward/progression` is now the first next seam
+  - package 6 also exposed and repaired one frozen-seam overclaim:
+    - unsupported `scheduler/timer`, `reward/progression`, and `spawn/emission` asks were still being normalized to `ready` by collapsing into admitted families
+    - `FinalBlueprint` now honest-blocks those asks instead
+- The real `gap-fill` chain and the first two bounded Dota2 cases remain useful evidence that downstream write / validation seams exist, but they do not remove the core blocker.
+- The honest risk now is compensating for missing core support with another case, more Workbench polish, or more docs instead of landing the generalized path in code.
 
 Plan items:
 
-- `[done]` Confirm the active Dota2 mainline step from the latest 2026-04-14 session-sync: Step 7 `Productization / UX bridge`, now centered on feature-scoped Gap Fill rather than standing lifecycle evidence closure.
-- `[done]` Land Dota2-side gap-fill boundary resolution from selected patterns and persist `gapFillBoundaries` into workspace state, with backward compatibility for older hosts/workspaces.
-- `[done]` Make `dota2 gap-fill` feature-aware instead of boundary-only so a selected feature can drive the CLI-backed fill flow.
-- `[done]` Productize the first Workbench feature-detail Gap Fill panel so it can list fillable boundaries and execute the CLI-backed planning flow.
-- `[done]` Replace raw boundary ids with clearer business-facing labels and explain the current fillable boundary surface in Workbench.
-- `[done]` Surface the exact gap-fill next-step guidance directly in Workbench through structured canonical guidance.
-- `[done]` Extend the current plan/review path into a first-class approval/apply/validate flow with continuation rail gating.
-- `[done]` Freeze Talent Draw as the only canonical skeleton+fill acceptance path and refresh the evidence pack around that contract.
-- `[done]` Re-run the canonical CLI path on a clean Dota2 host (`D:\RN`) and archive the refreshed evidence pack with `review-artifact.json`.
-- `[blocked]` Call the Dota2 Gap Fill path stable acceptance-proof before the runtime/manual evidence pass is complete.
-- `[doing]` Prepare the runtime closure pass on `D:\RN`:
-  - `yarn dev`
-  - `yarn launch rn temp`
-  - manual screenshots/video capture
-- `[todo]` Only after canonical acceptance is re-proven should Dota2 choose the next proof point:
-  - either a second mechanism case
-  - or a broader gap-fill product surface
+- `[done]` Reclassify Dota2 mainline away from Step 7 productization / second-case tightening and back to Step 2 core generalization.
+- `[done]` Preserve the proven downstream Dota2 path as supporting evidence rather than as the architecture driver:
+  - real CLI-backed `gap-fill` review / apply / validate-applied / doctor has already run on `D:\test3`
+  - Workbench remains a thin shell over CLI authority
+  - Talent Draw and the second bounded mechanism pass remain useful evidence, not the mainline queue
+- `[done]` Freeze Dota2 mechanic grammar v1 around reusable semantic families rather than case or map-template names:
+  - trigger/input
+  - scheduler/timer
+  - spawn/emission
+  - entity/session state
+  - selection/draft
+  - reward/progression
+  - resource/cost
+  - effect/modifier
+  - UI feedback/status
+  - integration/bridge
+- `[done]` State the Dota2 grammar v1 out-of-scope set clearly enough that agents stop treating every new mechanic ask as an implicit same-day implementation promise.
+- `[done]` Land and stage-close the highest-value bounded current-seam package-2 pass:
+  - one bounded current-seam pass has already landed
+  - no same-size existing-seam follow-up is currently discovered
+  - do not route sessions back into package-2 wording cleanup by default
+- `[done]` Migrate resolver behavior to `ModuleNeed -> capability fit`, with `explicitPatternHints` limited to tie-break usage and unresolved needs producing deterministic block/weak output instead of silent fallback.
+- `[done]` Complete the frozen-seam package-4 coverage closure pass:
+  - same-size family honesty tightening is now exhausted for the currently discovered partial families
+  - the frozen-seam audit found no single bounded downstream package worth landing now
+  - remaining movement now requires either broader family/seam work or a higher-level Step 2 package decision
+- `[done]` Land the narrow slice honesty fix for `integration.state_sync_bridge`:
+  - routed
+  - deliberately elided
+  - no standalone bridge file emitted
+  - still not broad bridge-family admission
+- `[done]` Land the narrow slice honesty fix for `resource/cost`:
+  - the family remains `partial`
+  - one honest canonical path now exists through same-feature `input.key_binding + resource.basic_pool + effect.resource_consume`
+  - no-caller, caller-ambiguous, multi-consumer, and pool/resource mismatch shapes still honest-defer
+- `[done]` Stabilize host realization and generator routing around reusable grammar families for the currently admitted and narrow-supported combinations so supported mechanic combinations do not require new product-code routing and bounded `GapFill` stays downstream instead of becoming a substitute architecture layer.
+- `[done]` Select the next Dota2 seam-expansion package deliberately instead of reopening frozen-seam cleanup:
+  - `scheduler/timer` bounded cooldown-local package is now stage-closed
+  - current ranking is `reward/progression` first
+  - then `spawn/emission`
+  - then broad standalone `entity/session state`
+- `[done]` Reintroduce Dota2 cases only as a package-6 acceptance matrix:
+  - `should-pass-without-new-product-code`
+  - `should-honest-block-on-current-v1`
+  - `should-expose-next-seam-gap`
+  - package 6 has now executed and validated frozen-seam truth instead of letting one case drive architecture
+- `[done]` Land the bounded Phase A `scheduler/timer` seam-expansion package:
+  - `FinalBlueprint` now admits only the timed-self-buff local-cooldown slice
+  - the effect `ModuleNeed` now emits `timing.cooldown.local`
+  - `dota2.short_time_buff` now admits that same narrow token and routes cooldown truth into the KV write path
+  - `initialDelaySeconds`, `delaySeconds`, `tickSeconds`, `intervalSeconds`, delayed selection resolution, post-selection scheduling, and generic scheduler composition all remain honest-blocked
+- `[doing]` Prepare and open the next post-scheduler Step 2 seam-expansion package around `reward/progression`.
+
+Mainline rule:
+
+- Do not add a new case to compensate for missing core generalization.
+- If a supported mechanic still requires product-code changes to work, that is a core blocker, not a case milestone.
 
 ## War3 Mainline
 
 Current step:
 
 - Step 7. Product-facing integration on a narrow backend seam
-- Current slice: anchor the upstream reference base and tighten the current TSTL skeleton / host contract against the chosen canonical stack without claiming write-ready host execution
+- Current slice: keep the bounded demo-probe loop honest while adding one adapter-local, review-only shadow realization/draft lane for the same canonical `setup-mid-zone-shop` feature through `War3ShadowRealizationPlan -> War3ShadowDraftBundle -> review package/export/validate/probe-input`
 
 Primary blocker:
 
-- War3 now has a stronger upstream evidence base, but the RW skeleton and host contract are still too lightweight for honest write-ready claims:
-  - `tmp/war3-tstl-skeleton` has not yet been tightened against the chosen canonical stack
+- War3 now has a stronger local review chain and a first honest narrow consumer loop, but it still cannot claim live downstream stability:
+  - current external probe execution is blocked by `kimi` membership / request availability
   - KK 1.29 runtime behavior is still not proven
   - Classic Lua workflow evidence remains useful context, not direct TSTL runtime proof
 
@@ -81,14 +148,26 @@ Plan items:
 - `[done]` Anchor the current authoring judgment:
   - TypeScript -> TypeScriptToLua -> Lua output is the mainline authoring seam
   - Classic Lua workflow evidence is reference context, not the TSTL authoring baseline
-- `[doing]` Tighten `tmp/war3-tstl-skeleton` against the canonical upstream stack instead of resuming broad ecosystem search.
-- `[todo]` Add the next concrete skeleton/host-contract facts:
-  - real build/dev/test seams
-  - definitions-generation placeholder
-  - explicit map naming decision
-  - `warcraft.json` compatibility or deliberate non-adoption
+- `[done]` Tighten `tmp/war3-tstl-skeleton` into a review-oriented local contract with executable seams, typed feature review, snapshot/manifest/intake layers, and bounded demo-case surfaces.
+- `[done]` Freeze current War3 bounded judgments in the skeleton/host docs:
+  - `maps/demo.w3x` remains the RW review-oriented map path
+  - `warcraft.json` remains deliberate non-adoption for now
+  - `setup-mid-zone-shop` remains the single canonical feature probe
+- `[done]` Add the current bounded demo-probe helpers:
+  - review-package artifact bridge
+  - probe-input builder
+  - demo-probe wrapper
+  - bounded probe-result summarizer
+- `[done]` Add one bounded adapter-local War3 shadow path for the same canonical feature without changing step/blocker truth:
+  - `War3ShadowRealizationPlan`
+  - `War3ShadowDraftBundle`
+  - review-package/export/validate compatibility threading over that shadow lane
+- `[doing]` Re-prove the new bounded demo loop with a fresh successful probe response once external probe access is available again.
 - `[blocked]` Treat War3 as write-ready or runtime-proven before the skeleton and host contract have been tightened against the chosen upstream stack.
-- `[todo]` Reflect only the necessary host/workflow facts into validator / intake / handoff code after the skeleton alignment is decided.
+- `[blocked]` Treat the current bounded demo loop as stable downstream evidence before the external probe execution blocker is cleared.
+- `[todo]` Only after one fresh successful bounded probe run should War3 choose between:
+  - tightening the same feature's prompt / summary loop
+  - or extending the same bounded pattern to exactly one second feature probe
 
 ## Cross-Track Risks / Dependencies
 
@@ -102,7 +181,7 @@ Current judgment:
 Plan items:
 
 - `[done]` Rebuild shared coordination truth from the latest 2026-04-14 Dota2 and War3 session-sync notes instead of the older 2026-04-13 status packet.
-- `[doing]` Keep Dota2 focused on canonical gap-fill acceptance closure and War3 focused on skeleton / host-contract tightening instead of reopening broad generic host-shell work.
+- `[doing]` Keep Dota2 focused on Step 2 core generalization over `IntentSchema`, `FinalBlueprint`, resolver semantics, pattern family coverage, and deterministic routing; keep War3 focused on bounded demo-probe validation instead of reopening broad generic host-shell work.
 - `[todo]` Reuse shared host/workspace seams only when one track has produced a stable artifact the other side can honestly consume.
 - `[todo]` Coordinate before changing shared `apps/workbench-ui` shell infrastructure or generic host-status plumbing.
 - `[todo]` Keep low-frequency control docs synced to fresh session-sync truth quickly enough that agents are not routed by stale step/blocker language.
@@ -116,8 +195,8 @@ Recommended split:
 
 Plan items:
 
-- `[doing]` Keep the main attention on Dota2 until the Gap Fill product flow is clear enough to support an honest next proof point.
-- `[todo]` Keep a smaller War3 lane on skeleton tightening and host-contract evidence rather than broad product-shell expansion.
+- `[doing]` Keep the main attention on Dota2 while the Step 2 core-generalization packages are landed; treat cases as later acceptance probes rather than current architecture drivers.
+- `[todo]` Keep a smaller War3 lane on bounded demo-probe validation and host-contract evidence rather than broad product-shell expansion.
 - `[done]` Keep second-host scope outside the current near-term mainline split.
 - `[done]` Keep the architecture/doc-governance wave as a controller-owned support track rather than letting it replace Dota2 or War3 execution work.
 
@@ -125,11 +204,11 @@ Plan items:
 
 Latest Dota2 session-sync:
 
-- [dota2-mainline-20260414-2335.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260414-2335.md)
+- [dota2-mainline-20260417-0122.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260417-0122.md)
 
 Latest War3 session-sync:
 
-- [war3-mainline-20260414-1906.md](/D:/Rune%20Weaver/docs/session-sync/war3-mainline-20260414-1906.md)
+- [war3-mainline-20260416-1107.md](/D:/Rune%20Weaver/docs/session-sync/war3-mainline-20260416-1107.md)
 
 Stable orchestration guardrail:
 
@@ -137,5 +216,5 @@ Stable orchestration guardrail:
 
 Notes:
 
-- Dota2 judgments are anchored to the 2026-04-14 canonical skeleton+fill acceptance-closure sync, not the older evidence-closure queue.
-- War3 judgments are anchored to the 2026-04-14 upstream-stack / skeleton-tightening sync, not the older implementation-draft consumer focus.
+- Dota2 judgments are anchored to the 2026-04-14 Step 2 core-generalization sync, not the older Talent Draw-only evidence-closure queue or the later second-case-tightening slice.
+- War3 judgments are anchored to the 2026-04-14 bounded demo-probe loop sync, not the older upstream-stack / skeleton-tightening sync.

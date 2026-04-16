@@ -1,5 +1,13 @@
 # Talent Draw E2E Lessons
 
+> Status: active-reference
+> Audience: agents
+> Doc family: contract
+> Update cadence: low-frequency
+> Last verified: 2026-04-14
+> Read when: debugging Dota2 host/runtime pitfalls discovered during the Talent Draw canonical case and extracting reusable host-side guardrails
+> Do not use for: current blocker truth, baseline architecture authority, or generic cross-host policy by itself
+
 This document records the concrete failures, root causes, and product-level guardrails discovered while driving the Talent Draw case all the way into a runnable Dota 2 host.
 
 The goal is simple: future cases should not have to rediscover these problems by hand.
@@ -475,7 +483,7 @@ These issues were identified during the Talent Draw run and should be treated as
 
 For the repeatable runtime walkthrough derived from these lessons, see:
 
-- [docs/talent-draw-case/DEMO-GUIDE.md](./docs/talent-draw-case/DEMO-GUIDE.md) - Step-by-step from fresh x-template to Dota2 play
-- [docs/talent-draw-case/demo-evidence/README.md](./docs/talent-draw-case/demo-evidence/README.md) - Evidence pack specification
+- [docs/talent-draw-case/DEMO-GUIDE.md](../../talent-draw-case/DEMO-GUIDE.md) - Step-by-step from fresh x-template to Dota2 play
+- [docs/talent-draw-case/demo-evidence/README.md](../../talent-draw-case/demo-evidence/README.md) - Evidence pack specification
 
 **Updated**: 2026-04-13 - Demo guide now includes troubleshooting table and VConsole checkpoints for runtime verification.

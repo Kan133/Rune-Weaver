@@ -176,7 +176,7 @@ export function buildDeferredEntriesInfo(entries: WritePlanEntry[]): Array<{ pat
     .filter((e: WritePlanEntry) => e.deferred)
     .map((e: WritePlanEntry) => ({
       pattern: e.sourcePattern,
-      reason: e.deferredReason || "Generator not yet implemented",
+      reason: e.deferredReason || "Entry intentionally deferred",
     }));
 }
 
@@ -204,6 +204,7 @@ export function buildGeneratorStage(
     deferredEntries: buildDeferredEntriesInfo(deferredEntries),
     issues,
     realizationContext: writePlan?.realizationContext,
+    deferredWarnings: writePlan?.deferredWarnings,
   };
 }
 
@@ -394,7 +395,9 @@ export function generateCodeContent(entry: WritePlanEntry, stableFeatureId?: str
       return generateKVContent(entry);
 
     case "bridge-support":
-      return `// Bridge support: handled via bridge adapter\n`;
+      throw new Error(
+        `bridge-support output for ${entry.sourcePattern} must be deferred/elided or explicitly materialized; placeholder bridge files are not allowed`
+      );
 
     case "dota2-lua":
       break;

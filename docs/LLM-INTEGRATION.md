@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-16
 > Read when: aligning LLM placement, provider boundaries, and proposal-stage usage rules
 > Do not use for: granting LLM final authority over blueprint, host realization, or write execution
 
@@ -43,6 +43,7 @@ Rune Weaver 当前不应优先引入：
 
 - LLM 可以帮助 `Wizard`
 - LLM 可以帮助生成 `BlueprintProposal`
+- 如果未来引入 family/source-model candidate extraction，它也仍属于 `Wizard` / `Intent` assistance，不形成新的 authoritative LLM stage
 - `BlueprintNormalizer` 与 `FinalBlueprint` 仍然必须是 deterministic gate
 - LLM 不是 final pattern authority
 - LLM 不是 final host realization authority
@@ -151,6 +152,16 @@ LLM_PROVIDER=openai-compatible
 OPENAI_BASE_URL=https://your-compatible-endpoint
 OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=your_model_name
+LLM_WIZARD_THINKING=enabled
+LLM_WIZARD_TEMPERATURE=1
+LLM_BLUEPRINT_THINKING=disabled
+LLM_BLUEPRINT_TEMPERATURE=0.6
+LLM_DOTA2_PLANNING_THINKING=enabled
+LLM_DOTA2_PLANNING_TEMPERATURE=1
+LLM_GAP_FILL_THINKING=disabled
+LLM_GAP_FILL_TEMPERATURE=0.6
+LLM_WORKBENCH_GAP_FILL_THINKING=disabled
+LLM_WORKBENCH_GAP_FILL_TEMPERATURE=0.6
 ```
 
 ### 6.2 `.env` 示例：Anthropic
@@ -169,6 +180,14 @@ ANTHROPIC_MODEL=claude-...
 - 正式实现不应直接读取 `api.txt`
 - 代码应优先从环境变量读取密钥
 - 不应把真实 key 写进源码、测试快照或文档示例
+- Rune Weaver 当前把仓库根 `.env` 作为唯一正式 LLM 配置面；不要再在 CLI / Workbench 调用点分散写 providerOptions / temperature
+
+### 6.4 Kimi 约束
+
+- 当 `OPENAI_MODEL` 命中 `kimi-k2.5` 时：
+  - `thinking=enabled` 只能搭配 `temperature=1`
+  - `thinking=disabled` 只能搭配 `temperature=0.6`
+- 这些约束应由 `core/llm` 的统一配置读取层校验，而不是由各 workflow 自己硬编码
 
 ## 7. 最小接口建议
 

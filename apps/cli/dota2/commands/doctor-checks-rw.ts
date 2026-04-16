@@ -115,6 +115,24 @@ export function checkWorkspace(hostRoot: string): DoctorCheck {
   }
 }
 
+function readActiveFeatureCount(hostRoot: string): number | null {
+  const workspacePath = join(hostRoot, "game/scripts/src/rune_weaver/rune-weaver.workspace.json");
+  if (!existsSync(workspacePath)) {
+    return null;
+  }
+
+  try {
+    const workspace = JSON.parse(readFileSync(workspacePath, "utf-8"));
+    if (!Array.isArray(workspace.features)) {
+      return 0;
+    }
+
+    return workspace.features.filter((feature: { status?: string } | null | undefined) => feature?.status === "active").length;
+  } catch {
+    return null;
+  }
+}
+
 export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
   const result = validatePostGeneration(hostRoot);
 
@@ -253,6 +271,7 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
   const modulesEntry = join(hostRoot, "game/scripts/src/modules/index.ts");
   const hudEntry = join(hostRoot, "content/panorama/src/hud/script.tsx");
   const hudStyles = join(hostRoot, "content/panorama/src/hud/styles.less");
+  const activeFeatureCount = readActiveFeatureCount(hostRoot);
   const issues: string[] = [];
 
   if (!existsSync(serverEntry)) {
@@ -281,7 +300,7 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
     issues.push("Missing content/panorama/src/hud/styles.less");
   } else {
     const content = readFileSync(hudStyles, "utf-8");
-    if (!content.includes("rune_weaver")) {
+    if ((activeFeatureCount ?? 1) > 0 && !content.includes("rune_weaver")) {
       issues.push("hud/styles.less does not import Rune Weaver styles");
     }
   }
@@ -309,8 +328,8 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
 export function checkHostBuildArtifacts(hostRoot: string): DoctorCheck {
   const packagePath = join(hostRoot, "package.json");
   const expectedArtifacts = [
-    "game/panorama/layout/custom_game/hud/script.js",
-    "game/panorama/layout/custom_game/hud/styles.css",
+    "content/panorama/layout/custom_game/hud/script.js",
+    "content/panorama/layout/custom_game/hud/styles.css",
   ];
 
   if (!existsSync(packagePath)) {

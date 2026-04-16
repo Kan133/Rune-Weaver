@@ -98,6 +98,19 @@ Use these frozen filenames when saving canonical screenshots:
 - `08-gap-fill-continuation.png`
 - runtime video: `talent-draw-demo-runtime.mp4`
 
+### Canonical Closure Rule
+
+Do not decide closure from a single screenshot, a green UI panel, or a successful launch alone.
+
+For the current Dota2 mainline, always judge closure from:
+
+1. `docs/talent-draw-case/demo-evidence/latest/acceptance-summary.json`
+2. `docs/talent-draw-case/demo-evidence/latest/manifest.json`
+3. the required manual screenshot/video files
+
+If `acceptance-summary.json` says `canonical_incomplete`, the run is still open even if the host launches successfully.
+If it says `exploratory`, do not use the run as canonical acceptance evidence.
+
 ---
 
 ## Detailed Steps
@@ -204,6 +217,7 @@ Checks post-generation self-consistency: KV structure, ScriptFile paths, workspa
 The evidence refresh flow writes the latest files under `docs/talent-draw-case/demo-evidence/latest/`:
 
 - `canonical-gap-fill-contract.json`
+- `acceptance-summary.json`
 - `demo-prepare-output.txt`
 - `doctor-output.txt`
 - `validate-output.txt`
@@ -212,6 +226,43 @@ The evidence refresh flow writes the latest files under `docs/talent-draw-case/d
 - `gap-fill-approvals/` when gap-fill participated
 - `vconsole-template.txt`
 - `screenshots/README.md`
+
+#### Operator Closure Sequence
+
+Use this exact order for the frozen canonical case:
+
+1. finish skeleton write and refresh evidence
+2. confirm `acceptance-summary.json` is `canonical_incomplete` or `canonical_acceptance_ready`, never `exploratory`
+3. run canonical gap-fill review with the frozen prompt and boundary
+4. continue through `confirmation/apply -> validate -> repair-build -> launch`
+5. capture the required Workbench screenshots (`06`-`08`)
+6. capture the required runtime screenshots (`01`-`05`) and `talent-draw-demo-runtime.mp4`
+7. run `npm run demo:talent-draw:refresh -- --host <x-template-path>` again
+8. inspect `acceptance-summary.json` first to see whether the pack is now complete
+
+#### How To Read Closure Status
+
+`acceptance-summary.json` is the first operator-facing answer:
+
+- `canonical_acceptance_ready`
+  - the frozen prompt/boundary still match
+  - required auto evidence exists
+  - required manual evidence exists
+- `canonical_incomplete`
+  - the run is still canonical
+  - but one or more required evidence files are still missing
+- `exploratory`
+  - the observed prompt or boundary drifted from the frozen Talent Draw contract
+  - this run must not be treated as canonical acceptance closure
+
+`acceptance-summary.json` is also the replay-package consistency answer:
+
+- `consistencyChecks`
+  - tells you whether the pack still records the canonical contract, review state, and approval-evidence state coherently
+- `handoffReadiness`
+  - tells you whether another operator can consume the pack without guessing
+- `proofPointGate`
+  - stays `blocked` until the replay pack is both canonical-complete and handoff-safe
 
 ---
 
@@ -291,12 +342,22 @@ Refresh command:
 npm run demo:talent-draw:refresh -- --host <x-template-path>
 ```
 
+After every refresh, inspect these in order:
+
+1. `docs/talent-draw-case/demo-evidence/latest/acceptance-summary.json`
+2. `docs/talent-draw-case/demo-evidence/latest/manifest.json`
+3. `docs/talent-draw-case/demo-evidence/latest/screenshots/README.md`
+
+If manual evidence is still missing, capture it first and refresh again before calling the run complete.
+If `handoffReadiness.status` is not `ready`, keep the run on closure work even if the host launched successfully.
+If `proofPointGate.status` is `blocked`, do not open the next Dota2 proof point.
+
 ---
 
 ## Related Documents
 
 - [CANONICAL-GAP-FILL-DEMO.md](./CANONICAL-GAP-FILL-DEMO.md) - Frozen skeleton-plus-fill demo contract
 - [CANONICAL-CASE-TALENT-DRAW.md](./CANONICAL-CASE-TALENT-DRAW.md) - Frozen case definition
-- [TALENT-DRAW-E2E-LESSONS.md](../../TALENT-DRAW-E2E-LESSONS.md) - E2E lessons
+- [TALENT-DRAW-E2E-LESSONS.md](../hosts/dota2/TALENT-DRAW-E2E-LESSONS.md) - E2E lessons
 - [DEMO-PATHS.md](../DEMO-PATHS.md) - Demo paths overview
 - [ROADMAP.md](../ROADMAP.md) - Product roadmap

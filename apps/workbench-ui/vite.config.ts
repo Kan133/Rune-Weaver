@@ -765,7 +765,7 @@ function buildCommandReviewSurface(
   errorMessage?: string,
 ): ReviewSurfacePayload | undefined {
   const artifactPath = extractArtifactPath(outputLines)
-  if (command === "run") {
+  if (command === "run" || command === "update") {
     return buildRunReviewSurface(artifactPath, outputLines)
   }
   if (command === "gap-fill") {
@@ -1287,10 +1287,17 @@ function localApiBridgePlugin() {
 
           const normalizedHostRoot = canonicalizeHostRoot(hostRoot)
 
-          if (command === "run" && !prompt) {
+          if ((command === "run" || command === "update") && !prompt) {
             res.statusCode = 400
             res.setHeader("Content-Type", "application/json")
-            res.end(JSON.stringify({ success: false, error: "Missing prompt for run command" }))
+            res.end(JSON.stringify({ success: false, error: `Missing prompt for ${command} command` }))
+            return
+          }
+
+          if ((command === "update" || command === "delete") && !featureId) {
+            res.statusCode = 400
+            res.setHeader("Content-Type", "application/json")
+            res.end(JSON.stringify({ success: false, error: `Missing featureId for ${command} command` }))
             return
           }
 
@@ -1321,6 +1328,9 @@ function localApiBridgePlugin() {
               "--host", normalizedHostRoot
             ]
             childEnv.RW_WORKBENCH_PROMPT_B64 = Buffer.from(prompt!, "utf8").toString("base64")
+            if (featureId) {
+              cliArgs.push("--feature", featureId)
+            }
             if (write) {
               cliArgs.push("--write")
             }
@@ -1328,6 +1338,33 @@ function localApiBridgePlugin() {
               cliArgs.push("--force")
             }
             if (!write && !force) {
+              cliArgs.push("--dry-run")
+            }
+          } else if (command === "update") {
+            cliArgs = [
+              "run", "cli", "--", "dota2", "update",
+              "--input-base64-env", "RW_WORKBENCH_PROMPT_B64",
+              "--host", normalizedHostRoot,
+              "--feature", featureId,
+            ]
+            childEnv.RW_WORKBENCH_PROMPT_B64 = Buffer.from(prompt!, "utf8").toString("base64")
+            if (write) {
+              cliArgs.push("--write")
+            } else {
+              cliArgs.push("--dry-run")
+            }
+            if (force) {
+              cliArgs.push("--force")
+            }
+          } else if (command === "delete") {
+            cliArgs = [
+              "run", "cli", "--", "dota2", "delete",
+              "--host", normalizedHostRoot,
+              "--feature", featureId,
+            ]
+            if (write) {
+              cliArgs.push("--write")
+            } else {
               cliArgs.push("--dry-run")
             }
           } else if (command === "demo-prepare") {
