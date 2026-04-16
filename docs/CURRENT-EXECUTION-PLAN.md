@@ -4,14 +4,14 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-phase-change
-> Last verified: 2026-04-16
+> Last verified: 2026-04-17
 > Read when: deciding the active Dota2 mainline execution queue and current critical-path task order
 > Do not use for: cross-track coordination by itself or long-term roadmap planning
 
 > Status
 > This remains the active Dota2 mainline execution queue inside the post-ABCD phase.
 > The current slice is Step 2 core generalization: Dota2 must strengthen the reusable `IntentSchema -> BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint -> ModuleNeed -> capability-fit resolver -> pattern family -> deterministic host realization / generator routing` path before more cases, more Workbench polish, or broader product-shell work.
-> The family-by-family honesty-tightening subphase, the current-seam package-2 bounded pass, the frozen-seam package-4 coverage audit, and package-6 acceptance execution have now all stage-closed on the current grammar-v1 seam. The next active Step 2 work is to open the bounded `scheduler/timer` seam-expansion package deliberately, rather than more package-2/package-4 micro-slicing or more package-6 preflight work.
+> The family-by-family honesty-tightening subphase, the current-seam package-2 bounded pass, the frozen-seam package-4 coverage audit, package-6 acceptance execution, and the bounded Phase A `scheduler/timer` seam-expansion package have now all stage-closed on the current grammar-v1 seam. The next active Step 2 work is to open the bounded `reward/progression` seam-expansion package deliberately, rather than more package-2/package-4 micro-slicing, more package-6 preflight work, or a broad `scheduler/timer` reopen.
 > For freshest same-day coordination across Dota2 and War3, pair this file with [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) and the latest session-sync notes under `docs/session-sync/`.
 
 ## Purpose
@@ -75,6 +75,18 @@ Current narrow honesty fixes already landed:
   - caller ambiguity
   - multiple consumers
   - pool/resource mismatch
+- `scheduler/timer` now has one narrow admitted path, but it is still not honest to describe the family as broadly landed
+- the current honest narrow scheduler path is:
+  - timed self-apply effect
+  - same-effect local cooldown only
+  - `FinalBlueprint` marker `timing.cooldown.local`
+  - `dota2.short_time_buff` KV cooldown threading with no standalone scheduler module
+- shapes outside that path still honest-block:
+  - `initialDelaySeconds` / `delaySeconds`
+  - `tickSeconds` / `intervalSeconds`
+  - delayed selection resolution
+  - post-selection scheduled execution
+  - reward/spawn-coupled scheduling
 
 Still true:
 
@@ -119,11 +131,15 @@ Current controller judgment:
 - package 6 validated the next seam ranking and also repaired one frozen-seam overclaim:
   - unsupported `scheduler/timer`, `reward/progression`, and `spawn/emission` asks were still able to normalize to `ready` by collapsing into admitted families
   - `FinalBlueprint` now honest-blocks those asks instead
+- the bounded Phase A `scheduler/timer` package is now stage-closed:
+  - one admitted same-effect local-cooldown path exists through `dota2.short_time_buff`
+  - broader scheduler/timer asks still honest-block with a named remaining boundary
 - current frozen-seam Step 2 is at the implementation boundary, seam boundary, and grammar-v1 declared boundary together for same-size code motion
 - the next active Step 2 work is:
-  - open the first seam-expansion package deliberately
-  - use completed package-6 evidence as the frozen-seam acceptance baseline
-- current next-seam ranking is `scheduler/timer`, then `reward/progression`, then `spawn/emission`, then broad standalone `entity/session state`
+  - open the next seam-expansion package deliberately
+  - use completed package-6 evidence plus the new Phase A scheduler/timer read as the current acceptance baseline
+- current next-seam ranking is `reward/progression`, then `spawn/emission`, then broad standalone `entity/session state`
+- do not reopen `scheduler/timer` beyond the bounded local-cooldown slice unless new code truth proves a same-size truthful extension
 - do not reopen `resource/cost`, `effect/modifier`, `UI feedback/status`, or `integration/bridge` for more mechanical micro-slices unless new code truth appears
 
 ## Mainline Rule
@@ -229,6 +245,7 @@ Current focus:
 - keep the latest family truth honest while coverage is still partial:
   - `resource/cost` now has one narrow end-to-end canonical path, but broad family admission is still false
   - `integration/bridge` now routes honestly for `integration.state_sync_bridge`, but broad bridge-family admission is still false
+  - `scheduler/timer` now has one narrow end-to-end canonical path for same-effect local cooldown, but delay/periodic/orchestrated scheduling admission is still false
 - active frozen-seam judgment:
   - package 4 is still incomplete overall, but its frozen-seam coverage audit is already complete
   - no single bounded downstream package is worth landing now on the frozen seam
@@ -254,6 +271,7 @@ Current focus:
 - preserve the current narrow routed truth:
   - `integration.state_sync_bridge` may route as `bridge-only` while deliberately eliding standalone bridge-file emission
   - resource/cost routing is only honest today for the single-caller same-feature canonical path described above
+  - scheduler/timer routing is only honest today for `dota2.short_time_buff` local cooldown metadata on the existing lua+kv path; there is still no generic scheduler composition layer
 
 Acceptance:
 

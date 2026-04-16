@@ -554,6 +554,34 @@ function shouldDeferDashEffect(
   };
 }
 
+function stringifyPatternScalar(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+
+  return undefined;
+}
+
+function resolveShortTimeBuffAbilityCooldown(
+  binding: SelectedPattern,
+  metadata?: Record<string, unknown>
+): string | undefined {
+  const bindingParameters = binding.parameters || {};
+
+  return (
+    stringifyPatternScalar(bindingParameters.cooldownSeconds) ||
+    stringifyPatternScalar(bindingParameters.cooldown) ||
+    stringifyPatternScalar(bindingParameters.abilityCooldown) ||
+    stringifyPatternScalar(metadata?.abilityCooldown) ||
+    stringifyPatternScalar(metadata?.cooldownSeconds) ||
+    stringifyPatternScalar(metadata?.cooldown)
+  );
+}
+
 function normalizeResourceIdentifier(value: unknown, fallback: string = "mana"): string {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim().toLowerCase()
@@ -861,6 +889,16 @@ function generateEntriesForPattern(
     // T138-R1: Attach ability parameters to KV entries for proper generation
     if (outputType === "kv" && abilityParams && Object.keys(abilityParams).length > 0) {
       entry.metadata = abilityParams;
+    }
+
+    if (outputType === "kv" && binding.patternId === "dota2.short_time_buff") {
+      const abilityCooldown = resolveShortTimeBuffAbilityCooldown(binding, entry.metadata);
+      if (abilityCooldown) {
+        entry.metadata = {
+          ...(entry.metadata || {}),
+          abilityCooldown,
+        };
+      }
     }
 
     if ((outputType === "kv" || outputType === "lua") && binding.patternId === "effect.modifier_applier") {

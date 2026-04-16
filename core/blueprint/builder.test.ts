@@ -360,6 +360,177 @@ function testTimedSelfBuffSteersToShortDurationCapability() {
   assert.ok(effectNeed?.requiredOutputs?.includes("host.config.kv"));
 }
 
+function testTimedSelfBuffWithLocalCooldownStaysReady() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Press Q to apply a short self buff with a 12 second cooldown.",
+      goal: "Press Q to apply a short self buff with a 12 second cooldown.",
+    },
+    requirements: {
+      functional: ["Press Q to cast a short self buff", "Keep the ability on a 12 second cooldown"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to cast the buff",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Apply a timed self buff with a local cooldown",
+          parameters: { cooldownSeconds: 12, durationSeconds: 4 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: undefined,
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["self"],
+    },
+    integrations: undefined,
+    stateModel: undefined,
+    isReadyForBlueprint: true,
+  });
+  const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.deepEqual(effectNeed?.requiredCapabilities, ["ability.buff.short_duration"]);
+  assert.ok(effectNeed?.optionalCapabilities?.includes("effect-duration/timed"));
+  assert.ok(effectNeed?.optionalCapabilities?.includes("timing.cooldown.local"));
+}
+
+function testInitialDelaySchedulerAskStaysBlocked() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Press Q, wait 2 seconds, then apply a short self buff.",
+      goal: "Press Q, wait 2 seconds, then apply a short self buff.",
+    },
+    requirements: {
+      functional: ["Press Q to cast a short self buff after a delay"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to cast the buff",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Apply a timed self buff after an initial delay",
+          parameters: { initialDelaySeconds: 2, durationSeconds: 4 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: undefined,
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["self"],
+    },
+    integrations: undefined,
+    stateModel: undefined,
+    isReadyForBlueprint: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("cooldown-local effect slice")
+    )
+  );
+}
+
+function testPeriodicSchedulerAskStaysBlocked() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Press Q to apply a self buff that ticks every second for 5 seconds.",
+      goal: "Press Q to apply a self buff that ticks every second for 5 seconds.",
+    },
+    requirements: {
+      functional: ["Press Q to cast a ticking self buff"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to cast the buff",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Apply a timed self buff with periodic ticks",
+          parameters: { intervalSeconds: 1, durationSeconds: 5 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: undefined,
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["self"],
+    },
+    integrations: undefined,
+    stateModel: undefined,
+    isReadyForBlueprint: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("delay/periodic")
+    )
+  );
+}
+
 function testTimedNonSelfBuffKeepsGenericModifierCapability() {
   const result = buildBlueprint({
     ...readySchema,
@@ -372,6 +543,148 @@ function testTimedNonSelfBuffKeepsGenericModifierCapability() {
   const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
 
   assert.deepEqual(effectNeed?.requiredCapabilities, ["effect.modifier.apply"]);
+}
+
+function testCooldownCoupledToSelectionFlowStaysBlocked() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "Open a modal choice flow and put the chosen effect on a 12 second cooldown.",
+      goal: "Open a modal choice flow and put the chosen effect on a 12 second cooldown.",
+    },
+    requirements: {
+      functional: [
+        "Open a weighted selection flow",
+        "Choose one option",
+        "Apply the chosen self buff with a local cooldown",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to open the selection flow",
+          parameters: { triggerKey: "F4" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Resolve one choice from weighted candidates",
+          parameters: { choiceCount: 1, selectionPolicy: "weighted" },
+        },
+        {
+          id: "ui_req",
+          kind: "ui",
+          summary: "Show a modal choice surface",
+          outputs: ["selection_modal"],
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Apply the chosen timed self buff with a local cooldown",
+          parameters: { cooldownSeconds: 12, durationSeconds: 4 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: ["rule.selection_flow"],
+    },
+    selection: {
+      mode: "weighted",
+      cardinality: "single",
+      repeatability: "repeatable",
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["self"],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal"],
+    },
+    integrations: undefined,
+    stateModel: undefined,
+    isReadyForBlueprint: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("cross-module/post-selection")
+    )
+  );
+}
+
+function testNonSelfCooldownBuffStaysBlockedAtCurrentBoundary() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Press Q to apply a timed enemy debuff with a 12 second cooldown.",
+      goal: "Press Q to apply a timed enemy debuff with a 12 second cooldown.",
+    },
+    requirements: {
+      functional: ["Press Q to cast a timed enemy debuff with a cooldown"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to cast the debuff",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Apply a timed enemy debuff with a local cooldown",
+          parameters: { cooldownSeconds: 12, durationSeconds: 4 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: undefined,
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["enemy"],
+    },
+    integrations: undefined,
+    stateModel: undefined,
+    isReadyForBlueprint: true,
+  });
+  const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.deepEqual(effectNeed?.requiredCapabilities, ["effect.modifier.apply"]);
+  assert.ok(!effectNeed?.optionalCapabilities?.includes("timing.cooldown.local"));
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("cooldown-local effect slice")
+    )
+  );
 }
 
 function testInventoryExtensionStaysOnExistingRuleAndUiModules() {
@@ -436,7 +749,12 @@ function runTests() {
   testCoarseCapabilityFallbacksEmitSemanticWarnings();
   testSupportedLifecycleClarificationDoesNotBlockPersistentBuffFlow();
   testTimedSelfBuffSteersToShortDurationCapability();
+  testTimedSelfBuffWithLocalCooldownStaysReady();
+  testInitialDelaySchedulerAskStaysBlocked();
+  testPeriodicSchedulerAskStaysBlocked();
   testTimedNonSelfBuffKeepsGenericModifierCapability();
+  testCooldownCoupledToSelectionFlowStaysBlocked();
+  testNonSelfCooldownBuffStaysBlockedAtCurrentBoundary();
   testInventoryExtensionStaysOnExistingRuleAndUiModules();
   console.log("builder.test.ts: PASS");
 }

@@ -881,6 +881,7 @@ const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
   ],
   capabilities: [
     "ability.buff.short_duration",
+    "timing.cooldown.local",
     "effect.modifier.apply_self",
     "ability_lua_shell",
     "modifier_same_file",
@@ -932,6 +933,7 @@ const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
   constraints: [
     "需要 x-template 或兼容 Dota2 addon 宿主",
     "需要 vscripts 加载器支持 ability_lua BaseClass",
+    "scheduler/timer 当前仅 admitted same-effect local cooldown；delay / periodic / post-selection orchestration 仍 deferred",
   ],
   dependencies: [
     { patternId: "dota_ts_adapter", relation: "requires", reason: "_G registration for ability/modifier classes" },

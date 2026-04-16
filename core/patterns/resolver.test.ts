@@ -144,6 +144,7 @@ withSyntheticPatterns(() => {
         moduleId: "short_time_buff_case",
         semanticRole: "effect_application",
         requiredCapabilities: ["ability.buff.short_duration"],
+        optionalCapabilities: ["timing.cooldown.local"],
         requiredOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
         integrationHints: ["ability.execution", "modifier.runtime"],
         stateExpectations: ["modifier.duration_state"],

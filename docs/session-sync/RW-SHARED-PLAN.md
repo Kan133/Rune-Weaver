@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-mainline-transition
-> Last verified: 2026-04-16
+> Last verified: 2026-04-17
 > Read when: coordinating Dota2 and War3 mainlines or deciding the current cross-track attention split
 > Do not use for: replacing latest session-sync notes or subsystem contract docs by itself
 
@@ -31,7 +31,7 @@ If the latest same-day session-sync notes disagree with lower-frequency control 
 Current step:
 
 - Step 2. Blueprint / pattern selection
-- Current slice: the family-by-family honesty-tightening subphase, the current-seam `package 2` bounded pass, the frozen-seam `package 4` coverage audit, and package-6 acceptance execution have now all stage-closed for current grammar-v1. The next active Dota2 Step 2 work is to open the bounded `scheduler/timer` seam-expansion package deliberately, not to reopen frozen-seam package-2/package-4 work or rerun package-6 preflight.
+- Current slice: the family-by-family honesty-tightening subphase, the current-seam `package 2` bounded pass, the frozen-seam `package 4` coverage audit, package-6 acceptance execution, and the bounded Phase A `scheduler/timer` seam-expansion package have now all stage-closed for current grammar-v1. The next active Dota2 Step 2 work is to open the bounded `reward/progression` seam-expansion package deliberately, not to reopen frozen-seam package-2/package-4 work, rerun package-6 preflight, or widen `scheduler/timer` beyond its new admitted local-cooldown slice.
 - Narrow truth-sync already landed inside that slice:
   - `integration.state_sync_bridge` now routes honestly as a deliberately elided `bridge-only` path with no standalone bridge file emitted
   - `resource/cost` now has one honest narrow same-feature caller path, but the family still remains partial overall
@@ -48,13 +48,19 @@ Primary blocker:
 - Current boundary judgment:
   - frozen-seam Step 2 is now at the implementation boundary, seam boundary, and grammar-v1 declared boundary together for same-size code motion
   - package 6 has now executed and validated the frozen-seam boundary
-  - the next controller task is to open the first deliberate seam/family expansion rather than reopen package-2/package-4 cleanup
+  - `scheduler/timer` now has one admitted truthful bounded path:
+    - timed self-apply effect
+    - same-effect local cooldown only
+    - routed through `dota2.short_time_buff`
+    - broader delay / periodic / post-selection scheduler orchestration remains outside the current seam
+  - the next controller task is to open the next deliberate seam/family expansion rather than reopen package-2/package-4 cleanup or broaden `scheduler/timer` ad hoc
 - Next structural read:
-  - current seam-expansion ranking is `scheduler/timer` first, then `reward/progression`, then `spawn/emission`, then broad standalone `entity/session state`
+  - current seam-expansion ranking is `reward/progression` first, then `spawn/emission`, then broad standalone `entity/session state`
+  - `scheduler/timer` is no longer the default active seam; its bounded cooldown-local package is stage-closed
 - Latest acceptance read:
-  - pass bucket matched expectation
-  - block bucket matched expectation
-  - seam-gap bucket confirmed `scheduler/timer` as the first next seam
+  - pass bucket now includes one admitted `scheduler/timer` local-cooldown path without adding a standalone scheduler module
+  - block bucket still matches expectation for delay / periodic / post-selection scheduler asks plus the unsupported reward/spawn families
+  - seam-gap bucket has moved on from `scheduler/timer`; `reward/progression` is now the first next seam
   - package 6 also exposed and repaired one frozen-seam overclaim:
     - unsupported `scheduler/timer`, `reward/progression`, and `spawn/emission` asks were still being normalized to `ready` by collapsing into admitted families
     - `FinalBlueprint` now honest-blocks those asks instead
@@ -100,8 +106,8 @@ Plan items:
   - no-caller, caller-ambiguous, multi-consumer, and pool/resource mismatch shapes still honest-defer
 - `[done]` Stabilize host realization and generator routing around reusable grammar families for the currently admitted and narrow-supported combinations so supported mechanic combinations do not require new product-code routing and bounded `GapFill` stays downstream instead of becoming a substitute architecture layer.
 - `[done]` Select the next Dota2 seam-expansion package deliberately instead of reopening frozen-seam cleanup:
-  - current ranking is `scheduler/timer` first
-  - then `reward/progression`
+  - `scheduler/timer` bounded cooldown-local package is now stage-closed
+  - current ranking is `reward/progression` first
   - then `spawn/emission`
   - then broad standalone `entity/session state`
 - `[done]` Reintroduce Dota2 cases only as a package-6 acceptance matrix:
@@ -109,7 +115,12 @@ Plan items:
   - `should-honest-block-on-current-v1`
   - `should-expose-next-seam-gap`
   - package 6 has now executed and validated frozen-seam truth instead of letting one case drive architecture
-- `[doing]` Prepare and open the first post-boundary Step 2 seam-expansion package around `scheduler/timer`.
+- `[done]` Land the bounded Phase A `scheduler/timer` seam-expansion package:
+  - `FinalBlueprint` now admits only the timed-self-buff local-cooldown slice
+  - the effect `ModuleNeed` now emits `timing.cooldown.local`
+  - `dota2.short_time_buff` now admits that same narrow token and routes cooldown truth into the KV write path
+  - `initialDelaySeconds`, `delaySeconds`, `tickSeconds`, `intervalSeconds`, delayed selection resolution, post-selection scheduling, and generic scheduler composition all remain honest-blocked
+- `[doing]` Prepare and open the next post-scheduler Step 2 seam-expansion package around `reward/progression`.
 
 Mainline rule:
 
@@ -193,7 +204,7 @@ Plan items:
 
 Latest Dota2 session-sync:
 
-- [dota2-mainline-20260414-2359.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260414-2359.md)
+- [dota2-mainline-20260417-0122.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260417-0122.md)
 
 Latest War3 session-sync:
 

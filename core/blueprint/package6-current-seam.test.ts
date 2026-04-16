@@ -210,6 +210,71 @@ function testResourceBlueprintResolvesToCurrentAdmittedResourcePath() {
   );
 }
 
+function testSchedulerCooldownLocalSliceResolvesToShortTimeBuff() {
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Press Q to cast a short self buff with a 12 second cooldown.",
+      goal: "Press Q to cast a short self buff with a 12 second cooldown.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: ["Press Q to cast a short self buff", "Keep the buff ability on a 12 second cooldown"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to cast the buff",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Apply a timed self buff with a local cooldown",
+          parameters: { cooldownSeconds: 12, durationSeconds: 4 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["self"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+      resourceConsumption: false,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const result = buildBlueprint(schema);
+  const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.ok(effectNeed?.optionalCapabilities?.includes("timing.cooldown.local"));
+
+  const resolution = resolvePatterns(result.finalBlueprint!);
+  assert.equal(resolution.unresolved.length, 0);
+  assert.deepEqual(
+    resolution.patterns.map((pattern) => pattern.patternId).sort(),
+    ["dota2.short_time_buff", "input.key_binding"]
+  );
+}
+
 function testSchedulerTimerGapDoesNotMasqueradeAsReadySupport() {
   const schema: IntentSchema = {
     version: "1.0",
@@ -297,7 +362,7 @@ function testSchedulerTimerGapDoesNotMasqueradeAsReadySupport() {
     result.normalizationReport?.issues.some(
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("scheduler/timer family")
+        issue.message.includes("cooldown-local effect slice")
     )
   );
 }
@@ -458,6 +523,7 @@ function testSpawnEmissionGapDoesNotCollapseIntoShortBuffSupport() {
 function runTests() {
   testAcceptanceInvariantsDoNotBlockAdmittedPatternResolution();
   testResourceBlueprintResolvesToCurrentAdmittedResourcePath();
+  testSchedulerCooldownLocalSliceResolvesToShortTimeBuff();
   testSchedulerTimerGapDoesNotMasqueradeAsReadySupport();
   testRewardProgressionGapDoesNotMasqueradeAsReadySupport();
   testSpawnEmissionGapDoesNotCollapseIntoShortBuffSupport();

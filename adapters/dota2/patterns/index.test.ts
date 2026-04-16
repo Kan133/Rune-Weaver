@@ -108,4 +108,17 @@ assert.ok(
 );
 assert.match(bridgePattern!.examples?.[0]?.description || "", /deliberately elided/i);
 
+const shortTimeBuff = getPatternMeta("dota2.short_time_buff");
+assert.ok(shortTimeBuff, "dota2.short_time_buff should remain in the catalog");
+assert.ok(
+  shortTimeBuff!.capabilities.includes("timing.cooldown.local"),
+  "dota2.short_time_buff should advertise the narrow cooldown-local timer token"
+);
+assert.ok(
+  shortTimeBuff!.constraints?.includes(
+    "scheduler/timer 当前仅 admitted same-effect local cooldown；delay / periodic / post-selection orchestration 仍 deferred"
+  ),
+  "dota2.short_time_buff should keep delay/periodic scheduler semantics outside the admitted slice"
+);
+
 console.log("adapters/dota2/patterns/index.test.ts passed");

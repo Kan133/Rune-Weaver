@@ -1301,6 +1301,9 @@ export class BlueprintBuilder {
     if (module.category === "effect" && schema.effects?.durationSemantics) {
       optional.add(`effect-duration/${schema.effects.durationSemantics}`);
     }
+    if (module.category === "effect" && this.isAdmittedLocalCooldownSchedulerSlice(schema)) {
+      optional.add("timing.cooldown.local");
+    }
 
     return optional.size > 0 ? [...optional] : undefined;
   }
@@ -1633,7 +1636,7 @@ export class BlueprintBuilder {
   ): void {
     if (this.hasUnsupportedSchedulerTimerSignals(schema)) {
       blockers.add(
-        "Scheduler/timer semantics are requested, but the current seam has no first-class scheduler/timer family."
+        "Scheduler/timer semantics exceed the current admitted cooldown-local effect slice; delay/periodic and cross-module/post-selection scheduler orchestration remain outside the current seam."
       );
     }
 
@@ -1651,13 +1654,78 @@ export class BlueprintBuilder {
   }
 
   private hasUnsupportedSchedulerTimerSignals(schema: IntentSchema): boolean {
+    if (!this.hasAnySchedulerTimerSignals(schema)) {
+      return false;
+    }
+
+    return !this.isAdmittedLocalCooldownSchedulerSlice(schema);
+  }
+
+  private hasAnySchedulerTimerSignals(schema: IntentSchema): boolean {
     const parameterKeys = this.collectTypedParameterKeys(schema);
     if (
       parameterKeys.has("initialDelaySeconds") ||
       parameterKeys.has("tickSeconds") ||
       parameterKeys.has("delaySeconds") ||
-      parameterKeys.has("cooldownSeconds") ||
       parameterKeys.has("intervalSeconds")
+    ) {
+      return true;
+    }
+
+    if (this.hasLocalCooldownSignal(schema)) {
+      return true;
+    }
+
+    return this.hasDisallowedSchedulerOrchestrationText(schema);
+  }
+
+  private isAdmittedLocalCooldownSchedulerSlice(schema: IntentSchema): boolean {
+    if (!this.hasLocalCooldownOnlySchedulerSignals(schema)) {
+      return false;
+    }
+
+    if (!this.shouldUseShortTimeBuffCapability(schema.effects)) {
+      return false;
+    }
+
+    if (this.hasSelectionSchedulerPressure(schema)) {
+      return false;
+    }
+
+    if (
+      this.hasUnsupportedRewardProgressionSignals(schema) ||
+      this.hasUnsupportedSpawnEmissionSignals(schema)
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private hasLocalCooldownOnlySchedulerSignals(schema: IntentSchema): boolean {
+    const parameterKeys = this.collectTypedParameterKeys(schema);
+    if (
+      parameterKeys.has("initialDelaySeconds") ||
+      parameterKeys.has("tickSeconds") ||
+      parameterKeys.has("delaySeconds") ||
+      parameterKeys.has("intervalSeconds")
+    ) {
+      return false;
+    }
+
+    if (!this.hasLocalCooldownSignal(schema)) {
+      return false;
+    }
+
+    return !this.hasDisallowedSchedulerOrchestrationText(schema);
+  }
+
+  private hasLocalCooldownSignal(schema: IntentSchema): boolean {
+    const parameterKeys = this.collectTypedParameterKeys(schema);
+    if (
+      parameterKeys.has("cooldownSeconds") ||
+      parameterKeys.has("cooldown") ||
+      parameterKeys.has("abilityCooldown")
     ) {
       return true;
     }
@@ -1672,6 +1740,15 @@ export class BlueprintBuilder {
         normalized.includes("cannot reopen") ||
         normalized.includes("cannot open again") ||
         normalized.includes("open again after") ||
+        normalized.includes("30 秒内不能再次打开")
+      );
+    });
+  }
+
+  private hasDisallowedSchedulerOrchestrationText(schema: IntentSchema): boolean {
+    return this.collectIntentStrings(schema).some((value) => {
+      const normalized = value.toLowerCase();
+      return (
         normalized.includes("delay resolution") ||
         normalized.includes("resolve the chosen result after") ||
         normalized.includes("不是立刻生效") ||
@@ -1684,10 +1761,37 @@ export class BlueprintBuilder {
         normalized.includes("periodic") ||
         normalized.includes("periodically") ||
         normalized.includes("tick every") ||
-        normalized.includes("trigger every") ||
-        normalized.includes("30 秒内不能再次打开")
+        normalized.includes("trigger every")
       );
     });
+  }
+
+  private hasSelectionSchedulerPressure(schema: IntentSchema): boolean {
+    if (
+      schema.normalizedMechanics.candidatePool === true ||
+      schema.normalizedMechanics.weightedSelection === true ||
+      schema.normalizedMechanics.playerChoice === true ||
+      schema.normalizedMechanics.uiModal === true
+    ) {
+      return true;
+    }
+
+    if (
+      schema.selection?.mode !== undefined ||
+      schema.selection?.cardinality !== undefined ||
+      schema.selection?.repeatability !== undefined ||
+      schema.selection?.duplicatePolicy !== undefined ||
+      schema.selection?.inventory !== undefined
+    ) {
+      return true;
+    }
+
+    return (schema.constraints.requiredPatterns || []).some(
+      (patternId) =>
+        patternId === "data.weighted_pool" ||
+        patternId === "rule.selection_flow" ||
+        patternId === "ui.selection_modal"
+    );
   }
 
   private hasUnsupportedRewardProgressionSignals(schema: IntentSchema): boolean {
