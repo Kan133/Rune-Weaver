@@ -483,7 +483,14 @@ function generateKeyBindingServerCode(
   featureId: string,
   pattern: SelectedPattern
 ): string {
-  const key = (pattern.parameters?.key as string) || "Q";
+  const key =
+    (pattern.parameters?.key as string) ||
+    (pattern.parameters?.triggerKey as string) ||
+    "";
+  const eventName = (pattern.parameters?.eventName as string) || "rune_weaver_input_triggered";
+  if (!key) {
+    throw new Error("input.key_binding requires an explicit key/triggerKey in assembly-code-adapter.");
+  }
 
   return `/**
  * ${className}
@@ -495,6 +502,7 @@ function generateKeyBindingServerCode(
 export class ${className} {
   private static instance: ${className};
   private boundKeys: Set<string> = new Set();
+  private readonly eventName: string = "${eventName}";
 
   static getInstance(): ${className} {
     if (!${className}.instance) {
@@ -516,7 +524,7 @@ export class ${className} {
     
     // 监听按键事件 - 使用 GameRules 和自定义事件系统
     if (GameRules && "XNetTable" in GameRules && (GameRules as any).XNetTable) {
-      CustomGameEventManager.RegisterListener("player_key_pressed", (event: any) => {
+      CustomGameEventManager.RegisterListener(this.eventName, (event: any) => {
         if (event.key === key) {
           callback();
         }

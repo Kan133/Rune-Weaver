@@ -1,24 +1,10 @@
-import { getCanonicalTalentDrawParameters } from "../../../adapters/dota2/cases/talent-draw.js";
+import { TALENT_DRAW_EXAMPLE } from "../../../adapters/dota2/families/selection-pool/examples.js";
 
 /**
  * Talent Draw Demo Fixture
- * 
- * 用于 E2E demo 和 smoke test，提供完整的 Talent Draw 参数。
- * 不被普通 Wizard 使用，需在 demo/test 中显式导入。
- * 
- * === CANONICAL CASE MAPPING ===
- * This fixture implements the canonical Talent Draw case with the following
- * rarity-to-attribute mapping:
- * 
- * | Rarity | Weight | Attribute        | Value | Description           |
- * |--------|--------|------------------|-------|-----------------------|
- * | R      | 40     | Strength         | +10   | "+10 Strength"        |
- * | SR     | 30     | Agility          | +10   | "+10 Agility"         |
- * | SSR    | 20     | Intelligence     | +10   | "+10 Intelligence"    |
- * | UR     | 10     | All Attributes   | +10   | "+10 All Attributes"  |
- * 
- * Note: Descriptions must match the actual applied effects to ensure UI
- * card fidelity. See: docs/talent-draw-case/CANONICAL-CASE-TALENT-DRAW.md
+ *
+ * Uses the live selection_pool family example catalog rather than legacy case authority.
+ * The fixture shape stays backward-compatible for existing workbench/demo consumers.
  */
 
 export interface TalentEntry {
@@ -57,12 +43,45 @@ export interface TalentDrawFixture {
   };
 }
 
+function buildFixtureParameters(): TalentDrawFixture["parameters"] {
+  const params = TALENT_DRAW_EXAMPLE.parameters;
+  return {
+    triggerKey: params.triggerKey,
+    choiceCount: params.choiceCount,
+    drawMode: params.drawMode || "multiple_without_replacement",
+    duplicatePolicy: params.duplicatePolicy || "forbid",
+    poolStateTracking: params.poolStateTracking || "session",
+    selectionPolicy: params.selectionPolicy || "single",
+    applyMode: params.applyMode || "immediate",
+    postSelectionPoolBehavior: params.postSelectionPoolBehavior || "remove_selected_from_remaining",
+    trackSelectedItems: params.trackSelectedItems !== false,
+    payloadShape: params.display?.payloadShape || "card_with_rarity",
+    minDisplayCount: params.display?.minDisplayCount || params.choiceCount,
+    placeholderConfig: {
+      id: params.placeholderConfig?.id || "empty_selection_slot",
+      name: params.placeholderConfig?.name || "Empty Slot",
+      description: params.placeholderConfig?.description || "No selection available",
+      disabled: params.placeholderConfig?.disabled ?? true,
+    },
+    effectApplication: {
+      enabled: true,
+      rarityAttributeBonusMap: params.effectProfile?.rarityAttributeBonusMap || {},
+    },
+    entries: params.objects.map((object) => ({
+      id: object.id,
+      label: object.label,
+      description: object.description,
+      weight: object.weight,
+      tier: object.tier,
+    })),
+  };
+}
+
 export const talentDrawFixture: TalentDrawFixture = {
-  prompt: "做一个按 F4 触发的三选一天赋抽取系统。玩家按 F4 后，从加权天赋池抽出 3 个候选天赋，显示卡牌选择 UI。玩家选择 1 个后立即应用效果，并且已选择的天赋后续不再出现。",
-  parameters: getCanonicalTalentDrawParameters() as TalentDrawFixture["parameters"],
+  prompt: TALENT_DRAW_EXAMPLE.createPrompt,
+  parameters: buildFixtureParameters(),
 };
 
-// 便捷函数：获取带 fixture 参数的 IntentSchema 扩展
 export function getTalentDrawParameters(): Record<string, unknown> {
-  return getCanonicalTalentDrawParameters();
+  return buildFixtureParameters();
 }

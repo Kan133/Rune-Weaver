@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: changing Dota2 generator-side bounded gap-fill behavior or reviewing Dota2 gap-fill boundaries
 > Do not use for: expanding Gap Fill into architecture ownership or deciding cross-host baseline authority
 
@@ -16,7 +16,7 @@ This document defines how Dota2-side gap fill should work inside Rune Weaver.
 
 The goal is not to let free-form vibecoding rewrite the host pipeline.
 
-The goal is to let case-specific logic fill the "muscle" inside an already-declared structure:
+The goal is to let Dota2-side implementation logic fill the "muscle" inside an already-declared structure:
 
 - `wizard` provides intent
 - `blueprint` provides module structure
@@ -27,7 +27,7 @@ The goal is to let case-specific logic fill the "muscle" inside an already-decla
 
 ## Core Rule
 
-Gap fill may specialize implementation inside explicit Dota2 generator boundaries.
+Gap fill may specialize implementation inside explicit Dota2 generator boundaries and other already-owned Dota2 artifact boundaries whose existence / path / ownership were fixed upstream.
 
 Gap fill may not change:
 
@@ -39,6 +39,21 @@ Gap fill may not change:
 - bridge / routing / lifecycle contracts
 
 If a requested change needs one of those, it is not gap fill. It is architecture or lifecycle work.
+
+Current Dota2 code-truth note:
+
+- Dota2-side gap fill boundaries are now emitted through `FinalBlueprint.fillContracts`
+- each `FillContract` is `mode: "closed"` and binds:
+  - `boundaryId`
+  - `targetModuleId`
+  - `targetPatternId`
+  - `sourceBindings`
+  - `allowed`
+  - `forbidden`
+  - `invariants`
+  - `expectedOutput`
+  - `fallbackPolicy: "deterministic-default"`
+- LLM may only contribute candidate intent for these boundaries; final activation and boundary ownership stay deterministic
 
 ## Allowed Boundary Types
 
@@ -87,6 +102,21 @@ Not allowed:
 - server index ownership changes
 - write-point aggregation policy changes
 
+### 4. Source-Backed Artifact Micro-Boundary
+
+Allowed:
+
+- object-data / config field filling inside an already-owned Rune Weaver artifact
+- bounded content refresh inside a fixed artifact path
+- LLM-assisted or rule-assisted muscle fill inside that owned artifact
+
+Not allowed:
+
+- deciding whether the artifact exists
+- changing which feature owns the artifact
+- changing the artifact path or widening owned scope
+- redefining lifecycle or host wiring semantics from inside the artifact fill
+
 ## Current Dota2 Boundary Anchors
 
 The following files are the first explicit Dota2 gap-fill anchors:
@@ -96,6 +126,23 @@ The following files are the first explicit Dota2 gap-fill anchors:
 - [selection-modal.ts](/D:/Rune%20Weaver/adapters/dota2/generator/ui/selection-modal.ts)
 
 These are host-specific generator surfaces. They are safe for A group work as long as changes stay inside declared boundaries and do not attempt to redefine shared host contracts.
+
+Current bounded family using these anchors:
+
+- `selection_pool`
+  - admitted bounded fields this round:
+    - single `triggerKey`
+    - `choiceCount` inside `1..5`
+    - `objectKind`
+    - feature-owned `objects[]`
+    - `inventory.capacity` inside `1..30`
+    - display copy/title fields
+  - still frozen:
+    - second trigger
+    - multi-confirm flow
+    - persistence
+    - cross-feature grants
+    - arbitrary new effect family
 
 ## Boundary IDs
 
@@ -163,6 +210,13 @@ When adding or changing gap fill inside Dota2 generators:
 3. prefer deterministic baseline logic plus narrow specialization
 4. add or update tests when the boundary affects output behavior
 5. run Dota2-specific validation and doctor flows after change
+
+When adding or changing gap fill inside a Dota2 source-backed artifact:
+
+1. treat artifact existence / path / ownership as fixed upstream skeleton
+2. fill content only inside the already-owned file
+3. do not turn object-data fill into module-topology or routing decisions
+4. validate the resulting host behavior the same way as generator-side gap fill
 
 ## Validation Expectations
 

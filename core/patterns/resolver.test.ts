@@ -158,6 +158,157 @@ withSyntheticPatterns(() => {
 }
 
 {
+  const rewardSchema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Track reward progress after each completed selection round and level up after three rounds.",
+      goal: "Track reward progress after each completed selection round and level up after three rounds.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Track reward progress after each selection round",
+        "Level up after three completed rounds",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to open the selection flow",
+          parameters: { triggerKey: "A" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Resolve one player-confirmed choice from weighted candidates",
+          parameters: { choiceCount: 1, selectionPolicy: "weighted" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Store reward progress and current reward level",
+          parameters: { progressThreshold: 3 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: {
+      mode: "weighted",
+      cardinality: "single",
+      repeatability: "repeatable",
+    },
+    stateModel: {
+      states: [
+        { id: "reward_progress", summary: "Completed selection rounds", owner: "feature", lifetime: "session" },
+        { id: "reward_level", summary: "Current reward level", owner: "feature", lifetime: "session" },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: false,
+      outcomeApplication: false,
+      resourceConsumption: false,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const blueprint = buildBlueprint(rewardSchema);
+  assert.equal(blueprint.success, true);
+
+  const result = resolvePatterns(blueprint.finalBlueprint!);
+  const selectionFlow = result.patterns.find((pattern) => pattern.patternId === "rule.selection_flow");
+
+  assert.equal(result.unresolved.length, 0);
+  assert.ok(selectionFlow);
+  assert.deepEqual(selectionFlow?.parameters?.progression, {
+    enabled: true,
+    progressThreshold: 3,
+    progressStateId: "reward_progress",
+    levelStateId: "reward_level",
+  });
+}
+
+{
+  const projectileSchema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Press D to fire one forward linear projectile with fixed speed, distance, and radius.",
+      goal: "Press D to fire one forward linear projectile with fixed speed, distance, and radius.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: ["Capture a key press", "Fire one forward linear projectile"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to emit the projectile",
+          parameters: { triggerKey: "D" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Emit one forward linear projectile",
+          parameters: {
+            projectileDistance: 900,
+            projectileSpeed: 1200,
+            projectileRadius: 125,
+          },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: false,
+      weightedSelection: false,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: true,
+      resourceConsumption: false,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const blueprint = buildBlueprint(projectileSchema);
+  assert.equal(blueprint.success, true);
+
+  const result = resolvePatterns(blueprint.finalBlueprint!);
+  const projectilePattern = result.patterns.find((pattern) => pattern.patternId === "dota2.linear_projectile_emit");
+
+  assert.equal(result.unresolved.length, 0);
+  assert.ok(projectilePattern);
+  assert.equal(projectilePattern?.parameters?.projectileDistance, 900);
+  assert.equal(projectilePattern?.parameters?.projectileSpeed, 1200);
+  assert.equal(projectilePattern?.parameters?.projectileRadius, 125);
+}
+
+{
   const createSchema: IntentSchema & { parameters: Record<string, unknown> } = {
     version: "1.0",
     host: { kind: "dota2-x-template" },

@@ -14,6 +14,7 @@ function createEntry(overrides: Partial<WritePlanEntry> = {}): WritePlanEntry {
     safe: true,
     parameters: {
       triggerKey: "F4",
+      eventName: "rune_weaver_selection_pool_triggered",
     },
     ...overrides,
   };
@@ -40,6 +41,9 @@ function createEntry(overrides: Partial<WritePlanEntry> = {}): WritePlanEntry {
   assert.match(code, /keyBinding\.setHandler\(\(playerId: number\) =>/i);
   assert.match(code, /resourceConsumer\.consumeConfiguredAmount\(playerId\)/i);
   assert.match(code, /registered with canonical resource consume caller/i);
+  assert.match(code, /private readonly eventName: string = "rune_weaver_selection_pool_triggered"/i);
+  assert.match(code, /RegisterListener\(this\.eventName/i);
+  assert.doesNotMatch(code, /player_key_pressed/i);
 }
 
 {
@@ -53,6 +57,29 @@ function createEntry(overrides: Partial<WritePlanEntry> = {}): WritePlanEntry {
   assert.doesNotMatch(code, /consumeConfiguredAmount/);
   assert.match(code, /FeatureResourceKeyBinding\.getInstance\(\);/i);
   assert.match(code, /\[Rune Weaver\] FeatureResourceKeyBinding registered/i);
+  assert.match(code, /private readonly eventName: string = "rune_weaver_selection_pool_triggered"/i);
+  assert.doesNotMatch(code, /player_key_pressed/i);
+}
+
+{
+  let error: unknown;
+  try {
+    generateKeyBindingCode(
+      "FeatureResourceKeyBinding",
+      "standalone_system_resource",
+      createEntry({
+        parameters: {},
+      })
+    );
+  } catch (caught) {
+    error = caught;
+  }
+
+  assert.ok(error instanceof Error);
+  assert.match(
+    (error as Error).message,
+    /requires an explicit triggerKey\/key parameter/i
+  );
 }
 
 console.log("adapters/dota2/generator/server/key-binding.test.ts passed");

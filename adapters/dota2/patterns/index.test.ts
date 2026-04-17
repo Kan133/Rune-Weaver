@@ -121,4 +121,32 @@ assert.ok(
   "dota2.short_time_buff should keep delay/periodic scheduler semantics outside the admitted slice"
 );
 
+const selectionFlow = getPatternMeta("rule.selection_flow");
+assert.ok(selectionFlow, "rule.selection_flow should remain in the catalog");
+assert.ok(
+  selectionFlow!.capabilities.includes("progression.selection.local_threshold"),
+  "rule.selection_flow should advertise the narrow local progression token"
+);
+assert.ok(
+  selectionFlow!.stateAffordances?.includes("progression.round_counter_state"),
+  "rule.selection_flow should expose the round-counter progression state surface"
+);
+assert.ok(
+  selectionFlow!.stateAffordances?.includes("progression.level_state"),
+  "rule.selection_flow should expose the level progression state surface"
+);
+
+const linearProjectile = getPatternMeta("dota2.linear_projectile_emit");
+assert.ok(linearProjectile, "dota2.linear_projectile_emit should exist in the catalog");
+assert.ok(
+  linearProjectile!.capabilities.includes("emission.projectile.linear.forward"),
+  "dota2.linear_projectile_emit should advertise the narrow forward projectile capability"
+);
+assert.ok(
+  linearProjectile!.constraints?.includes(
+    "helper-unit / follow / effect-coupled spawn choreography 当前仍 deferred"
+  ),
+  "dota2.linear_projectile_emit should keep helper/follow spawn choreography outside the admitted slice"
+);
+
 console.log("adapters/dota2/patterns/index.test.ts passed");

@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: admitting or reviewing `PatternContract`, `HostBinding`, and `FillSlot` surfaces for catalog use
 > Do not use for: pattern backlog priority, extraction workflow, or host-specific implementation notes by itself
 
@@ -45,7 +45,8 @@ This document follows the accepted baseline vocabulary:
 - `FillSlot`
   - declared bounded variability inside an already-selected pattern / realization path
 - `GapFill`
-  - execution that fills declared `FillSlot`s only
+  - controlled muscle-fill execution after structure / realization / ownership are fixed
+  - at pattern level, it should enter through declared `FillSlot`s and must not absorb structure authority
 
 This document does not reopen those terms.
 
@@ -148,6 +149,8 @@ Additional admission rules:
 - a pattern that can only be found by raw pattern-id hinting is not mature enough for admission
 - domain/theme renaming is not enough to justify a new contract
 - host API names, file paths, or generator internals must not become semantic identity
+- capability surface should be expressed as reusable mechanism tokens, not case names or feature labels
+- names such as `monster_enrage_over_time`, `talent_inventory`, or `equipment_draw` are business descriptions, not admissible capability tokens by themselves
 
 ## Minimum `HostBinding` Admission Rules
 
@@ -197,6 +200,9 @@ Every admitted `FillSlot` must expose:
 - host write targets
 - cross-module architecture
 
+`FillSlot` is the preferred pattern-local entry to Gap Fill, but not every muscle detail must become a new pattern seam.
+If an already-owned artifact or already-assigned host-local implementation zone needs bounded content fill, that still counts as Gap Fill as long as pattern / family / host / ownership authority stay fixed upstream.
+
 If a requested variability needs any of those decisions, the entry is underspecified upstream and should not pass admission.
 
 ## Resolver And Realization Compatibility Rules
@@ -216,6 +222,7 @@ Admission implications:
 - hints may participate only after capability / invariants / outputs / state / family evaluation has produced a tie set
 - generator routing is downstream of family selection, not a second semantic resolver
 - `FillSlot` is downstream of realization choice and may not reopen family or host authority
+- capability fit should match stable mechanism vocabulary rather than prompt wording or case-theme naming
 
 If an entry only works because hints bypass capability fit, or because generator logic re-decides family, the entry should stay in draft.
 

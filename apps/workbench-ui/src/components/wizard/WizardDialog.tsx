@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFeatureStore } from '@/hooks/useFeatureStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { resolveCanonicalTalentDrawFeatureId } from '../../../../../adapters/dota2/cases/talent-draw';
 
 interface ExecuteAPIResponse {
   success: boolean;
@@ -140,7 +139,6 @@ export function WizardDialog() {
     setWizardStep('generating');
 
     try {
-      const featureId = resolveCanonicalTalentDrawFeatureId(promptDraft);
       const response = await fetch('/api/cli/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,7 +146,6 @@ export function WizardDialog() {
           command: 'run',
           hostRoot: connectedHostRoot,
           prompt: promptDraft,
-          featureId,
           write: true,
           force: false,
         }),
@@ -238,7 +235,7 @@ export function WizardDialog() {
         );
       }
 
-      await reloadConnectedWorkspace(featureId || null);
+      await reloadConnectedWorkspace(null);
       const reviewSummary = resultPayload.review
         ? [
             resultPayload.review.title,

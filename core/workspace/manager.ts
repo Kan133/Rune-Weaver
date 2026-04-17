@@ -29,6 +29,19 @@ const CURRENT_VERSION = "0.1";
 // F011: Workspace file is located in game/scripts/src/rune_weaver/
 const WORKSPACE_RELATIVE_PATH = "game/scripts/src/rune_weaver";
 
+function resolveOptionalReplace<T>(
+  nextValue: T | null | undefined,
+  existingValue: T | undefined,
+): T | undefined {
+  if (nextValue === undefined) {
+    return existingValue;
+  }
+  if (nextValue === null) {
+    return undefined;
+  }
+  return nextValue;
+}
+
 export function getWorkspaceFilePath(hostRoot: string): string {
   return join(hostRoot, WORKSPACE_RELATIVE_PATH, WORKSPACE_FILE_NAME);
 }
@@ -202,7 +215,8 @@ export function addFeatureToWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
-    sourceModel: result.sourceModel,
+    sourceModel: result.sourceModel ?? undefined,
+    featureAuthoring: result.featureAuthoring ?? undefined,
     integrationPoints,
     gapFillBoundaries: result.gapFillBoundaries,
     createdAt: now,
@@ -238,7 +252,8 @@ export function updateFeatureInWorkspace(
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
     entryBindings: result.entryBindings,
-    sourceModel: result.sourceModel || existing.sourceModel,
+    sourceModel: resolveOptionalReplace(result.sourceModel, existing.sourceModel),
+    featureAuthoring: resolveOptionalReplace(result.featureAuthoring, existing.featureAuthoring),
     integrationPoints: integrationPoints || existing.integrationPoints,
     gapFillBoundaries: result.gapFillBoundaries || existing.gapFillBoundaries,
     updatedAt: now,
@@ -371,6 +386,7 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
   const now = new Date().toISOString();
   const generatedFiles = ((raw.generatedFiles as string[]) || []).filter((file): file is string => typeof file === "string");
   const sourceModel = normalizeSourceModelRef(raw.sourceModel);
+  const featureAuthoring = normalizeFeatureAuthoring(raw.featureAuthoring);
 
   return {
     featureId: (raw.featureId as string) || "",
@@ -382,12 +398,34 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
     generatedFiles,
     entryBindings: normalizeEntryBindings(raw.entryBindings, generatedFiles),
     sourceModel,
+    featureAuthoring,
     integrationPoints: (raw.integrationPoints as string[]) || undefined,
     gapFillBoundaries: (raw.gapFillBoundaries as string[]) || undefined,
     dependsOn: (raw.dependsOn as string[]) || undefined,
     createdAt: (raw.createdAt as string) || now,
     updatedAt: (raw.updatedAt as string) || now,
   };
+}
+
+function normalizeFeatureAuthoring(rawFeatureAuthoring: unknown): RuneWeaverFeatureRecord["featureAuthoring"] {
+  if (!rawFeatureAuthoring || typeof rawFeatureAuthoring !== "object") {
+    return undefined;
+  }
+
+  const raw = rawFeatureAuthoring as Record<string, unknown>;
+  if (
+    raw.mode !== "source-backed" ||
+    raw.profile !== "selection_pool" ||
+    typeof raw.objectKind !== "string" ||
+    !raw.parameters ||
+    typeof raw.parameters !== "object" ||
+    !raw.parameterSurface ||
+    typeof raw.parameterSurface !== "object"
+  ) {
+    return undefined;
+  }
+
+  return rawFeatureAuthoring as RuneWeaverFeatureRecord["featureAuthoring"];
 }
 
 /**

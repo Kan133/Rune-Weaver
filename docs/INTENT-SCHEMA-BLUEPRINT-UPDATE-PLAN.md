@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-16
+> Last verified: 2026-04-17
 > Read when: checking which Lane B items remain residual after baseline wording landed
 > Do not use for: restating accepted baseline architecture or overriding authoritative docs
 > Owner: Lane B
@@ -326,6 +326,68 @@ Fallback rule:
 
 - if a request does not match a known family, it should not fail only because family matching is missing
 - the bounded fallback is `generic-core` source model shaping plus normal deterministic blueprinting
+
+### 5.7 Grammar Family / Capability / Composition Placement
+
+For this planning wave, use the following terminology split:
+
+- `grammar family`
+  - a stable reusable mechanism boundary
+  - examples at the current Dota2 mainline level include `scheduler/timer`, `reward/progression`, `spawn/emission`, and `entity/session state`
+- `capability`
+  - the smallest reusable mechanism token carried under a family
+  - it says what mechanism support exists, not what business story is being told
+- `composition`
+  - behavior created by combining capabilities or families
+  - this is the preferred home for many user-facing semantics that sound large but are built from existing atoms
+- `feature-owned source model`
+  - feature-scoped authoring data such as business objects, catalogs, policy/config fields, and update-merge inputs
+  - this is where rich per-feature content should live when it should not become family vocabulary
+
+Why this split must exist:
+
+- `ModuleNeed -> capability fit -> pattern resolution -> host realization -> honest block` requires stable vocabulary
+- LLM may suggest decomposition, candidate families, or candidate capability placement
+- LLM should not be the only authority deciding whether a new phrase becomes:
+  - a parameter
+  - source-model data
+  - composition
+  - a capability
+  - or a new family
+
+New-semantics placement order for this planning wave:
+
+1. check whether the request is only a parameter change
+2. check whether it is a feature-owned source-model change
+3. check whether it is a composition of existing capabilities or families
+4. only then consider a new capability under an existing family
+5. consider a new family only as the last option
+
+v1 example capability vocabulary for planning use:
+
+| Token | Family | Planning status |
+| --- | --- | --- |
+| `timing.cooldown.local` | `scheduler/timer` | current truthful example already admitted |
+| `timing.delay.local` | `scheduler/timer` | example vocabulary only; not current shipped truth |
+| `timing.periodic.local` | `scheduler/timer` | example vocabulary only; not current shipped truth |
+| `reward.apply.local` | `reward/progression` | example vocabulary only; not current shipped truth |
+| `progress.counter.local` | `reward/progression` | example vocabulary only; not current shipped truth |
+| `spawn.single.local` | `spawn/emission` | example vocabulary only; not current shipped truth |
+| `spawn.batch.local` | `spawn/emission` | example vocabulary only; not current shipped truth |
+| `emission.projectile.local` | `spawn/emission` | example vocabulary only; not current shipped truth |
+
+The following should not become v1 example capability tokens:
+
+- `progress.threshold.local`
+  - treat as composition or rule logic on top of `progress.counter.local`
+- `round_timer`
+  - treat as `scheduler/timer + entity/session state`
+- `monster_enrage_over_time`
+  - treat as `scheduler/timer + reward/progression + effect/state`
+- `talent_inventory`
+  - treat as feature-owned source model plus UI/state contract
+- `equipment_draw`
+  - treat as business skeleton or source-model variation, not a capability token
 
 ---
 

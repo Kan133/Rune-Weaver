@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: deciding whether a doc is safe to trust, ignore, or archive
 > Do not use for: architecture design by itself; this is a routing/trust registry, not a subsystem spec
 
@@ -141,7 +141,7 @@ Minimum machine-readable header automation scope:
 | [DOTA2-KV-GENERATOR-SCOPE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-KV-GENERATOR-SCOPE.md) | active-reference | current | read-by-task | Dota2 KV generator boundary |
 | [DOTA2-TS-GENERATOR-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-GENERATOR-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 TS generator boundary |
 | [DOTA2-TS-LUA-AUTHORING-PATHS.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-LUA-AUTHORING-PATHS.md) | active-reference | current | read-by-task | Dota2 TS/Lua authoring-path reference |
-| [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md) | active-reference | needs-refresh | read-by-task | Dota2 bounded gap-fill boundary |
+| [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 bounded gap-fill boundary |
 | [DOTA-DATA-INGESTION.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA-DATA-INGESTION.md) | active-reference | current | read-by-task | Dota2 reference-data ingestion model |
 | [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md) | active-reference | needs-refresh | read-by-task | Dota2-oriented pattern authoring guide |
 | [UI-SAFER-PROFILE.md](/D:/Rune%20Weaver/docs/hosts/dota2/UI-SAFER-PROFILE.md) | active-reference | current | read-by-task | Dota2 Panorama safer-generation profile |

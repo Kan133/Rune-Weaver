@@ -367,7 +367,7 @@ function testSchedulerTimerGapDoesNotMasqueradeAsReadySupport() {
   );
 }
 
-function testRewardProgressionGapDoesNotMasqueradeAsReadySupport() {
+function testRewardProgressionSelectionLocalSliceNowPasses() {
   const schema: IntentSchema = {
     version: "1.0",
     host: { kind: "dota2-x-template" },
@@ -437,6 +437,95 @@ function testRewardProgressionGapDoesNotMasqueradeAsReadySupport() {
   };
 
   const result = buildBlueprint(schema);
+  const resolution = resolvePatterns(result.finalBlueprint!);
+  const selectionNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "selection_flow");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.ok(selectionNeed?.optionalCapabilities?.includes("progression.selection.local_threshold"));
+  assert.ok(
+    resolution.patterns.some((pattern) => pattern.patternId === "rule.selection_flow")
+  );
+}
+
+function testBroaderRewardProgressionGapStillBlocks() {
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Track reward progress across matches and grant a persistent inventory unlock after three rounds.",
+      goal: "Track reward progress across matches and grant a persistent inventory unlock after three rounds.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Track reward progress across matches",
+        "Grant an inventory unlock after three rounds",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to open the selection flow",
+          parameters: { triggerKey: "A" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Resolve one player-confirmed choice from weighted candidates",
+          parameters: { choiceCount: 1, selectionPolicy: "weighted" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Store reward progress and current reward level",
+          parameters: { progressThreshold: 3 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: {
+      mode: "weighted",
+      cardinality: "single",
+      repeatability: "repeatable",
+      inventory: {
+        enabled: true,
+        capacity: 3,
+        storeSelectedItems: true,
+        blockDrawWhenFull: false,
+        fullMessage: "Inventory full",
+        presentation: "persistent_panel",
+      },
+    },
+    stateModel: {
+      states: [
+        { id: "reward_progress", summary: "Completed selection rounds", owner: "feature", lifetime: "persistent" },
+        { id: "reward_level", summary: "Current reward level", owner: "feature", lifetime: "persistent" },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: false,
+      outcomeApplication: false,
+      resourceConsumption: false,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const result = buildBlueprint(schema);
 
   assert.equal(result.success, false);
   assert.equal(result.finalBlueprint?.status, "blocked");
@@ -444,12 +533,75 @@ function testRewardProgressionGapDoesNotMasqueradeAsReadySupport() {
     result.normalizationReport?.issues.some(
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("reward/progression family")
+        issue.message.includes("selection-local threshold progression slice")
     )
   );
 }
 
-function testSpawnEmissionGapDoesNotCollapseIntoShortBuffSupport() {
+function testForwardLinearProjectileSliceNowPasses() {
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Press D to fire one forward linear projectile with fixed speed, distance, and radius.",
+      goal: "Press D to fire one forward linear projectile with fixed speed, distance, and radius.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: ["Capture a key press", "Fire one forward linear projectile"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to emit the projectile",
+          parameters: { triggerKey: "D" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Emit one forward linear projectile",
+          parameters: {
+            projectileDistance: 900,
+            projectileSpeed: 1200,
+            projectileRadius: 125,
+          },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: false,
+      weightedSelection: false,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: true,
+      resourceConsumption: false,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const result = buildBlueprint(schema);
+  const resolution = resolvePatterns(result.finalBlueprint!);
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.ok(
+    resolution.patterns.some((pattern) => pattern.patternId === "dota2.linear_projectile_emit")
+  );
+}
+
+function testSpawnEmissionGapDoesNotCollapseIntoLinearProjectileSupport() {
   const schema: IntentSchema = {
     version: "1.0",
     host: { kind: "dota2-x-template" },
@@ -515,7 +667,68 @@ function testSpawnEmissionGapDoesNotCollapseIntoShortBuffSupport() {
     result.normalizationReport?.issues.some(
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("spawn/emission family")
+        issue.message.includes("helper-unit / follow / effect-coupled spawn choreography")
+    )
+  );
+}
+
+function testStandaloneStateBoundaryStillBlocks() {
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Maintain a standalone shared session state store for this feature.",
+      goal: "Maintain a standalone shared session state store for this feature.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: ["Maintain a standalone shared session state store"],
+      typed: [
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Store standalone shared session state",
+          parameters: {},
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    stateModel: {
+      states: [
+        { id: "generic_state", summary: "Current generic state", owner: "feature", lifetime: "session" },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: false,
+      candidatePool: false,
+      weightedSelection: false,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: false,
+      resourceConsumption: false,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const result = buildBlueprint(schema);
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("Standalone entity/session state semantics")
     )
   );
 }
@@ -525,8 +738,11 @@ function runTests() {
   testResourceBlueprintResolvesToCurrentAdmittedResourcePath();
   testSchedulerCooldownLocalSliceResolvesToShortTimeBuff();
   testSchedulerTimerGapDoesNotMasqueradeAsReadySupport();
-  testRewardProgressionGapDoesNotMasqueradeAsReadySupport();
-  testSpawnEmissionGapDoesNotCollapseIntoShortBuffSupport();
+  testRewardProgressionSelectionLocalSliceNowPasses();
+  testBroaderRewardProgressionGapStillBlocks();
+  testForwardLinearProjectileSliceNowPasses();
+  testSpawnEmissionGapDoesNotCollapseIntoLinearProjectileSupport();
+  testStandaloneStateBoundaryStillBlocks();
   console.log("package6-current-seam.test.ts: PASS");
 }
 

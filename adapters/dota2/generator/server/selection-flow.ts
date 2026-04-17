@@ -1,15 +1,21 @@
 /**
- * Selection Flow Generator - GP-2 & GP-3
+ * Selection Flow Generator
  *
- * GP-2: Selection Flow Commit/Events
- * GP-3: Effect Application Mapping
+ * Owns:
+ * - active round orchestration
+ * - confirm-one flow
+ * - effect application hook
+ * - admitted inventory/progression hooks
+ *
+ * Does not own:
+ * - trigger hotkey capture
+ * - weighted pool session state (remaining / owned / currentChoice)
  */
 
 import { WritePlanEntry } from "../../assembler/index.js";
 
 // Dota2 gap-fill boundary anchors.
-// These constants intentionally live in the Dota2 generator layer so A group
-// can harden case-specific logic without touching shared host contracts.
+// GAP_FILL_BOUNDARY: selection_flow.effect_mapping
 export const SELECTION_FLOW_GAP_FILL_BOUNDARIES = {
   effectMapping: {
     id: "selection_flow.effect_mapping",
@@ -19,7 +25,6 @@ export const SELECTION_FLOW_GAP_FILL_BOUNDARIES = {
 } as const;
 
 export interface SelectionFlowParams {
-  triggerKey?: string;
   choiceCount?: number;
   selectionPolicy?: "single" | "multi";
   applyMode?: "immediate" | "deferred";
@@ -37,6 +42,20 @@ export interface SelectionFlowParams {
     fullMessage: string;
     presentation: "persistent_panel";
   };
+  progression?: {
+    enabled: boolean;
+    progressThreshold: number;
+    progressStateId: string;
+    levelStateId: string;
+  };
+}
+
+function normalizeChoiceCount(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return 1;
+  }
+  return Math.max(1, Math.floor(numeric));
 }
 
 export function generateSelectionFlowCode(
@@ -44,32 +63,39 @@ export function generateSelectionFlowCode(
   featureId: string,
   entry: WritePlanEntry
 ): string {
-  const caseParams = (entry.parameters || {}) as SelectionFlowParams;
-  const triggerKey = caseParams.triggerKey || "F4";
-  const choiceCount = caseParams.choiceCount || 3;
-  const selectionPolicy = caseParams.selectionPolicy || "single";
-  const applyMode = caseParams.applyMode || "immediate";
-  const postSelectionPoolBehavior = caseParams.postSelectionPoolBehavior || "none";
-  const trackSelectedItems = caseParams.trackSelectedItems || false;
-  const effectApplication = caseParams.effectApplication;
-  const inventory = caseParams.inventory;
+  const params = (entry.parameters || {}) as SelectionFlowParams;
+  const choiceCount = normalizeChoiceCount(params.choiceCount);
+  const selectionPolicy = params.selectionPolicy || "single";
+  const applyMode = params.applyMode || "immediate";
+  const postSelectionPoolBehavior = params.postSelectionPoolBehavior || "none";
+  const trackSelectedItems = params.trackSelectedItems !== false;
+  const effectApplication = params.effectApplication;
+  const inventory = params.inventory;
+  const progression = params.progression;
 
-  // GAP_FILL_BOUNDARY: selection_flow.effect_mapping
-  // Allowed: rarity-driven formula, case value mapping, option-to-effect translation.
-  // Forbidden: event channel changes, session ownership model changes, pattern binding changes.
-  const hasPoolStateManagement = postSelectionPoolBehavior !== "none";
-  const hasEffectApplication = effectApplication?.enabled || false;
+  const hasPoolCommit = postSelectionPoolBehavior !== "none";
+  const hasEffectApplication = effectApplication?.enabled === true;
   const hasInventory = inventory?.enabled === true;
   const inventoryCapacity = hasInventory ? Math.max(1, Math.floor(inventory?.capacity || 15)) : 0;
   const inventoryStoreSelectedItems = hasInventory ? inventory?.storeSelectedItems !== false : false;
   const inventoryBlockDrawWhenFull = hasInventory ? inventory?.blockDrawWhenFull !== false : false;
-  const inventoryFullMessage = hasInventory && inventory?.fullMessage
-    ? inventory.fullMessage
-    : "Talent inventory full";
-  const inventoryPresentation = hasInventory && inventory?.presentation
-    ? inventory.presentation
-    : "persistent_panel";
-  const hasSessionState = hasPoolStateManagement || hasInventory;
+  const inventoryFullMessage =
+    hasInventory && inventory?.fullMessage ? inventory.fullMessage : "Selection inventory full";
+  const inventoryPresentation =
+    hasInventory && inventory?.presentation ? inventory.presentation : "persistent_panel";
+  const hasProgression =
+    progression?.enabled === true &&
+    Number.isFinite(progression.progressThreshold) &&
+    progression.progressThreshold > 0 &&
+    typeof progression.progressStateId === "string" &&
+    progression.progressStateId.trim().length > 0 &&
+    typeof progression.levelStateId === "string" &&
+    progression.levelStateId.trim().length > 0;
+  const progressionThreshold = hasProgression
+    ? Math.max(1, Math.floor(progression!.progressThreshold))
+    : 0;
+  const progressionStateId = hasProgression ? progression!.progressStateId.trim() : "selection_progress";
+  const progressionLevelStateId = hasProgression ? progression!.levelStateId.trim() : "selection_level";
   const hasValidRarityMap =
     hasEffectApplication &&
     effectApplication?.rarityAttributeBonusMap &&
@@ -79,103 +105,62 @@ export function generateSelectionFlowCode(
     ? Object.entries(effectApplication!.rarityAttributeBonusMap!)
         .map(
           ([rarity, config]) =>
-            `      "${rarity}": { attribute: "${config.attribute}", value: ${config.value} }`
+            `      "${rarity}": { attribute: "${config.attribute}", value: ${config.value} }`,
         )
         .join(",\n")
     : "";
 
-  const sessionStateDeclaration = hasSessionState
+  const inventoryStateDeclaration = hasInventory
     ? `
-  private playerSessionStates: Map<number, {
-    remainingIds: string[];
-    ownedIds: string[];
-    currentChoiceIds: string[];
-${hasInventory ? `    selectedInventory: SelectionOption[];\n    inventoryFullNotified: boolean;\n` : ""}  }> = new Map();
+  private playerInventoryStates: Map<number, { selectedInventory: SelectionOption[] }> = new Map();
 `
     : "";
 
-  const sessionStateMethods = hasSessionState
+  const progressionStateDeclaration = hasProgression
     ? `
-  initPlayerSession(playerId: number, allIds: string[]): void {
-    this.playerSessionStates.set(playerId, {
-      remainingIds: [...allIds],
-      ownedIds: [],
-      currentChoiceIds: [],
-${hasInventory ? `      selectedInventory: [],\n      inventoryFullNotified: false,\n` : ""}    });
-    print(\`[Rune Weaver] ${className}: Initialized session for player \${playerId}\`);
-  }
+  private playerProgressionStates: Map<number, { completedRounds: number; rewardLevel: number }> = new Map();
+`
+    : "";
 
-  getPlayerSession(
-    playerId: number
-  ): { remainingIds: string[]; ownedIds: string[]; currentChoiceIds: string[];${hasInventory ? " selectedInventory: SelectionOption[]; inventoryFullNotified: boolean;" : ""} } | undefined {
-    return this.playerSessionStates.get(playerId);
-  }
-
-  private removeFromRemaining(playerId: number, optionId: string): void {
-    const session = this.playerSessionStates.get(playerId);
-    if (!session) return;
-
-    const index = session.remainingIds.indexOf(optionId);
-    if (index > -1) {
-      session.remainingIds.splice(index, 1);
+  const inventoryMethods = hasInventory
+    ? `
+  private ensureInventoryState(playerId: number): void {
+    if (!this.playerInventoryStates.has(playerId)) {
+      this.playerInventoryStates.set(playerId, { selectedInventory: [] });
     }
   }
-
-  private addToOwned(playerId: number, optionId: string): void {
-    const session = this.playerSessionStates.get(playerId);
-    if (!session) return;
-
-    if (!session.ownedIds.includes(optionId)) {
-      session.ownedIds.push(optionId);
-    }
-  }
-
-  private updateCurrentChoices(playerId: number, choiceIds: string[]): void {
-    const session = this.playerSessionStates.get(playerId);
-    if (!session) return;
-    session.currentChoiceIds = [...choiceIds];
-  }
-${hasInventory ? `
 
   private getSelectedInventory(playerId: number): SelectionOption[] {
-    const session = this.playerSessionStates.get(playerId);
-    if (!session) {
-      return [];
-    }
-    return session.selectedInventory;
+    this.ensureInventoryState(playerId);
+    return this.playerInventoryStates.get(playerId)?.selectedInventory || [];
   }
 
   private isInventoryFull(playerId: number): boolean {
-    const session = this.playerSessionStates.get(playerId);
-    if (!session) {
-      return false;
-    }
-    return session.selectedInventory.length >= ${inventoryCapacity};
+    return this.getSelectedInventory(playerId).length >= ${inventoryCapacity};
   }
 
   private appendToInventory(playerId: number, option: SelectionOption): void {
-    const session = this.playerSessionStates.get(playerId);
-    if (!session) {
+    this.ensureInventoryState(playerId);
+    const inventoryState = this.playerInventoryStates.get(playerId);
+    if (!inventoryState) {
       return;
     }
 
-    if (session.selectedInventory.some((item) => item.id === option.id)) {
+    if (inventoryState.selectedInventory.some((item) => item.id === option.id)) {
       return;
     }
 
-    if (session.selectedInventory.length >= ${inventoryCapacity}) {
-      session.inventoryFullNotified = true;
+    if (inventoryState.selectedInventory.length >= ${inventoryCapacity}) {
       return;
     }
 
-    session.selectedInventory.push({
+    inventoryState.selectedInventory.push({
       id: option.id,
       name: option.name,
       description: option.description,
       icon: option.icon,
       tier: option.tier,
     });
-    session.inventoryFullNotified = session.selectedInventory.length >= ${inventoryCapacity};
   }
 
   private buildInventoryPayload(playerId: number): {
@@ -187,12 +172,11 @@ ${hasInventory ? `
     presentation: string;
   } {
     const items = this.getSelectedInventory(playerId);
-    const isFull = items.length >= ${inventoryCapacity};
     return {
       enabled: true,
       capacity: ${inventoryCapacity},
       items,
-      isFull,
+      isFull: items.length >= ${inventoryCapacity},
       fullMessage: "${inventoryFullMessage}",
       presentation: "${inventoryPresentation}",
     };
@@ -217,7 +201,34 @@ ${hasInventory ? `
       }
     );
   }
-` : ""}
+`
+    : "";
+
+  const progressionMethods = hasProgression
+    ? `
+  private readonly progressionThreshold = ${progressionThreshold};
+  private readonly progressionStateId = "${progressionStateId}";
+  private readonly progressionLevelStateId = "${progressionLevelStateId}";
+
+  private ensureProgressionState(playerId: number): void {
+    if (!this.playerProgressionStates.has(playerId)) {
+      this.playerProgressionStates.set(playerId, { completedRounds: 0, rewardLevel: 0 });
+    }
+  }
+
+  private advanceProgression(playerId: number): void {
+    this.ensureProgressionState(playerId);
+    const progressionState = this.playerProgressionStates.get(playerId);
+    if (!progressionState) {
+      return;
+    }
+
+    progressionState.completedRounds += 1;
+    progressionState.rewardLevel = Math.floor(progressionState.completedRounds / this.progressionThreshold);
+    print(
+      \`[Rune Weaver] ${className}: progression update player=\${playerId} \${this.progressionStateId}=\${progressionState.completedRounds} \${this.progressionLevelStateId}=\${progressionState.rewardLevel}\`
+    );
+  }
 `
     : "";
 
@@ -226,15 +237,14 @@ ${hasInventory ? `
   private applyEffectByRarity(playerId: number, option: SelectionOption): void {
     const hero = PlayerResource.GetSelectedHeroEntity(playerId as PlayerID);
     if (!hero) {
-      print(\`[Rune Weaver] ${className}: No hero found for player \${playerId}\`);
+      print(\`[Rune Weaver] ${className}: no hero found for player \${playerId}\`);
       return;
     }
 
-    const DEFAULT_RARITY = "R";
-    const rarity = option.tier || DEFAULT_RARITY;
+    const rarity = option.tier || "R";
     const bonusConfig = this.rarityAttributeBonusMap[rarity];
     if (!bonusConfig) {
-      print(\`[Rune Weaver] ${className}: No bonus config for rarity \${rarity}\`);
+      print(\`[Rune Weaver] ${className}: no bonus config for rarity \${rarity}\`);
       return;
     }
 
@@ -255,7 +265,7 @@ ${hasInventory ? `
         hero.ModifyIntellect(value);
         break;
       default:
-        print(\`[Rune Weaver] ${className}: Unknown attribute \${attribute}\`);
+        print(\`[Rune Weaver] ${className}: unknown attribute \${attribute}\`);
     }
 
     this.fireEffectAppliedEvent(playerId, option, bonusConfig);
@@ -284,22 +294,20 @@ ${hasInventory ? `
 `
     : "";
 
-  const trackSelectedCode = trackSelectedItems ? "this.addToOwned(playerId, selectedOption.id);" : "";
-  const poolCommitLogic = hasPoolStateManagement
-    ? postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible"
-      ? `
-    this.removeFromRemaining(playerId, selectedOption.id);
-    ${trackSelectedCode}
-    const unselectedIds = selection.options
+  const poolCommitLogic = hasPoolCommit
+    ? `
+    if (selection.poolCommit) {
+      selection.poolCommit(selectedOption.id, { trackOwned: ${trackSelectedItems} });
+    }
+${postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible"
+    ? `    const unselectedIds = selection.options
       .filter((option) => option.id !== selectedOption.id)
       .map((option) => option.id);
-    print(\`[Rune Weaver] ${className}: Unselected candidates \${unselectedIds.join(", ")} remain eligible\`);
+    print(\`[Rune Weaver] ${className}: unselected candidates \${unselectedIds.join(", ")} remain eligible\`);
 `
-      : `
-    this.removeFromRemaining(playerId, selectedOption.id);
-    ${trackSelectedCode}
-`
+    : ""}`
     : "";
+
   const inventoryCommitLogic = hasInventory
     ? inventoryStoreSelectedItems
       ? `
@@ -310,7 +318,12 @@ ${hasInventory ? `
     this.sendInventoryStateToClient(playerId);
 `
     : "";
-  const commitSelectionLogic = `${poolCommitLogic}${inventoryCommitLogic}`;
+
+  const progressionCommitLogic = hasProgression
+    ? `
+    this.advanceProgression(playerId);
+`
+    : "";
 
   const effectApplicationCall = hasEffectApplication && applyMode === "immediate"
     ? `
@@ -330,20 +343,31 @@ ${hasInventory ? `
 `
     : "";
 
+  const progressionHeader = hasProgression
+    ? `
+ * - progression: enabled (threshold ${progressionThreshold}, progressStateId "${progressionStateId}", levelStateId "${progressionLevelStateId}")
+`
+    : "";
+
+  const poolCommitBinding = hasPoolCommit
+    ? `
+      pool && typeof pool.commitSelection === "function"
+        ? (selectedId, options) => pool.commitSelection(selectedId, options)
+        : undefined`
+    : `
+      undefined`;
+
   return `/**
  * ${className}
  * 选择流程管理器 - Generated by Rune Weaver
  *
  * Features:
- * - triggerKey: "${triggerKey}"
  * - choiceCount: ${choiceCount}
  * - selectionPolicy: "${selectionPolicy}"
  * - applyMode: "${applyMode}"
  * - postSelectionPoolBehavior: "${postSelectionPoolBehavior}"
  * - trackSelectedItems: ${trackSelectedItems}
-${inventoryHeader} * ${hasEffectApplication && applyMode === "immediate" ? "- Apply effect immediately" : ""}
- * ${hasEffectApplication && applyMode === "deferred" ? "- Apply effect on deferred confirmation" : ""}
- */
+${inventoryHeader}${progressionHeader}${hasEffectApplication && applyMode === "immediate" ? " * - Apply effect immediately\n" : ""}${hasEffectApplication && applyMode === "deferred" ? " * - Apply effect on deferred confirmation\n" : ""} */
 
 interface SelectionOption {
   id: string;
@@ -362,19 +386,24 @@ interface PoolCandidate {
   tier?: string;
 }
 
+interface PoolCommitOptions {
+  trackOwned?: boolean;
+}
+
 interface PlayerSelection {
   playerId: number;
   options: SelectionOption[];
   selectedIndex: number;
   isConfirmed: boolean;
   deferredEffect?: SelectionOption;
+  poolCommit?: (selectedId: string, options?: PoolCommitOptions) => void;
 }
 
 export class ${className} {
   private static instance: ${className};
   private activeSelections: Map<number, PlayerSelection> = new Map();
   private selectionCallbacks: Map<number, (option: SelectionOption) => void> = new Map();
-${sessionStateDeclaration}${hasEffectApplication ? `
+${inventoryStateDeclaration}${progressionStateDeclaration}${hasEffectApplication ? `
   private rarityAttributeBonusMap: Record<string, { attribute: string; value: number }> = {
 ${rarityAttributeBonusMapCode}
   };
@@ -386,11 +415,12 @@ ${rarityAttributeBonusMapCode}
     }
     return ${className}.instance;
   }
-${sessionStateMethods}
+${inventoryMethods}${progressionMethods}
   startSelection(
     playerId: number,
     options: SelectionOption[],
-    onSelected: (option: SelectionOption) => void
+    onSelected: (option: SelectionOption) => void,
+    poolCommit?: (selectedId: string, options?: PoolCommitOptions) => void
   ): void {
     if (options.length === 0) {
       print("[Rune Weaver] Cannot start selection with empty options");
@@ -402,10 +432,9 @@ ${sessionStateMethods}
       options,
       selectedIndex: -1,
       isConfirmed: false,
+      poolCommit,
     });
     this.selectionCallbacks.set(playerId, onSelected);
-
-    ${hasSessionState ? "this.updateCurrentChoices(playerId, options.map((option) => option.id));" : ""}
 ${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    this.sendToClient(playerId, options);
   }
 
@@ -424,8 +453,7 @@ ${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    thi
 
     selection.isConfirmed = true;
     const selectedOption = selection.options[selection.selectedIndex];
-    ${commitSelectionLogic}${effectApplicationCall}
-
+${poolCommitLogic}${inventoryCommitLogic}${progressionCommitLogic}${effectApplicationCall}
     const callback = this.selectionCallbacks.get(playerId);
     if (callback) {
       callback(selectedOption);
@@ -488,13 +516,11 @@ ${effectApplicationCode}
         featureId: "${featureId}",
         options,
         choiceCount: ${choiceCount},
-        selectionPolicy: "${selectionPolicy}",
-        title: "Choose Your Talent",
-        description: "Press ${triggerKey} to open talent draw",${hasInventory ? `
+        selectionPolicy: "${selectionPolicy}",${hasInventory ? `
         inventory: this.buildInventoryPayload(playerId),` : ""}
       };
       const player = PlayerResource.GetPlayer(playerId as PlayerID);
-      print(\`[Rune Weaver] ${className}: Sending selection UI to player \${playerId}, options=\${options.length}, player=\${player ? "ok" : "missing"}\`);
+      print(\`[Rune Weaver] ${className}: sending selection UI to player \${playerId}, options=\${options.length}, player=\${player ? "ok" : "missing"}\`);
       if (player) {
         (CustomGameEventManager.Send_ServerToPlayer as any)(
           player,
@@ -511,34 +537,21 @@ ${effectApplicationCode}
   }
 
   generateOptionsFromPool<T extends SelectionOption>(
-    playerId: number,
     pool: any,
     count: number
   ): T[] {
     const normalizeCandidates = (candidates: PoolCandidate[]): T[] => {
-      const options = candidates.map((candidate) => ({
+      return candidates.map((candidate) => ({
         id: candidate.id,
         name: candidate.name || candidate.label || candidate.id,
         description: candidate.description || "",
         icon: candidate.icon,
         tier: candidate.tier,
       })) as T[];
-
-      return options;
     };
 
     if (pool && typeof pool.drawForSelection === "function") {
-      const candidates = normalizeCandidates(pool.drawForSelection(count) as PoolCandidate[]);
-      ${
-        hasSessionState
-          ? `const candidateIds: string[] = [];
-      for (const candidate of candidates as T[]) {
-        candidateIds.push(candidate.id);
-      }
-      this.updateCurrentChoices(playerId, candidateIds);`
-          : ""
-      }
-      return candidates;
+      return normalizeCandidates(pool.drawForSelection(count) as PoolCandidate[]);
     }
 
     if (pool && typeof pool.drawMultiple === "function") {
@@ -550,46 +563,32 @@ ${effectApplicationCode}
 
   triggerSelectionFromPool(playerId: number, pool: any): void {
     if (!pool) {
-      print(\`[Rune Weaver] ${className}: No pool available\`);
+      print(\`[Rune Weaver] ${className}: no pool available\`);
       return;
     }
-
-    ${hasSessionState ? `
-    if (!this.getPlayerSession(playerId) && typeof this.initPlayerSession === "function") {
-      const remainingIds: string[] =
-        typeof pool.getRemainingTalentIds === "function"
-          ? pool.getRemainingTalentIds()
-          : (() => {
-              const ids: string[] = [];
-              if (typeof pool.getAllItems === "function") {
-                for (const item of pool.getAllItems()) {
-                  ids.push(item.item.id);
-                }
-              }
-              return ids;
-            })();
-      this.initPlayerSession(playerId, remainingIds);
-    }
-` : ""}${hasInventory ? `
+${hasInventory ? `
+    this.ensureInventoryState(playerId);
     this.sendInventoryStateToClient(playerId);
 ${inventoryBlockDrawWhenFull ? `
     if (this.isInventoryFull(playerId)) {
-      print(\`[Rune Weaver] ${className}: Inventory full for player \${playerId}, draw blocked before modal open\`);
+      print(\`[Rune Weaver] ${className}: inventory full for player \${playerId}, draw blocked before modal open\`);
       return;
     }
-` : ""}` : ""}
-
-    const options = this.generateOptionsFromPool(playerId, pool, ${choiceCount});
+` : ""}` : ""}${hasProgression ? `
+    this.ensureProgressionState(playerId);
+` : ""}
+    const options = this.generateOptionsFromPool(pool, ${choiceCount});
     if (!options || options.length === 0) {
-      print(\`[Rune Weaver] ${className}: No options generated for player \${playerId}\`);
+      print(\`[Rune Weaver] ${className}: no options generated for player \${playerId}\`);
       return;
     }
 
-    this.startSelection(playerId, options, (selectedOption) => {
-      if (pool && typeof pool.commitSelection === "function") {
-        pool.commitSelection(selectedOption.id);
-      }
-    });
+    this.startSelection(
+      playerId,
+      options,
+      () => {},
+${poolCommitBinding}
+    );
   }
 }
 

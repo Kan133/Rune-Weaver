@@ -10,8 +10,8 @@
 
 > Status
 > This remains the active Dota2 mainline execution queue inside the post-ABCD phase.
-> The current slice is Step 2 core generalization: Dota2 must strengthen the reusable `IntentSchema -> BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint -> ModuleNeed -> capability-fit resolver -> pattern family -> deterministic host realization / generator routing` path before more cases, more Workbench polish, or broader product-shell work.
-> The family-by-family honesty-tightening subphase, the current-seam package-2 bounded pass, the frozen-seam package-4 coverage audit, package-6 acceptance execution, and the bounded Phase A `scheduler/timer` seam-expansion package have now all stage-closed on the current grammar-v1 seam. The next active Step 2 work is to open the bounded `reward/progression` seam-expansion package deliberately, rather than more package-2/package-4 micro-slicing, more package-6 preflight work, or a broad `scheduler/timer` reopen.
+> The current slice is Step 6 validation / evidence / case generalization: Step 2 can now honest-close after the bounded `builder.ts` authority-closure refactor moved seam authority, clarification policing, shared lexical probing, module semantic shaping, and blueprint status policy out of the builder orchestration path and revalidated the current grammar-v1 core. The active work is now to refresh the package-6 acceptance matrix against that authority-closed core: re-prove one supported pass path, one honest-block path, and one seam-gap probe without adding new product-code routing or reopening closed family slices by default.
+> The family-by-family honesty-tightening subphase, the current-seam package-2 bounded pass, the frozen-seam package-4 coverage audit, package-6 acceptance execution, the bounded Phase A `scheduler/timer` seam-expansion package, the bounded `reward/progression` seam-expansion package, the bounded `spawn/emission` seam-expansion package, the bounded standalone `entity/session state` boundary-closure pass, and the Step 2B authority-closure refactor have now all stage-closed on the current grammar-v1 seam.
 > For freshest same-day coordination across Dota2 and War3, pair this file with [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) and the latest session-sync notes under `docs/session-sync/`.
 
 ## Purpose
@@ -28,18 +28,16 @@ If a fresh session-sync note disagrees with this file on the current slice or bl
 
 ## Active Goal
 
-Build a generalized Dota2 core path.
+Validate the generalized Dota2 core path on fresh post-refactor evidence.
 
 The active Dota2 goal is now:
 
-- richer `IntentSchema`
-- deterministic `BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint`
-- canonical `ModuleNeed`
-- capability-fit-first pattern resolution
-- Dota2 pattern family coverage for a reusable mechanic grammar
-- deterministic host realization / generator routing
+- preserve the authority-closed `IntentSchema -> BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint -> ModuleNeed` chain
+- keep capability-fit-first pattern resolution and deterministic host realization / generator routing stable
+- refresh the package-6 acceptance matrix on the post-refactor core
+- re-prove that supported requests pass, unsupported requests honest-block, and seam-gap probes stay named without case-specific compensation
 
-Cases now exist to validate the generalized core after it is in place; they do not drive architecture by themselves.
+Cases now act as validation evidence against the generalized core; they do not drive architecture by themselves.
 
 ## Current Baseline
 
@@ -87,6 +85,30 @@ Current narrow honesty fixes already landed:
   - delayed selection resolution
   - post-selection scheduled execution
   - reward/spawn-coupled scheduling
+- `reward/progression` now has one narrow admitted path, but it is still not honest to describe the family as broadly landed
+- the current honest narrow reward/progression path is:
+  - selection-confirmed same-feature session-local threshold progression
+  - `rule.selection_flow` carries `progression.selection.local_threshold`
+  - round-counter / level-state updates stay inside the existing selection-flow runtime
+- shapes outside that path still honest-block:
+  - persistence / meta progression
+  - economy / inventory grant
+  - cross-feature reward
+  - scheduler-coupled progression
+- `spawn/emission` now has one narrow admitted path, but it is still not honest to describe the family as broadly landed
+- the current honest narrow spawn/emission path is:
+  - one no-target forward linear projectile with fixed speed / distance / radius
+  - `FinalBlueprint` marker `emission.projectile.linear.forward`
+  - `dota2.linear_projectile_emit` on the existing lua+kv ability route
+- shapes outside that path still honest-block:
+  - helper units / summons
+  - follow / tracking choreography
+  - on-hit effect-coupled spawn behavior
+  - scheduler-coupled emission
+- standalone `entity/session state` is no longer a hidden admitted family
+- the current honest state boundary is:
+  - pattern-owned session-local state inside `data.weighted_pool` / `rule.selection_flow` remains admitted
+  - standalone session store, shared state bus, persistence, and broad entity graph runtime remain outside grammar-v1
 
 Still true:
 
@@ -103,23 +125,23 @@ Still true:
 
 ## Current Blocker
 
-The current Dota2 core is still too case-led and too thin in `IntentSchema`, `FinalBlueprint`, resolver semantics, and Dota2 pattern family coverage.
+The current Dota2 core is no longer blocked on Step 2 package authority. The new blocker is validation freshness: post-refactor acceptance evidence has not yet been re-established on the authority-closed core, so Dota2 cannot yet claim that the generalized path stays honest end-to-end under validation without case-specific compensation.
 
 This means the mainline blocker is not:
 
-- Talent Draw replay alone
+- another Step 2 seam-expansion package
+- a reopen of Step 2B builder authority closure
 - Workbench polish
-- "just do another case first"
-- broad doc work as a substitute for core implementation
+- broad doc work as a substitute for fresh acceptance evidence
 
 ## Current Package Audit
 
 | package | current judgment | why |
 | --- | --- | --- |
 | `1. Freeze Dota2 Mechanic Grammar v1` | `landed enough for current v1` | grammar-v1 family freeze is now explicit in controller truth, and the queue no longer finds more same-size honesty slices to drain |
-| `2. Land Richer IntentSchema And Deterministic FinalBlueprint In Code` | `still active / incomplete` | typed semantics, `FinalBlueprint`, canonical `ModuleNeed[]`, and honest `weak` / `blocked` states exist, and one bounded current-seam quality pass has already landed and stage-closed; broader upstream semantic quality is still not globally closed |
-| `3. Migrate Resolver To ModuleNeed -> Capability Fit` | `landed enough for current v1` | capability-fit-first resolution is live, `explicitPatternHints` are tie-break only, and unresolved needs block/weak honestly; fallback remains as a migration backstop because package 2 is still incomplete |
-| `4. Build The Minimum Dota2 Pattern Family Set For The Grammar` | `still active / incomplete` | admitted families are still narrow, several families remain partial, and unsupported families still exist; the honesty-tightening subphase is exhausted, and the frozen-seam package-4 audit has already stage-closed with no single bounded downstream package worth landing now |
+| `2. Land Richer IntentSchema And Deterministic FinalBlueprint In Code` | `landed enough for current v1` | typed semantics, `FinalBlueprint`, canonical `ModuleNeed[]`, honest `weak` / `blocked` states, and all current seam packages now exist; the remaining authority-bearing semantics were extracted out of `core/blueprint/builder.ts`, so package-2 closure no longer depends on builder-embedded heuristic rulebooks |
+| `3. Migrate Resolver To ModuleNeed -> Capability Fit` | `landed enough for current v1` | capability-fit-first resolution is live, `explicitPatternHints` are tie-break only, and unresolved needs block/weak honestly; any remaining fallback usage is a migration backstop rather than a package-2 blocker |
+| `4. Build The Minimum Dota2 Pattern Family Set For The Grammar` | `landed enough for current v1` | each supported grammar family now has at least one admitted path or an explicit grammar-v1 boundary: reward/progression and spawn/emission now have narrow truthful paths, and standalone state no longer masquerades as admitted support |
 | `5. Stabilize Host Realization And Generator Routing Around Grammar Families` | `landed enough for current v1` | realization/routing are deterministic for admitted and currently supported narrow combinations; remaining pressure is family coverage, not routing instability |
 
 Current controller judgment:
@@ -127,19 +149,32 @@ Current controller judgment:
 - the family-honesty subphase is stage-closed
 - package 2 has already had one high-value bounded current-seam pass and that pass is stage-closed on the frozen seam
 - package 4 has already had its frozen-seam coverage audit and that audit is stage-closed on the frozen seam
-- package 6 has now executed as a full pass/block/gap acceptance matrix on the frozen seam
-- package 6 validated the next seam ranking and also repaired one frozen-seam overclaim:
+- package 6 has now executed as a full pass/block/gap acceptance matrix on the frozen seam and its baseline has been refreshed with the new seam truth
+- the Step 2B authority-closure refactor is now stage-closed:
+  - `builder.ts` is orchestration-first rather than the primary holder of grammar-v1 rulebooks
+  - seam authority, clarification policing, lexical probing, module semantic shaping, and blueprint status policy now live in explicit helper/policy modules
+  - targeted regression coverage stayed green after the extraction
+- package 6 first validated the next seam ranking and repaired one frozen-seam overclaim:
   - unsupported `scheduler/timer`, `reward/progression`, and `spawn/emission` asks were still able to normalize to `ready` by collapsing into admitted families
   - `FinalBlueprint` now honest-blocks those asks instead
 - the bounded Phase A `scheduler/timer` package is now stage-closed:
   - one admitted same-effect local-cooldown path exists through `dota2.short_time_buff`
   - broader scheduler/timer asks still honest-block with a named remaining boundary
-- current frozen-seam Step 2 is at the implementation boundary, seam boundary, and grammar-v1 declared boundary together for same-size code motion
-- the next active Step 2 work is:
-  - open the next seam-expansion package deliberately
-  - use completed package-6 evidence plus the new Phase A scheduler/timer read as the current acceptance baseline
-- current next-seam ranking is `reward/progression`, then `spawn/emission`, then broad standalone `entity/session state`
+- the bounded `reward/progression` package is now stage-closed:
+  - one admitted selection-confirmed same-feature session-local threshold progression path exists through `rule.selection_flow`
+  - broader reward framework asks still honest-block with a named remaining boundary
+- the bounded `spawn/emission` package is now stage-closed:
+  - one admitted no-target forward-linear-projectile path exists through `dota2.linear_projectile_emit`
+  - helper / follow / effect-coupled spawn asks still honest-block with a named remaining boundary
+- the bounded standalone `entity/session state` pass is now stage-closed:
+  - standalone state no longer collapses into admitted weighted-pool / session-snapshot authority
+  - grammar-v1 currently admits only pattern-owned session-local state
+- Step 2 is now honest-closed for current v1
+- the next active Dota2 work is:
+  - refresh the package-6 acceptance matrix on the authority-closed core
+  - re-prove one supported pass path, one honest-block path, and one seam-gap probe
 - do not reopen `scheduler/timer` beyond the bounded local-cooldown slice unless new code truth proves a same-size truthful extension
+- do not reopen `reward/progression`, `spawn/emission`, or standalone `entity/session state` by default unless new code truth disproves the current bounded closures
 - do not reopen `resource/cost`, `effect/modifier`, `UI feedback/status`, or `integration/bridge` for more mechanical micro-slices unless new code truth appears
 
 ## Mainline Rule
@@ -199,9 +234,10 @@ Current focus:
 - support typed intent semantics instead of thin summaries only
 - normalize into `FinalBlueprint` plus canonical `ModuleNeed[]`
 - surface honest `weak` / `blocked` states when semantics are underspecified
-- current-seam note:
+- closure note:
   - one bounded quality pass has already landed
-  - package 2 is no longer the default active package unless a future move proves a larger same-seam closure is worth reopening
+  - all ranked seam-expansion packages are now stage-closed
+  - residual builder-owned authority has been extracted into explicit policy/helper modules, so Step 2 can honest-close for current v1
 
 Acceptance:
 
@@ -242,14 +278,16 @@ Current focus:
   - resource / effect action loops
   - UI status and feedback
 - keep `PatternContract`, `HostBinding`, and generator usage reviewable instead of mixed into one blob
-- keep the latest family truth honest while coverage is still partial:
+- keep the latest family truth honest while staying inside current v1:
   - `resource/cost` now has one narrow end-to-end canonical path, but broad family admission is still false
   - `integration/bridge` now routes honestly for `integration.state_sync_bridge`, but broad bridge-family admission is still false
   - `scheduler/timer` now has one narrow end-to-end canonical path for same-effect local cooldown, but delay/periodic/orchestrated scheduling admission is still false
-- active frozen-seam judgment:
-  - package 4 is still incomplete overall, but its frozen-seam coverage audit is already complete
-  - no single bounded downstream package is worth landing now on the frozen seam
-  - the honest task is now boundary closure and next seam selection, not reopening exhausted family micro-slices
+  - `reward/progression` now has one narrow end-to-end canonical path for selection-confirmed same-feature session-local threshold progression, but persistence / economy / inventory grant remain false
+  - `spawn/emission` now has one narrow end-to-end canonical path for no-target forward linear projectile emission, but helper/follow/effect-coupled spawn choreography remains false
+  - standalone `entity/session state` is now explicit grammar-v1 boundary truth rather than hidden fallback coverage
+- active judgment:
+  - package 4 is now landed enough for current v1
+  - remaining Step 2 pressure is package-2 authority closure, not another family micro-slice
 
 Acceptance:
 
@@ -291,8 +329,17 @@ Current focus:
   - `should-pass-without-new-product-code`
   - `should-honest-block-on-current-v1`
   - `should-expose-next-seam-gap`
-- keep the resulting execution sheet and typed artifacts as the frozen-seam acceptance baseline
-- do not route agents back into package-6 preflight as if the matrix were still unrun
+- refresh that matrix on the authority-closed core rather than treating the pre-refactor read as permanently fresh
+- current baseline includes:
+  - admitted `scheduler/timer` local cooldown
+  - admitted selection-local progression
+  - admitted forward-linear-projectile emission
+  - honest-block on standalone shared state
+- the next evidence refresh must re-prove:
+  - one supported pass path
+  - one honest-block path
+  - one seam-gap probe
+- do not route agents back into Step 2 architecture work as a substitute for that validation refresh
 
 Acceptance:
 
@@ -318,11 +365,11 @@ Do not treat these as current-plan work unless the user explicitly reopens them:
 
 When choosing between tasks, prefer work that strengthens:
 
-1. Dota2 mechanic grammar v1 and its explicit scope boundary
-2. richer `IntentSchema` plus deterministic `FinalBlueprint` / `ModuleNeed`
-3. `ModuleNeed -> capability fit` resolution and minimum Dota2 pattern family coverage
+1. fresh validation / evidence on the authority-closed Dota2 core
+2. preservation of the explicit grammar-v1 boundary without reopening closed seams by default
+3. deterministic `FinalBlueprint` / `ModuleNeed` / resolver behavior under supported and blocked asks
 4. deterministic host realization / generator routing over supported mechanic combinations
-5. case validation only after the generalized core is in place
+5. reopening a seam only if fresh Step 6 evidence exposes a real new blocker
 
 If a task improves none of the above, it is probably not on the current Dota2 critical path.
 

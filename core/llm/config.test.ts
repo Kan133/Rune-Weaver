@@ -43,7 +43,7 @@ function testOpenAICompatibleAutoOmitsThinkingPayloadForNonKimi(): void {
       "LLM_PROVIDER=openai-compatible",
       "OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4",
       "OPENAI_API_KEY=sk-test",
-      "OPENAI_MODEL=glm-4.7",
+      "OPENAI_MODEL=gpt-4.1-mini",
       "LLM_WIZARD_THINKING=enabled",
       "LLM_WIZARD_TEMPERATURE=1",
     ].join("\n"),
@@ -52,6 +52,26 @@ function testOpenAICompatibleAutoOmitsThinkingPayloadForNonKimi(): void {
       assert.strictEqual(config.thinking, "enabled");
       assert.strictEqual(config.temperature, 1);
       assert.strictEqual(config.providerOptions, undefined);
+    },
+  );
+}
+
+function testOpenAICompatibleAutoSendsThinkingPayloadForGlm47(): void {
+  withTempEnvFile(
+    [
+      "LLM_PROVIDER=openai-compatible",
+      "OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4",
+      "OPENAI_API_KEY=sk-test",
+      "OPENAI_MODEL=glm-4.7",
+      "LLM_WIZARD_THINKING=disabled",
+      "LLM_WIZARD_TEMPERATURE=1",
+    ].join("\n"),
+    (projectRoot) => {
+      const config = readLLMExecutionConfig(projectRoot, "wizard");
+      assert.strictEqual(config.thinking, "disabled");
+      assert.deepStrictEqual(config.providerOptions, {
+        thinking: { type: "disabled" },
+      });
     },
   );
 }
@@ -155,9 +175,37 @@ function testKimiThinkingPayloadNoneDisablesValidationCoupling(): void {
   );
 }
 
-function testProcessEnvOverridesDotEnv(): void {
+function testDotEnvWinsForManagedLlmKeysByDefault(): void {
   const originalBaseUrl = process.env.OPENAI_BASE_URL;
   process.env.OPENAI_BASE_URL = "https://stale-process-env.example/v1";
+
+  try {
+    withTempEnvFile(
+      [
+        "LLM_PROVIDER=openai-compatible",
+        "OPENAI_BASE_URL=https://api.moonshot.cn/v1",
+        "OPENAI_API_KEY=sk-test",
+        "OPENAI_MODEL=kimi-k2.5",
+      ].join("\n"),
+      (projectRoot) => {
+        const env = readLLMEnvironment(projectRoot);
+        assert.strictEqual(env.OPENAI_BASE_URL, "https://api.moonshot.cn/v1");
+      },
+    );
+  } finally {
+    if (originalBaseUrl === undefined) {
+      delete process.env.OPENAI_BASE_URL;
+    } else {
+      process.env.OPENAI_BASE_URL = originalBaseUrl;
+    }
+  }
+}
+
+function testProcessEnvCanStillOverrideManagedLlmKeysWhenFlagged(): void {
+  const originalBaseUrl = process.env.OPENAI_BASE_URL;
+  const originalOverrideFlag = process.env.RW_LLM_PROCESS_ENV_OVERRIDES;
+  process.env.OPENAI_BASE_URL = "https://stale-process-env.example/v1";
+  process.env.RW_LLM_PROCESS_ENV_OVERRIDES = "1";
 
   try {
     withTempEnvFile(
@@ -178,6 +226,12 @@ function testProcessEnvOverridesDotEnv(): void {
     } else {
       process.env.OPENAI_BASE_URL = originalBaseUrl;
     }
+
+    if (originalOverrideFlag === undefined) {
+      delete process.env.RW_LLM_PROCESS_ENV_OVERRIDES;
+    } else {
+      process.env.RW_LLM_PROCESS_ENV_OVERRIDES = originalOverrideFlag;
+    }
   }
 }
 
@@ -185,11 +239,13 @@ function run(): void {
   const tests: Array<{ name: string; fn: () => void }> = [
     { name: "reads gap-fill workflow config from .env", fn: testGapFillWorkflowConfig },
     { name: "auto omits thinking payload for non-kimi openai-compatible models", fn: testOpenAICompatibleAutoOmitsThinkingPayloadForNonKimi },
+    { name: "auto sends thinking payload for glm-4.7", fn: testOpenAICompatibleAutoSendsThinkingPayloadForGlm47 },
     { name: "explicit thinking payload override forces type-object payload", fn: testOpenAICompatibleThinkingPayloadOverrideCanForceTypeObject },
     { name: "accepts kimi enabled thinking with temperature 1", fn: testKimiEnabledThinkingRequiresOne },
     { name: "rejects invalid kimi temperature combinations", fn: testKimiRejectsWrongTemperature },
     { name: "kimi payload=none disables thinking validation coupling", fn: testKimiThinkingPayloadNoneDisablesValidationCoupling },
-    { name: "process env overrides .env for llm settings", fn: testProcessEnvOverridesDotEnv },
+    { name: "dotenv wins for managed llm settings by default", fn: testDotEnvWinsForManagedLlmKeysByDefault },
+    { name: "process env can override managed llm settings when flagged", fn: testProcessEnvCanStillOverrideManagedLlmKeysWhenFlagged },
   ];
 
   let passed = 0;

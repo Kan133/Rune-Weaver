@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-contract-change
-> Last verified: 2026-04-16
+> Last verified: 2026-04-17
 > Read when: aligning current execution layering and cross-cutting architectural boundary rules
 > Do not use for: current product completion status or roadmap sequencing by itself
 
@@ -41,8 +41,16 @@ Important:
 - generators should not be treated as a direct continuation of `AssemblyPlan`
 
 > Planning-only note
-> Complex, object-rich features may later introduce optional feature-boundary / source-model specialization between `IntentSchema` and deterministic blueprint normalization.
-> That seam is not part of the current accepted mainline pipeline and must remain planning-only until it is separately ratified into baseline docs.
+> Complex, object-rich features may later introduce optional source-backed authoring decisions inside `Blueprint Stage`.
+> If that happens, the existence, ownership path, and lifecycle boundary of a Rune Weaver-owned source artifact belong to the skeleton / `FinalBlueprint` contract rather than to a new top-level execution layer.
+> The bounded contents of an already-admitted artifact belong to `GapFill` muscle fill, not to a new architecture authority.
+
+Current code-truth note:
+
+- `IntentSchema.parameters` remains a narrow scalar/module-safe extraction bag only
+- source-backed candidate truth now travels through typed proposal fields such as `featureAuthoringProposal` and `fillIntentCandidates`
+- `FinalBlueprint.featureAuthoring` and `FinalBlueprint.fillContracts` are the deterministic downstream authority when a source-backed family path is admitted
+- authoring truth must not be mirrored back into planner-local `parameters` bags once `FinalBlueprint` has normalized it
 
 ## Accepted Cross-Cutting Direction
 
@@ -67,10 +75,91 @@ The following cross-cutting terms are now accepted baseline vocabulary:
 - `FillSlot`
   - declared bounded variability inside an already-selected pattern / realization path
 - `GapFill`
-  - execution that fills declared `FillSlot`s only
+  - controlled implementation fill after skeleton and ownership are fixed
+  - may enter through declared `FillSlot`s and other already-assigned implementation zones
 
 This accepted vocabulary does not mean every implementation path has already migrated.
 It does mean other baseline docs should stop using conflicting seam names.
+
+## Grammar Family And Capability Guardrails
+
+When later docs, code, or agents describe new semantics, use the following placement rules.
+
+- `grammar family`
+  - a stable reusable mechanism boundary
+  - not a case name, business feature name, parameter bundle, or source catalog
+- `capability`
+  - the smallest reusable mechanism token carried under a family
+  - describes what mechanism support exists, not a business story
+- `composition`
+  - behavior formed by combining multiple capabilities or multiple families
+  - new requests should prefer composition before inventing a new family
+- `feature-owned source model`
+  - feature-scoped authoring data such as business objects, catalogs, policy/config fields, and update-merge inputs
+  - not a capability token and not itself a family
+  - may exist as a placement concept even when source-model specialization is still planning-only for parts of the pipeline
+
+Current truthful example:
+
+- the only currently admitted timer capability example is `scheduler/timer -> timing.cooldown.local`
+
+These are not capability tokens:
+
+- `monster_enrage_over_time`
+- `30_second_round_timer`
+- `talent_inventory`
+- `equipment_draw`
+
+Those should be expressed as composition, feature-owned source data, or business-object structure instead of capability names.
+
+Use this placement order for new semantics:
+
+1. parameter change
+2. feature-owned source-model change
+3. composition of existing capabilities or families
+4. new capability under an existing family
+5. new family only as the last option
+
+## Gap Fill Boundary
+
+Gap Fill is the controlled muscle layer that operates after the skeleton is fixed.
+
+In baseline terms:
+
+- skeleton belongs to `Blueprint Stage`, `Pattern Resolution`, `HostRealizationPlan`, and ownership-aware lifecycle contracts
+- muscle belongs to `GapFill`
+
+The preferred typed entry for pattern-local variability remains:
+
+- `ModuleNeed.boundedVariability -> FillSlot`
+
+But the accepted boundary is slightly broader than pattern-local `FillSlot`s alone.
+
+Current executable surface:
+
+- `FinalBlueprint.fillContracts`
+  - closed-boundary ownership for admitted fill zones
+  - binds owner module / owner pattern / source bindings / deterministic fallback
+
+After skeleton and owned scope are fixed, `GapFill` may also fill:
+
+- local implementation detail inside an already-selected module / binding / generator-template path
+- object-data or config fields inside an already-owned Rune Weaver artifact
+- host-local glue inside an already-assigned host target
+
+`GapFill` must not decide:
+
+- whether a feature owns a Rune Weaver source-backed artifact
+- module existence or module roles
+- selected pattern set
+- host realization targets
+- write ownership scope
+- lifecycle semantics
+
+Accepted shorthand:
+
+- source-backed artifact existence / path / ownership are skeleton
+- source-backed artifact content is muscle
 
 ## Layering
 
@@ -140,6 +229,9 @@ This means:
 - LLM may assist proposal
 - LLM is not final blueprint authority
 - `FinalBlueprint` must not decide host realization family, generator family, or write targets
+- `BlueprintProposal` may carry candidate-only `featureAuthoringProposal` and `fillIntentCandidates`
+- `FinalBlueprint` may carry normalized `featureAuthoring` and closed-boundary `fillContracts`
+- these typed fields are the source-backed and gap-fill authority surfaces; they must not be reintroduced as planner-side write ownership or mirrored `Blueprint.parameters`
 
 ## 3. Host Realization
 
@@ -199,8 +291,8 @@ This layer should not:
 
 When bounded variability remains after pattern selection and host realization:
 
-- it should flow through declared `FillSlot` contracts
-- `GapFill` should remain bounded completion only
+- it should flow through declared `FillSlot` contracts or other already-assigned implementation zones inside owned scope
+- `GapFill` should remain controlled muscle fill after skeleton and ownership are fixed
 - this layer must not invent missing architecture after the fact
 
 ## 5. Validation And State
@@ -272,6 +364,7 @@ The accepted LLM boundary is:
 
 - Wizard LLM: intent extraction and typed semantic clarification
 - Blueprint proposal LLM: optional candidate structure only
+- Gap Fill LLM: allowed only inside fixed `FillSlot` / owned-artifact muscle scope
 - BlueprintNormalizer / FinalBlueprint: deterministic, no LLM final authority
 - Host Realization: rule-first, host-specific, no realization LLM
 

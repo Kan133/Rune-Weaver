@@ -24,6 +24,7 @@ import type {
 } from "../../../core/host/routing.js";
 import { getPatternMeta } from "../patterns";
 import { getPatternRouteKinds } from "../../../core/patterns/canonical-patterns.js";
+import { appendSelectionPoolSourceModelEntry } from "../families/selection-pool/index.js";
 
 /**
  * T112-R2: Generator family hint for transitional routing
@@ -200,24 +201,10 @@ export function createWritePlan(
     entries.push(...patternEntries);
   }
 
+  appendInputKeyBindingEmitterEntries(entries);
   applyResourceCostHonestyDeferrals(entries);
   applyResourceCostComposition(entries);
   applyResourceCostCallerInvocation(entries);
-
-  // 生成执行顺序
-  const executionOrder = calculateExecutionOrder(entries);
-
-  // 统计
-  const stats = {
-    total: entries.length,
-    create: entries.filter((e) => e.operation === "create").length,
-    update: entries.filter((e) => e.operation === "update").length,
-    conflicts: entries.filter(
-      (e) => !e.safe || (e.conflicts && e.conflicts.length > 0)
-    ).length,
-    // T112-R2: Count deferred entries
-    deferred: entries.filter((e) => e.deferred).length,
-  };
 
   // 提取集成点
   const integrationPoints: string[] = [];
@@ -229,7 +216,7 @@ export function createWritePlan(
     }
   }
 
-  return {
+  const writePlan: WritePlan = {
     id: `writeplan_${plan.blueprintId}_${Date.now()}`,
     targetProject: projectPath,
     generatedAt: new Date().toISOString(),
@@ -239,8 +226,16 @@ export function createWritePlan(
     },
     entries,
     integrationPoints,
-    stats,
-    executionOrder,
+    stats: {
+      total: entries.length,
+      create: entries.filter((e) => e.operation === "create").length,
+      update: entries.filter((e) => e.operation === "update").length,
+      conflicts: entries.filter(
+        (e) => !e.safe || (e.conflicts && e.conflicts.length > 0)
+      ).length,
+      deferred: entries.filter((e) => e.deferred).length,
+    },
+    executionOrder: calculateExecutionOrder(entries),
     readyForHostWrite: plan.readyForHostWrite,
     readinessBlockers: plan.hostWriteReadiness?.blockers,
     // T115: Attach route context if available (primary path for T115+)
@@ -253,6 +248,69 @@ export function createWritePlan(
       .filter((e) => e.deferred && e.deferredReason)
       .map((e) => `[${e.sourcePattern}] ${e.deferredReason}`),
   };
+
+  appendSelectionPoolSourceModelEntry(
+    writePlan,
+    generatedFeatureId,
+    plan.featureAuthoring,
+  );
+  writePlan.executionOrder = calculateExecutionOrder(writePlan.entries);
+  writePlan.stats = {
+    total: writePlan.entries.length,
+    create: writePlan.entries.filter((e) => e.operation === "create").length,
+    update: writePlan.entries.filter((e) => e.operation === "update").length,
+    conflicts: writePlan.entries.filter(
+      (e) => !e.safe || (e.conflicts && e.conflicts.length > 0)
+    ).length,
+    deferred: writePlan.entries.filter((e) => e.deferred).length,
+  };
+
+  return writePlan;
+}
+
+function appendInputKeyBindingEmitterEntries(entries: WritePlanEntry[]): void {
+  const emitterEntries: WritePlanEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.sourcePattern !== "input.key_binding") {
+      continue;
+    }
+
+    if (!isPrimaryRuntimeEntry(entry)) {
+      continue;
+    }
+
+    if (
+      !entry.targetPath.startsWith(`${RUNE_WEAVER_NAMESPACE.server.serverSpecific}/`) ||
+      !entry.targetPath.endsWith(".ts")
+    ) {
+      continue;
+    }
+
+    const fileName = entry.targetPath.split("/").pop()?.replace(/\.ts$/i, "");
+    if (!fileName) {
+      continue;
+    }
+
+    const emitterTargetPath = `${RUNE_WEAVER_NAMESPACE.panorama.ui}/${fileName}_emitter.tsx`;
+    if (entries.some((candidate) => candidate.targetPath === emitterTargetPath)) {
+      continue;
+    }
+
+    emitterEntries.push({
+      ...entry,
+      targetPath: emitterTargetPath,
+      contentType: "tsx",
+      contentSummary: `${entry.contentSummary} [ui-emitter]`,
+      generatorFamilyHint: "dota2-ui",
+      metadata: {
+        ...(entry.metadata || {}),
+        inputEmitter: true,
+      },
+    });
+  }
+
+  entries.push(...emitterEntries);
 }
 
 /**
@@ -609,6 +667,79 @@ function toOptionalPositiveNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function resolveLinearProjectileConfig(
+  binding: SelectedPattern,
+  featureId: string,
+  targetId: string
+): {
+  abilityName: string;
+  projectileDistance: string;
+  projectileSpeed: string;
+  projectileRadius: string;
+  scriptFile: string;
+} | undefined {
+  const bindingParameters = binding.parameters || {};
+  const projectileDistance = toOptionalPositiveNumber(
+    bindingParameters.projectileDistance ?? bindingParameters.distance
+  );
+  const projectileSpeed = toOptionalPositiveNumber(
+    bindingParameters.projectileSpeed ?? bindingParameters.speed
+  );
+  const projectileRadius = toOptionalPositiveNumber(
+    bindingParameters.projectileRadius ?? bindingParameters.radius
+  );
+
+  if (
+    projectileDistance === undefined ||
+    projectileSpeed === undefined ||
+    projectileRadius === undefined
+  ) {
+    return undefined;
+  }
+
+  const abilityName = (bindingParameters.abilityName as string)
+    || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
+
+  return {
+    abilityName,
+    projectileDistance: String(projectileDistance),
+    projectileSpeed: String(projectileSpeed),
+    projectileRadius: String(projectileRadius),
+    scriptFile: `rune_weaver/abilities/${featureId}.lua`,
+  };
+}
+
+function buildLinearProjectileOnSpellStart(): string {
+  return `    local caster = self:GetCaster()
+    local origin = caster:GetAbsOrigin()
+    local direction = caster:GetForwardVector()
+
+    ProjectileManager:CreateLinearProjectile({
+        Ability = self,
+        Source = caster,
+        vSpawnOrigin = origin,
+        fDistance = self:GetSpecialValueFor("projectile_distance") or 0,
+        fStartRadius = self:GetSpecialValueFor("projectile_radius") or 0,
+        fEndRadius = self:GetSpecialValueFor("projectile_radius") or 0,
+        vVelocity = direction * (self:GetSpecialValueFor("projectile_speed") or 0),
+        bHasFrontalCone = false,
+        bReplaceExisting = false,
+        bDeleteOnHit = true,
+        iUnitTargetTeam = DOTA_UNIT_TARGET_TEAM_ENEMY,
+        iUnitTargetType = DOTA_UNIT_TARGET_HERO + DOTA_UNIT_TARGET_BASIC,
+        iUnitTargetFlags = DOTA_UNIT_TARGET_FLAG_NONE,
+        bProvidesVision = false
+    })`;
+}
+
+function buildLinearProjectileAdditionalMethods(abilityName: string): string {
+  return `
+function ${abilityName}.prototype.OnProjectileHit(self, target, location)
+    return true
+end
+`;
+}
+
 function normalizeResourceFailBehavior(value: unknown): string {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim().toLowerCase()
@@ -901,6 +1032,24 @@ function generateEntriesForPattern(
       }
     }
 
+    if ((outputType === "kv" || outputType === "lua") && binding.patternId === "dota2.linear_projectile_emit") {
+      const projectileConfig = resolveLinearProjectileConfig(binding, featureId, targetId);
+      if (projectileConfig) {
+        entry.metadata = {
+          ...(entry.metadata || {}),
+          abilityName: projectileConfig.abilityName,
+          abilityBaseClass: "ability_lua",
+          abilityBehavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
+          scriptFile: projectileConfig.scriptFile,
+          specials: [
+            { index: "01", varType: "FIELD_INTEGER", key: "projectile_distance", value: projectileConfig.projectileDistance },
+            { index: "02", varType: "FIELD_INTEGER", key: "projectile_speed", value: projectileConfig.projectileSpeed },
+            { index: "03", varType: "FIELD_INTEGER", key: "projectile_radius", value: projectileConfig.projectileRadius },
+          ],
+        };
+      }
+    }
+
     if ((outputType === "kv" || outputType === "lua") && binding.patternId === "effect.modifier_applier") {
       const effectAbilityName = (binding.parameters?.abilityName as string)
         || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -979,6 +1128,18 @@ function generateEntriesForPattern(
                 String((binding.parameters?.movespeedBonus as number) || 80),
             },
           },
+        };
+      }
+    }
+
+    if (outputType === "lua" && binding.patternId === "dota2.linear_projectile_emit") {
+      const projectileConfig = resolveLinearProjectileConfig(binding, featureId, targetId);
+      if (projectileConfig) {
+        entry.metadata = {
+          ...(entry.metadata || {}),
+          abilityName: projectileConfig.abilityName,
+          onSpellStart: buildLinearProjectileOnSpellStart(),
+          additionalMethods: buildLinearProjectileAdditionalMethods(projectileConfig.abilityName),
         };
       }
     }

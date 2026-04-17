@@ -16,6 +16,7 @@ import { generateResourcePoolCode } from "./server/resource-pool.js";
 import { generateResourceConsumeCode } from "./server/resource-consume.js";
 import { generateDefaultServerCode } from "./server/default-server.js";
 import { generateSelectionModalComponent } from "./ui/selection-modal.js";
+import { generateKeyBindingEmitterComponent } from "./ui/key-binding-emitter.js";
 import { generateKeyHintComponent } from "./ui/key-hint.js";
 import { generateResourceBarComponent } from "./ui/resource-bar.js";
 import { generateDefaultUIComponent } from "./ui/default-ui.js";
@@ -87,11 +88,11 @@ function generateKVCode(
     : entry.targetPath.includes("micro_feature_")
       ? entry.targetPath.match(/micro_feature_([^/]+)/)?.[1]
       : featureId;
-  const abilityName = featureSegment
-    ? `rw_${featureSegment}_${baseName}`
-    : `rw_${baseName}`;
-
   const entryMetadata = entry.metadata || {};
+  const abilityName = (entryMetadata.abilityName as string | undefined)
+    || (featureSegment
+      ? `rw_${featureSegment}_${baseName}`
+      : `rw_${baseName}`);
   const params = {
     cooldown: entryMetadata.abilityCooldown as string | undefined,
     manaCost: entryMetadata.abilityManaCost as string | undefined,
@@ -106,9 +107,11 @@ function generateKVCode(
     hostTarget: "ability_kv",
     abilityConfig: {
       abilityName,
-      baseClass: "ability_datadriven",
-      abilityType: "DOTA_ABILITY_TYPE_BASIC",
-      behavior: "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
+      baseClass: (entryMetadata.abilityBaseClass as string | undefined) || "ability_datadriven",
+      abilityType:
+        ((entryMetadata.abilityType as KVGeneratorInput["abilityConfig"]["abilityType"] | undefined) ||
+          "DOTA_ABILITY_TYPE_BASIC"),
+      behavior: (entryMetadata.abilityBehavior as string | undefined) || "DOTA_ABILITY_BEHAVIOR_NO_TARGET",
       abilityCooldown: params.cooldown || "8.0",
       abilityManaCost: params.manaCost || "50",
       abilityCastRange: params.castRange || "0",
@@ -116,6 +119,8 @@ function generateKVCode(
       maxLevel: "4",
       requiredLevel: "1",
       levelsBetweenUpgrades: "3",
+      scriptFile: entryMetadata.scriptFile as string | undefined,
+      specials: entryMetadata.specials as KVGeneratorInput["abilityConfig"]["specials"] | undefined,
       precache: [],
     },
     rationale: [
@@ -183,6 +188,8 @@ function generateUICode(
   const componentName = toPascalCase(baseName);
   
   switch (patternId) {
+    case "input.key_binding":
+      return generateKeyBindingEmitterComponent(componentName, featureId, entry);
     case "ui.key_hint":
       return generateKeyHintComponent(componentName, featureId, entry);
     case "ui.selection_modal":

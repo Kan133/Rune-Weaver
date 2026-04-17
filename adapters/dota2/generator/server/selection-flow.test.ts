@@ -53,9 +53,9 @@ function testPostSelectionPoolBehavior() {
 
   const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
 
-  assert(code.includes("removeFromRemaining"), "Should contain removeFromRemaining");
-  assert(code.includes("playerSessionStates"), "Should contain playerSessionStates");
-  assert(code.includes("remainingIds"), "Should contain remainingIds");
+  assert(code.includes("poolCommit"), "Should contain poolCommit handoff");
+  assert(!code.includes("playerSessionStates"), "Should not mirror pool session state locally");
+  assert(!code.includes("remainingIds"), "Should not store remainingIds in selection_flow");
 
   console.log("✓ Test 2 passed\n");
 }
@@ -72,8 +72,8 @@ function testTrackSelectedItems() {
 
   const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
 
-  assert(code.includes("addToOwned"), "Should contain addToOwned");
-  assert(code.includes("ownedIds"), "Should contain ownedIds");
+  assert(code.includes("trackOwned: true"), "Should pass trackOwned through pool commit options");
+  assert(!code.includes("ownedIds"), "Should not store ownedIds in selection_flow");
 
   console.log("✓ Test 3 passed\n");
 }
@@ -135,7 +135,7 @@ function testRemoveSelectedAndKeepUnselectedEligible() {
   const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
 
   assert(code.includes("remove_selected_and_keep_unselected_eligible"), "Should contain behavior name");
-  assert(code.includes("Unselected candidates"), "Should contain Unselected candidates");
+  assert(code.includes("unselected candidates"), "Should contain unselected candidates");
   assert(code.includes("remain eligible"), "Should contain remain eligible");
 
   console.log("✓ Test 6 passed\n");
@@ -169,7 +169,7 @@ function testBackwardCompatibility() {
 
   assert(code.includes("class TestSelectionFlow"), "Should contain class name");
   assert(code.includes("startSelection"), "Should contain startSelection");
-  assert(code.includes("choiceCount: 3"), "Should contain default choiceCount");
+  assert(code.includes("choiceCount: 1"), "Should contain neutral fallback choiceCount");
   assert(code.includes('selectionPolicy: "single"'), "Should contain default selectionPolicy");
   assert(code.includes('postSelectionPoolBehavior: "none"'), "Should contain default postSelectionPoolBehavior");
 
@@ -237,9 +237,55 @@ function testInventoryExtension() {
   assert(code.includes("selectedInventory"), "Should contain selectedInventory state");
   assert(code.includes("rune_weaver_selection_inventory_state"), "Should emit inventory state event");
   assert(code.includes("Talent inventory full"), "Should embed the full-state message");
-  assert(code.includes("Inventory full for player"), "Should block draw before opening modal when full");
+  assert(code.includes("inventory full for player"), "Should block draw before opening modal when full");
 
   console.log("✓ Test 11 passed\n");
+}
+
+// Test 12: local progression extension stays inside selection flow runtime
+function testLocalProgressionExtension() {
+  console.log("Test 12: local progression extension support");
+
+  const entry = createMockEntry({
+    choiceCount: 1,
+    progression: {
+      enabled: true,
+      progressThreshold: 3,
+      progressStateId: "reward_progress",
+      levelStateId: "reward_level",
+    },
+  });
+
+  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
+
+  assert(code.includes("progressionThreshold = 3"), "Should contain the local progression threshold");
+  assert(code.includes('progressionStateId = "reward_progress"'), "Should contain the round-counter state id");
+  assert(code.includes('progressionLevelStateId = "reward_level"'), "Should contain the level state id");
+  assert(code.includes("advanceProgression"), "Should contain progression update logic");
+  assert(code.includes("progressionState.completedRounds += 1"), "Should increment completed rounds on confirm");
+  assert(code.includes("Math.floor(progressionState.completedRounds / this.progressionThreshold)"), "Should derive level from thresholded rounds");
+
+  console.log("✓ Test 12 passed\n");
+}
+
+// Test 13: selection flow must not carry weighted-pool session state ownership
+function testNoPoolStateMirroring() {
+  console.log("Test 13: no pool state mirroring");
+
+  const entry = createMockEntry({
+    choiceCount: 3,
+    postSelectionPoolBehavior: "remove_selected_from_remaining",
+    trackSelectedItems: true,
+  });
+
+  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
+
+  assert(!code.includes("remainingIds"), "Should not declare remainingIds");
+  assert(!code.includes("ownedIds"), "Should not declare ownedIds");
+  assert(!code.includes("currentChoiceIds"), "Should not declare currentChoiceIds");
+  assert(!code.includes("getRemainingTalentIds"), "Should not fallback to talent-specific pool API");
+
+  console.log("✓ Test 13 passed\n");
 }
 
 // Run all tests
@@ -255,4 +301,6 @@ testBackwardCompatibility();
 testImmediateApplyMode();
 testDeferredApplyMode();
 testInventoryExtension();
+testLocalProgressionExtension();
+testNoPoolStateMirroring();
 console.log("=== All tests passed ===");

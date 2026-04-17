@@ -10,8 +10,8 @@
         "featureId": "talent_draw_demo",
         "intentKind": "standalone-system",
         "status": "active",
-        "revision": 7,
-        "blueprintId": "standalone_system_yffo",
+        "revision": 15,
+        "blueprintId": "micro_feature_m2gh",
         "selectedPatterns": [
           "effect.modifier_applier",
           "ui.selection_modal",
@@ -26,7 +26,8 @@
           "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
           "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
           "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-          "game/scripts/src/rune_weaver/features/talent_draw_demo/talent-draw.source.json"
+          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
         ],
         "entryBindings": [
           {
@@ -41,9 +42,283 @@
           }
         ],
         "sourceModel": {
-          "adapter": "talent-draw",
+          "adapter": "selection_pool",
           "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/talent-draw.source.json"
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+        },
+        "featureAuthoring": {
+          "mode": "source-backed",
+          "profile": "selection_pool",
+          "objectKind": "talent",
+          "parameters": {
+            "triggerKey": "F4",
+            "choiceCount": 3,
+            "objectKind": "talent",
+            "objects": [
+              {
+                "id": "R001",
+                "label": "Strength Boost",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R002",
+                "label": "Fortitude",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "SR001",
+                "label": "Agility Boost",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SR002",
+                "label": "Swift Reflexes",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SSR001",
+                "label": "Intelligence Boost",
+                "description": "+10 Intelligence",
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "id": "UR001",
+                "label": "Ultimate Growth",
+                "description": "+10 All Attributes",
+                "weight": 10,
+                "tier": "UR"
+              },
+              {
+                "id": "R003",
+                "label": "Strength Boost 03",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R004",
+                "label": "Strength Boost 04",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R005",
+                "label": "Strength Boost 05",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R006",
+                "label": "Strength Boost 06",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R007",
+                "label": "Strength Boost 07",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R008",
+                "label": "Strength Boost 08",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "SR003",
+                "label": "Agility Boost 03",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SR004",
+                "label": "Agility Boost 04",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SR005",
+                "label": "Agility Boost 05",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SR006",
+                "label": "Agility Boost 06",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SSR002",
+                "label": "Intelligence Boost 02",
+                "description": "+10 Intelligence",
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "id": "SSR003",
+                "label": "Intelligence Boost 03",
+                "description": "+10 Intelligence",
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "id": "SSR004",
+                "label": "Intelligence Boost 04",
+                "description": "+10 Intelligence",
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "id": "UR002",
+                "label": "Ultimate Growth 02",
+                "description": "+10 All Attributes",
+                "weight": 10,
+                "tier": "UR"
+              }
+            ],
+            "drawMode": "multiple_without_replacement",
+            "duplicatePolicy": "forbid",
+            "poolStateTracking": "session",
+            "selectionPolicy": "single",
+            "applyMode": "immediate",
+            "postSelectionPoolBehavior": "remove_selected_from_remaining",
+            "trackSelectedItems": true,
+            "inventory": {
+              "enabled": true,
+              "capacity": 15,
+              "storeSelectedItems": true,
+              "blockDrawWhenFull": true,
+              "fullMessage": "Talent inventory full",
+              "presentation": "persistent_panel"
+            },
+            "display": {
+              "title": "Choose Your Talent",
+              "description": "Select one of the following talents",
+              "inventoryTitle": "Talent Inventory",
+              "payloadShape": "card_with_rarity",
+              "minDisplayCount": 3
+            },
+            "placeholderConfig": {
+              "id": "empty_talent_slot",
+              "name": "Empty Slot",
+              "description": "No talent available",
+              "disabled": true
+            },
+            "effectProfile": {
+              "kind": "tier_attribute_bonus_placeholder",
+              "rarityAttributeBonusMap": {
+                "R": {
+                  "attribute": "strength",
+                  "value": 10
+                },
+                "SR": {
+                  "attribute": "agility",
+                  "value": 10
+                },
+                "SSR": {
+                  "attribute": "intelligence",
+                  "value": 10
+                },
+                "UR": {
+                  "attribute": "all",
+                  "value": 10
+                }
+              }
+            }
+          },
+          "parameterSurface": {
+            "triggerKey": {
+              "kind": "single_hotkey",
+              "allowList": [
+                "Q",
+                "W",
+                "E",
+                "R",
+                "D",
+                "F",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "F9",
+                "F10",
+                "F11",
+                "F12"
+              ]
+            },
+            "choiceCount": {
+              "minimum": 1,
+              "maximum": 5
+            },
+            "objectKind": {
+              "allowed": [
+                "talent",
+                "equipment",
+                "skill_card_placeholder"
+              ]
+            },
+            "objects": {
+              "minItems": 1,
+              "seededWhenMissing": true
+            },
+            "inventory": {
+              "supported": true,
+              "capacityRange": {
+                "minimum": 1,
+                "maximum": 30
+              },
+              "fixedPresentation": "persistent_panel"
+            },
+            "invariants": [
+              "single trigger entry only",
+              "weighted pool candidate source",
+              "confirm exactly one candidate",
+              "same-feature owned object collection only",
+              "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
+              "no persistence",
+              "no cross-feature grants",
+              "no arbitrary custom effect family"
+            ]
+          },
+          "notes": [
+            "selection_pool proposal migrated from existing workspace featureAuthoring.",
+            "selection_pool merged the admitted session-only inventory contract."
+          ],
+          "sourceArtifactRef": {
+            "adapter": "selection_pool",
+            "version": 1,
+            "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+          }
         },
         "integrationPoints": [
           "input.key_binding:F4"
@@ -54,12 +329,12 @@
           "selection_flow.effect_mapping"
         ],
         "createdAt": "2026-04-16T12:18:47.513Z",
-        "updatedAt": "2026-04-16T15:58:09.842Z"
+        "updatedAt": "2026-04-17T13:44:15.114Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-16T15:58:09.844Z",
+    "exportedAt": "2026-04-17T13:44:15.117Z",
     "exportedBy": "rune-weaver-cli",
     "sourceHostRoot": "D:\\test3",
     "version": "0.1"

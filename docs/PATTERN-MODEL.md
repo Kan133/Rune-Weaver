@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: aligning pattern semantics, host binding boundaries, and resolver behavior
 > Do not use for: current execution priority or host-specific implementation detail by itself
 
@@ -93,6 +93,8 @@ Pattern Resolution 现在应消费 canonical `ModuleNeed`。
 - `explicitPatternHints` 不是主路由
 - `explicitPatternHints` 只能在 capability / invariants / outputs / state / family evaluation 已经形成 tie set 后参与
 - `ModuleNeed.boundedVariability` 只会下游映射到 declared `FillSlot`
+- capability 应保持为可复用机制原子，而不是业务 feature 名、catalog 名或 case 主题词
+- feature-owned source model 如果承载业务对象或 catalog，仍应停留在 pattern 之前，而不是冒充 pattern capability
 
 ## 4. RealizationFamily 的位置
 

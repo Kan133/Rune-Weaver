@@ -1,0 +1,766 @@
+import {
+  BlueprintModule,
+  IntentRequirement,
+  IntentSchema,
+  ModuleNeed,
+} from "../schema/types";
+import { CORE_PATTERN_IDS } from "../patterns/canonical-patterns";
+import {
+  buildSelectionLocalProgressionConfig,
+  isAdmittedForwardLinearProjectileSlice,
+  isAdmittedLocalCooldownSchedulerSlice,
+  isAdmittedSelectionLocalProgressionSlice,
+  isSelectionLocalProgressionStateRequirement,
+  shouldUseShortTimeBuffCapability,
+  stateLooksLikeCommittedSelection,
+  stateLooksLikePoolState,
+} from "./seam-authority";
+
+export function inferCategoriesFromMechanics(
+  schema: IntentSchema
+): BlueprintModule["category"][] {
+  const mechanics = schema.normalizedMechanics;
+  const categories: BlueprintModule["category"][] = [];
+
+  if (mechanics.trigger) {
+    categories.push("trigger");
+  }
+  if (mechanics.candidatePool) {
+    categories.push("data");
+  }
+  if (mechanics.weightedSelection || mechanics.playerChoice) {
+    categories.push("rule");
+  }
+  if (mechanics.uiModal) {
+    categories.push("ui");
+  }
+  if (mechanics.outcomeApplication) {
+    categories.push("effect");
+  }
+  if (mechanics.resourceConsumption) {
+    categories.push("resource");
+  }
+
+  return categories;
+}
+
+export function resolveRequirementCategory(
+  req: IntentRequirement,
+  schema: IntentSchema
+): BlueprintModule["category"] {
+  if (isSelectionLocalProgressionStateRequirement(req, schema)) {
+    return "rule";
+  }
+
+  return mapRequirementKindToCategory(req.kind);
+}
+
+export function resolveRequirementRole(
+  req: IntentRequirement,
+  category: BlueprintModule["category"],
+  schema: IntentSchema,
+  contextSignals: string[]
+): string {
+  if (req.kind === "state") {
+    if (category === "rule" && isSelectionLocalProgressionStateRequirement(req, schema)) {
+      return "selection_flow";
+    }
+
+    if (!schema.normalizedMechanics.candidatePool) {
+      return "session_state";
+    }
+  }
+
+  return inferRoleFromCategory(category, contextSignals);
+}
+
+export function resolveRequirementParameters(
+  req: IntentRequirement,
+  category: BlueprintModule["category"],
+  schemaParams: Record<string, unknown>,
+  schema: IntentSchema
+): Record<string, unknown> {
+  const parameters = {
+    ...extractModuleParameters(category, schemaParams),
+    ...(req.parameters || {}),
+  };
+
+  const progressionConfig =
+    category === "rule"
+      ? buildSelectionLocalProgressionConfig(req, schema)
+      : undefined;
+  if (progressionConfig) {
+    parameters.progression = progressionConfig;
+  }
+
+  return parameters;
+}
+
+export function describeMechanicResponsibility(
+  category: BlueprintModule["category"]
+): string {
+  switch (category) {
+    case "trigger":
+      return "Trigger flow activation";
+    case "data":
+      return "Provide candidate data and pool state";
+    case "rule":
+      return "Orchestrate selection and commit behavior";
+    case "ui":
+      return "Present interactive selection surface";
+    case "effect":
+      return "Apply selected outcome";
+    case "resource":
+      return "Track resource state and consumption";
+    case "integration":
+      return "Bridge integration boundaries";
+    default:
+      return "Handle feature behavior";
+  }
+}
+
+export function inferRoleFromCategory(
+  category: BlueprintModule["category"],
+  contextSignals: string[] = []
+): string {
+  if (category === "ui") {
+    return inferUISemanticRole(contextSignals);
+  }
+
+  const roleMap: Record<BlueprintModule["category"], string> = {
+    trigger: "input_trigger",
+    data: "weighted_pool",
+    rule: "selection_flow",
+    effect: "effect_application",
+    ui: "selection_modal",
+    resource: "resource_pool",
+    integration: "integration_bridge",
+  };
+  return roleMap[category];
+}
+
+export function extractModuleParameters(
+  category: BlueprintModule["category"],
+  schemaParams: Record<string, unknown>
+): Record<string, unknown> {
+  switch (category) {
+    case "trigger":
+      return extractTriggerParams(schemaParams);
+    case "data":
+      return extractPoolParams(schemaParams);
+    case "rule":
+      return extractSelectionParams(schemaParams);
+    case "ui":
+      return extractUIParams(schemaParams);
+    case "effect":
+      return extractEffectParams(schemaParams);
+    default:
+      return {};
+  }
+}
+
+export function inferCategoryFromRequirement(
+  req: string
+): BlueprintModule["category"] {
+  const reqLower = req.toLowerCase();
+
+  if (reqLower.includes("按键") || reqLower.includes("触发") || reqLower.includes("输入")) {
+    return "trigger";
+  }
+  if (reqLower.includes("数据") || reqLower.includes("池") || reqLower.includes("集合")) {
+    return "data";
+  }
+  if (reqLower.includes("规则") || reqLower.includes("流程") || reqLower.includes("选择")) {
+    return "rule";
+  }
+  if (reqLower.includes("效果") || reqLower.includes("技能") || reqLower.includes("冲刺")) {
+    return "effect";
+  }
+  if (reqLower.includes("ui") || reqLower.includes("界面") || reqLower.includes("显示")) {
+    return "ui";
+  }
+  if (reqLower.includes("资源") || reqLower.includes("消耗")) {
+    return "resource";
+  }
+
+  return "effect";
+}
+
+export function getCanonicalPatternIds(
+  category: BlueprintModule["category"],
+  role?: string
+): string[] {
+  switch (category) {
+    case "trigger":
+      return [CORE_PATTERN_IDS.INPUT_KEY_BINDING];
+    case "data":
+      if (role === "session_state") {
+        return [];
+      }
+      return [CORE_PATTERN_IDS.DATA_WEIGHTED_POOL];
+    case "rule":
+      return [CORE_PATTERN_IDS.RULE_SELECTION_FLOW];
+    case "ui":
+      if (role === "resource_bar") {
+        return [CORE_PATTERN_IDS.UI_RESOURCE_BAR];
+      }
+      if (role === "key_hint") {
+        return [CORE_PATTERN_IDS.UI_KEY_HINT];
+      }
+      return [CORE_PATTERN_IDS.UI_SELECTION_MODAL];
+    case "effect":
+      return [];
+    case "resource":
+      return [];
+    case "integration":
+      return [];
+    default:
+      return [];
+  }
+}
+
+export function buildModuleNeeds(
+  schema: IntentSchema,
+  modules: BlueprintModule[]
+): ModuleNeed[] {
+  return modules.map((module) => ({
+    moduleId: module.id,
+    semanticRole: module.role,
+    requiredCapabilities: inferRequiredCapabilities(module, schema),
+    optionalCapabilities: inferOptionalCapabilities(module, schema),
+    requiredOutputs: inferRequiredOutputs(module, schema),
+    stateExpectations: inferStateExpectations(module, schema),
+    integrationHints: inferIntegrationHints(module, schema),
+    invariants: inferInvariants(module, schema),
+    boundedVariability: inferBoundedVariability(module),
+    explicitPatternHints: inferExplicitPatternHints(module, schema),
+    prohibitedTraits: undefined,
+  }));
+}
+
+function mapRequirementKindToCategory(
+  kind: IntentRequirement["kind"]
+): BlueprintModule["category"] {
+  switch (kind) {
+    case "trigger":
+      return "trigger";
+    case "state":
+      return "data";
+    case "rule":
+      return "rule";
+    case "effect":
+      return "effect";
+    case "resource":
+      return "resource";
+    case "ui":
+      return "ui";
+    case "integration":
+      return "integration";
+    default:
+      return "effect";
+  }
+}
+
+function inferUISemanticRole(
+  contextSignals: string[]
+): "selection_modal" | "key_hint" | "resource_bar" {
+  const context = contextSignals
+    .flatMap((signal) => signal.split(/\s+/))
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    contextSignalsContainAny(context, [
+      "resource_bar",
+      "resource bar",
+      "mana",
+      "energy",
+      "resource",
+      "法力",
+      "蓝量",
+      "资源",
+      "bar",
+      "条",
+    ])
+  ) {
+    return "resource_bar";
+  }
+
+  if (
+    contextSignalsContainAny(context, [
+      "key_hint",
+      "key hint",
+      "hotkey",
+      "按键",
+      "键位",
+      "hint",
+      "cooldown",
+    ])
+  ) {
+    return "key_hint";
+  }
+
+  return "selection_modal";
+}
+
+function extractTriggerParams(params: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (params.triggerKey) {
+    result.key = params.triggerKey;
+  }
+  if (params.eventName) {
+    result.eventName = params.eventName;
+  }
+  return result;
+}
+
+function extractPoolParams(params: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (params.entries) {
+    result.entries = params.entries;
+  }
+  if (params.weights) {
+    result.weights = params.weights;
+  }
+  if (params.tiers) {
+    result.tiers = params.tiers;
+  }
+  if (params.choiceCount) {
+    result.choiceCount = params.choiceCount;
+  }
+  if (params.drawMode) {
+    result.drawMode = params.drawMode;
+  }
+  if (params.duplicatePolicy) {
+    result.duplicatePolicy = params.duplicatePolicy;
+  }
+  if (params.poolStateTracking) {
+    result.poolStateTracking = params.poolStateTracking;
+  }
+  return result;
+}
+
+function extractSelectionParams(params: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (params.choiceCount) {
+    result.choiceCount = params.choiceCount;
+  }
+  if (params.selectionPolicy) {
+    result.selectionPolicy = params.selectionPolicy;
+  }
+  if (params.applyMode) {
+    result.applyMode = params.applyMode;
+  }
+  if (params.postSelectionPoolBehavior) {
+    result.postSelectionPoolBehavior = params.postSelectionPoolBehavior;
+  }
+  if (params.trackSelectedItems !== undefined) {
+    result.trackSelectedItems = params.trackSelectedItems;
+  }
+  if (params.effectApplication) {
+    result.effectApplication = params.effectApplication;
+  }
+  if (params.inventory) {
+    result.inventory = params.inventory;
+  }
+  return result;
+}
+
+function extractUIParams(params: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (params.choiceCount) {
+    result.choiceCount = params.choiceCount;
+  }
+  if (params.layoutPreset) {
+    result.layoutPreset = params.layoutPreset;
+  }
+  if (params.selectionMode) {
+    result.selectionMode = params.selectionMode;
+  }
+  if (params.dismissBehavior) {
+    result.dismissBehavior = params.dismissBehavior;
+  }
+  if (params.payloadShape) {
+    result.payloadShape = params.payloadShape;
+  }
+  if (params.minDisplayCount !== undefined) {
+    result.minDisplayCount = params.minDisplayCount;
+  }
+  if (params.placeholderConfig) {
+    result.placeholderConfig = params.placeholderConfig;
+  }
+  if (params.inventory) {
+    result.inventory = params.inventory;
+  }
+  return result;
+}
+
+function extractEffectParams(params: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (params.effectMapping) {
+    result.effectMapping = params.effectMapping;
+  }
+  if (params.effectApplication) {
+    result.effectApplication = params.effectApplication;
+  }
+  return result;
+}
+
+function inferExplicitPatternHints(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] | undefined {
+  const hints = new Set<string>();
+  const defaultPatternIds = new Set(getCanonicalPatternIds(module.category, module.role));
+
+  for (const patternId of schema.constraints.requiredPatterns || []) {
+    if (patternMatchesModuleCategory(patternId, module.category)) {
+      hints.add(patternId);
+    }
+  }
+
+  for (const patternId of module.patternIds || []) {
+    if (!defaultPatternIds.has(patternId)) {
+      hints.add(patternId);
+    }
+  }
+
+  return hints.size > 0 ? [...hints] : undefined;
+}
+
+function patternMatchesModuleCategory(
+  patternId: string,
+  category: BlueprintModule["category"]
+): boolean {
+  const family = patternId.split(".")[0];
+  switch (category) {
+    case "trigger":
+      return family === "input";
+    case "data":
+      return family === "data";
+    case "rule":
+      return family === "rule";
+    case "effect":
+      return family === "effect";
+    case "resource":
+      return family === "resource";
+    case "ui":
+      return family === "ui";
+    case "integration":
+      return family === "integration";
+    default:
+      return false;
+  }
+}
+
+function inferRequiredCapabilities(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] {
+  const capabilities = new Set<string>();
+
+  switch (module.category) {
+    case "trigger":
+      capabilities.add("input.trigger.capture");
+      break;
+    case "data":
+      if (module.role === "session_state") {
+        capabilities.add("state.session.snapshot");
+      } else if (schema.normalizedMechanics.candidatePool) {
+        capabilities.add("selection.pool.weighted_candidates");
+      } else {
+        capabilities.add("state.session.snapshot");
+      }
+      break;
+    case "rule":
+      if (
+        schema.normalizedMechanics.playerChoice ||
+        schema.selection?.mode === "user-chosen" ||
+        schema.normalizedMechanics.uiModal ||
+        schema.uiRequirements?.needed
+      ) {
+        capabilities.add("selection.flow.player_confirmed");
+      } else if (schema.selection?.mode === "weighted" || schema.normalizedMechanics.weightedSelection) {
+        capabilities.add("selection.flow.weighted_resolve");
+      } else {
+        capabilities.add("selection.flow.resolve");
+      }
+      break;
+    case "effect":
+      if (isAdmittedForwardLinearProjectileSlice(schema)) {
+        capabilities.add("emission.projectile.linear.forward");
+        break;
+      }
+      if (shouldUseShortTimeBuffCapability(schema.effects)) {
+        capabilities.add("ability.buff.short_duration");
+        break;
+      }
+      for (const operation of schema.effects?.operations || []) {
+        capabilities.add(mapEffectOperationToCapability(operation));
+      }
+      if ((schema.effects?.operations || []).length === 0) {
+        capabilities.add("effect.modifier.apply");
+      }
+      break;
+    case "resource":
+      capabilities.add("resource.pool.numeric");
+      break;
+    case "ui":
+      if (module.role === "resource_bar") {
+        capabilities.add("ui.resource.bar");
+      } else if (module.role === "key_hint") {
+        capabilities.add("ui.input.key_hint");
+      } else {
+        capabilities.add("ui.selection.modal");
+      }
+      break;
+    case "integration":
+      capabilities.add("integration.bridge.sync");
+      break;
+  }
+
+  return [...capabilities];
+}
+
+function inferOptionalCapabilities(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] | undefined {
+  const optional = new Set<string>();
+
+  if (
+    module.category === "rule" &&
+    module.role === "selection_flow" &&
+    isAdmittedSelectionLocalProgressionSlice(schema)
+  ) {
+    optional.add("progression.selection.local_threshold");
+  }
+  if (module.category === "rule" && schema.selection?.repeatability) {
+    optional.add(`selection-repeatability/${schema.selection.repeatability}`);
+  }
+  if (
+    module.category === "rule" &&
+    (schema.selection?.mode === "weighted" || schema.normalizedMechanics.weightedSelection)
+  ) {
+    optional.add("selection.flow.weighted_resolve");
+  }
+  if (module.category === "ui" && schema.uiRequirements?.feedbackNeeds) {
+    for (const need of schema.uiRequirements.feedbackNeeds) {
+      optional.add(`ui-feedback/${need}`);
+    }
+  }
+  if (module.category === "effect" && schema.effects?.durationSemantics) {
+    optional.add(`effect-duration/${schema.effects.durationSemantics}`);
+  }
+  if (module.category === "effect" && isAdmittedLocalCooldownSchedulerSlice(schema)) {
+    optional.add("timing.cooldown.local");
+  }
+
+  return optional.size > 0 ? [...optional] : undefined;
+}
+
+function inferRequiredOutputs(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] | undefined {
+  const outputs = new Set<string>();
+
+  if (module.outputs) {
+    for (const output of module.outputs) {
+      outputs.add(output);
+    }
+  }
+  if (module.category === "ui" && schema.uiRequirements?.surfaces) {
+    outputs.add("ui.surface");
+  }
+  if (module.category === "trigger") {
+    outputs.add("server.runtime");
+  }
+  if (
+    module.category === "data" &&
+    module.role === "weighted_pool" &&
+    schema.normalizedMechanics.candidatePool
+  ) {
+    outputs.add("shared.runtime");
+  }
+  if (module.category === "rule") {
+    outputs.add("server.runtime");
+  }
+  if (module.category === "effect") {
+    outputs.add("server.runtime");
+    outputs.add("host.config.kv");
+    if (
+      shouldUseShortTimeBuffCapability(schema.effects) ||
+      isAdmittedForwardLinearProjectileSlice(schema)
+    ) {
+      outputs.add("host.runtime.lua");
+    }
+    for (const output of schema.requirements.outputs || []) {
+      outputs.add(output);
+    }
+    for (const requirement of schema.requirements.typed || []) {
+      if (resolveRequirementCategory(requirement, schema) === "effect") {
+        for (const output of requirement.outputs || []) {
+          outputs.add(output);
+        }
+      }
+    }
+  }
+  if (module.category === "integration") {
+    outputs.add("server.runtime");
+    for (const binding of schema.integrations?.expectedBindings || []) {
+      outputs.add(`${binding.kind}:${binding.id}`);
+    }
+  }
+
+  return outputs.size > 0 ? [...outputs] : undefined;
+}
+
+function inferStateExpectations(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] | undefined {
+  if (!schema.stateModel?.states || schema.stateModel.states.length === 0) {
+    return undefined;
+  }
+
+  if (!["data", "rule", "resource", "effect"].includes(module.category)) {
+    return undefined;
+  }
+
+  const expectations = new Set<string>();
+
+  if (module.category === "data" && schema.stateModel.states.some((state) => stateLooksLikePoolState(state))) {
+    expectations.add("selection.pool_state");
+  }
+
+  if (["rule", "effect"].includes(module.category) && schema.stateModel.states.some((state) => stateLooksLikeCommittedSelection(state))) {
+    expectations.add("selection.commit_state");
+  }
+
+  if (
+    module.category === "rule" &&
+    module.role === "selection_flow" &&
+    isAdmittedSelectionLocalProgressionSlice(schema)
+  ) {
+    expectations.add("progression.round_counter_state");
+    expectations.add("progression.level_state");
+  }
+
+  for (const state of schema.stateModel.states) {
+    expectations.add(`state:${state.id}`);
+    if (state.owner) {
+      expectations.add(`owner:${state.owner}`);
+    }
+    if (state.lifetime) {
+      expectations.add(`lifetime:${state.lifetime}`);
+    }
+    if (state.mutationMode) {
+      expectations.add(`mutation:${state.mutationMode}`);
+    }
+  }
+
+  return [...expectations];
+}
+
+function inferIntegrationHints(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] | undefined {
+  const bindings = schema.integrations?.expectedBindings || [];
+  if (bindings.length === 0 && module.category !== "ui") {
+    return undefined;
+  }
+
+  const hints = new Set<string>();
+  if (module.category === "ui") {
+    hints.add("ui.surface");
+    if (module.role === "resource_bar") {
+      hints.add("resource.ui_surface");
+    } else if (module.role === "key_hint") {
+      hints.add("input.binding");
+    }
+  }
+
+  for (const binding of bindings) {
+    if (module.category === "integration" || (module.category === "ui" && binding.kind === "ui-surface")) {
+      if (binding.kind === "ui-surface") {
+        if (module.role === "resource_bar") {
+          hints.add("resource.ui_surface");
+        } else if (module.role === "key_hint") {
+          hints.add("input.binding");
+        } else {
+          hints.add("selection.ui_surface");
+        }
+      }
+      if (module.category === "ui") {
+        hints.add("ui.surface");
+      }
+      if (binding.kind === "bridge-point" || module.category === "integration") {
+        hints.add("server.runtime");
+      }
+      hints.add(`binding:${binding.kind}:${binding.id}`);
+      if (binding.required) {
+        hints.add(`required-binding:${binding.id}`);
+      }
+    }
+  }
+
+  return hints.size > 0 ? [...hints] : undefined;
+}
+
+function inferInvariants(
+  module: BlueprintModule,
+  schema: IntentSchema
+): string[] | undefined {
+  const invariants = new Set<string>();
+
+  for (const requirement of schema.requirements.typed || []) {
+    if (resolveRequirementCategory(requirement, schema) === module.category) {
+      for (const invariant of requirement.invariants || []) {
+        invariants.add(invariant);
+      }
+    }
+  }
+
+  return invariants.size > 0 ? [...invariants] : undefined;
+}
+
+function inferBoundedVariability(
+  module: BlueprintModule
+): string[] | undefined {
+  const variability = new Set<string>();
+
+  if (module.parameters) {
+    for (const key of Object.keys(module.parameters)) {
+      variability.add(`parameter:${key}`);
+    }
+  }
+
+  return variability.size > 0 ? [...variability] : undefined;
+}
+
+function mapEffectOperationToCapability(
+  operation: NonNullable<IntentSchema["effects"]>["operations"][number]
+): string {
+  switch (operation) {
+    case "apply":
+      return "effect.modifier.apply";
+    case "remove":
+      return "effect.modifier.remove";
+    case "stack":
+      return "effect.modifier.stack";
+    case "expire":
+      return "effect.modifier.expire";
+    case "consume":
+      return "effect.resource.consume";
+    case "restore":
+      return "effect.resource.restore";
+    default:
+      return "effect.modifier.apply";
+  }
+}
+
+function contextSignalsContainAny(context: string, terms: string[]): boolean {
+  return terms.some((term) => context.includes(term.toLowerCase()));
+}

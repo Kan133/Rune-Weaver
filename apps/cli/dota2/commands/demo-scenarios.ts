@@ -1,7 +1,7 @@
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import {
-  TALENT_DRAW_CANONICAL_UPDATE_PROMPT,
-} from "../../../../adapters/dota2/cases/talent-draw.js";
+  TALENT_DRAW_EXAMPLE_INVENTORY_UPDATE_PROMPT,
+} from "../../../../adapters/dota2/families/selection-pool/examples.js";
 
 export interface DemoScenario {
   id: string;
@@ -73,7 +73,7 @@ const talentDrawInventoryUpdateScenario: DemoScenario = {
   defaultFeatureId: "talent_draw_demo",
   defaultAddonName: "talent_draw_demo",
   defaultMapName: "temp",
-  updatePrompt: TALENT_DRAW_CANONICAL_UPDATE_PROMPT,
+  updatePrompt: TALENT_DRAW_EXAMPLE_INVENTORY_UPDATE_PROMPT,
   writeFeatureLabel: "Write or refresh Talent Draw v1 baseline",
   createStepLabel: "Create/write Talent Draw v1",
   deleteStepLabel: "Delete Talent Draw inventory demo",
@@ -87,7 +87,7 @@ const talentDrawInventoryUpdateScenario: DemoScenario = {
     "--",
     "dota2",
     "update",
-    TALENT_DRAW_CANONICAL_UPDATE_PROMPT,
+    TALENT_DRAW_EXAMPLE_INVENTORY_UPDATE_PROMPT,
     "--host",
     options.hostRoot,
     "--feature",

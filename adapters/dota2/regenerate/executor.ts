@@ -12,6 +12,9 @@ import { CleanupPlan, formatCleanupPlan } from "./cleanup-plan.js";
 import { RuneWeaverFeatureRecord, RuneWeaverWorkspace, saveWorkspace, findFeatureById } from "../../../core/workspace/index.js";
 import { WritePlan } from "../assembler/index.js";
 import { generateCode } from "../generator/index.js";
+import {
+  resolveSelectionPoolWorkspaceFields,
+} from "../families/selection-pool/index.js";
 
 export interface RegenerateResult {
   success: boolean;
@@ -198,11 +201,18 @@ function updateWorkspaceState(
   const aggregatedKvFiles = Array.from(kvTargetPaths);
   const nonKvFiles = nonKvEntries.map((e) => e.targetPath);
   const generatedFiles = [...nonKvFiles, ...aggregatedKvFiles];
+  const sourceBackedFields = resolveSelectionPoolWorkspaceFields(
+    writePlan,
+    featureId,
+    "regenerate",
+  );
 
   const updatedFeature: RuneWeaverFeatureRecord = {
     ...existingFeature,
     revision: nextRevision,
     generatedFiles,
+    sourceModel: sourceBackedFields.sourceModel ?? undefined,
+    featureAuthoring: sourceBackedFields.featureAuthoring ?? undefined,
     updatedAt: now,
   };
 

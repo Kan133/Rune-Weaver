@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-16
+> Last verified: 2026-04-17
 > Read when: aligning LLM placement, provider boundaries, and proposal-stage usage rules
 > Do not use for: granting LLM final authority over blueprint, host realization, or write execution
 
@@ -43,11 +43,24 @@ Rune Weaver 当前不应优先引入：
 
 - LLM 可以帮助 `Wizard`
 - LLM 可以帮助生成 `BlueprintProposal`
+- LLM 可以帮助 `GapFill` 在固定 `FillSlot` 或已拥有 artifact 边界内填充实现肌肉
 - 如果未来引入 family/source-model candidate extraction，它也仍属于 `Wizard` / `Intent` assistance，不形成新的 authoritative LLM stage
 - `BlueprintNormalizer` 与 `FinalBlueprint` 仍然必须是 deterministic gate
 - LLM 不是 final pattern authority
 - LLM 不是 final host realization authority
 - LLM 不是 final write-path authority
+
+当前最小 typed 链路补充为：
+
+`Wizard -> IntentSchema(parameters + featureAuthoringProposal + fillIntentCandidates) -> optional BlueprintProposal -> BlueprintNormalizer -> FinalBlueprint(featureAuthoring + fillContracts)`
+
+这条链里的 authority 分工是：
+
+- LLM 可以提出 `featureAuthoringProposal`
+- LLM 可以提出 `fillIntentCandidates`
+- `IntentSchema.parameters` 只保留 scalar / module-safe 提取，不再承载 source artifact payload、source ref、或 planner-side authoring truth
+- `BlueprintNormalizer` 决定 proposal 是否真的可以落成 `FinalBlueprint.featureAuthoring`
+- `FinalBlueprint.fillContracts` 决定哪些 Gap Fill boundary 被激活、由谁拥有、允许读哪些 source bindings、以及 deterministic fallback 是什么
 
 ## 3. 设计原则
 
