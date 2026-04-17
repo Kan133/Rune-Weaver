@@ -25,10 +25,12 @@ import {
   RuneWeaverWorkspace,
   RuneWeaverFeatureRecord,
   FeatureWriteResult,
-  FeatureSourceModelRef,
 } from "../../../core/workspace/index.js";
 import { injectHostEntryBridge, refreshBridge } from "../../../adapters/dota2/bridge/index.js";
 import { resolveDota2GapFillBoundaryIdsForPatterns } from "../../../adapters/dota2/gap-fill/boundaries.js";
+import {
+  resolveSelectionPoolWorkspaceFields,
+} from "../../../adapters/dota2/families/selection-pool/index.js";
 
 export type FeatureMode = "create" | "update" | "regenerate";
 
@@ -37,28 +39,6 @@ export interface WorkspaceUpdateResult {
   featureId: string;
   totalFeatures: number;
   error?: string;
-}
-
-function isFeatureSourceModelRef(value: unknown): value is FeatureSourceModelRef {
-  return !!value &&
-    typeof value === "object" &&
-    typeof (value as Record<string, unknown>).adapter === "string" &&
-    typeof (value as Record<string, unknown>).version === "number" &&
-    typeof (value as Record<string, unknown>).path === "string";
-}
-
-function extractSourceModelRefFromWritePlan(writePlan: WritePlan): FeatureSourceModelRef | undefined {
-  const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
-  const candidate = sourceEntry?.metadata?.sourceModelRef;
-  if (!isFeatureSourceModelRef(candidate)) {
-    return undefined;
-  }
-
-  return {
-    adapter: candidate.adapter,
-    version: candidate.version,
-    path: candidate.path,
-  };
 }
 
 /**
@@ -158,13 +138,21 @@ export function updateWorkspaceState(
     generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
   }
 
+  const sourceBackedFields = resolveSelectionPoolWorkspaceFields(
+    writePlan,
+    featureId,
+    mode,
+    blueprint.featureAuthoring,
+  );
+
   const featureResult: FeatureWriteResult = {
     featureId,
     blueprintId: blueprint.id,
     selectedPatterns: assemblyPlan.selectedPatterns.map((p) => p.patternId),
     generatedFiles,
     entryBindings,
-    sourceModel: extractSourceModelRefFromWritePlan(writePlan),
+    sourceModel: sourceBackedFields.sourceModel,
+    featureAuthoring: sourceBackedFields.featureAuthoring,
     gapFillBoundaries: resolveDota2GapFillBoundaryIdsForPatterns(
       assemblyPlan.selectedPatterns.map((p) => p.patternId)
     ),

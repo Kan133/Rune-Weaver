@@ -123,6 +123,10 @@ export interface IntentSchema {
   openQuestions: string[];
   resolvedAssumptions: string[];
   isReadyForBlueprint: boolean;
+  /** Planning-stage extracted scalar/module-safe parameters only */
+  parameters?: Record<string, unknown>;
+  featureAuthoringProposal?: FeatureAuthoringProposal;
+  fillIntentCandidates?: FillIntentCandidate[];
 }
 
 export interface UserRequestSummary {
@@ -210,6 +214,9 @@ export interface Blueprint {
   moduleNeeds?: ModuleNeed[];
   /** Step 2 migration: legacy-compatible proposal linkage */
   proposalId?: string;
+  /** Step 6 migration: Blueprint-authorized source-backed authoring contract */
+  featureAuthoring?: FeatureAuthoring;
+  fillContracts?: FillContract[];
 }
 
 export interface BlueprintSourceIntent {
@@ -270,6 +277,137 @@ export interface ProposalConnection {
   connectionType?: string;
 }
 
+export type SourceBackedFeatureAuthoringMode = "source-backed";
+export type SourceBackedFeatureProfile = "selection_pool";
+export type SelectionPoolObjectKind = "talent" | "equipment" | "skill_card_placeholder";
+export type SelectionPoolObjectTier = "R" | "SR" | "SSR" | "UR";
+
+export interface FeatureAuthoringSourceArtifactRef {
+  adapter: string;
+  version: number;
+  path: string;
+}
+
+export interface SelectionPoolAuthoredObject {
+  id: string;
+  label: string;
+  description: string;
+  weight: number;
+  tier: SelectionPoolObjectTier;
+}
+
+export interface SelectionPoolInventoryContract {
+  enabled: boolean;
+  capacity: number;
+  storeSelectedItems: boolean;
+  blockDrawWhenFull: boolean;
+  fullMessage: string;
+  presentation: "persistent_panel";
+}
+
+export interface SelectionPoolEffectProfile {
+  kind: "tier_attribute_bonus_placeholder";
+  rarityAttributeBonusMap: Record<string, { attribute: string; value: number }>;
+}
+
+export interface SelectionPoolFeatureAuthoringParameters {
+  triggerKey: string;
+  choiceCount: number;
+  objectKind: SelectionPoolObjectKind;
+  objects: SelectionPoolAuthoredObject[];
+  drawMode?: "single" | "multiple_without_replacement" | "multiple_with_replacement";
+  duplicatePolicy?: "allow" | "avoid_when_possible" | "forbid";
+  poolStateTracking?: "none" | "session";
+  selectionPolicy?: "single";
+  applyMode?: "immediate" | "deferred";
+  postSelectionPoolBehavior?:
+    | "none"
+    | "remove_selected_from_remaining"
+    | "remove_selected_and_keep_unselected_eligible";
+  trackSelectedItems?: boolean;
+  inventory?: SelectionPoolInventoryContract;
+  display?: {
+    title?: string;
+    description?: string;
+    inventoryTitle?: string;
+    payloadShape?: "card_with_rarity";
+    minDisplayCount?: number;
+  };
+  placeholderConfig?: {
+    id: string;
+    name: string;
+    description?: string;
+    disabled?: boolean;
+  };
+  effectProfile?: SelectionPoolEffectProfile;
+}
+
+export interface SelectionPoolParameterSurface {
+  triggerKey: {
+    kind: "single_hotkey";
+    allowList: string[];
+  };
+  choiceCount: {
+    minimum: number;
+    maximum: number;
+  };
+  objectKind: {
+    allowed: SelectionPoolObjectKind[];
+  };
+  objects: {
+    minItems: number;
+    seededWhenMissing: boolean;
+  };
+  inventory: {
+    supported: boolean;
+    capacityRange: {
+      minimum: number;
+      maximum: number;
+    };
+    fixedPresentation: "persistent_panel";
+  };
+  invariants: string[];
+}
+
+export interface FeatureAuthoringProposal {
+  mode: SourceBackedFeatureAuthoringMode;
+  profile: SourceBackedFeatureProfile;
+  objectKind: SelectionPoolObjectKind;
+  parameters: SelectionPoolFeatureAuthoringParameters;
+  parameterSurface: SelectionPoolParameterSurface;
+  proposalSource?: "llm" | "fallback" | "existing-feature";
+  notes?: string[];
+}
+
+export interface FeatureAuthoring {
+  mode: SourceBackedFeatureAuthoringMode;
+  profile: SourceBackedFeatureProfile;
+  objectKind: SelectionPoolObjectKind;
+  parameters: SelectionPoolFeatureAuthoringParameters;
+  parameterSurface: SelectionPoolParameterSurface;
+  sourceArtifactRef?: FeatureAuthoringSourceArtifactRef;
+  notes?: string[];
+}
+
+export interface FillIntentCandidate {
+  boundaryId: string;
+  summary: string;
+  source: "llm" | "fallback" | "existing-feature" | "deterministic";
+}
+
+export interface FillContract {
+  boundaryId: string;
+  targetModuleId: string;
+  targetPatternId: string;
+  mode: "closed";
+  sourceBindings: string[];
+  allowed: string[];
+  forbidden: string[];
+  invariants: string[];
+  expectedOutput: string;
+  fallbackPolicy: "deterministic-default";
+}
+
 export interface BlueprintProposal {
   id: string;
   source: "llm" | "fallback" | "rule";
@@ -286,6 +424,8 @@ export interface BlueprintProposal {
   uncertainties?: string[];
   blockedBy?: string[];
   candidatePatternFamilies?: string[];
+  featureAuthoringProposal?: FeatureAuthoringProposal;
+  fillIntentCandidates?: FillIntentCandidate[];
 }
 
 export interface ModuleNeed extends Record<string, unknown> {
@@ -314,6 +454,7 @@ export interface BlueprintNormalizationReport {
 export interface FinalBlueprint extends Blueprint {
   status: NormalizedBlueprintStatus;
   moduleNeeds: ModuleNeed[];
+  fillContracts?: FillContract[];
 }
 
 export interface ValidationContract {
@@ -383,6 +524,8 @@ export interface AssemblyPlan {
   hostWriteReadiness?: HostWriteReadiness;
   /** T138-R1: Parameters extracted from prompt (cooldown, mana, range, etc.) */
   parameters?: Record<string, unknown>;
+  featureAuthoring?: FeatureAuthoring;
+  fillContracts?: FillContract[];
 }
 
 /**

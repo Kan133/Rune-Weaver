@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: checking residual notes around the canonical `ModuleNeed` seam after baseline wording landed
 > Do not use for: redefining the accepted canonical seam in parallel with baseline docs
 > Owner: Lane B semantic ownership, Lane C consumer ownership, main controller merge authority
@@ -84,6 +84,28 @@ This is the only `ModuleNeed` proposal shape that other planning docs should def
   - optional pattern-id hints from upstream, never authoritative
 - `prohibitedTraits`
   - pattern traits that must not be selected for this module
+
+---
+
+## Capability Token Note
+
+`requiredCapabilities` and `optionalCapabilities` should carry stable mechanism tokens.
+
+They should not directly carry:
+
+- case names
+- feature labels
+- business-object labels
+- catalogs
+- source-model payloads
+
+Current truthful example:
+
+- `timing.cooldown.local`
+
+Planning vocabulary may discuss additional example tokens such as `timing.delay.local` or `spawn.single.local`, but those remain planning examples unless separately admitted into baseline truth.
+
+When a request is really about business objects or catalogs, it should be placed in feature-owned source data or composition notes instead of being pushed into `ModuleNeed` token vocabulary.
 
 ---
 

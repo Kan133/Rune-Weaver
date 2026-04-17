@@ -22,6 +22,7 @@
 
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
+import { isFeatureSourceModelEntry } from "../families/selection-pool/index.js";
 
 const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
@@ -99,11 +100,16 @@ function isBridgeFile(path: string): boolean {
 }
 
 function isFeatureSourceModelFile(classification: FileUpdateClassification): boolean {
-  const normalizedPath = normalizePath(classification.path);
-  return (
-    classification.newEntry?.sourcePattern === "rw.feature_source_model" ||
-    normalizedPath.endsWith("/talent-draw.source.json")
-  );
+  return isFeatureSourceModelEntry(classification.newEntry) || isFeatureSourceModelEntry(classification.oldEntry);
+}
+
+function findFeatureSourceModelEntry(entries: Map<string, WritePlanEntry>): WritePlanEntry | undefined {
+  for (const entry of entries.values()) {
+    if (isFeatureSourceModelEntry(entry)) {
+      return entry;
+    }
+  }
+  return undefined;
 }
 
 function classifyFileChange(
@@ -151,6 +157,16 @@ function classifyFileChange(
   }
   
   if (normalizedOldPath !== normalizedNewPath) {
+    if (isFeatureSourceModelEntry(oldEntry) && isFeatureSourceModelEntry(newEntry)) {
+      return {
+        path: newPath,
+        classification: "refresh-only",
+        reason: "Feature source artifact path changed under the same source-model lifecycle",
+        oldEntry,
+        newEntry,
+      };
+    }
+
     const oldPatternId = extractPatternIdFromPath(oldPath);
     const newPatternId = extractPatternIdFromPath(newPath);
     
@@ -212,6 +228,22 @@ export function classifyUpdateDiff(
       safe: true,
     });
   }
+
+  if (existingFeature.sourceModel?.path) {
+    const normalizedSourcePath = normalizePath(existingFeature.sourceModel.path);
+    oldFiles.set(normalizedSourcePath, {
+      operation: "create",
+      targetPath: normalizedSourcePath,
+      contentType: "json",
+      contentSummary: "",
+      sourcePattern: "rw.feature_source_model",
+      sourceModule: "feature_source_model",
+      safe: true,
+      metadata: {
+        sourceModelRef: existingFeature.sourceModel,
+      },
+    });
+  }
   
   for (const entry of newWritePlan.entries.filter((candidate) => !candidate.deferred)) {
     const normalizedRelativePath = normalizePath(entry.targetPath);
@@ -219,6 +251,25 @@ export function classifyUpdateDiff(
   }
   
   const classifications: FileUpdateClassification[] = [];
+  const oldSourceEntry = findFeatureSourceModelEntry(oldFiles);
+  const newSourceEntry = findFeatureSourceModelEntry(newFiles);
+
+  if (
+    oldSourceEntry &&
+    newSourceEntry &&
+    normalizePath(oldSourceEntry.targetPath) !== normalizePath(newSourceEntry.targetPath)
+  ) {
+    classifications.push({
+      path: newSourceEntry.targetPath,
+      classification: "refresh-only",
+      reason: "Feature source artifact migrated under the same source-model lifecycle",
+      oldEntry: oldSourceEntry,
+      newEntry: newSourceEntry,
+    });
+    oldFiles.delete(normalizePath(oldSourceEntry.targetPath));
+    newFiles.delete(normalizePath(newSourceEntry.targetPath));
+  }
+
   const allPaths = new Set([...oldFiles.keys(), ...newFiles.keys()]);
   
   for (const path of allPaths) {

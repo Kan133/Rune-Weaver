@@ -239,7 +239,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "rule.selection_flow",
     category: "rule",
     summary: "多选一选择流程",
-    description: "管理完整的多选一流程：展示候选项、接收选择、应用结果、提交池状态变更，并可在当前切片内承载窄的 session-only 已选库存同步。",
+    description: "管理完整的多选一流程：展示候选项、接收选择、应用结果、提交池状态变更，并可在当前切片内承载窄的 session-only 已选库存同步，以及 selection-confirmed local progression 阈值累计。",
     responsibilities: [
       { text: "从数据池获取候选项", core: true },
       { text: "展示选择界面（通过 UI Pattern）", core: true },
@@ -251,11 +251,12 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { text: "不管理数据池本身", alternative: "使用 data.weighted_pool" },
       { text: "不渲染 UI", alternative: "使用 ui.selection_modal" },
       { text: "不处理跨局持久化", alternative: "MVP 只需单局持久化" },
+      { text: "不扩展为通用 reward/progression framework", alternative: "当前仅承载 same-feature session-local threshold progression" },
     ],
-    capabilities: ["selection.flow.player_confirmed", "selection.flow.resolve_choice", "selection.flow.pool_commit", "selection.flow.effect_mapping", "multi_choice", "player_selection", "result_apply", "pool_state_commit", "effect_mapping"],
+    capabilities: ["selection.flow.player_confirmed", "selection.flow.resolve_choice", "selection.flow.pool_commit", "selection.flow.effect_mapping", "progression.selection.local_threshold", "multi_choice", "player_selection", "result_apply", "pool_state_commit", "effect_mapping"],
     traits: ["requires_runtime", "choice_orchestration", "stateful.session"],
     semanticOutputs: ["server.runtime"],
-    stateAffordances: ["selection.commit_state"],
+    stateAffordances: ["selection.commit_state", "progression.round_counter_state", "progression.level_state"],
     integrationHints: ["selection.candidate_source", "selection.ui_surface"],
     invariants: ["choice count must be satisfiable by the candidate set"],
     inputs: [
@@ -279,6 +280,12 @@ export const dota2Patterns: Dota2PatternMeta[] = [
         required: false,
         description: '当前 admitted 的窄库存扩展：session-only、persistent_panel、确认后入库、满仓时阻止继续抽取',
       },
+      {
+        name: "progression",
+        type: "object",
+        required: false,
+        description: "当前 admitted 的窄 progression 扩展：selection-confirmed、same-feature、session-local threshold counter + level state",
+      },
     ],
     constraints: [
       "choiceCount 必须大于 0",
@@ -287,6 +294,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       "如果 trackSelectedItems = true，已选 id 必须追加到会话 owned 列表",
       "未选中的候选项必须保持 eligible（Talent Draw MVP）",
       'inventory 当前仅支持 session-only + "persistent_panel" 的窄 Talent Draw 扩展，不扩展为通用库存框架',
+      "progression 当前仅支持 same-feature + session-local + threshold-based round counter；不承诺 persistence / economy / cross-feature grant",
     ],
     dependencies: [
       { patternId: "data.weighted_pool", relation: "optional", reason: "用于获取候选项和池状态" },
@@ -985,8 +993,80 @@ const PATTERN_SHORT_TIME_BUFF: Dota2PatternMeta = createDota2Pattern({
   },
 });
 
+const PATTERN_LINEAR_PROJECTILE_EMIT: Dota2PatternMeta = createDota2Pattern({
+  id: "dota2.linear_projectile_emit",
+  category: "ability",
+  summary: "无目标前向直线投射物",
+  description:
+    "创建一个 no-target ability_lua shell，在施法时沿施法者前方向前发射一个直线投射物。" +
+    "当前 admitted slice 仅覆盖单投射物、固定 speed/distance/radius、命中即销毁，不扩展为 helper-unit、tracking companion、波次编排或 on-hit effect family。",
+  responsibilities: [
+    { text: "提供无目标施法入口并创建单个直线投射物", core: true },
+    { text: "将 speed / distance / radius 写入 KV specials", core: true },
+    { text: "在 Lua 中声明最小 OnProjectileHit 销毁行为", core: true },
+  ],
+  nonGoals: [
+    { text: "不生成 helper unit 或 summon runtime", alternative: "保持为单 projectile emission" },
+    { text: "不处理跟踪、跟随玩家或 companion AI", alternative: "tracking/follow choreography 留待后续 seam" },
+    { text: "不扩展为 on-hit buff / modifier mapping", alternative: "命中后仅 honest destroy / return true" },
+  ],
+  capabilities: [
+    "emission.projectile.linear.forward",
+    "ability_lua_shell",
+    "projectile.runtime",
+    "kv_ability_definition",
+  ],
+  traits: ["requires_runtime", "projectile_emitter", "supports_static_config", "deterministic_parameterization"],
+  semanticOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+  integrationHints: ["ability.execution", "projectile.runtime"],
+  invariants: [
+    "projectile distance and speed must remain positive",
+    "projectile radius must remain positive",
+    "ability must stay no-target in the current admitted slice",
+  ],
+  inputs: [
+    { name: "abilityName", type: "string", required: false, description: "能力名称（默认由 feature 推导）" },
+    { name: "projectileDistance", type: "number", required: true, description: "投射物距离" },
+    { name: "projectileSpeed", type: "number", required: true, description: "投射物速度" },
+    { name: "projectileRadius", type: "number", required: true, description: "投射物半径" },
+  ],
+  outputs: [
+    { name: "lua_ability", type: "lua", description: "Lua projectile ability wrapper" },
+    { name: "kv_ability", type: "kv", description: "Projectile ability KV entry" },
+  ],
+  parameters: [
+    { name: "abilityName", type: "string", required: false, description: "生成的 ability 名称标识" },
+    { name: "projectileDistance", type: "number", required: true, description: "直线投射物飞行距离" },
+    { name: "projectileSpeed", type: "number", required: true, description: "直线投射物飞行速度" },
+    { name: "projectileRadius", type: "number", required: true, description: "直线投射物命中半径" },
+  ],
+  constraints: [
+    "projectileDistance / projectileSpeed / projectileRadius 必须为正数",
+    "当前 admitted slice 仅支持 DOTA_ABILITY_BEHAVIOR_NO_TARGET 的前向直线投射物",
+    "helper-unit / follow / effect-coupled spawn choreography 当前仍 deferred",
+  ],
+  examples: [
+    {
+      name: "前向发射一枚直线投射物",
+      description: "按下技能后沿朝向发射一枚固定 speed/distance/radius 的 projectile",
+      params: { abilityName: "rw_linear_projectile", projectileDistance: 900, projectileSpeed: 1200, projectileRadius: 125 },
+      useCase: "窄 spawn/emission 主动技能",
+    },
+  ],
+  hostTarget: "dota2.server",
+  outputTypes: ["lua", "kv"],
+  allowedFamilies: ["composite-static-runtime"],
+  preferredFamily: "composite-static-runtime",
+  requiredHostCapabilities: ["ability-lua", "projectile-runtime"],
+  dota2Params: {
+    requiresAbility: true,
+    requiresModifier: false,
+  },
+});
+
 // Push all patterns into registry
 dota2Patterns.push(PATTERN_SHORT_TIME_BUFF);
+dota2Patterns.push(PATTERN_LINEAR_PROJECTILE_EMIT);
 
 export function getPatternMeta(patternId: string): Dota2PatternMeta | undefined {
   return dota2Patterns.find((p) => p.id === patternId);

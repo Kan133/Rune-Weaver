@@ -8,6 +8,7 @@
  */
 
 import type { HostKind } from "../host/types.js";
+import type { FeatureAuthoring } from "../schema/types.js";
 
 export interface EntryBinding {
   target: "server" | "ui" | "config";
@@ -33,6 +34,7 @@ export interface RuneWeaverFeatureRecord {
   generatedFiles: string[];
   entryBindings: EntryBinding[];
   sourceModel?: FeatureSourceModelRef;
+  featureAuthoring?: FeatureAuthoring;
   dependsOn?: string[];
   integrationPoints?: string[];  // 存储集成点标识，如 ["input.key_binding:Q"]
   gapFillBoundaries?: string[];
@@ -74,7 +76,8 @@ export interface FeatureWriteResult {
   selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
-  sourceModel?: FeatureSourceModelRef;
+  sourceModel?: FeatureSourceModelRef | null;
+  featureAuthoring?: FeatureAuthoring | null;
   gapFillBoundaries?: string[];
 }
 

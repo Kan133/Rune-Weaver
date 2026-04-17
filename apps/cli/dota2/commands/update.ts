@@ -10,6 +10,9 @@ import { exportWorkspaceToBridge, refreshBridge } from "../../../../adapters/dot
 import { classifyUpdateDiff, executeSelectiveUpdate, formatUpdateDiffResult, formatSelectiveUpdateResult } from "../../../../adapters/dota2/update/index.js";
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
+import {
+  resolveSelectionPoolWorkspaceFields,
+} from "../../../../adapters/dota2/families/selection-pool/index.js";
 import { generateKVContentWithIndex, performUpdateHostValidation } from "../../helpers/index.js";
 import { saveReviewArtifact } from "../review-artifacts.js";
 import { createUpdateReviewArtifact } from "../update-artifact.js";
@@ -46,24 +49,6 @@ export async function runUpdateCommand(
   options: Dota2CLIOptions,
   deps: UpdateCommandDeps,
 ): Promise<boolean> {
-  const extractSourceModelRefFromWritePlan = (writePlan: { entries: Array<{ sourcePattern: string; metadata?: Record<string, unknown> }> }) => {
-    const candidate = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model")?.metadata?.sourceModelRef;
-    if (
-      candidate &&
-      typeof candidate === "object" &&
-      typeof (candidate as Record<string, unknown>).adapter === "string" &&
-      typeof (candidate as Record<string, unknown>).version === "number" &&
-      typeof (candidate as Record<string, unknown>).path === "string"
-    ) {
-      return {
-        adapter: (candidate as Record<string, unknown>).adapter as string,
-        version: (candidate as Record<string, unknown>).version as number,
-        path: (candidate as Record<string, unknown>).path as string,
-      };
-    }
-    return undefined;
-  };
-
   const getIntentReadiness = (schema: { readiness?: string; isReadyForBlueprint?: boolean }): "ready" | "weak" | "blocked" => {
     if (schema.readiness === "ready" || schema.readiness === "weak" || schema.readiness === "blocked") {
       return schema.readiness;
@@ -561,6 +546,13 @@ export async function runUpdateCommand(
     const nonKvFilesForUpdate = nonKvEntriesForUpdate.map((entry: any) => entry.targetPath);
     const generatedFilesForUpdate = [...nonKvFilesForUpdate, ...aggregatedKvFilesForUpdate].filter((file) => !deletedFiles.includes(file));
 
+    const sourceBackedFields = resolveSelectionPoolWorkspaceFields(
+      writePlan,
+      existingFeature.featureId,
+      "update",
+      blueprint.featureAuthoring,
+    );
+
     const updatedFeature: RuneWeaverFeatureRecord = {
       ...existingFeature,
       revision: existingFeature.revision + 1,
@@ -568,7 +560,8 @@ export async function runUpdateCommand(
       entryBindings: extractEntryBindings(plan.bridgeUpdates),
       generatedFiles: generatedFilesForUpdate,
       selectedPatterns: resolutionResult.patterns.map((pattern) => pattern.patternId),
-      sourceModel: extractSourceModelRefFromWritePlan(writePlan) || existingFeature.sourceModel,
+      sourceModel: sourceBackedFields.sourceModel ?? undefined,
+      featureAuthoring: sourceBackedFields.featureAuthoring ?? undefined,
       updatedAt: new Date().toISOString(),
     };
 

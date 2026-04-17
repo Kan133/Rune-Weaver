@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 
 import { buildBlueprint } from "./builder";
 import type { IntentSchema } from "../schema/types";
+import {
+  buildSelectionPoolExampleParameters,
+  getSelectionPoolParameterSurface,
+} from "../../adapters/dota2/families/selection-pool/index.js";
 
 const readySchema: IntentSchema = {
   version: "1.0",
@@ -243,7 +247,7 @@ function testExplicitPatternHintsOnlyEmitSchemaConstrainedPatterns() {
   assert.equal(needsByRole.get("selection_modal")?.explicitPatternHints, undefined);
 }
 
-function testCoarseCapabilityFallbacksEmitSemanticWarnings() {
+function testStandaloneStateAskHonestBlocksInsteadOfStayingWeak() {
   const result = buildBlueprint({
     ...readySchema,
     requirements: {
@@ -278,7 +282,14 @@ function testCoarseCapabilityFallbacksEmitSemanticWarnings() {
   });
 
   assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("Standalone entity/session state semantics")
+    )
+  );
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
@@ -291,6 +302,282 @@ function testCoarseCapabilityFallbacksEmitSemanticWarnings() {
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
         issue.message.includes("state.session.snapshot")
+    )
+  );
+}
+
+function testSelectionLocalProgressionSliceStaysReady() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "Track reward progress after each completed selection round and level up after three rounds.",
+      goal: "Track reward progress after each completed selection round and level up after three rounds.",
+    },
+    requirements: {
+      functional: [
+        "Track reward progress after each selection round",
+        "Level up after three completed rounds",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to open the selection flow",
+          parameters: { triggerKey: "A" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Resolve one player-confirmed choice from weighted candidates",
+          parameters: { choiceCount: 1, selectionPolicy: "weighted" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Store reward progress and current reward level",
+          parameters: { progressThreshold: 3 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: {
+      mode: "weighted",
+      cardinality: "single",
+      repeatability: "repeatable",
+    },
+    stateModel: {
+      states: [
+        { id: "reward_progress", summary: "Completed selection rounds", owner: "feature", lifetime: "session" },
+        { id: "reward_level", summary: "Current reward level", owner: "feature", lifetime: "session" },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: false,
+      outcomeApplication: false,
+      resourceConsumption: false,
+    },
+    uiRequirements: undefined,
+    integrations: undefined,
+    effects: undefined,
+    isReadyForBlueprint: true,
+  });
+
+  const selectionModule = result.finalBlueprint?.modules.find((module) => module.role === "selection_flow");
+  const selectionNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "selection_flow");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.deepEqual(selectionModule?.parameters?.progression, {
+    enabled: true,
+    progressThreshold: 3,
+    progressStateId: "reward_progress",
+    levelStateId: "reward_level",
+  });
+  assert.ok(selectionNeed?.optionalCapabilities?.includes("progression.selection.local_threshold"));
+  assert.ok(selectionNeed?.stateExpectations?.includes("progression.round_counter_state"));
+  assert.ok(selectionNeed?.stateExpectations?.includes("progression.level_state"));
+}
+
+function testBroaderRewardProgressionFrameworkStaysBlocked() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "Track reward progress across matches and grant a persistent inventory unlock after three rounds.",
+      goal: "Track reward progress across matches and grant a persistent inventory unlock after three rounds.",
+    },
+    requirements: {
+      functional: [
+        "Track reward progress across matches",
+        "Grant an inventory unlock after three rounds",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to open the selection flow",
+          parameters: { triggerKey: "A" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Resolve one player-confirmed choice from weighted candidates",
+          parameters: { choiceCount: 1, selectionPolicy: "weighted" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Store reward progress and current reward level",
+          parameters: { progressThreshold: 3 },
+        },
+      ],
+    },
+    selection: {
+      mode: "weighted",
+      cardinality: "single",
+      repeatability: "repeatable",
+      inventory: {
+        enabled: true,
+        capacity: 3,
+        storeSelectedItems: true,
+        blockDrawWhenFull: false,
+        fullMessage: "Inventory full",
+        presentation: "persistent_panel",
+      },
+    },
+    stateModel: {
+      states: [
+        { id: "reward_progress", summary: "Completed selection rounds", owner: "feature", lifetime: "persistent" },
+        { id: "reward_level", summary: "Current reward level", owner: "feature", lifetime: "persistent" },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: false,
+      outcomeApplication: false,
+      resourceConsumption: false,
+    },
+    effects: undefined,
+    uiRequirements: undefined,
+    integrations: undefined,
+    isReadyForBlueprint: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("selection-local threshold progression slice")
+    )
+  );
+}
+
+function testForwardLinearProjectileSliceStaysReady() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "Press D to fire one forward linear projectile with fixed speed, distance, and radius.",
+      goal: "Press D to fire one forward linear projectile with fixed speed, distance, and radius.",
+    },
+    requirements: {
+      functional: ["Capture a key press", "Fire one forward linear projectile"],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to emit the projectile",
+          parameters: { triggerKey: "D" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Emit one forward linear projectile",
+          parameters: {
+            projectileDistance: 900,
+            projectileSpeed: 1200,
+            projectileRadius: 125,
+          },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    effects: undefined,
+    uiRequirements: undefined,
+    integrations: undefined,
+    stateModel: undefined,
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: false,
+      weightedSelection: false,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: true,
+      resourceConsumption: false,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.deepEqual(effectNeed?.requiredCapabilities, ["emission.projectile.linear.forward"]);
+  assert.ok(effectNeed?.requiredOutputs?.includes("host.runtime.lua"));
+  assert.ok(effectNeed?.requiredOutputs?.includes("host.config.kv"));
+}
+
+function testHelperUnitSpawnChoreographyStaysBlocked() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "Press D to spawn a helper unit or projectile that follows the player and applies a short-time effect.",
+      goal: "Press D to spawn a helper unit or projectile that follows the player and applies a short-time effect.",
+    },
+    requirements: {
+      functional: [
+        "Capture a key press",
+        "Spawn a helper unit or projectile",
+        "Apply a short-time effect",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a key press to activate the spawn action",
+          parameters: { triggerKey: "D" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Spawn a helper unit or projectile that follows the player and applies a brief effect",
+          parameters: { lifetimeSeconds: 5 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "timed",
+      targets: ["self"],
+    },
+    uiRequirements: undefined,
+    integrations: undefined,
+    stateModel: undefined,
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: false,
+      weightedSelection: false,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: true,
+      resourceConsumption: false,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("forward-linear-projectile slice")
     )
   );
 }
@@ -737,6 +1024,88 @@ function testInventoryExtensionStaysOnExistingRuleAndUiModules() {
   assert.deepEqual(uiModule?.parameters?.inventory, inventorySchema.parameters?.inventory);
 }
 
+function testSelectionPoolFeatureAuthoringFlowsThroughFinalBlueprint() {
+  const selectionPoolParameters = buildSelectionPoolExampleParameters("talent");
+  const result = buildBlueprint({
+    ...readySchema,
+    featureAuthoringProposal: {
+      mode: "source-backed",
+      profile: "selection_pool",
+      objectKind: "talent",
+      parameters: selectionPoolParameters,
+      parameterSurface: getSelectionPoolParameterSurface(),
+      proposalSource: "fallback",
+    },
+    fillIntentCandidates: [
+      {
+        boundaryId: "weighted_pool.selection_policy",
+        summary: "Shape weighted candidate draw policy from authored objects.",
+        source: "fallback",
+      },
+      {
+        boundaryId: "selection_flow.effect_mapping",
+        summary: "Map authored effect profile into immediate apply behavior.",
+        source: "fallback",
+      },
+      {
+        boundaryId: "ui.selection_modal.payload_adapter",
+        summary: "Adapt authored display fields into modal payload.",
+        source: "fallback",
+      },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.deepEqual(
+    result.finalBlueprint?.fillContracts?.map((contract) => contract.boundaryId),
+    [
+      "weighted_pool.selection_policy",
+      "selection_flow.effect_mapping",
+      "ui.selection_modal.payload_adapter",
+    ],
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(result.finalBlueprint?.parameters || {}, "rwFeatureAuthoring"),
+    false,
+  );
+}
+
+function testSelectionPoolBoundedFieldsStayInsideSameSkeleton() {
+  const result = buildBlueprint({
+    ...readySchema,
+    featureAuthoringProposal: {
+      mode: "source-backed",
+      profile: "selection_pool",
+      objectKind: "talent",
+      parameters: {
+        ...buildSelectionPoolExampleParameters("talent"),
+        triggerKey: "F5",
+        choiceCount: 5,
+        display: {
+          title: "Choose Your Selection",
+          description: "Select one of the following options",
+          inventoryTitle: "Selection Inventory",
+          payloadShape: "card_with_rarity",
+          minDisplayCount: 5,
+        },
+      },
+      parameterSurface: getSelectionPoolParameterSurface(),
+      proposalSource: "fallback",
+    },
+  });
+
+  const inputModule = result.finalBlueprint?.modules.find((module) => module.role === "input_trigger");
+  const flowModule = result.finalBlueprint?.modules.find((module) => module.role === "selection_flow");
+  const modalModule = result.finalBlueprint?.modules.find((module) => module.role === "selection_modal");
+
+  assert.equal(result.success, true);
+  assert.equal(inputModule?.parameters?.triggerKey, "F5");
+  assert.equal(flowModule?.parameters?.choiceCount, 5);
+  assert.equal(modalModule?.parameters?.title, "Choose Your Selection");
+  assert.equal(modalModule?.parameters?.minDisplayCount, 5);
+}
+
 function runTests() {
   testReadyBuildProducesFinalBlueprint();
   testWeakBuildHonorsHonestStatus();
@@ -746,7 +1115,9 @@ function runTests() {
   testBoundedDraftCatalogClarificationDoesNotBlockExistingSeamBlueprint();
   testSupportedCapabilitiesUseAdmittedVocabulary();
   testExplicitPatternHintsOnlyEmitSchemaConstrainedPatterns();
-  testCoarseCapabilityFallbacksEmitSemanticWarnings();
+  testStandaloneStateAskHonestBlocksInsteadOfStayingWeak();
+  testSelectionLocalProgressionSliceStaysReady();
+  testBroaderRewardProgressionFrameworkStaysBlocked();
   testSupportedLifecycleClarificationDoesNotBlockPersistentBuffFlow();
   testTimedSelfBuffSteersToShortDurationCapability();
   testTimedSelfBuffWithLocalCooldownStaysReady();
@@ -755,7 +1126,11 @@ function runTests() {
   testTimedNonSelfBuffKeepsGenericModifierCapability();
   testCooldownCoupledToSelectionFlowStaysBlocked();
   testNonSelfCooldownBuffStaysBlockedAtCurrentBoundary();
+  testForwardLinearProjectileSliceStaysReady();
+  testHelperUnitSpawnChoreographyStaysBlocked();
   testInventoryExtensionStaysOnExistingRuleAndUiModules();
+  testSelectionPoolFeatureAuthoringFlowsThroughFinalBlueprint();
+  testSelectionPoolBoundedFieldsStayInsideSameSkeleton();
   console.log("builder.test.ts: PASS");
 }
 

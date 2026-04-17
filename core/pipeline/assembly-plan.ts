@@ -344,6 +344,8 @@ export class AssemblyPlanBuilder {
       hostWriteReadiness,
       // T138-R1: Pass through parameters from Blueprint
       parameters: blueprint.parameters,
+      featureAuthoring: blueprint.featureAuthoring,
+      fillContracts: blueprint.fillContracts,
     };
   }
 

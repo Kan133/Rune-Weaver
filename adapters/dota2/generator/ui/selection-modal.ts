@@ -1,5 +1,5 @@
 /**
- * Selection Modal Component Generator - GP-4
+ * Selection Modal Component Generator
  */
 
 import { WritePlanEntry } from "../../assembler/index.js";
@@ -14,8 +14,8 @@ export const SELECTION_MODAL_GAP_FILL_BOUNDARIES = {
 } as const;
 
 export interface SelectionModalParams {
-  triggerKey?: string;
   choiceCount?: number;
+  objectKind?: "talent" | "equipment" | "skill_card_placeholder";
   minDisplayCount?: number;
   placeholderConfig?: {
     id: string;
@@ -37,6 +37,7 @@ export interface SelectionModalParams {
     fullMessage: string;
     presentation: "persistent_panel";
   };
+  inventoryTitle?: string;
 }
 
 function resolveLayoutPreset(value: unknown): "card_tray" {
@@ -45,7 +46,7 @@ function resolveLayoutPreset(value: unknown): "card_tray" {
   }
 
   throw new Error(
-    `ui.selection_modal currently only supports layoutPreset "card_tray"; received ${JSON.stringify(value)}`
+    `ui.selection_modal currently only supports layoutPreset "card_tray"; received ${JSON.stringify(value)}`,
   );
 }
 
@@ -55,45 +56,50 @@ function resolveSelectionMode(value: unknown): "single" {
   }
 
   throw new Error(
-    `ui.selection_modal currently only supports selectionMode "single"; received ${JSON.stringify(value)}`
+    `ui.selection_modal currently only supports selectionMode "single"; received ${JSON.stringify(value)}`,
   );
+}
+
+function resolveChoiceCount(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return 1;
+  }
+  return Math.max(1, Math.floor(numeric));
 }
 
 export function generateSelectionModalComponent(
   componentName: string,
   featureId: string,
-  entry: WritePlanEntry
+  entry: WritePlanEntry,
 ): string {
-  const caseParams = (entry.parameters || {}) as SelectionModalParams;
-  const triggerKey = caseParams.triggerKey || "F4";
-  const choiceCount = caseParams.choiceCount || 3;
-  const minDisplayCount = caseParams.minDisplayCount || choiceCount;
-  const placeholderConfig = caseParams.placeholderConfig;
-  const payloadShape = caseParams.payloadShape || "card";
-  const title = caseParams.title || "Choose Your Talent";
-  const description = caseParams.description || "Select one of the following talents";
-  const dismissBehavior = caseParams.dismissBehavior || "selection_only";
-  const layoutPreset = resolveLayoutPreset(caseParams.layoutPreset);
-  const selectionMode = resolveSelectionMode(caseParams.selectionMode);
-  const inventory = caseParams.inventory;
+  const params = (entry.parameters || {}) as SelectionModalParams;
+  const choiceCount = resolveChoiceCount(params.choiceCount);
+  const minDisplayCount = Math.max(choiceCount, resolveChoiceCount(params.minDisplayCount ?? choiceCount));
+  const payloadShape = params.payloadShape || "card";
+  const title = params.title || "Choose Your Selection";
+  const description = params.description || "Select one of the following options";
+  const dismissBehavior = params.dismissBehavior || "selection_only";
+  const layoutPreset = resolveLayoutPreset(params.layoutPreset);
+  const selectionMode = resolveSelectionMode(params.selectionMode);
+  const inventory = params.inventory;
   const hasInventory = inventory?.enabled === true;
   const inventoryCapacity = hasInventory ? Math.max(1, Math.floor(inventory?.capacity || 15)) : 0;
-  const inventoryFullMessage = hasInventory && inventory?.fullMessage
-    ? inventory.fullMessage
-    : "Talent inventory full";
-  const inventoryPresentation = hasInventory && inventory?.presentation
-    ? inventory.presentation
-    : "persistent_panel";
-  const hasPlaceholderSupport = minDisplayCount > 0 && placeholderConfig !== undefined;
+  const inventoryFullMessage =
+    hasInventory && inventory?.fullMessage ? inventory.fullMessage : "Selection inventory full";
+  const inventoryPresentation =
+    hasInventory && inventory?.presentation ? inventory.presentation : "persistent_panel";
+  const inventoryTitle = params.inventoryTitle || "Selection Inventory";
+  const hasPlaceholderSupport = minDisplayCount > 0 && params.placeholderConfig !== undefined;
   const cssBaseName = entry.targetPath.split("/").pop()?.replace(".tsx", "").toLowerCase() || componentName.toLowerCase();
 
   const placeholderConfigCode = hasPlaceholderSupport
     ? `
   const placeholderConfig = {
-    id: "${placeholderConfig!.id}",
-    name: "${placeholderConfig!.name}",
-    description: ${placeholderConfig!.description ? `"${placeholderConfig!.description}"` : "undefined"},
-    disabled: ${placeholderConfig!.disabled !== undefined ? placeholderConfig!.disabled : true}
+    id: "${params.placeholderConfig!.id}",
+    name: "${params.placeholderConfig!.name}",
+    description: ${params.placeholderConfig!.description ? `"${params.placeholderConfig!.description}"` : "undefined"},
+    disabled: ${params.placeholderConfig!.disabled !== undefined ? params.placeholderConfig!.disabled : true}
   };
   const minDisplayCount = ${minDisplayCount};
 `
@@ -105,12 +111,14 @@ export function generateSelectionModalComponent(
   const inventoryCapacity = ${inventoryCapacity};
   const inventoryFullMessage = "${inventoryFullMessage}";
   const inventoryPresentation = "${inventoryPresentation}";
+  const inventoryTitle = "${inventoryTitle}";
 `
     : `
   const inventoryEnabled = false;
   const inventoryCapacity = 0;
-  const inventoryFullMessage = "Talent inventory full";
+  const inventoryFullMessage = "Selection inventory full";
   const inventoryPresentation = "persistent_panel";
+  const inventoryTitle = "Selection Inventory";
 `;
 
   const placeholderPaddingLogic = hasPlaceholderSupport
@@ -141,7 +149,6 @@ export function generateSelectionModalComponent(
  * Generated selection modal
  *
  * Features:
- * - triggerKey: "${triggerKey}"
  * - choiceCount: ${choiceCount}
  * - payloadShape: "${payloadShape}"
  * - dismissBehavior: "${dismissBehavior}"
@@ -152,10 +159,6 @@ export function generateSelectionModalComponent(
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { registerCustomKey } from "../../../utils/keybinding";
-import { setKeyDownCallback } from "../../../hooks/useKeyboard";
-
-const rwRegisteredKeys = new Set<string>();
 
 interface SelectionItem {
   id: string;
@@ -199,7 +202,6 @@ export function ${componentName}(props: ${componentName}Props) {
   } = props;
 
   const featureId = "${featureId}";
-  const triggerKey = "${triggerKey}";
   const sendCustomEvent = (eventName: string, payload: Record<string, unknown>) => {
     (GameEvents.SendCustomGameEventToServer as any)(eventName, payload);
   };
@@ -208,30 +210,19 @@ ${placeholderConfigCode}${inventoryConfigCode}
   // Allowed: item normalization, placeholder padding, defensive fallback values, card presentation formatting.
   // Forbidden: root mount changes, transport event changes, LESS/HUD wiring changes.
   const normalizeSelectionItems = (rawItems?: unknown): SelectionItem[] => {
-    // Defensive fallback: treat null/undefined/empty as empty array
     if (rawItems === undefined || rawItems === null) {
       return [];
     }
 
-    // Handle array-like values or object-like values from Lua
     const itemsArray: unknown[] = Array.isArray(rawItems) ? rawItems : Object.values(rawItems ?? {});
 
     return itemsArray
       .filter((item): item is Record<string, unknown> => {
-        // Filter out non-object/null/undefined entries
         return item !== null && item !== undefined && typeof item === "object";
       })
       .map((item, index): SelectionItem => {
-        // Normalize rarity/tier: support both rarity and tier, prefer tier for display
-        // rarityValue: used for card presentation formatting (visual theming)
-        // tierValue: used for display label and CSS class generation
         const rarityValue = item.rarity ?? item.tier;
         const tierValue = item.tier ?? item.rarity;
-        // Defensive fallback values: preserve type safety for downstream card presentation
-        // - id: coerce numbers, generate indexed fallback for missing/invalid values
-        // - name: required string fallback to "Unknown"
-        // - description/icon/tier/rarity: optional strings, undefined if invalid
-        // - disabled/isPlaceholder: boolean defaults to false for safety
         return {
           id: typeof item.id === "string" ? item.id : typeof item.id === "number" ? String(item.id) : \`unknown_\${index}\`,
           name: typeof item.name === "string" ? item.name : "Unknown",
@@ -253,18 +244,14 @@ ${placeholderConfigCode}${inventoryConfigCode}
   const [inventoryItems, setInventoryItems] = useState<SelectionItem[]>([]);
   const [inventoryIsFull, setInventoryIsFull] = useState(false);
 
-  // Use refs for stable effect dependencies
   const titleRef = useRef(title);
   const descriptionRef = useRef(description);
   const featureIdRef = useRef(featureId);
-  const triggerKeyRef = useRef(triggerKey);
 
-  // Update refs when values change
   useEffect(() => {
     titleRef.current = title;
     descriptionRef.current = description;
     featureIdRef.current = featureId;
-    triggerKeyRef.current = triggerKey;
   });
 
   useEffect(() => {
@@ -293,22 +280,8 @@ ${hasInventory ? `
     setInventoryItems(normalizedItems.slice(0, inventoryCapacity));
     setInventoryIsFull(payload.isFull === true || normalizedItems.length >= inventoryCapacity);
   };
-` : ""}
-  useEffect(() => {
+` : ""}  useEffect(() => {
     console.log("[Rune Weaver] ${componentName} mounted for feature ${featureId}");
-
-    if (!rwRegisteredKeys.has(triggerKeyRef.current)) {
-      registerCustomKey(triggerKeyRef.current);
-      rwRegisteredKeys.add(triggerKeyRef.current);
-    }
-
-    setKeyDownCallback(triggerKeyRef.current, () => {
-      sendCustomEvent("player_key_pressed", {
-        key: triggerKeyRef.current,
-        featureId: featureIdRef.current,
-        playerId: Game.GetLocalPlayerID(),
-      });
-    });
 
     const showSelectionSub = GameEvents.Subscribe("rune_weaver_show_selection", (data: {
       featureId?: string;
@@ -320,6 +293,7 @@ ${hasInventory ? `
       if (data.featureId && data.featureId !== featureIdRef.current) {
         return;
       }
+
       const normalizedItems = normalizeSelectionItems(data.options);
       console.log(\`[Rune Weaver] ${componentName} received selection event: options=\${normalizedItems.length}\`);
       setModalItems(normalizedItems);
@@ -348,7 +322,6 @@ ${hasInventory ? `
     });
 
     return () => {
-      setKeyDownCallback(triggerKeyRef.current, () => {});
       GameEvents.Unsubscribe(showSelectionSub);
 ${hasInventory ? "      GameEvents.Unsubscribe(inventorySub);\n" : ""}      GameEvents.Unsubscribe(confirmSub);
     };
@@ -359,12 +332,9 @@ ${placeholderPaddingLogic}
     ? Array.from({ length: inventoryCapacity }, (_, index) => inventoryItems[index] ?? null)
     : [];
 
-  // Get selected item for debug logging and validation
   const selectedItem = selectedIndex >= 0 && selectedIndex < displayItems.length
     ? displayItems[selectedIndex]
     : null;
-
-  // Check if confirm should be disabled
   const isConfirmDisabled = selectedIndex === -1 ||
     selectedItem?.disabled === true ||
     selectedItem?.isPlaceholder === true;
@@ -399,7 +369,6 @@ ${placeholderPaddingLogic}
       return;
     }
 
-    // Prevent selection of disabled or placeholder items
     const item = displayItems[selectedIndex];
     if (!item) {
       return;
@@ -436,7 +405,7 @@ ${placeholderPaddingLogic}
           <Panel className="inventory-header">
             <Label
               className={\`inventory-title \${inventoryIsFull ? "full" : ""}\`}
-              text={inventoryIsFull ? inventoryFullMessage : "Talent Inventory"}
+              text={inventoryIsFull ? inventoryFullMessage : inventoryTitle}
             />
             <Label className="inventory-subtitle" text={\`\${inventoryItems.length} / \${inventoryCapacity}\`} />
           </Panel>

@@ -471,6 +471,27 @@ function testStableEffectDeps() {
   console.log("✓ Test 12 passed\n");
 }
 
+// Test 12b: selection modal must not own trigger capture
+function testNoTriggerOwnership() {
+  console.log("Test 12b: Selection modal does not own trigger capture");
+
+  const entry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {}
+  };
+
+  const code = generateSelectionModalComponent("TestModal", "test_feature", entry);
+
+  assert(!code.includes("registerCustomKey"), "Should not register custom keys in selection modal");
+  assert(!code.includes("setKeyDownCallback"), "Should not bind keyboard callbacks in selection modal");
+  assert(!code.includes("player_key_pressed"), "Should not emit player_key_pressed from selection modal");
+
+  console.log("✓ Test 12b passed\n");
+}
+
 // Test 13: Sparse debug logs for selected and confirmed item id
 function testDebugLogs() {
   console.log("Test 13: Sparse debug logs for selected and confirmed item id");
@@ -600,6 +621,7 @@ testRarityTierNormalization();
 testConfirmDisabledState();
 testHandleConfirmChecks();
 testStableEffectDeps();
+testNoTriggerOwnership();
 testDebugLogs();
 testNoLessImport();
 testPreventDisabledSelection();

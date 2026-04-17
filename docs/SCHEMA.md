@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: aligning IntentSchema, FinalBlueprint, ModuleNeed, and AssemblyPlan contract boundaries
 > Do not use for: execution priority or host realization policy by itself
 
@@ -90,6 +90,9 @@ export interface IntentSchema {
   resolvedAssumptions: string[];
   openQuestions: string[];
   isReadyForBlueprint: boolean;
+  parameters?: Record<string, unknown>;
+  featureAuthoringProposal?: FeatureAuthoringProposal;
+  fillIntentCandidates?: FillIntentCandidate[];
 }
 
 export interface IntentActor {
@@ -173,6 +176,31 @@ export interface RequiredClarification {
 - richer typed sections 应先作为 optional fields 加入
 - `blocked` 不能被伪装成“继续生成再说”
 
+当前 code-truth 补充：
+
+- `parameters` 只保留 prompt-extracted scalar / module-safe 字段
+- source refs、source artifact payload、planner-local authoring writeback hints 不应进入 `parameters`
+- source-backed authoring candidate 不应再通过 `parameters` 携带
+- 当前已落地的 typed proposal surface 是：
+
+```ts
+export interface FeatureAuthoringProposal {
+  mode: "source-backed";
+  profile: "selection_pool";
+  objectKind: "talent" | "equipment" | "skill_card_placeholder";
+  parameters: SelectionPoolFeatureAuthoringParameters;
+  parameterSurface: SelectionPoolParameterSurface;
+  proposalSource?: "llm" | "fallback" | "existing-feature";
+  notes?: string[];
+}
+
+export interface FillIntentCandidate {
+  boundaryId: string;
+  summary: string;
+  source: "llm" | "fallback" | "existing-feature" | "deterministic";
+}
+```
+
 ## 2. Blueprint / FinalBlueprint
 
 ### 职责
@@ -217,6 +245,8 @@ export interface FinalBlueprint {
   assumptions: string[];
   validations: ValidationIssue[];
   uiDesignSpec?: UIDesignSpec;
+  featureAuthoring?: FeatureAuthoring;
+  fillContracts?: FillContract[];
 }
 
 export interface FinalBlueprintModule {
@@ -253,14 +283,35 @@ export interface BlueprintConnection {
   to: string;
   purpose: string;
 }
+
+export interface FillContract {
+  boundaryId: string;
+  targetModuleId: string;
+  targetPatternId: string;
+  mode: "closed";
+  sourceBindings: string[];
+  allowed: string[];
+  forbidden: string[];
+  invariants: string[];
+  expectedOutput: string;
+  fallbackPolicy: "deterministic-default";
+}
 ```
 
 边界说明：
 
 - `BlueprintProposal` 不是 downstream trust seam
+- `BlueprintProposal` 可以携带 candidate-only `featureAuthoringProposal` / `fillIntentCandidates`，但这些仍需经过 deterministic normalization
 - `FinalBlueprint` 不得携带 host realization family、generator family、write targets
+- `FinalBlueprint.featureAuthoring` 是当前 source-backed authoring truth；不要再把它镜像回 planner-side `parameters`
+- `FinalBlueprint.fillContracts` 是当前 Gap Fill closed-boundary authority；它绑定 boundary / owner module / owner pattern / sourceBindings / fallbackPolicy
 - `ModuleNeed` 是 pattern-facing seam，不是 final pattern selection
 - `explicitPatternHints` 只能作为下游 tie-break 输入，不能越级变成主路由
+- `requiredCapabilities` / `optionalCapabilities` 应承载可复用机制 token，而不是 case 名、feature 名、catalog 名或业务故事
+- 当前真实 capability 例子只承认 `timing.cooldown.local`
+- 业务对象、catalog、feature-owned source data 与 host 决策不应直接塞进 `ModuleNeed`
+- 如果一个 feature 需要 Rune Weaver-owned source-backed artifact，决定“该 artifact 是否存在、属于哪个 feature、拥有哪个 path / ownership 边界”的 authority 属于 `FinalBlueprint` skeleton，而不属于 `GapFill`
+- 一旦该 artifact 的存在与 owned scope 已被上游固定，artifact 内的 object-data / config content 属于受控实现填充，可由 `GapFill` 在已分配 scope 内完成
 
 ## 3. UIDesignSpec
 
@@ -319,6 +370,7 @@ export interface UIVisualStyle {
 优先级规则：
 
 - 能表达为 `ModuleNeed.boundedVariability -> FillSlot` 的，不应回退成新的架构 seam
+- 已经属于既定 skeleton 之内、且只是实现肌肉/对象内容填充的问题，应优先视作 `GapFill` 或 artifact-local fill，而不是新的 module / pattern / host seam
 - `ExtensionPoint` 不能承担模块结构、pattern 选择、host realization、write path 决策
 
 ### 推荐结构
@@ -438,8 +490,10 @@ export interface ValidationContract {
 - `FinalBlueprint` 不是宿主代码
 - `FinalBlueprint` 不决定 host / generator / write authority
 - `ModuleNeed` 不是 pattern resolution result
+- `ModuleNeed` 不是 feature-owned source data 或 source-backed artifact content 的存放点
 - `UIDesignSpec` 不是业务规则
 - `ExtensionPoint` 不是任意代码注入
+- `GapFill` 可以填实现肌肉，但不能发明 skeleton
 - `AssemblyPlan` 不是最终落盘结果
 
 ## 8. 当前结论

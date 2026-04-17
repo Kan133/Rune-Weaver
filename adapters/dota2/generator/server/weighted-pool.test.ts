@@ -33,11 +33,15 @@ const code = generateWeightedPoolCode(
 );
 
 assert.match(code, /drawForSelection\(count: number = 3\): T\[] \{/);
+assert.match(code, /const configuredDrawMode: string = "multiple_without_replacement";/);
+assert.match(code, /const configuredDuplicatePolicy: string = "forbid";/);
 assert.match(code, /this\.sessionState\.currentChoiceIds = result\.map/);
+assert.match(code, /getRemainingObjectIds\(\): string\[] \{/);
+assert.match(code, /commitSelection\(selectedId: string, options\?: \{ trackOwned\?: boolean \}\): void \{/);
 assert.match(code, /return result;\s*\n  }\s*\n/);
 assert.doesNotMatch(
   code,
-  /\n    }\s*\n\s*}\s*\n\s*\n\s*\/\/ Update currentChoiceIds in session state/,
+  /drawnTiers|tierGroups|getRemainingTalentIds/,
 );
 
 console.log("adapters/dota2/generator/server/weighted-pool.test.ts passed");

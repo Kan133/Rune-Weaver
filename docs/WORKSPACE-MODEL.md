@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-contract-change
-> Last verified: 2026-04-16
+> Last verified: 2026-04-17
 > Read when: changing feature registry, ownership, or create/update/delete workspace behavior
 > Do not use for: roadmap sequencing or host realization policy by itself
 
@@ -16,11 +16,11 @@ Current required lifecycle surface:
 
 - `create`
 - `update`
+- `regenerate`
 - `delete`
 
 Deferred:
 
-- `regenerate`
 - `rollback`
 - semantic incremental update
 
@@ -43,11 +43,13 @@ Agents must treat this file as the authoritative persisted registry for Rune Wea
 
 Do not document or implement another source of truth for feature state without explicitly changing the code and this document together.
 
-Planning-only guardrail:
+Current guardrail:
 
-- future feature-owned source artifacts, if adopted, remain authoring artifacts owned by the same feature lifecycle
-- they do not replace workspace as the persisted registry or lifecycle authority
-- current workspace schema does not add source-model fields
+- workspace remains the persisted registry and lifecycle authority even when a feature owns a Rune Weaver authoring artifact
+- if a feature owns a source-backed artifact, the artifact's existence, path, and ownership boundary belong to the lifecycle skeleton
+- current source-backed artifact materialization should derive from normalized `FinalBlueprint.featureAuthoring`, not from planner-local parameter bags
+- bounded content inside that already-owned artifact may be refreshed by `GapFill` or other bounded implementation fill inside owned scope
+- the artifact does not replace workspace as the persisted registry or lifecycle authority
 
 ## 3. Workspace Structure
 
@@ -72,7 +74,11 @@ interface RuneWeaverFeatureRecord {
   selectedPatterns: string[];
   generatedFiles: string[];
   entryBindings: EntryBinding[];
+  sourceModel?: FeatureSourceModelRef;
+  featureAuthoring?: FeatureAuthoring;
   dependsOn?: string[];
+  integrationPoints?: string[];
+  gapFillBoundaries?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -82,6 +88,12 @@ interface EntryBinding {
   file: string;
   kind: "import" | "register" | "mount" | "append_index";
   symbol?: string;
+}
+
+interface FeatureSourceModelRef {
+  adapter: string;
+  version: number;
+  path: string;
 }
 ```
 
@@ -94,6 +106,13 @@ For the current MVP, the minimum truthful fields are:
 - `entryBindings`
 - `revision`
 - timestamps
+
+When present, these fields are also lifecycle-truthful rather than advisory:
+
+- `sourceModel`
+- `featureAuthoring`
+- `integrationPoints`
+- `gapFillBoundaries`
 
 ## 4. Feature Identity
 
@@ -140,6 +159,17 @@ The system must prevent:
 - two features silently writing the same business surface
 - delete/update operations crossing into another feature's owned scope without explicit governance
 
+### 5.4 Source-Backed Artifact Ownership
+
+If a feature owns a Rune Weaver authoring artifact:
+
+- workspace tracks that ownership through `sourceModel`
+- workspace also stores normalized `featureAuthoring` as the source-backed authoring truth used by create / update / regenerate
+- the artifact path is part of the feature's owned lifecycle boundary
+- `update` / `delete` must treat that artifact as owned scope
+- artifact content may be muscle-filled inside that owned scope, but the existence/path/ownership of the artifact is not a Gap Fill decision
+- workspace updates should use explicit clear / replace semantics for `sourceModel` and `featureAuthoring`; no silent carry-forward when a regenerated write plan omits them
+
 ## 6. Required Operations
 
 ### 6.1 Create
@@ -152,6 +182,8 @@ The system must prevent:
 - write truthful `selectedPatterns`
 - write truthful `generatedFiles`
 - write truthful `entryBindings`
+- persist truthful owned-artifact metadata when the feature owns a source-backed artifact
+- persist truthful normalized `featureAuthoring` when the feature uses a source-backed authoring profile
 - update workspace
 
 If the operation does not persist truthful patterns/files/bindings, it is not yet product-grade `create`.
@@ -165,6 +197,7 @@ If the operation does not persist truthful patterns/files/bindings, it is not ye
 - rewrite only that feature's owned artifacts and allowed bridge bindings
 - update `revision`
 - refresh workspace fields so they remain truthful
+- clear or replace `sourceModel` / `featureAuthoring` explicitly from the write result instead of silently retaining stale source-backed fields
 
 For the current MVP, `update` is:
 
@@ -188,9 +221,11 @@ Deleting only the workspace record does not count as finished product-grade `del
 
 ### 7.1 Regenerate
 
-Deferred.
+Current truthful role:
 
-Do not require `regenerate` for the current MVP.
+- `regenerate` is the rewrite path when update diff classification requires cleanup + rewrite rather than selective refresh
+- it must refresh `generatedFiles`, `sourceModel`, and `featureAuthoring` through the same owned-scope lifecycle truth as `create` / `update`
+- it is not semantic incremental update; it is an ownership-safe rewrite path
 
 ### 7.2 Rollback
 

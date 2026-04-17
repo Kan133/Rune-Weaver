@@ -832,8 +832,15 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
 
     const content = readFileSync(join(hostRoot, poolFile), "utf8");
     const hasTodoMarker = content.includes("TODO: Add initial talent entries");
+    const initialEntriesMatch = content.match(/const initialEntries = \[([\s\S]*?)\]\s+as T\[];/);
+    const initialEntryCount = initialEntriesMatch ? (initialEntriesMatch[1].match(/\{\s*id:/g) || []).length : 0;
     const addCallCount = (content.match(/\.add\(/g) || []).length;
-    const seededAddCalls = hasTodoMarker ? addCallCount : Math.max(0, addCallCount - 1);
+    const usesSeedLoop = /for \(const entry of initialEntries\)/.test(content);
+    const seededAddCalls = usesSeedLoop
+      ? initialEntryCount
+      : hasTodoMarker
+        ? addCallCount
+        : Math.max(0, addCallCount - 1);
 
     if (hasTodoMarker || seededAddCalls === 0) {
       emptySeedFeatures.push(`${feature.featureId}: weighted pool has no initial entries`);

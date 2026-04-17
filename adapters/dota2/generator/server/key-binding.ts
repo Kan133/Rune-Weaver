@@ -9,6 +9,7 @@ import { WritePlanEntry } from "../../assembler/index.js";
 interface KeyBindingParams {
   triggerKey?: string;
   key?: string;
+  eventName?: string;
 }
 
 interface KeyBindingInvocationMetadata {
@@ -29,7 +30,16 @@ export function generateKeyBindingCode(
 ): string {
   const params = (entry.parameters || {}) as KeyBindingParams;
   const metadata = (entry.metadata || {}) as KeyBindingInvocationMetadata;
-  const triggerKey = params.triggerKey || params.key || "F4";
+  const triggerKey = typeof (params.triggerKey || params.key) === "string"
+    ? String(params.triggerKey || params.key).trim().toUpperCase()
+    : "";
+  if (!triggerKey) {
+    throw new Error("input.key_binding requires an explicit triggerKey/key parameter.");
+  }
+  const eventName =
+    typeof params.eventName === "string" && params.eventName.trim().length > 0
+      ? params.eventName.trim()
+      : "rune_weaver_input_triggered";
   const hasResourceInvocation =
     metadata.resourceInvocationMode === "resource-consume-configured" &&
     typeof metadata.resourceInvocationImportPath === "string" &&
@@ -70,6 +80,7 @@ export class ${className} {
   private boundKeys: Set<string> = new Set();
   private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;
   private readonly configuredKey: string = "${triggerKey}";
+  private readonly eventName: string = "${eventName}";
   private readonly featureId: string = "${featureId}";
   private configuredKeyBound = false;
 
@@ -95,7 +106,7 @@ export class ${className} {
     this.boundKeys.add(key);
 
     if (GameRules && (GameRules as any).XNetTable) {
-      CustomGameEventManager.RegisterListener("player_key_pressed", (_eventSourceIndex: number, event: any) => {
+      CustomGameEventManager.RegisterListener(this.eventName, (_eventSourceIndex: number, event: any) => {
         if (!event || event.key !== key) {
           return;
         }
@@ -114,7 +125,7 @@ export class ${className} {
       });
     }
 
-    print(\`[Rune Weaver] Bound key: \${key} for feature \${this.featureId}\`);
+    print(\`[Rune Weaver] Bound key: \${key} for feature \${this.featureId} via \${this.eventName}\`);
   }
 
   /**
@@ -148,6 +159,10 @@ export class ${className} {
 
   getConfiguredKey(): string {
     return this.configuredKey;
+  }
+
+  getEventName(): string {
+    return this.eventName;
   }
 }
 

@@ -67,12 +67,19 @@ const sourceArtifactDiff = classifyUpdateDiff(
       ...newWritePlan.entries,
       {
         operation: "create",
-        targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/talent-draw.source.json",
+        targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
         contentType: "json",
-        contentSummary: "feature_source_model/talent-draw (json) talents:20",
+        contentSummary: "feature_source_model/selection_pool (json) objects:20 kind:talent",
         sourcePattern: "rw.feature_source_model",
         sourceModule: "feature_source_model",
         safe: true,
+        metadata: {
+          sourceModelRef: {
+            adapter: "selection_pool",
+            version: 1,
+            path: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
+          },
+        },
       },
     ],
   } as WritePlan,
@@ -83,7 +90,58 @@ assert.equal(sourceArtifactDiff.requiresRegenerate, false);
 assert.equal(sourceArtifactDiff.createdFiles.length, 1);
 assert.equal(
   sourceArtifactDiff.createdFiles[0].path,
-  "game/scripts/src/rune_weaver/features/standalone_system_test/talent-draw.source.json"
+  "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json"
+);
+
+const migratedSourceFeature: RuneWeaverFeatureRecord = {
+  ...existingFeature,
+  sourceModel: {
+    adapter: "talent-draw",
+    version: 1,
+    path: "game/scripts/src/rune_weaver/features/standalone_system_test/talent-draw.source.json",
+  },
+};
+
+const migratedSourceArtifactDiff = classifyUpdateDiff(
+  migratedSourceFeature,
+  {
+    entries: [
+      ...newWritePlan.entries,
+      {
+        operation: "create",
+        targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
+        contentType: "json",
+        contentSummary: "feature_source_model/selection_pool (json) objects:20 kind:talent",
+        sourcePattern: "rw.feature_source_model",
+        sourceModule: "feature_source_model",
+        safe: true,
+        metadata: {
+          sourceModelRef: {
+            adapter: "selection_pool",
+            version: 1,
+            path: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
+          },
+        },
+      },
+    ],
+  } as WritePlan,
+  "D:\\test-host",
+);
+
+assert.equal(migratedSourceArtifactDiff.requiresRegenerate, false);
+assert.equal(migratedSourceArtifactDiff.refreshedFiles.length, 2);
+assert.equal(migratedSourceArtifactDiff.createdFiles.length, 0);
+assert.equal(migratedSourceArtifactDiff.deletedFiles.length, 1);
+assert.deepEqual(
+  migratedSourceArtifactDiff.refreshedFiles.map((file) => file.path).sort(),
+  [
+    "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
+    "game/scripts/src/rune_weaver/generated/server/standalone_system_test_input_trigger_input_key_binding.ts",
+  ].sort(),
+);
+assert.equal(
+  migratedSourceArtifactDiff.deletedFiles[0].path,
+  "game/scripts/src/rune_weaver/generated/server/standalone_system_test_integration_bridge_integration_state_sync_bridge.ts"
 );
 
 console.log("adapters/dota2/update/update-classifier.test.ts passed");

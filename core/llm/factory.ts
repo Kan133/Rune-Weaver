@@ -82,6 +82,8 @@ const DEFAULT_WORKFLOW_TEMPERATURE: Record<LLMWorkflowKind, number> = {
 
 const DEFAULT_OPENAI_COMPAT_THINKING_PAYLOAD_MODE: OpenAICompatibleThinkingPayloadMode = "auto";
 const KIMI_THINKING_MODEL_PATTERN = /^kimi-k2\.5/i;
+const GLM_THINKING_MODEL_PATTERN = /^glm-4\.7/i;
+const PROCESS_ENV_LLM_OVERRIDE_FLAG = "RW_LLM_PROCESS_ENV_OVERRIDES";
 
 export function readLLMExecutionConfig(
   projectRoot: string = process.cwd(),
@@ -210,7 +212,10 @@ function shouldSendThinkingPayload(
     return true;
   }
 
-  return !!model && KIMI_THINKING_MODEL_PATTERN.test(model);
+  return !!model && (
+    KIMI_THINKING_MODEL_PATTERN.test(model) ||
+    GLM_THINKING_MODEL_PATTERN.test(model)
+  );
 }
 
 function buildProviderOptions(
@@ -306,6 +311,7 @@ function readOptionalPositiveNumber(
 
 function loadEnv(projectRoot: string): Record<string, string> {
   const result: Record<string, string> = {};
+  const dotEnvKeys = new Set<string>();
 
   const envPath = resolve(projectRoot, ".env");
   if (existsSync(envPath)) {
@@ -332,14 +338,34 @@ function loadEnv(projectRoot: string): Record<string, string> {
       }
 
       result[key] = value;
+      dotEnvKeys.add(key);
     }
   }
 
+  const allowProcessLLMOverride = process.env[PROCESS_ENV_LLM_OVERRIDE_FLAG] === "1";
   for (const [key, value] of Object.entries(process.env)) {
     if (typeof value === "string") {
+      if (!allowProcessLLMOverride && dotEnvKeys.has(key) && isManagedLLMEnvKey(key)) {
+        continue;
+      }
       result[key] = value;
     }
   }
 
   return result;
+}
+
+function isManagedLLMEnvKey(key: string): boolean {
+  return (
+    key === "LLM_PROVIDER" ||
+    key === "OPENAI_BASE_URL" ||
+    key === "OPENAI_API_KEY" ||
+    key === "OPENAI_MODEL" ||
+    key === "OPENAI_TIMEOUT_MS" ||
+    key === "OPENAI_COMPAT_THINKING_PAYLOAD" ||
+    key === "ANTHROPIC_BASE_URL" ||
+    key === "ANTHROPIC_API_KEY" ||
+    key === "ANTHROPIC_MODEL" ||
+    key.startsWith("LLM_")
+  );
 }

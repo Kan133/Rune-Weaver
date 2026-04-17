@@ -5,16 +5,9 @@ import { AssemblyPlanBuilder, AssemblyPlanConfig } from "../../../core/pipeline/
 import { createLLMClientFromEnv, isLLMConfigured, readLLMExecutionConfig } from "../../../core/llm/factory.js";
 import { runWizardToIntentSchema, extractNumericParameters } from "../../../core/wizard/index.js";
 import {
-  analyzeTalentDrawPrompt,
-  mergeCanonicalTalentDrawParameters,
-  resolveCanonicalTalentDrawFeatureId,
-  type TalentDrawInventoryParameters,
-  type TalentDrawPromptAnalysis,
-} from "../../../adapters/dota2/cases/talent-draw.js";
-import {
-  extractTalentDrawSourceModelFromParameters,
-  resolveTalentDrawSourceModel,
-} from "../../../adapters/dota2/cases/talent-draw-adapter.js";
+  applySelectionPoolIntentContract,
+  resolveSelectionPoolFamily,
+} from "../../../adapters/dota2/families/selection-pool/index.js";
 import {
   initializeWorkspace,
   findFeatureById,
@@ -30,22 +23,6 @@ export interface CreateIntentSchemaContext {
   mode?: FeatureMode;
   featureId?: string;
   existingFeature?: RuneWeaverFeatureRecord | null;
-}
-
-function hasInventoryParameters(value: unknown): value is TalentDrawInventoryParameters {
-  return !!value &&
-    typeof value === "object" &&
-    (value as Record<string, unknown>).enabled === true &&
-    typeof (value as Record<string, unknown>).capacity === "number" &&
-    typeof (value as Record<string, unknown>).fullMessage === "string" &&
-    (value as Record<string, unknown>).presentation === "persistent_panel";
-}
-
-function shouldEmbedTalentDrawEffectInSelectionFlow(
-  analysis: TalentDrawPromptAnalysis,
-  extractedParams: Record<string, unknown>,
-): boolean {
-  return analysis.isCanonicalBasePrompt && extractedParams.effectApplication !== undefined;
 }
 
 function dedupeStrings(values: Array<string | undefined>): string[] {
@@ -65,178 +42,22 @@ function dedupeStrings(values: Array<string | undefined>): string[] {
   return result;
 }
 
-function dedupeBindings(
-  bindings: NonNullable<IntentSchema["integrations"]>["expectedBindings"],
-): NonNullable<IntentSchema["integrations"]>["expectedBindings"] {
-  const seen = new Set<string>();
-  const result: NonNullable<IntentSchema["integrations"]>["expectedBindings"] = [];
-
-  for (const binding of bindings) {
-    const key = `${binding.kind}:${binding.id}:${binding.summary}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(binding);
-  }
-
-  return result;
-}
-
-function applyTalentDrawSchemaContract(
-  schema: IntentSchema,
-  analysis: TalentDrawPromptAnalysis,
-  extractedParams: Record<string, unknown>,
-): IntentSchema {
-  const inventory = hasInventoryParameters(extractedParams.inventory) ? extractedParams.inventory : undefined;
-  const shouldEmbedEffect = shouldEmbedTalentDrawEffectInSelectionFlow(analysis, extractedParams);
-
-  let nextSchema: IntentSchema = {
-    ...schema,
-    requirements: {
-      ...schema.requirements,
-      typed: shouldEmbedEffect
-        ? (schema.requirements.typed || []).filter((requirement) => requirement.kind !== "effect")
-        : schema.requirements.typed,
-    },
-    effects: shouldEmbedEffect ? undefined : schema.effects,
-  };
-
-  if (analysis.isCanonicalBasePrompt) {
-    nextSchema = {
-      ...nextSchema,
-      flow: {
-        ...nextSchema.flow,
-        triggerSummary: nextSchema.flow?.triggerSummary || "Press F4 to open the talent draw flow.",
-        sequence: dedupeStrings([
-          ...(nextSchema.flow?.sequence || []),
-          "Player presses the configured trigger key.",
-          "Selection flow draws three candidates from the weighted talent pool.",
-          inventory
-            ? "Confirmed talents are appended to the session-only inventory panel, and draws stop when the panel is full."
-            : "Player confirms one talent and it is removed from the remaining pool.",
-        ]),
-        requiresConfirmation: true,
-        supportsRetry: true,
-      },
-      selection: {
-        ...nextSchema.selection,
-        mode: "user-chosen",
-        cardinality: "single",
-        repeatability: "repeatable",
-        duplicatePolicy: "forbid",
-        ...(inventory ? { inventory } : {}),
-      },
-      uiRequirements: {
-        needed: true,
-        surfaces: dedupeStrings([...(nextSchema.uiRequirements?.surfaces || []), "selection_modal"]),
-        feedbackNeeds: dedupeStrings([
-          ...(nextSchema.uiRequirements?.feedbackNeeds || []),
-          inventory ? "persistent inventory panel" : undefined,
-          inventory ? inventory.fullMessage : undefined,
-        ]),
-      },
-      integrations: {
-        expectedBindings: dedupeBindings([
-          ...(nextSchema.integrations?.expectedBindings || []),
-          {
-            id: "fallback-input-binding",
-            kind: "entry-point",
-            summary: "Authoritative input binding for the talent draw trigger.",
-            required: true,
-          },
-          {
-            id: "fallback-state-sync",
-            kind: "bridge-point",
-            summary: "Selection flow state synchronized to the current UI surface.",
-            required: true,
-          },
-          {
-            id: "fallback-selection-surface",
-            kind: "ui-surface",
-            summary: "Selection modal UI surface for the talent draw flow.",
-            required: true,
-          },
-        ]),
-      },
-      stateModel: {
-        states: [
-          ...(nextSchema.stateModel?.states || []).filter((state) => state.id !== "talent-draw-inventory"),
-          ...(inventory
-            ? [{
-                id: "talent-draw-inventory",
-                summary: "Session-only stored talents shown in the persistent inventory panel",
-                owner: "session" as const,
-                lifetime: "session" as const,
-                mutationMode: "update" as const,
-              }]
-            : []),
-        ],
-      },
-      resolvedAssumptions: dedupeStrings([
-        ...nextSchema.resolvedAssumptions,
-        shouldEmbedEffect
-          ? "Talent Draw immediate apply remains embedded in rule.selection_flow effect mapping instead of opening a separate effect pattern."
-          : undefined,
-        inventory
-          ? "Talent Draw inventory stays session-only and uses the existing selection flow and modal runtime surfaces."
-          : undefined,
-      ]),
-    };
-  }
-
-  if (analysis.inventoryMode === "unsupported") {
-    const issue = `Unsupported Talent Draw inventory update: ${analysis.unsupportedReasons.join(" ")}`;
-    nextSchema = {
-      ...nextSchema,
-      readiness: "blocked",
-      requiredClarifications: [
-        ...(nextSchema.requiredClarifications || []),
-        {
-          id: "talent-draw-inventory-contract",
-          question: issue,
-          blocksFinalization: true,
-        },
-      ],
-      openQuestions: dedupeStrings([...(nextSchema.openQuestions || []), issue]),
-      resolvedAssumptions: dedupeStrings([
-        ...nextSchema.resolvedAssumptions,
-        "Current Talent Draw lifecycle lane only supports the frozen persistent 15-slot inventory extension.",
-      ]),
-      isReadyForBlueprint: false,
-    };
-  }
-
-  return nextSchema;
-}
-
-function applyTalentDrawSourceModelBlock(
-  schema: IntentSchema,
-  reasons: string[],
-): IntentSchema {
-  if (reasons.length === 0) {
-    return schema;
-  }
-
-  const issue = `Unsupported Talent Draw source-model update: ${reasons.join(" ")}`;
-  return {
-    ...schema,
-    readiness: "blocked",
-    requiredClarifications: [
-      ...(schema.requiredClarifications || []),
-      {
-        id: "talent-draw-source-model-contract",
-        question: issue,
-        blocksFinalization: true,
-      },
-    ],
-    openQuestions: dedupeStrings([...(schema.openQuestions || []), issue]),
-    resolvedAssumptions: dedupeStrings([
-      ...schema.resolvedAssumptions,
-      "Current Talent Draw source-model lane only supports the frozen inventory extension and the canonical 6-to-20 pool expansion.",
-    ]),
-    isReadyForBlueprint: false,
-  };
+function hasSelectionPoolInventoryParameters(value: unknown): value is {
+  enabled: boolean;
+  capacity: number;
+  storeSelectedItems: boolean;
+  blockDrawWhenFull: boolean;
+  fullMessage: string;
+  presentation: "persistent_panel";
+} {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as Record<string, unknown>).enabled === true &&
+      typeof (value as Record<string, unknown>).capacity === "number" &&
+      typeof (value as Record<string, unknown>).fullMessage === "string" &&
+      (value as Record<string, unknown>).presentation === "persistent_panel",
+  );
 }
 
 export interface Dota2BlueprintBuildResult {
@@ -358,7 +179,7 @@ export function resolveStableFeatureId(input: {
     return explicitFeatureId;
   }
 
-  return resolveCanonicalTalentDrawFeatureId(input.prompt) || input.blueprintId;
+  return input.blueprintId;
 }
 
 export function resolveExistingFeatureContext(
@@ -429,16 +250,19 @@ export async function createIntentSchema(
         });
 
         if (result.valid && result.schema) {
-          const talentDrawAnalysis = analyzeTalentDrawPrompt(prompt);
-          const baseParams = mergeCanonicalTalentDrawParameters(prompt, extractNumericParameters(prompt));
-          const talentDrawSourceResolution = resolveTalentDrawSourceModel({
+          const baseParams = extractNumericParameters(prompt);
+          const selectionPoolResolution = resolveSelectionPoolFamily({
             prompt,
             hostRoot,
             mode: context.mode || "create",
-            featureId: context.featureId || resolveCanonicalTalentDrawFeatureId(prompt),
+            featureId: context.featureId,
             existingFeature: context.existingFeature || null,
+            proposalSource: "llm",
           });
-          const extractedParams = talentDrawSourceResolution.compiledParameters || baseParams;
+          const extractedParams = {
+            ...baseParams,
+            ...(selectionPoolResolution.scalarParameters || {}),
+          };
           const normalizedMechanics = applyMechanicHints(
             {
               trigger: false,
@@ -452,9 +276,6 @@ export async function createIntentSchema(
             },
             extractedParams
           );
-          if (shouldEmbedTalentDrawEffectInSelectionFlow(talentDrawAnalysis, extractedParams)) {
-            normalizedMechanics.outcomeApplication = false;
-          }
           let schema = {
             ...result.schema,
             host: {
@@ -468,8 +289,7 @@ export async function createIntentSchema(
             (schema as any).parameters = extractedParams;
           }
 
-          schema = applyTalentDrawSchemaContract(schema, talentDrawAnalysis, extractedParams);
-          schema = applyTalentDrawSourceModelBlock(schema, talentDrawSourceResolution.reasons);
+          schema = applySelectionPoolIntentContract(schema, selectionPoolResolution);
 
           console.log("  ✅ IntentSchema created via LLM Wizard");
           console.log(`     Goal: ${schema.request.goal}`);
@@ -528,16 +348,19 @@ function createFallbackIntentSchema(
   context: CreateIntentSchemaContext = {},
 ): IntentSchema {
   const lowerPrompt = prompt.toLowerCase();
-  const talentDrawAnalysis = analyzeTalentDrawPrompt(prompt);
-  const baseParams = mergeCanonicalTalentDrawParameters(prompt, extractNumericParameters(prompt));
-  const talentDrawSourceResolution = resolveTalentDrawSourceModel({
+  const baseParams = extractNumericParameters(prompt);
+  const selectionPoolResolution = resolveSelectionPoolFamily({
     prompt,
     hostRoot,
     mode: context.mode || "create",
-    featureId: context.featureId || resolveCanonicalTalentDrawFeatureId(prompt),
+    featureId: context.featureId,
     existingFeature: context.existingFeature || null,
+    proposalSource: "fallback",
   });
-  const extractedParams = talentDrawSourceResolution.compiledParameters || baseParams;
+  const extractedParams = {
+    ...baseParams,
+    ...(selectionPoolResolution.scalarParameters || {}),
+  };
   const hasTriChoiceLanguage = hasAnyKeyword(lowerPrompt, [
     "三选一",
     "3选1",
@@ -575,19 +398,19 @@ function createFallbackIntentSchema(
     hasStatusDisplayLanguage || hasAnyKeyword(lowerPrompt, ["保留", "当前选择", "持续", "active"]);
 
   let intentKind: "micro-feature" | "standalone-system" = "micro-feature";
-  if (lowerPrompt.includes("系统") || lowerPrompt.includes("天赋")) {
+  if (lowerPrompt.includes("系统") || hasAnyKeyword(lowerPrompt, ["天赋", "装备", "技能卡", "skill card", "equipment", "talent"])) {
     intentKind = "standalone-system";
   }
 
-  const uiKeywords = ["ui", "界面", "显示", "天赋", "modal", "窗口"];
+  const uiKeywords = ["ui", "界面", "显示", "modal", "窗口", "卡牌", "选择", "天赋", "装备", "技能卡"];
   const uiNeeded = uiKeywords.some((kw) => lowerPrompt.includes(kw));
 
   const normalizedMechanics = applyMechanicHints({
     trigger: lowerPrompt.includes("按") || lowerPrompt.includes("键") || lowerPrompt.includes("触发"),
-    candidatePool: (lowerPrompt.includes("选择") && lowerPrompt.includes("天赋")) || hasCandidatePoolLanguage,
+    candidatePool: (lowerPrompt.includes("选择") && hasAnyKeyword(lowerPrompt, ["天赋", "装备", "技能卡"])) || hasCandidatePoolLanguage,
     weightedSelection: lowerPrompt.includes("权重") || lowerPrompt.includes("随机"),
-    playerChoice: (lowerPrompt.includes("选择") && !lowerPrompt.includes("天赋")) || hasTriChoiceLanguage,
-    uiModal: lowerPrompt.includes("天赋") || lowerPrompt.includes("窗口") || hasTriChoiceLanguage || hasStatusDisplayLanguage,
+    playerChoice: lowerPrompt.includes("选择") || hasTriChoiceLanguage,
+    uiModal: hasAnyKeyword(lowerPrompt, ["天赋", "装备", "技能卡", "窗口", "modal", "卡牌"]) || hasTriChoiceLanguage || hasStatusDisplayLanguage,
     outcomeApplication:
       lowerPrompt.includes("冲刺") ||
       lowerPrompt.includes("效果") ||
@@ -596,9 +419,6 @@ function createFallbackIntentSchema(
       lowerPrompt.includes("属性"),
     resourceConsumption: lowerPrompt.includes("消耗") || lowerPrompt.includes("资源"),
   }, extractedParams);
-  if (shouldEmbedTalentDrawEffectInSelectionFlow(talentDrawAnalysis, extractedParams)) {
-    normalizedMechanics.outcomeApplication = false;
-  }
   const requiredClarifications = createFallbackRequiredClarifications(lowerPrompt, normalizedMechanics);
   const readiness: IntentReadiness = (requiredClarifications ?? []).some((item) => item.blocksFinalization)
     ? "blocked"
@@ -626,7 +446,7 @@ function createFallbackIntentSchema(
         hasCandidatePoolLanguage,
         hasBridgeSyncLanguage,
         hasStatusDisplayLanguage,
-        inventoryEnabled: hasInventoryParameters(extractedParams.inventory),
+        inventoryEnabled: hasSelectionPoolInventoryParameters(extractedParams.inventory),
       }),
       interactions: uiNeeded ? ["UI交互"] : [],
       outputs: [],
@@ -637,7 +457,7 @@ function createFallbackIntentSchema(
     selection: createFallbackSelection(normalizedMechanics, {
       hasCandidatePoolLanguage,
       hasPersistentSelectionLanguage,
-      inventory: hasInventoryParameters(extractedParams.inventory) ? extractedParams.inventory : undefined,
+      inventory: hasSelectionPoolInventoryParameters(extractedParams.inventory) ? extractedParams.inventory : undefined,
     }),
     effects: createFallbackEffects(normalizedMechanics, hasPersistentSelectionLanguage),
     integrations: createFallbackIntegrations(normalizedMechanics, {
@@ -649,7 +469,7 @@ function createFallbackIntentSchema(
       hasPersistentSelectionLanguage,
       uiNeeded,
       hasBridgeSyncLanguage,
-      inventoryEnabled: hasInventoryParameters(extractedParams.inventory),
+      inventoryEnabled: hasSelectionPoolInventoryParameters(extractedParams.inventory),
     }),
     uiRequirements: {
       needed: uiNeeded,
@@ -670,10 +490,7 @@ function createFallbackIntentSchema(
     (schema as any).parameters = extractedParams;
   }
 
-  return applyTalentDrawSourceModelBlock(
-    applyTalentDrawSchemaContract(schema, talentDrawAnalysis, extractedParams),
-    talentDrawSourceResolution.reasons,
-  );
+  return applySelectionPoolIntentContract(schema, selectionPoolResolution);
 }
 
 function createFallbackRequiredClarifications(
@@ -848,7 +665,14 @@ function createFallbackSelection(
   flags: {
     hasCandidatePoolLanguage: boolean;
     hasPersistentSelectionLanguage: boolean;
-    inventory?: TalentDrawInventoryParameters;
+    inventory?: {
+      enabled: boolean;
+      capacity: number;
+      storeSelectedItems: boolean;
+      blockDrawWhenFull: boolean;
+      fullMessage: string;
+      presentation: "persistent_panel";
+    };
   }
 ): IntentSchema["selection"] | undefined {
   if (!mechanics.playerChoice && !flags.hasCandidatePoolLanguage) {
@@ -954,7 +778,7 @@ function createFallbackStateModel(
   if (flags.inventoryEnabled) {
     states.push({
       id: "selected-inventory",
-      summary: "Session-only stored talents shown in the persistent inventory panel",
+      summary: "Session-only stored selections shown in the persistent inventory panel",
       owner: "session",
       lifetime: "session",
       mutationMode: "update",
@@ -1131,8 +955,6 @@ export function createWritePlan(
       hostRealizationPlan ?? undefined,
     );
 
-    appendSyntheticFeatureSourceModelEntry(writePlan, assemblyPlan);
-
     if (existingFeature) {
       const alignment = alignWritePlanWithExistingFeature(writePlan, existingFeature, mode);
       if (!alignment.ok) {
@@ -1173,37 +995,6 @@ export function createWritePlan(
     console.log(`  ❌ Generator failed: ${message}`);
     return { writePlan: null, issues: [message] };
   }
-}
-
-function appendSyntheticFeatureSourceModelEntry(
-  writePlan: WritePlan,
-  assemblyPlan: AssemblyPlan,
-): void {
-  const { sourceModel, sourceModelRef } = extractTalentDrawSourceModelFromParameters(assemblyPlan.parameters);
-  if (!sourceModel || !sourceModelRef) {
-    return;
-  }
-
-  if (writePlan.entries.some((entry) => entry.targetPath === sourceModelRef.path)) {
-    return;
-  }
-
-  writePlan.entries.push({
-    operation: "create",
-    targetPath: sourceModelRef.path,
-    contentType: "json",
-    contentSummary: `feature_source_model/talent-draw (json) talents:${sourceModel.talents.length}`,
-    sourcePattern: "rw.feature_source_model",
-    sourceModule: "feature_source_model",
-    safe: true,
-    parameters: sourceModel as unknown as Record<string, unknown>,
-    metadata: {
-      sourceModelRef,
-      adapter: "talent-draw",
-    },
-  });
-
-  writePlan.executionOrder = [...writePlan.executionOrder, writePlan.entries.length - 1];
 }
 
 function recalculateWritePlanStats(writePlan: WritePlan): void {

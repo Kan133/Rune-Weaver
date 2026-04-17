@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-17
 > Read when: deciding the minimum doc set for a task
 > Do not use for: subsystem truth by itself; this file routes readers to the right docs
 
@@ -135,6 +135,8 @@ Add when relevant:
 - [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
 - [GENERATOR-ROUTING-SCHEMA.md](/D:/Rune%20Weaver/docs/GENERATOR-ROUTING-SCHEMA.md)
 - [HOST-REALIZATION-SCHEMA.md](/D:/Rune%20Weaver/docs/HOST-REALIZATION-SCHEMA.md)
+- [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md)
+  - when the task changes Dota2 generator-side or source-backed muscle-fill boundaries
 - [PATTERN-CONTRACT-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/PATTERN-CONTRACT-VNEXT-PROPOSAL.md)
 - [REALIZATION-FAMILY-PROPOSAL.md](/D:/Rune%20Weaver/docs/REALIZATION-FAMILY-PROPOSAL.md)
 - [FILL-SLOT-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/FILL-SLOT-CONTRACT-PROPOSAL.md)
