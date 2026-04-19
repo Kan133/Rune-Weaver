@@ -2,7 +2,7 @@
  * Dota2 Adapter - Post-Generation Repair (P0)
  *
  * Repairs failed post-generation validation checks.
- * Based on Talent Draw runtime bugs - these are critical repairs
+ * Based on selection_pool runtime bugs - these are critical repairs
  * that must be applied before the game can run correctly.
  *
  * This is a barrel file that re-exports from the post-generation-repair/ directory.

@@ -4,253 +4,175 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-phase-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-18
 > Read when: aligning current lifecycle truth, scope, and MVP boundary before execution
-> Do not use for: long-term architecture proposals or roadmap sequencing by itself
+> Do not use for: long-term architecture proposals or same-day blocker truth by itself
 
 ## Purpose
 
 This document is the current authoritative execution baseline for Rune Weaver.
 
-Use it to align agents before implementation, doc writing, or task breakdown.
+If another doc conflicts with this file about current lifecycle truth, ownership boundary, or product-grade Dota2 capability, prefer this file.
 
-If another document conflicts with this file about **current product scope**, **current capability boundary**, or **current task priority**, prefer this file.
+## Current Baseline
 
-## Document Roles
+Rune Weaver is now baselined on a **governance-first feature lifecycle**, not on a grammar-first mechanic admission model.
 
-- [README.md](/D:/Rune%20Weaver/README.md) defines the **target product outcome**.
-- This file defines the **current executable MVP boundary** for agents.
-- [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md) defines how lead agents should scope and evaluate worker tasks.
-- [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md) defines how agents should proceed without repeatedly asking the user for bounded MVP decisions.
-- [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md) is the **operational entry** for day-to-day work.
-- [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md) defines **phase sequencing**, not the single source of truth for current implementation reality.
-- Long-form contract docs remain useful, but many of them are still **planning/reference** rather than shipped behavior.
+Current Dota2 baseline:
 
-## Current Milestone
+1. workspace-backed feature registry
+2. stable `featureId`
+3. owned files and bridge-entry governance
+4. product-grade `create`
+5. product-grade `update`
+6. truthful `regenerate`
+7. truthful `delete`
+8. maintenance `rollback`
+9. dependency-aware validation and final commit gating
 
-The current milestone is:
+Current non-goals:
 
-**reach the README-shaped MVP with strict host separation, feature management, and minimum governance.**
+- arbitrary host-side freeform code editing
+- undeclared cross-feature writes
+- second-host write-ready claims
+- review-free exploratory output
 
-The required MVP surface is:
-
-1. host separation
-2. workspace-backed feature registry
-3. product-grade `create`
-4. product-grade `update`
-5. product-grade `delete`
-6. minimum cross-feature conflict checks
-
-The following are explicitly **deferred** for this milestone:
-
-- `regenerate`
-- `rollback`
-- semantic incremental update
-- second host
-- full productized workbench backend/UI contract
-- broad conflict graph/platform governance
-
-## Current Code Reality
+## Current Product Reality
 
 What is true now:
 
-- host ownership boundary exists
-- workspace state exists
-- bridge export to `apps/workbench-ui/public/bridge-workspace.json` exists
-- root/build/typecheck baseline exists
-- workbench UI can visualize workspace/bridge data
+- CLI is the authoritative lifecycle path.
+- Workbench is a visualization / orchestration / evidence shell.
+- workspace is the persisted lifecycle truth.
+- feature records now persist governance and validation fields, not just file lists.
+- family/pattern retrieval is attempted first, but missing retrieval no longer hard-blocks unknown mechanics by default.
+- guided-native / exploratory asks can continue into synthesized host-native artifacts.
+- repair is bounded local repair / muscle fill, not the primary generation model.
 
-What is **not** yet product-grade:
+What is not honest to claim yet:
 
-- `create` is only partially persisted in the workbench path
-- `update` performs owned-scope artifact rewrite (not semantic incremental update)
-- `delete` removes workspace record and unloads feature artifacts (rollback remains deferred)
-- conflict governance is minimum workspace-backed governance (not broad graph governance)
-- workbench runtime flow is still narrower than the README story
+- broad mechanic generalization is already runtime-proven
+- exploratory output is already stabilized and review-free
+- War3 is a write-ready second host
 
-Agents must not overclaim these as finished product capabilities.
+## Canonical Feature Record Surface
 
-## Canonical Source Of Truth
+The minimum truthful feature record now includes:
 
-The current source of truth for feature state is:
-
-- `game/scripts/src/rune_weaver/rune-weaver.workspace.json`
-
-This is the file agents should treat as the authoritative persisted registry for Rune Weaver-owned features inside a host.
-
-Agents must not treat:
-
-- old phase notes
-- fixture data
-- mock backend results
-- transient workbench demo outputs
-
-as stronger truth than workspace state.
-
-## Non-Negotiable Product Boundaries
-
-### 1. Host Separation
-
-Rune Weaver currently owns only:
-
-- `game/scripts/src/rune_weaver/**`
-- `game/scripts/vscripts/rune_weaver/**`
-- `content/panorama/src/rune_weaver/**`
-- a small set of explicit bridge points
-
-Allowed bridge points:
-
-- `game/scripts/src/modules/index.ts`
-- `content/panorama/src/hud/script.tsx`
-
-Agents must not expand host ownership casually.
-
-### 2. Feature As The Main Product Object
-
-A `feature` is the primary managed object.
-
-It is not:
-
-- a prompt
-- a file
-- a pattern
-- a patch
-
-The minimum persisted feature record must carry:
-
-- stable `featureId`
+- `featureId`
 - `blueprintId`
 - `selectedPatterns`
 - `generatedFiles`
 - `entryBindings`
 - `revision`
+- `dependsOn`
+- `maturity`
+- `implementationStrategy`
+- `featureContract`
+- `validationStatus`
+- `dependencyEdges`
+- `commitDecision`
 - timestamps
 
-### 3. Create / Update / Delete Meanings
+Compatibility note:
 
-For the current milestone, the meanings are:
+- `gapFillBoundaries` may still exist in workspace, but it is now a compatibility projection of bounded repair surfaces.
+
+## Lifecycle Meanings
+
+Current accepted meanings:
 
 - `create`
   - create a new persisted feature
-  - write Rune Weaver-owned artifacts
-  - record patterns/files/bindings in workspace
+  - write owned artifacts
+  - persist truthful contracts, ownership, validation, and strategy metadata
 
 - `update`
   - keep the same `featureId`
-  - rewrite only the target feature's owned artifacts and allowed bridge bindings
-  - update workspace state and revision
-  - this is **not** semantic incremental update
+  - stay inside owned scope and declared dependency contracts
+  - refresh workspace truth after final gate
+
+- `regenerate`
+  - ownership-safe cleanup + rewrite path
+  - uses the same governed planning / validation / commit semantics as create and update
 
 - `delete`
-  - remove or deactivate the feature from active workspace state
-  - remove its Rune Weaver-owned artifacts
-  - refresh bridge exposure so the host no longer mounts it
-  - block or require confirmation if other features depend on it
+  - remove the feature from active workspace state
+  - remove owned artifacts
+  - revalidate dependent features before commit
 
-### 4. Deferred Lifecycle
+- `rollback`
+  - maintenance command for backing a feature out of active state
+  - still governed by ownership / dependency / validation checks
 
-`regenerate` and `rollback` are not required for the current README-target MVP.
+## Governance Rules
 
-They may remain in engineering discussions or code, but agents must treat them as:
+Non-negotiable rules:
 
-- deferred
-- non-blocking
-- not part of current acceptance
+1. workspace remains the hard registry and lifecycle authority
+2. host ownership is limited to:
+   - `game/scripts/src/rune_weaver/**`
+   - `game/scripts/vscripts/rune_weaver/**`
+   - `content/panorama/src/rune_weaver/**`
+   - explicit bridge points
+3. undeclared cross-feature writes are blocked
+4. required dependency breakage is blocked
+5. unknown mechanics should become `guided_native` or `exploratory`, not die because the catalog has not seen them before
 
-## Minimum Governance v1
+## Commit Gate Baseline
 
-The minimum governance layer only needs to do the following:
+Current final authority is the chain-end `CommitDecision`, not blueprint `ready | weak | blocked`.
 
-1. detect ownership overlap
-2. detect bridge/integration-point contention
-3. detect target ambiguity for `update`
-4. detect dependency risk for `delete`
-5. explain the issue in feature-level language
-6. block or require confirmation before write
+Current meanings:
 
-The minimum relationship vocabulary is:
+- `committable`
+  - validated templated/stabilized path
+- `exploratory`
+  - write may proceed, but `requiresReview=true`
+- `blocked`
+  - ownership, dependency, host, repair, or validation failure
 
-- `depends_on`
-- `extends`
-- `conflicts_with`
+Agents must not treat blueprint readiness alone as the final lifecycle verdict.
 
-Agents should not design a large graph governance system for this milestone.
+## LLM Boundary
 
-## Workbench / UI Reality
+Current accepted LLM placement:
 
-The current `apps/workbench-ui` should be understood as:
+- Wizard / update wizard
+- optional proposal assistance inside blueprint stage
+- artifact synthesis for fixed owned targets
+- local repair inside bounded fill contracts / owned scope
 
-- a feature/workspace visualization shell
-- a bridge/workspace consumer
-- not yet the full product backend contract
+Current rejected LLM authority:
 
-The minimum UI object set for this milestone is:
+- final feature ownership
+- final dependency contract
+- final host target selection
+- final write authority
+- final commit gate
 
-- host selection / host root
-- feature list
-- feature detail
-- operation intent (`create` / `update` / `delete`)
-- change preview
-- conflict / governance summary
-- workspace persistence state
-- host output evidence
+## Workbench Reality
 
-Do not make broader workbench panelization the first priority.
+`apps/workbench-ui` remains:
 
-## Authoritative Create Path
+- visualization shell
+- review shell
+- orchestration shell
 
-The **authoritative create path for Packet A is `apps/cli/dota2-cli.ts`** (via `dota2 run`).
+It is not the authoritative lifecycle executor.
 
-**Host Readiness Prerequisite (T149):** `dota2 init` 是 CLI authoritative create 的正式前置条件。未完成 init 的 host 不应直接进入 create。
-
-The CLI path:
-- Executes real file writes via `executeWritePlan`
-- Produces truthful `generatedFiles` from `WriteResult.createdFiles` / `WriteResult.modifiedFiles`
-- Calls `updateWorkspaceState` with actual execution results
-- Is the only path that can produce a complete, truthful workspace record
-
-The **workbench path (`apps/workbench/`)** is:
-- A Phase 3 Week-1 demo/preview tool
-- NOT the authoritative create path for Packet A acceptance
-- Does NOT execute real file writes (only calls `createWritePlan`, not `executeWritePlan`)
-- Produces `generatedFiles` from plan entries, not actual execution results
-
-For Packet A acceptance, only the CLI path is authoritative. Do not use workbench as evidence of product-grade create.
-
-## Required Read Order For Agents
+## Required Read Order
 
 1. [README.md](/D:/Rune%20Weaver/README.md)
 2. [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
 3. [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md)
 4. [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md)
 5. [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
-6. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
-7. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
+6. [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
+7. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+8. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
 
-Useful reference docs:
+Use session-sync for same-day step/blocker truth:
 
-- [PRODUCT.md](/D:/Rune%20Weaver/docs/PRODUCT.md)
-- [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md)
-- [PHASE-ROADMAP-ZH.md](/D:/Rune%20Weaver/docs/PHASE-ROADMAP-ZH.md)
-- [FEATURE-CONFLICT-GOVERNANCE-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/FEATURE-CONFLICT-GOVERNANCE-GUARDRAILS-ZH.md)
-- [FEATURE-BOUNDARY-RELATIONSHIP-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/FEATURE-BOUNDARY-RELATIONSHIP-GUARDRAILS-ZH.md)
-
-Planning-only / non-authoritative for current shipped behavior:
-
-- `WORKBENCH-*` frontend contract/plan docs
-- semantic update contracts
-- regenerate/rollback-heavy lifecycle claims
-- phase-history acceptance logs
-
-## Completed Milestone Items
-
-1. ✅ make workspace model and implementation agree
-2. ✅ make `create` persist real patterns/files/bindings
-3. ✅ replace metadata-only `update` with owned-scope artifact rewrite
-4. ✅ replace `delete = unmanage` with `delete = unload`
-5. ✅ move conflict checks from mock baseline to workspace-backed checks
-6. keep workbench/UI aligned to workspace-backed feature management rather than demo-only lifecycle panels
-
-## Current Focus
-
-Refer to [CURRENT-EXECUTION-PLAN.md](./CURRENT-EXECUTION-PLAN.md) for current priorities.
+- [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)
+- latest relevant `docs/session-sync/*mainline*.md`

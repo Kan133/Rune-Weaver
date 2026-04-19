@@ -49,6 +49,8 @@ interface CLIOptions {
   output?: string;
   temperature?: number;
   model?: string;
+  corpus?: string;
+  runs?: number;
   addonName?: string;
   mapName?: string;
   scenario?: string;
@@ -81,6 +83,17 @@ function parseArgs(): CLIOptions {
         options.input = args[0];
         args.shift();
       }
+    } else {
+      options.input = firstArg;
+      args.shift();
+    }
+  }
+
+  if (options.command === "wizard" && args.length > 0 && !args[0].startsWith("-")) {
+    const firstArg = args[0];
+    if (firstArg === "stability") {
+      options.subcommand = "stability";
+      args.shift();
     } else {
       options.input = firstArg;
       args.shift();
@@ -165,6 +178,12 @@ function parseArgs(): CLIOptions {
       case "--model":
         options.model = args[++i];
         break;
+      case "--corpus":
+        options.corpus = args[++i];
+        break;
+      case "--runs":
+        options.runs = parseInt(args[++i], 10);
+        break;
       case "--addon-name":
         options.addonName = args[++i];
         break;
@@ -228,6 +247,7 @@ function showHelp(command?: string, subcommand?: string): void {
 命令:
   create                创建新功�?(默认)
   wizard <text>         运行 Wizard 生成 IntentSchema
+  wizard stability      运行 Wizard 稳定性采样与摘要
   blueprint <text>      运行 Wizard -> Blueprint 完整链路
   dota2 run <prompt>    运行完整 Dota2 主链�?
   export-bridge         导出 workspace �?UI bridge
@@ -305,12 +325,16 @@ assembly 命令:
 
 async function runWizardCommand(options: CLIOptions): Promise<boolean> {
   const wizardOptions = {
+    subcommand: (options.subcommand || "generate") as "generate" | "stability",
     rawText: options.input || "",
     json: options.json || false,
     output: options.output,
     verbose: options.verbose,
     temperature: options.temperature,
     model: options.model,
+    corpus: options.corpus,
+    runs: options.runs,
+    hostRoot: options.host,
   };
   
   return await runWizardCLI(wizardOptions);

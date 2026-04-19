@@ -13,9 +13,12 @@
 import {
   Blueprint,
   BlueprintModule,
+  ModuleImplementationRecord,
+  ModuleSourceKind,
   PatternHint,
   SelectedPattern as BaseSelectedPattern,
   NormalizedMechanics,
+  UnresolvedModuleNeed,
 } from "../schema/types";
 import {
   getCanonicalPatternMeta,
@@ -45,7 +48,10 @@ export interface UnresolvedPattern {
 export interface PatternResolutionResult {
   patterns: ResolvedPattern[];
   unresolved: UnresolvedPattern[];
+  moduleRecords: ModuleImplementationRecord[];
+  unresolvedModuleNeeds: UnresolvedModuleNeed[];
   issues: ResolutionIssue[];
+  viable: boolean;
   complete: boolean;
 }
 
@@ -88,6 +94,8 @@ const MODULE_NEED_FAMILY_HINT = "family";
 export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
   const patterns: ResolvedPattern[] = [];
   const unresolved: UnresolvedPattern[] = [];
+  const moduleRecords: ModuleImplementationRecord[] = [];
+  const unresolvedModuleNeeds: UnresolvedModuleNeed[] = [];
   const issues: ResolutionIssue[] = [];
   const selectedById = new Map<string, ResolvedPattern>();
 
@@ -111,10 +119,13 @@ export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
             : existing.priority;
         existing.score = Math.max(existing.score || 0, result.resolved.score || 0);
       }
+
+      moduleRecords.push(buildResolvedModuleRecord(need, result.resolved, blueprint));
     }
 
     if (result.unresolved) {
       unresolved.push(result.unresolved);
+      unresolvedModuleNeeds.push(buildUnresolvedModuleNeed(need, blueprint, result.unresolved));
       issues.push({
         code: "MODULE_NEED_UNRESOLVED",
         scope: "assembly",
@@ -143,23 +154,41 @@ export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
     return a.patternId.localeCompare(b.patternId);
   });
 
+  const unresolvedNeedsAreSynthesisSafe =
+    unresolvedModuleNeeds.length > 0 &&
+    unresolvedModuleNeeds.every((need) => isSynthesisSafeUnresolvedNeed(need, blueprint));
+
   if (selectedPatterns.length === 0) {
-    issues.push({
-      code: "NO_PATTERNS_RESOLVED",
-      scope: "assembly",
-      severity: "error",
-      message: "No patterns could be resolved from capability-fit evaluation",
-    });
+    if (unresolvedNeedsAreSynthesisSafe) {
+      issues.push({
+        code: "NO_PATTERNS_RESOLVED",
+        scope: "assembly",
+        severity: "warning",
+        message:
+          "No canonical patterns were resolved; unresolved module needs remain synthesis-safe and can continue through module synthesis",
+      });
+    } else {
+      issues.push({
+        code: "NO_PATTERNS_RESOLVED",
+        scope: "assembly",
+        severity: "error",
+        message: "No patterns could be resolved from capability-fit evaluation",
+      });
+    }
   }
+
+  const hasError = issues.some((issue) => issue.severity === "error");
 
   return {
     patterns: selectedPatterns,
     unresolved,
+    moduleRecords,
+    unresolvedModuleNeeds,
     issues,
+    viable: unresolvedNeedsAreSynthesisSafe || !hasError,
     complete:
-      selectedPatterns.length > 0 &&
-      unresolved.length === 0 &&
-      !issues.some((issue) => issue.severity === "error"),
+      unresolvedModuleNeeds.length === 0 &&
+      !hasError,
   };
 }
 
@@ -178,9 +207,12 @@ function resolveFromNeed(
       unresolved: {
         requestedId: `<module:${need.moduleId}>`,
         moduleId: need.moduleId,
-        reason: `No admitted pattern satisfies required capabilities for module '${need.semanticRole}'`,
+        reason:
+          `No canonical pattern satisfies required capabilities for module '${need.semanticRole}'. ` +
+          "Continue with module synthesis from this module contract.",
         missingCapabilities: [...need.requiredCapabilities],
-        suggestedAlternative: "Add an admitted pattern family path or mark the mechanic unsupported",
+        suggestedAlternative:
+          "Use module synthesis to implement this module need with host-native code guided by required capabilities, outputs, and integration hints",
       },
     };
   }
@@ -203,9 +235,9 @@ function resolveFromNeed(
         moduleId: need.moduleId,
         reason:
           `Patterns matched required capabilities for module '${need.semanticRole}' ` +
-          `but none satisfied output/state/integration compatibility strongly enough`,
+          `but compatibility across outputs/state/integration remained weak for deterministic selection`,
         suggestedAlternative:
-          "Refine the admitted pattern metadata or narrow the declared ModuleNeed compatibility surface",
+          "Proceed with module synthesis for this module need while preserving declared outputs, state expectations, and integration hints",
       },
     };
   }
@@ -228,6 +260,156 @@ function resolveFromNeed(
     },
     unresolved: null,
   };
+}
+
+function buildResolvedModuleRecord(
+  need: RuntimeModuleNeed,
+  resolved: ResolvedPattern,
+  blueprint: Blueprint,
+): ModuleImplementationRecord {
+  const existingRecord = blueprint.moduleRecords?.find((record) => record.moduleId === need.moduleId);
+  const sourceKind: ModuleSourceKind =
+    existingRecord?.sourceKind === "family" ? "family" : "pattern";
+  const selectedPatternIds = Array.from(
+    new Set([...(existingRecord?.selectedPatternIds || []), resolved.patternId]),
+  );
+  const fillContractIds = (existingRecord?.fillContractIds && existingRecord.fillContractIds.length > 0)
+    ? [...existingRecord.fillContractIds]
+    : (blueprint.fillContracts || [])
+        .filter((fillContract) => fillContract.targetModuleId === need.moduleId)
+        .map((fillContract) => fillContract.boundaryId);
+  return {
+    moduleId: need.moduleId,
+    role: need.semanticRole,
+    category: existingRecord?.category || need.sourceModule?.category,
+    sourceKind,
+    familyId: existingRecord?.familyId,
+    patternId: resolved.patternId,
+    selectedPatternIds,
+    artifactTargets: existingRecord?.artifactTargets || deriveArtifactTargetsFromNeed(need),
+    ownedPaths: existingRecord?.ownedPaths || [],
+    fillContractIds,
+    reviewRequired: false,
+    requiresReview: false,
+    reviewReasons: [],
+    implementationStrategy:
+      sourceKind === "family"
+        ? "family"
+        : "pattern",
+    maturity:
+      sourceKind === "family" || sourceKind === "pattern"
+        ? "templated"
+        : existingRecord?.maturity,
+    outputKinds: existingRecord?.outputKinds,
+    artifactPaths: existingRecord?.artifactPaths,
+    synthesizedArtifactIds: existingRecord?.synthesizedArtifactIds,
+    resolvedFrom: sourceKind === "family" ? "family" : "pattern",
+    summary:
+      sourceKind === "family"
+        ? `Family-backed module '${need.semanticRole}' resolved to reusable pattern '${resolved.patternId}'`
+        : `Resolved reusable implementation for module '${need.semanticRole}'`,
+    requiredOutputs: [...need.requiredOutputs],
+    integrationHints: [...need.integrationHints],
+    stateExpectations: [...need.stateExpectations],
+    metadata: {
+      ...(existingRecord?.metadata || {}),
+      resolutionSource: resolved.source,
+      score: resolved.score,
+    },
+  };
+}
+
+function buildUnresolvedModuleNeed(
+  need: RuntimeModuleNeed,
+  blueprint: Blueprint,
+  unresolved: UnresolvedPattern,
+): UnresolvedModuleNeed {
+  const existingRecord = blueprint.moduleRecords?.find((record) => record.moduleId === need.moduleId);
+  return {
+    moduleId: need.moduleId,
+    semanticRole: need.semanticRole,
+    category: existingRecord?.category || need.sourceModule?.category,
+    reason: unresolved.reason,
+    requiredCapabilities: [...need.requiredCapabilities],
+    optionalCapabilities: [...need.optionalCapabilities],
+    requiredOutputs: [...need.requiredOutputs],
+    artifactTargets: existingRecord?.artifactTargets || deriveArtifactTargetsFromNeed(need),
+    ownedScopeHints: existingRecord?.ownedPaths || [],
+    stateExpectations: [...need.stateExpectations],
+    integrationHints: [...need.integrationHints],
+    invariants: [...need.invariants],
+    boundedVariability: [...need.boundedVariability],
+    explicitPatternHints: [...need.explicitPatternHints],
+    prohibitedTraits: [...need.prohibitedTraits],
+    suggestedAlternative: unresolved.suggestedAlternative,
+    strategy: resolveUnresolvedStrategy(blueprint, existingRecord),
+    familyId: existingRecord?.familyId,
+    source: need.source,
+  };
+}
+
+function deriveArtifactTargetsFromNeed(need: RuntimeModuleNeed): string[] {
+  const targets = new Set<string>();
+  for (const output of need.requiredOutputs) {
+    if (/ui|panorama/i.test(output)) {
+      targets.add("ui");
+    } else if (/kv|config/i.test(output)) {
+      targets.add("config");
+    } else if (/lua/i.test(output)) {
+      targets.add("lua");
+    } else if (/bridge|sync/i.test(output)) {
+      targets.add("bridge");
+    } else if (/shared/i.test(output)) {
+      targets.add("shared");
+    } else {
+      targets.add("server");
+    }
+  }
+
+  if (targets.size === 0) {
+    switch (need.sourceModule?.category) {
+      case "ui":
+        targets.add("ui");
+        break;
+      case "integration":
+        targets.add("bridge");
+        break;
+      default:
+        targets.add("server");
+        break;
+    }
+  }
+
+  return [...targets];
+}
+
+function resolveUnresolvedStrategy(
+  blueprint: Blueprint,
+  existingRecord?: ModuleImplementationRecord,
+): NonNullable<UnresolvedModuleNeed["strategy"]> {
+  if (existingRecord?.sourceKind === "family" || existingRecord?.sourceKind === "pattern") {
+    return "guided_native";
+  }
+
+  return blueprint.implementationStrategy || blueprint.designDraft?.chosenImplementationStrategy || "exploratory";
+}
+
+function isSynthesisSafeUnresolvedNeed(
+  unresolvedNeed: UnresolvedModuleNeed,
+  blueprint: Blueprint,
+): boolean {
+  if (blueprint.commitDecision?.outcome === "blocked") {
+    return false;
+  }
+
+  if (
+    blueprint.commitDecision &&
+    (!blueprint.commitDecision.canAssemble || !blueprint.commitDecision.canWriteHost)
+  ) {
+    return false;
+  }
+
+  return unresolvedNeed.strategy === "guided_native" || unresolvedNeed.strategy === "exploratory";
 }
 
 function extractRuntimeModuleNeeds(

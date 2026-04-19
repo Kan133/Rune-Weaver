@@ -75,6 +75,23 @@ function testUpdateClearsSourceBackedFieldsWhenNoOwnedArtifactRemains(): void {
   assert.equal(resolved.featureAuthoring, null);
 }
 
+function testUpdateCanRehydrateLifecycleFieldsFromBlueprintAuthoring(): void {
+  const featureAuthoring = createSelectionPoolFeatureAuthoring();
+  const resolved = resolveSelectionPoolWorkspaceFields(
+    createWritePlan(),
+    "talent_draw_demo",
+    "update",
+    featureAuthoring,
+  );
+
+  assert.equal(resolved.sourceModel?.adapter, "selection_pool");
+  assert.equal(
+    resolved.sourceModel?.path,
+    "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+  );
+  assert.equal(resolved.featureAuthoring?.profile, "selection_pool");
+}
+
 function testResolverUsesWritePlanMetadataWhenArtifactEntryExists(): void {
   const writePlan = createWritePlan();
   const featureAuthoring = createSelectionPoolFeatureAuthoring();
@@ -95,6 +112,7 @@ function testResolverUsesWritePlanMetadataWhenArtifactEntryExists(): void {
 
 testCreateDerivesLifecycleFieldsFromBlueprintAuthoring();
 testUpdateClearsSourceBackedFieldsWhenNoOwnedArtifactRemains();
+testUpdateCanRehydrateLifecycleFieldsFromBlueprintAuthoring();
 testResolverUsesWritePlanMetadataWhenArtifactEntryExists();
 
 console.log("adapters/dota2/families/selection-pool/lifecycle.test.ts passed");

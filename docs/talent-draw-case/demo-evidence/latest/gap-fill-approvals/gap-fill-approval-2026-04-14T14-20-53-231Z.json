@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "kind": "gap-fill-approval",
+  "approvalId": "4b46ba2b-e7e3-41dc-86dc-882d08162f64",
+  "createdAt": "2026-04-14T14:20:53.230Z",
+  "hostRoot": "D:\\test3",
+  "boundaryId": "weighted_pool.selection_policy",
+  "instruction": "把候选抽取策略改成：每次打开 F4 时，优先从不同稀有度中各抽一个候选，避免同一轮出现重复稀有度；若可用稀有度不足，再按现有权重补齐剩余槽位；已获得条目仍不得再次出现，并保留现有触发键、桥接、事件通道和 UI 交互。",
+  "instructionSummary": "把候选抽取策略改成：每次打开 F4 时，优先从不同稀有度中各抽一个候选，避免同一轮出现重复稀有度；若可用稀有度不足，再按现有权重补齐剩余槽位；已获得条目仍不得再次出现，并保留现有触发键、桥接、事件通道和 UI 交互。",
+  "targetFile": "adapters/dota2/generator/server/weighted-pool.ts",
+  "targetFileHash": "9e815cb2031ca2132e27aa1be6c807940cc3a59eaa10577bb86dde89c70e4a5e",
+  "patchPlanSummary": "修改 drawForSelection 方法，实现按稀有度分层抽取策略：优先从不同稀有度各抽一个候选，避免同轮重复稀有度；稀有度不足时按现有权重补齐；保留 forbid 重复策略与 session 状态过滤。 (1 op)",
+  "patchPlanHash": "0c88953f74c77cc1ec44dc6953b5264346ec7323689bdd042d7433e36f57aa36",
+  "decision": {
+    "decision": "require_confirmation",
+    "riskLevel": "medium",
+    "reasons": [
+      {
+        "code": "wide_line_range",
+        "category": "approval_required",
+        "message": "Operation target 'lines 0091-0167' spans 77 lines, above the auto-apply limit of 12."
+      },
+      {
+        "code": "large_replacement",
+        "category": "approval_required",
+        "message": "Replacement for lines 0091-0167 adds 114 lines, above the auto-apply limit of 12."
+      }
+    ],
+    "userSummary": "Patch stays within the boundary, but it is large or complex enough to require confirmation.",
+    "canApplyDirectly": false,
+    "failureCategories": [
+      "approval_required"
+    ]
+  },
+  "decisionRecord": {
+    "requestedBoundaryId": "weighted_pool.selection_policy",
+    "requestedBoundaryLabel": "Weighted pool selection policy",
+    "targetFile": "adapters/dota2/generator/server/weighted-pool.ts",
+    "originalInstruction": "把候选抽取策略改成：每次打开 F4 时，优先从不同稀有度中各抽一个候选，避免同一轮出现重复稀有度；若可用稀有度不足，再按现有权重补齐剩余槽位；已获得条目仍不得再次出现，并保留现有触发键、桥接、事件通道和 UI 交互。",
+    "source": "user_provided",
+    "canonicalAssistUsed": false,
+    "assumptionsMade": [
+      "Do not introduce persistence or session ownership changes."
+    ],
+    "userInputsUsed": [
+      "把候选抽取策略改成：每次打开 F4 时，优先从不同稀有度中各抽一个候选，避免同一轮出现重复稀有度；若可用稀有度不足，再按现有权重补齐剩余槽位；已获得条目仍不得再次出现，并保留现有触发键、桥接、事件通道和 UI 交互。"
+    ],
+    "inferredInputsUsed": [],
+    "approvalDecision": "require_confirmation",
+    "failureCategories": [
+      "approval_required"
+    ],
+    "recommendedNextStep": "Approve this record before applying the patch."
+  },
+  "patchPlan": {
+    "boundaryId": "weighted_pool.selection_policy",
+    "targetFile": "adapters/dota2/generator/server/weighted-pool.ts",
+    "summary": "修改 drawForSelection 方法，实现按稀有度分层抽取策略：优先从不同稀有度各抽一个候选，避免同轮重复稀有度；稀有度不足时按现有权重补齐；保留 forbid 重复策略与 session 状态过滤。",
+    "operations": [
+      {
+        "kind": "replace",
+        "target": "lines 0091-0167",
+        "reason": "替换原有的纯权重随机抽取逻辑为分层稀有度优先策略，确保每轮抽取优先覆盖不同稀有度，同时保留 session 状态过滤和 forbid 重复检查",
+        "excerpt": "drawForSelection method with weighted random only",
+        "replacement": "  /**\n   * Draw multiple candidates for selection (without replacement)\n   * Tier-diverse first: one from each available tier, then weight-based fill.\n   * Supports duplicatePolicy=\"forbid\" and session state filtering.\n   */\n  drawForSelection(count: number = ${choiceCount}): T[] {\n    if (this.items.length === 0) {\n      print(`[Rune Weaver] ${className}: No items in pool`);\n      return [];\n    }\n\n    const result: T[] = [];\n    const drawnIds = new Set<string>();\n    const ownedIds = new Set<string>(${hasSessionState ? \"this.sessionState.ownedTalentIds\" : \"[]\"});\n\n    // Filter available items respecting session state and ownership\n    let availableItems = this.items.filter(item => {\n      const id = (item.item as any).id as string;\n      if (ownedIds.has(id)) return false;\n      ${hasSessionState ? `if (!this.sessionState.remainingTalentIds.includes(id)) return false;` : \"\"}\n      return true;\n    });\n\n    if (availableItems.length === 0) {\n      print(`[Rune Weaver] ${className}: No available items in session pool`);\n      return [];\n    }\n\n    // Group by tier for tier-diverse selection\n    const tierGroups = new Map<number, WeightedItem<T>[]>();\n    for (const item of availableItems) {\n      const tier = item.tier ?? 0;\n      if (!tierGroups.has(tier)) tierGroups.set(tier, []);\n      tierGroups.get(tier)!.push(item);\n    }\n\n    const sortedTiers = Array.from(tierGroups.keys()).sort((a, b) => a - b);\n\n    // Phase 1: Draw one from each tier until count reached or tiers exhausted\n    for (const tier of sortedTiers) {\n      if (result.length >= count) break;\n      const group = tierGroups.get(tier)!.filter(item => {\n        const id = (item.item as any).id as string;\n        return !drawnIds.has(id);\n      });\n      if (group.length === 0) continue;\n\n      const tierTotalWeight = group.reduce((sum, item) => sum + item.weight, 0);\n      if (tierTotalWeight <= 0) continue;\n\n      let random = RandomFloat(0, tierTotalWeight);\n      let drawn: WeightedItem<T> | null = null;\n      for (const item of group) {\n        random -= item.weight;\n        if (random <= 0) {\n          drawn = item;\n          break;\n        }\n      }\n\n      if (drawn) {\n        const itemId = (drawn.item as any).id as string;\n        if (\"${duplicatePolicy}\" === \"forbid\" && drawnIds.has(itemId)) {\n          continue;\n        }\n        result.push(drawn.item);\n        drawnIds.add(itemId);\n        // Remove from availableItems to prevent re-selection in phase 2\n        const idx = availableItems.indexOf(drawn);\n        if (idx > -1) availableItems.splice(idx, 1);\n      }\n    }\n\n    // Phase 2: Weight-based fill for remaining slots\n    while (result.length < count && availableItems.length > 0) {\n      if (\"${duplicatePolicy}\" === \"forbid\" && drawnIds.size >= availableItems.length + result.length) {\n        print(`[Rune Weaver] ${className}: Cannot draw more unique items (duplicatePolicy=\"forbid\")`);\n        break;\n      }\n\n      const currentTotalWeight = availableItems.reduce((sum, item) => sum + item.weight, 0);\n      if (currentTotalWeight <= 0) {\n        print(`[Rune Weaver] ${className}: No weight available in pool`);\n        break;\n      }\n\n      let random = RandomFloat(0, currentTotalWeight);\n      let drawn: WeightedItem<T> | null = null;\n      for (const item of availableItems) {\n        random -= item.weight;\n        if (random <= 0) {\n          drawn = item;\n          break;\n        }\n      }\n\n      if (drawn) {\n        const itemId = (drawn.item as any).id as string;\n        if (\"${duplicatePolicy}\" === \"forbid\" && drawnIds.has(itemId)) {\n          continue;\n        }\n        result.push(drawn.item);\n        drawnIds.add(itemId);\n        const idx = availableItems.indexOf(drawn);\n        if (idx > -1) availableItems.splice(idx, 1);\n      }\n    }\n\n    ${hasSessionState ? `// Update currentChoiceIds in session state\n    this.sessionState.currentChoiceIds = result.map(item => (item as any).id);` : \"\"}\n\n    return result;\n  }\n"
+      }
+    ],
+    "notes": [
+      "保留 sessionState.remainingTalentIds 和 ownedTalentIds 过滤逻辑，确保已获得条目不会再次出现",
+      "保留 duplicatePolicy=\"forbid\" 检查，防止同一轮内重复",
+      "不修改 host routing、event channels、UI interaction 或触发键（F4）的桥接代码",
+      "不修改 pool contract（add/remove/draw 等基础方法签名与行为）",
+      "不引入未声明的持久化语义，session 状态仍维持原有生命周期"
+    ]
+  },
+  "recordHash": "950a01c7639349d70bb292e27e23865b071be8359dae1f70d294675dca2fb44c"
+}

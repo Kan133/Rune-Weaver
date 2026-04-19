@@ -86,6 +86,26 @@ try {
   assert(hudStyles.includes(".rune-weaver-root"), "root style block should still exist");
   console.log("✓ Test 4 passed");
 
+  console.log("Test 5: injectHostEntryBridge can create missing host entry shells");
+  const missingEntryHost = mkdtempSync(join(tmpdir(), "rw-bridge-missing-"));
+  try {
+    mkdirSync(join(missingEntryHost, "game", "scripts", "src", "rune_weaver", "generated", "server"), { recursive: true });
+    mkdirSync(join(missingEntryHost, "content", "panorama", "src", "rune_weaver", "generated", "ui"), { recursive: true });
+    const ensureMissingResult = ensureBridgeFiles(missingEntryHost);
+    assert(ensureMissingResult.success, "ensureBridgeFiles should succeed for missing-entry host");
+
+    const missingInjectionResult = injectHostEntryBridge(missingEntryHost);
+    assert(missingInjectionResult.success, "injectHostEntryBridge should create missing host entries");
+
+    const createdServerEntry = readFileSync(join(missingEntryHost, "game", "scripts", "src", "modules", "index.ts"), "utf-8");
+    const createdUIEntry = readFileSync(join(missingEntryHost, "content", "panorama", "src", "hud", "script.tsx"), "utf-8");
+    assert(createdServerEntry.includes("activateRuneWeaverModules();"), "created server entry should mount Rune Weaver bridge");
+    assert(createdUIEntry.includes("<RuneWeaverHUDRoot />"), "created UI entry should mount Rune Weaver HUD root");
+    console.log("✓ Test 5 passed");
+  } finally {
+    rmSync(missingEntryHost, { recursive: true, force: true });
+  }
+
   console.log("=== All tests passed ===");
 } finally {
   rmSync(hostRoot, { recursive: true, force: true });

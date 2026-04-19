@@ -37,11 +37,36 @@ export async function runDota2RuntimeValidation(
   if (!shouldRun) {
     console.log(`  ⏭️  Skipped (${skipReason})`);
     defaultResult.limitations = [`Skipped due to ${skipReason}`];
+    defaultResult.skipped = true;
     return defaultResult;
   }
 
   try {
     const runtimeArtifact = await validateHostRuntime(options.hostRoot);
+    if (!runtimeArtifact.overall.checked) {
+      const limitations = runtimeArtifact.overall.limitations.length > 0
+        ? runtimeArtifact.overall.limitations
+        : ["Runtime validation skipped because no runtime validation prerequisites were available."];
+
+      console.log("  ⏭️  Runtime validation skipped");
+      if (limitations.length > 0) {
+        console.log("  Limitations:");
+        for (const limitation of limitations) {
+          console.log(`    - ${limitation}`);
+        }
+      }
+
+      return {
+        success: true,
+        serverPassed: true,
+        uiPassed: true,
+        serverErrors: 0,
+        uiErrors: 0,
+        limitations,
+        skipped: true,
+      };
+    }
+
     const runtimeValidationResult: Dota2RuntimeValidationStage = {
       success: runtimeArtifact.overall.success,
       serverPassed: runtimeArtifact.overall.serverPassed,

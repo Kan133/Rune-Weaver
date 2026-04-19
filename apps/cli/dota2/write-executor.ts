@@ -222,6 +222,7 @@ export async function executeWrite(
   }
 
   const result = await executeWritePlan(executorPlan, executorOptions);
+  const dryRunExecution = executorOptions.dryRun === true;
 
   console.log("\n  Execution Result:");
   console.log(`    Success: ${result.success}`);
@@ -231,9 +232,12 @@ export async function executeWrite(
     console.log("    (Use --force to override)");
   }
 
-  console.log(`    Executed: ${result.executed.length}`);
+  console.log(`    ${dryRunExecution ? "Planned" : "Executed"}: ${result.executed.length}`);
   console.log(`    Skipped: ${result.skipped.length}`);
   console.log(`    Failed: ${result.failed.length}`);
+  if (dryRunExecution) {
+    console.log("    Dry-run: no host files were written");
+  }
 
   if (result.createdFiles.length > 0 && options.verbose) {
     console.log("    Created Files:");

@@ -11,6 +11,12 @@ import {
   Blueprint,
   BlueprintModule,
   BlueprintConnection,
+  CommitDecision,
+  DesignDraft,
+  FeatureContract,
+  FeatureDependencyEdge,
+  FeatureMaturity,
+  ImplementationStrategy,
   BlueprintNormalizationReport,
   BlueprintProposal,
   FinalBlueprint,
@@ -24,6 +30,8 @@ import {
   PatternHint,
   UIDesignSpec,
   UISurfaceSpec,
+  UpdateIntent,
+  ValidationStatus,
 } from "../schema/types";
 import { BlueprintBuilderConfig, BlueprintBuildResult } from "./types";
 import { isCanonicalPatternAvailable, CORE_PATTERN_IDS } from "../patterns/canonical-patterns";
@@ -46,18 +54,13 @@ import {
   getProposalStatus,
   getSchemaReadiness,
 } from "./blueprint-status-policy";
-import { isResolvableExistingSeamIssue } from "./clarification-policy";
 import {
-  deriveFeatureAuthoringProposal,
-  normalizeFeatureAuthoringProposal,
-  type FeatureAuthoringNormalizationResult,
-} from "./feature-authoring";
-import {
-  buildSelectionPoolFillContracts,
-  compileSelectionPoolModuleParameters,
-} from "../../adapters/dota2/families/selection-pool/index.js";
-import { assessSemanticCompleteness } from "./seam-authority";
+  assessSemanticCompleteness,
+  classifySchedulerTimerRisk,
+  detectSelectionFlowAsk,
+} from "./seam-authority";
 import type { SemanticAssessment } from "./seam-authority";
+import { stripNegativeConstraintFragments } from "./semantic-lexical";
 
 function isPatternAvailable(patternId: string): boolean {
   return isCanonicalPatternAvailable(patternId);
@@ -85,14 +88,17 @@ export class BlueprintBuilder {
    * @param schema 已验证的 IntentSchema
    * @returns 构建结果
    */
-  build(schema: IntentSchema): BlueprintBuildResult {
+  build(
+    schema: IntentSchema,
+  ): BlueprintBuildResult {
     try {
       const proposal = this.buildProposal(schema);
       const normalization = this.normalizeProposal(schema, proposal);
       const finalBlueprint = normalization.finalBlueprint;
       const issues = [...normalization.report.issues];
+      const canContinue = finalBlueprint.commitDecision?.canAssemble ?? finalBlueprint.status === "ready";
 
-      if (finalBlueprint.status !== "ready") {
+      if (!canContinue) {
         return {
           success: false,
           blueprint: finalBlueprint,
@@ -135,7 +141,7 @@ export class BlueprintBuilder {
     const patternHints = this.buildPatternHints(schema);
     const uiDesignSpec = this.buildUIDesignSpec(schema);
     const validations = this.buildValidationContracts(schema);
-    const assumptions = [...schema.resolvedAssumptions];
+    const assumptions = [...(schema.resolvedAssumptions || [])];
 
     return {
       id: this.generateBlueprintId(schema),
@@ -158,15 +164,13 @@ export class BlueprintBuilder {
     };
   }
 
-  private buildProposal(schema: IntentSchema): BlueprintProposal {
+  private buildProposal(
+    schema: IntentSchema,
+  ): BlueprintProposal {
     const candidate = this.doBuild(schema);
     const readiness = getSchemaReadiness(schema);
     const issues = collectProposalIssues(schema);
-    const blockedBy = collectProposalBlockers(schema);
-    const featureAuthoringProposal = deriveFeatureAuthoringProposal(schema);
-    const fillIntentCandidates = Array.isArray(schema.fillIntentCandidates)
-      ? schema.fillIntentCandidates
-      : undefined;
+    const blockedBy = [...collectProposalBlockers(schema)];
 
     const proposedModules: ProposalModule[] = candidate.modules.map((module) => ({
       id: module.id,
@@ -198,42 +202,68 @@ export class BlueprintBuilder {
       proposedModules,
       proposedConnections,
       confidence: this.getProposalConfidence(proposedModules, readiness),
-      notes: [...schema.resolvedAssumptions],
+      notes: [...(schema.resolvedAssumptions || [])],
       issues,
       uncertainties: schema.uncertainties?.map((item) => item.summary) || [],
       blockedBy,
       candidatePatternFamilies: this.collectCandidatePatternFamilies(candidate),
-      ...(featureAuthoringProposal ? { featureAuthoringProposal } : {}),
-      ...(fillIntentCandidates ? { fillIntentCandidates } : {}),
     };
+  }
+
+  buildUpdate(
+    updateIntent: UpdateIntent,
+  ): BlueprintBuildResult {
+    try {
+      const effectiveSchema = this.buildEffectiveUpdateSchema(updateIntent);
+      const proposal = this.buildProposal(effectiveSchema);
+      const normalization = this.normalizeProposal(effectiveSchema, proposal);
+      const finalBlueprint = normalization.finalBlueprint;
+      const issues = [...normalization.report.issues];
+      const canContinue = finalBlueprint.commitDecision?.canAssemble ?? finalBlueprint.status === "ready";
+
+      if (!canContinue) {
+        return {
+          success: false,
+          blueprint: finalBlueprint,
+          finalBlueprint,
+          blueprintProposal: proposal,
+          normalizationReport: normalization.report,
+          issues,
+        };
+      }
+
+      return {
+        success: true,
+        blueprint: finalBlueprint,
+        finalBlueprint,
+        blueprintProposal: proposal,
+        normalizationReport: normalization.report,
+        issues,
+      };
+    } catch (error) {
+      const issues: ValidationIssue[] = [];
+      issues.push({
+        code: "BLUEPRINT_UPDATE_BUILD_ERROR",
+        scope: "blueprint",
+        severity: "error",
+        message: `构建 Update Blueprint 时发生错误: ${error instanceof Error ? error.message : String(error)}`,
+        path: "builder.update",
+      });
+      return { success: false, issues };
+    }
   }
 
   private normalizeProposal(
     schema: IntentSchema,
-    proposal: BlueprintProposal
+    proposal: BlueprintProposal,
   ): { finalBlueprint: FinalBlueprint; report: BlueprintNormalizationReport } {
     const candidate = this.doBuild(schema);
-    const normalizedFeatureAuthoring = normalizeFeatureAuthoringProposal(
-      schema,
-      proposal.featureAuthoringProposal,
-    );
-    const modules = this.applyFeatureAuthoringToModules(
-      this.canonicalizeModules(candidate.modules),
-      normalizedFeatureAuthoring,
-    );
+    const modules = this.canonicalizeModules(candidate.modules);
     const connections = this.canonicalizeConnections(candidate.connections, modules);
     const moduleNeeds = buildModuleNeeds(schema, modules);
     const assessment = assessSemanticCompleteness(schema, modules, moduleNeeds, proposal);
     const preliminaryStatus = getNormalizedStatus(schema, proposal, modules, assessment);
-    const status: NormalizedBlueprintStatus =
-      normalizedFeatureAuthoring.blockers.length > 0
-        ? "blocked"
-        : normalizedFeatureAuthoring.warnings.length > 0 && preliminaryStatus === "ready"
-          ? "weak"
-          : preliminaryStatus;
-    const fillContracts = normalizedFeatureAuthoring.featureAuthoring
-      ? buildSelectionPoolFillContracts(modules)
-      : undefined;
+    const status: NormalizedBlueprintStatus = preliminaryStatus;
     const issues = this.collectNormalizationIssues(
       schema,
       proposal,
@@ -241,11 +271,22 @@ export class BlueprintBuilder {
       moduleNeeds,
       status,
       assessment,
-      normalizedFeatureAuthoring,
     );
     const blockers = issues
       .filter((issue) => issue.severity === "error")
       .map((issue) => issue.message);
+    const designDraft = this.buildDesignDraft(candidate, proposal, assessment, status);
+    const implementationStrategy = designDraft.chosenImplementationStrategy;
+    const featureContract = this.buildFeatureContract(schema);
+    const dependencyEdges = this.buildDependencyEdges(schema);
+    const validationStatus = this.buildValidationStatus(status, issues);
+    const commitDecision = this.buildCommitDecision(
+      status,
+      implementationStrategy,
+      issues,
+      assessment,
+    );
+    const maturity = this.determineFeatureMaturity(implementationStrategy, status);
 
     const finalBlueprint: FinalBlueprint = {
       ...candidate,
@@ -255,14 +296,19 @@ export class BlueprintBuilder {
       status,
       moduleNeeds,
       proposalId: proposal.id,
-      readyForAssembly: status === "ready" && issues.every((issue) => issue.severity !== "error"),
-      ...(normalizedFeatureAuthoring.featureAuthoring ? { featureAuthoring: normalizedFeatureAuthoring.featureAuthoring } : {}),
-      ...(fillContracts ? { fillContracts } : {}),
+      readyForAssembly: commitDecision.canAssemble,
+      designDraft,
+      maturity,
+      implementationStrategy,
+      featureContract,
+      validationStatus,
+      dependencyEdges,
+      commitDecision,
     };
 
     const report: BlueprintNormalizationReport = {
       status,
-      notes: [...proposal.notes, ...assessment.notes, ...normalizedFeatureAuthoring.notes],
+      notes: [...proposal.notes, ...assessment.notes, ...(designDraft.notes || [])],
       issues,
       blockers,
     };
@@ -270,37 +316,518 @@ export class BlueprintBuilder {
     return { finalBlueprint, report };
   }
 
-  private applyFeatureAuthoringToModules(
-    modules: BlueprintModule[],
-    featureAuthoring: FeatureAuthoringNormalizationResult,
-  ): BlueprintModule[] {
-    if (!featureAuthoring.featureAuthoring || featureAuthoring.featureAuthoring.profile !== "selection_pool") {
-      return modules;
+  private buildDesignDraft(
+    candidate: Blueprint,
+    proposal: BlueprintProposal,
+    assessment: SemanticAssessment,
+    status: NormalizedBlueprintStatus,
+  ): DesignDraft {
+    const retrievedPatternCandidates = Array.from(
+      new Set([
+        ...candidate.patternHints.flatMap((hint) => hint.suggestedPatterns || []),
+        ...proposal.proposedModules.flatMap((module) => module.proposedPatternIds || []),
+      ]),
+    );
+    const retrievedFamilyCandidates = Array.from(
+      new Set(proposal.candidatePatternFamilies || []),
+    );
+    const chosenImplementationStrategy = this.determineImplementationStrategy(
+      status,
+      retrievedFamilyCandidates,
+      retrievedPatternCandidates,
+    );
+
+    return {
+      retrievedFamilyCandidates,
+      retrievedPatternCandidates,
+      reuseConfidence: this.determineReuseConfidence(
+        retrievedFamilyCandidates,
+        retrievedPatternCandidates,
+      ),
+      chosenImplementationStrategy,
+      artifactTargets: this.deriveArtifactTargets(candidate),
+      notes: assessment.warnings,
+    };
+  }
+
+  private determineImplementationStrategy(
+    status: NormalizedBlueprintStatus,
+    families: string[],
+    patterns: string[],
+  ): ImplementationStrategy {
+    if (families.length > 0 && status === "ready") {
+      return "family";
+    }
+    if (patterns.length > 0 && status === "ready") {
+      return "pattern";
+    }
+    if (patterns.length > 0) {
+      return "guided_native";
+    }
+    return "exploratory";
+  }
+
+  private determineReuseConfidence(
+    families: string[],
+    patterns: string[],
+  ): DesignDraft["reuseConfidence"] {
+    if (families.length > 0) {
+      return "high";
+    }
+    if (patterns.length > 0) {
+      return "medium";
+    }
+    return "low";
+  }
+
+  private deriveArtifactTargets(candidate: Blueprint): string[] {
+    const targets = new Set<string>(["server"]);
+
+    if (candidate.modules.some((module) => module.category === "ui")) {
+      targets.add("ui");
     }
 
-    const compiled = compileSelectionPoolModuleParameters(featureAuthoring.featureAuthoring);
-    return modules.map((module) => {
-      const override =
-        module.role === "input_trigger"
-          ? compiled.input_trigger
-          : module.role === "weighted_pool"
-            ? compiled.weighted_pool
-            : module.role === "selection_flow"
-              ? compiled.selection_flow
-              : module.role === "selection_modal"
-                ? compiled.selection_modal
-                : undefined;
+    if (candidate.modules.some((module) => module.category === "effect")) {
+      targets.add("lua");
+      targets.add("config");
+    }
 
-      return override
+    if (candidate.modules.some((module) => module.category === "data")) {
+      targets.add("shared");
+    }
+
+    return Array.from(targets);
+  }
+
+  private buildFeatureContract(schema: IntentSchema): FeatureContract {
+    const exports = new Map<string, FeatureContract["exports"][number]>();
+    const consumes = new Map<string, FeatureContract["consumes"][number]>();
+    const integrationSurfaces = new Set<string>();
+    const stateScopes: FeatureContract["stateScopes"] = (schema.stateModel?.states || []).map((state) => ({
+      stateId: state.id,
+      scope:
+        state.lifetime === "persistent"
+          ? "persistent"
+          : state.lifetime === "session"
+            ? "session"
+            : "local",
+      owner:
+        state.owner === "external"
+          ? "external"
+          : state.owner === "session"
+            ? "shared"
+            : "feature",
+      summary: state.summary,
+    }));
+
+    for (const state of schema.stateModel?.states || []) {
+      exports.set(state.id, {
+        id: state.id,
+        kind: "state",
+        summary: state.summary,
+      });
+    }
+
+    for (const binding of schema.integrations?.expectedBindings || []) {
+      integrationSurfaces.add(binding.id);
+      exports.set(binding.id, {
+        id: binding.id,
+        kind: "integration",
+        summary: binding.summary,
+      });
+    }
+
+    for (const requirement of schema.requirements.typed || []) {
+      consumes.set(requirement.id, {
+        id: requirement.id,
+        kind: this.mapRequirementToContractSurface(requirement.kind),
+        summary: requirement.summary,
+      });
+    }
+
+    for (const dependency of schema.composition?.dependencies || []) {
+      const dependencyId = dependency.target || `${dependency.kind}:${dependency.relation}`;
+      consumes.set(dependencyId, {
+        id: dependencyId,
+        kind: dependency.kind === "cross-feature" ? "integration" : "capability",
+        summary: `Consumes dependency via ${dependency.relation}`,
+      });
+    }
+
+    return {
+      exports: Array.from(exports.values()),
+      consumes: Array.from(consumes.values()),
+      integrationSurfaces: Array.from(integrationSurfaces),
+      stateScopes,
+    };
+  }
+
+  private buildDependencyEdges(schema: IntentSchema): FeatureDependencyEdge[] {
+    return (schema.composition?.dependencies || []).map((dependency) => ({
+      relation: this.normalizeDependencyRelation(dependency.relation),
+      targetFeatureId: dependency.kind === "cross-feature" ? dependency.target : undefined,
+      targetSurfaceId: dependency.target,
+      required: dependency.required,
+      summary: `${dependency.kind}:${dependency.relation}${dependency.target ? `:${dependency.target}` : ""}`,
+    }));
+  }
+
+  private normalizeDependencyRelation(
+    relation: string,
+  ): FeatureDependencyEdge["relation"] {
+    switch (relation) {
+      case "reads":
+      case "writes":
+      case "triggers":
+      case "grants":
+        return relation;
+      case "syncs-with":
+        return "syncs_with";
+      default:
+        return "reads";
+    }
+  }
+
+  private buildValidationStatus(
+    status: NormalizedBlueprintStatus,
+    issues: ValidationIssue[],
+  ): ValidationStatus {
+    const warnings = issues
+      .filter((issue) => issue.severity === "warning")
+      .map((issue) => issue.message);
+    const blockers = issues
+      .filter((issue) => issue.severity === "error")
+      .map((issue) => issue.message);
+
+    return {
+      status:
+        blockers.length > 0
+          ? "failed"
+          : status === "weak" || warnings.length > 0
+            ? "needs_review"
+            : "unvalidated",
+      warnings,
+      blockers,
+    };
+  }
+
+  private buildCommitDecision(
+    status: NormalizedBlueprintStatus,
+    implementationStrategy: ImplementationStrategy,
+    issues: ValidationIssue[],
+    assessment: SemanticAssessment,
+  ): CommitDecision {
+    const errors = issues
+      .filter((issue) => issue.severity === "error")
+      .map((issue) => issue.message);
+    const warnings = issues
+      .filter((issue) => issue.severity === "warning")
+      .map((issue) => issue.message);
+
+    if (status === "blocked" || errors.length > 0) {
+      return {
+        outcome: "blocked",
+        canAssemble: false,
+        canWriteHost: false,
+        requiresReview: true,
+        reasons: errors.length > 0 ? errors : assessment.blockers,
+      };
+    }
+
+    const isExploratory =
+      status === "weak"
+      || implementationStrategy === "exploratory"
+      || implementationStrategy === "guided_native";
+
+    return {
+      outcome: isExploratory ? "exploratory" : "committable",
+      canAssemble: true,
+      canWriteHost: true,
+      requiresReview: isExploratory || warnings.length > 0,
+      reasons: [...warnings, ...assessment.notes],
+    };
+  }
+
+  private determineFeatureMaturity(
+    implementationStrategy: ImplementationStrategy,
+    status: NormalizedBlueprintStatus,
+  ): FeatureMaturity {
+    if (status === "weak" || implementationStrategy === "exploratory") {
+      return "exploratory";
+    }
+    if (implementationStrategy === "guided_native") {
+      return "stabilized";
+    }
+    return "templated";
+  }
+
+  private mapRequirementToContractSurface(
+    kind: IntentRequirement["kind"],
+  ): FeatureContract["exports"][number]["kind"] {
+    switch (kind) {
+      case "trigger":
+      case "rule":
+        return "event";
+      case "state":
+        return "state";
+      case "resource":
+        return "data";
+      case "integration":
+        return "integration";
+      default:
+        return "capability";
+    }
+  }
+
+  private buildEffectiveUpdateSchema(
+    updateIntent: UpdateIntent,
+  ): IntentSchema {
+    const requestedChange = updateIntent.requestedChange;
+    const currentFeatureContext = updateIntent.currentFeatureContext;
+    const preservedPatternIds = this.resolvePreservedPatternIds(currentFeatureContext);
+    const preservedModuleRoles = this.resolvePreservedModuleRoles(currentFeatureContext);
+    const choiceCount =
+      requestedChange.selection?.choiceCount
+      || (typeof currentFeatureContext.boundedFields.choiceCount === "number"
+        ? currentFeatureContext.boundedFields.choiceCount
+        : undefined);
+    const triggerKey =
+      (typeof requestedChange.parameters?.triggerKey === "string"
+        ? requestedChange.parameters.triggerKey
+        : undefined)
+      || (typeof currentFeatureContext.boundedFields.triggerKey === "string"
+        ? currentFeatureContext.boundedFields.triggerKey
+        : undefined);
+    const mergedRequiredPatterns = Array.from(
+      new Set([
+        ...(requestedChange.constraints?.requiredPatterns || []),
+        ...preservedPatternIds,
+      ]),
+    );
+    const collapsePatternOwnedState = this.shouldCollapsePatternOwnedState(
+      requestedChange,
+      preservedModuleRoles,
+    );
+    const mergedFunctional = Array.from(
+      new Set([
+        ...(requestedChange.requirements.functional || []),
+        "Preserve the current feature skeleton while applying the requested same-feature delta.",
+      ]),
+    );
+    const mergedSurfaces = this.mergeUpdateUISurfaces(requestedChange, preservedPatternIds);
+
+    return {
+      ...requestedChange,
+      request: {
+        ...requestedChange.request,
+        goal: requestedChange.request.goal || `Update feature ${updateIntent.target.featureId}`,
+      },
+      classification: {
+        ...requestedChange.classification,
+        intentKind:
+          requestedChange.classification.intentKind === "unknown"
+            ? (currentFeatureContext.intentKind as IntentSchema["classification"]["intentKind"])
+            : requestedChange.classification.intentKind,
+      },
+      requirements: {
+        ...requestedChange.requirements,
+        functional: mergedFunctional,
+        typed: collapsePatternOwnedState
+          ? (requestedChange.requirements.typed || []).filter((requirement) => requirement.kind !== "state")
+          : requestedChange.requirements.typed,
+      },
+      constraints: {
+        ...(requestedChange.constraints || {}),
+        ...(mergedRequiredPatterns.length > 0 ? { requiredPatterns: mergedRequiredPatterns } : {}),
+      },
+      selection: this.buildPreservedUpdateSelection(requestedChange, preservedModuleRoles, choiceCount),
+      uiRequirements: mergedSurfaces.length > 0
         ? {
-            ...module,
-            parameters: {
-              ...(module.parameters || {}),
-              ...override,
-            },
+            ...(requestedChange.uiRequirements || {}),
+            needed: true,
+            surfaces: mergedSurfaces,
           }
-        : module;
-    });
+        : requestedChange.uiRequirements,
+      stateModel: collapsePatternOwnedState ? undefined : requestedChange.stateModel,
+      normalizedMechanics: this.buildPreservedUpdateMechanics(requestedChange, preservedModuleRoles),
+      parameters: {
+        ...(requestedChange.parameters || {}),
+        ...(triggerKey ? { triggerKey } : {}),
+        ...(typeof choiceCount === "number" ? { choiceCount } : {}),
+      },
+      resolvedAssumptions: Array.from(
+        new Set([
+          ...(requestedChange.resolvedAssumptions || []),
+          ...updateIntent.resolvedAssumptions,
+        ]),
+      ),
+    };
+  }
+
+  private shouldCollapsePatternOwnedState(
+    requestedChange: IntentSchema,
+    preservedModuleRoles: string[],
+  ): boolean {
+    if (requestedChange.selection?.inventory?.enabled !== true) {
+      return false;
+    }
+
+    return preservedModuleRoles.includes("weighted_pool")
+      || preservedModuleRoles.includes("selection_flow");
+  }
+
+  private buildPreservedUpdateMechanics(
+    requestedChange: IntentSchema,
+    preservedModuleRoles: string[],
+  ): IntentSchema["normalizedMechanics"] {
+    const mechanics = {
+      ...(requestedChange.normalizedMechanics || {}),
+    };
+    const preserved = new Set(preservedModuleRoles);
+
+    if (preserved.has("input_trigger")) {
+      mechanics.trigger = true;
+    }
+    if (preserved.has("weighted_pool")) {
+      mechanics.candidatePool = true;
+      mechanics.weightedSelection = true;
+    }
+    if (preserved.has("selection_flow")) {
+      mechanics.playerChoice = true;
+    }
+    if (preserved.has("selection_modal")) {
+      mechanics.uiModal = true;
+    }
+    if (preserved.has("effect_application") || preserved.has("spawn_emitter")) {
+      mechanics.outcomeApplication = true;
+    }
+    if (preserved.has("resource_pool")) {
+      mechanics.resourceConsumption = true;
+    }
+
+    return mechanics;
+  }
+
+  private mergeUpdateUISurfaces(
+    requestedChange: IntentSchema,
+    preservedPatternIds: string[],
+  ): string[] {
+    const surfaces = new Set<string>(requestedChange.uiRequirements?.surfaces || []);
+    const preserved = new Set(preservedPatternIds);
+    if (preserved.has("selection_modal") || preserved.has("ui.selection_modal")) {
+      surfaces.add("selection_modal");
+    }
+    return Array.from(surfaces);
+  }
+
+  private buildPreservedUpdateSelection(
+    requestedChange: IntentSchema,
+    preservedModuleRoles: string[],
+    choiceCount: number | undefined,
+  ): IntentSchema["selection"] {
+    const preserved = new Set(preservedModuleRoles);
+    const hasSelectionSkeleton =
+      requestedChange.selection !== undefined
+      || preserved.has("weighted_pool")
+      || preserved.has("selection_flow")
+      || preserved.has("selection_modal");
+
+    if (!hasSelectionSkeleton) {
+      return requestedChange.selection;
+    }
+
+    return {
+      mode: requestedChange.selection?.mode || "user-chosen",
+      ...(preserved.has("weighted_pool") || requestedChange.selection?.source
+        ? {
+            source: requestedChange.selection?.source || "weighted-pool",
+          }
+        : {}),
+      choiceMode: requestedChange.selection?.choiceMode || "user-chosen",
+      cardinality: requestedChange.selection?.cardinality || "single",
+      ...(typeof choiceCount === "number" ? { choiceCount } : {}),
+      repeatability: requestedChange.selection?.repeatability || "repeatable",
+      duplicatePolicy: requestedChange.selection?.duplicatePolicy || "forbid",
+      commitment: requestedChange.selection?.commitment || "confirm",
+      ...(requestedChange.selection?.inventory
+        ? { inventory: requestedChange.selection.inventory }
+        : {}),
+    };
+  }
+
+  private resolvePreservedPatternIds(
+    currentFeatureContext: UpdateIntent["currentFeatureContext"],
+  ): string[] {
+    const modulePatternIds = (currentFeatureContext.moduleRecords || [])
+      .flatMap((moduleRecord) => moduleRecord.selectedPatternIds || []);
+    const legacyBackbonePatternIds = [
+      ...(currentFeatureContext.preservedModuleBackbone || []),
+      ...(currentFeatureContext.admittedSkeleton || []),
+    ].filter((item) => item.includes("."));
+
+    return Array.from(
+      new Set([
+        ...currentFeatureContext.selectedPatterns,
+        ...modulePatternIds,
+        ...legacyBackbonePatternIds,
+      ]),
+    );
+  }
+
+  private resolvePreservedModuleRoles(
+    currentFeatureContext: UpdateIntent["currentFeatureContext"],
+  ): string[] {
+    const roles = (currentFeatureContext.moduleRecords || [])
+      .map((moduleRecord) => moduleRecord.role);
+
+    const backboneItems = [
+      ...(currentFeatureContext.preservedModuleBackbone || []),
+      ...(currentFeatureContext.admittedSkeleton || []),
+    ];
+
+    for (const item of backboneItems) {
+      const mapped = item.includes(".")
+        ? this.mapPatternIdToModuleRole(item)
+        : item;
+      if (mapped) {
+        roles.push(mapped);
+      }
+    }
+
+    if (roles.length === 0) {
+      for (const patternId of currentFeatureContext.selectedPatterns) {
+        const mapped = this.mapPatternIdToModuleRole(patternId);
+        if (mapped) {
+          roles.push(mapped);
+        }
+      }
+    }
+
+    return Array.from(new Set(roles));
+  }
+
+  private mapPatternIdToModuleRole(patternId: string): string | undefined {
+    switch (patternId) {
+      case CORE_PATTERN_IDS.INPUT_KEY_BINDING:
+        return "input_trigger";
+      case CORE_PATTERN_IDS.DATA_WEIGHTED_POOL:
+        return "weighted_pool";
+      case CORE_PATTERN_IDS.RULE_SELECTION_FLOW:
+        return "selection_flow";
+      case CORE_PATTERN_IDS.UI_SELECTION_MODAL:
+        return "selection_modal";
+      case CORE_PATTERN_IDS.UI_RESOURCE_BAR:
+        return "resource_bar";
+      case CORE_PATTERN_IDS.UI_KEY_HINT:
+        return "key_hint";
+      case "effect.modifier_applier":
+      case "dota2.short_time_buff":
+      case "dota2.linear_projectile_emit":
+      case "effect.dash":
+        return "effect_application";
+      default:
+        return undefined;
+    }
   }
 
   /**
@@ -392,8 +919,13 @@ export class BlueprintBuilder {
     prefix: string,
     schemaParams: Record<string, unknown>
   ): BlueprintModule | null {
-    const category = inferCategoryFromRequirement(req);
-    const role = inferRoleFromCategory(category, [req]);
+    const sanitizedRequirement = stripNegativeConstraintFragments(req);
+    if (this.isNegativeConstraintRequirement(req) || sanitizedRequirement.length === 0) {
+      return null;
+    }
+
+    const category = inferCategoryFromRequirement(sanitizedRequirement);
+    const role = inferRoleFromCategory(category, [sanitizedRequirement]);
     const patternIds = getCanonicalPatternIds(category, role);
     const parameters = extractModuleParameters(category, schemaParams);
     
@@ -402,9 +934,14 @@ export class BlueprintBuilder {
       role,
       category,
       patternIds,
-      responsibilities: [req],
+      responsibilities: [sanitizedRequirement],
       ...(Object.keys(parameters).length > 0 && { parameters }),
     };
+  }
+
+  private isNegativeConstraintRequirement(req: string): boolean {
+    const normalized = req.trim().toLowerCase();
+    return /^(?:(?:the|this)\s+feature\s+)?(?:do not|don't|must not|mustn't|should not|no\b|without\b|禁止|不要|不需要|无需|别|不能|不可|不得)/iu.test(normalized);
   }
 
   /**
@@ -427,8 +964,8 @@ export class BlueprintBuilder {
     const categories = inferCategoriesFromMechanics(schema);
 
     for (const category of categories) {
-      const role = inferRoleFromCategory(category);
-      const parameters = extractModuleParameters(category, schemaParams);
+      const role = inferRoleFromCategory(category, this.collectMechanicContextSignals(schema, category));
+      const parameters = this.collectMechanicModuleParameters(schema, category, role, schemaParams);
       const newModule: BlueprintModule = {
         id: `${prefix}${category}_${modules.length}`,
         role,
@@ -438,14 +975,96 @@ export class BlueprintBuilder {
         ...(Object.keys(parameters).length > 0 && { parameters }),
       };
       this.upsertModule(modules, newModule);
+
+      if (
+        category === "rule" &&
+        role === "selection_flow" &&
+        classifySchedulerTimerRisk(schema) === "synthesis_required"
+      ) {
+        const timedRuleParameters = this.collectMechanicModuleParameters(schema, category, "timed_rule", schemaParams);
+        this.upsertModule(modules, {
+          id: `${prefix}${category}_timed_${modules.length}`,
+          role: "timed_rule",
+          category,
+          patternIds: getCanonicalPatternIds(category, "timed_rule"),
+          responsibilities: ["Orchestrate non-reusable local timing semantics that require synthesis"],
+          ...(Object.keys(timedRuleParameters).length > 0 ? { parameters: timedRuleParameters } : {}),
+        });
+      }
     }
+  }
+
+  private collectMechanicModuleParameters(
+    schema: IntentSchema,
+    category: BlueprintModule["category"],
+    role: string,
+    schemaParams: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const parameters = {
+      ...extractModuleParameters(category, schemaParams),
+    };
+
+    if (category === "rule" && role === "timed_rule") {
+      Object.assign(parameters, this.extractTimingMechanicParameters(schema));
+    }
+
+    return parameters;
+  }
+
+  private collectMechanicContextSignals(
+    schema: IntentSchema,
+    category: BlueprintModule["category"],
+  ): string[] {
+    if (category !== "rule") {
+      return [];
+    }
+
+    const signals: string[] = [];
+    if (detectSelectionFlowAsk(schema)) {
+      signals.push("selection");
+    }
+    if (classifySchedulerTimerRisk(schema) !== undefined) {
+      signals.push("timer");
+    }
+
+    return signals;
+  }
+
+  private extractTimingMechanicParameters(
+    schema: IntentSchema,
+  ): Record<string, unknown> {
+    const parameters: Record<string, unknown> = {};
+    const copyNumeric = (key: string, value: unknown): void => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        parameters[key] = value;
+      }
+    };
+
+    copyNumeric("delaySeconds", schema.timing?.delaySeconds);
+    copyNumeric("intervalSeconds", schema.timing?.intervalSeconds);
+    copyNumeric("cooldownSeconds", schema.timing?.cooldownSeconds);
+
+    for (const requirement of schema.requirements.typed || []) {
+      const requirementParameters = requirement.parameters || {};
+      copyNumeric("initialDelaySeconds", requirementParameters.initialDelaySeconds);
+      copyNumeric("delaySeconds", requirementParameters.delaySeconds);
+      copyNumeric("tickSeconds", requirementParameters.tickSeconds);
+      copyNumeric("intervalSeconds", requirementParameters.intervalSeconds);
+      copyNumeric("cooldownSeconds", requirementParameters.cooldownSeconds);
+      copyNumeric("cooldown", requirementParameters.cooldown);
+      copyNumeric("abilityCooldown", requirementParameters.abilityCooldown);
+    }
+
+    return parameters;
   }
 
   private upsertModule(
     modules: BlueprintModule[],
     newModule: BlueprintModule
   ): void {
-    const existingIndex = modules.findIndex(m => m.category === newModule.category);
+    const existingIndex = modules.findIndex(
+      (module) => module.category === newModule.category && module.role === newModule.role,
+    );
 
     if (existingIndex >= 0) {
       const existing = modules[existingIndex];
@@ -859,7 +1478,6 @@ export class BlueprintBuilder {
     moduleNeeds: ModuleNeed[],
     status: NormalizedBlueprintStatus,
     assessment: SemanticAssessment,
-    featureAuthoring: FeatureAuthoringNormalizationResult,
   ): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
 
@@ -889,8 +1507,8 @@ export class BlueprintBuilder {
         scope: "blueprint",
         severity: status === "blocked" ? "error" : "warning",
         message: status === "blocked"
-          ? "语义不足，FinalBlueprint 已被 honest-block"
-          : "语义仍有不确定性，FinalBlueprint 处于 weak 状态",
+          ? "FinalBlueprint hit a governance or structural block and cannot continue"
+          : "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees",
         path: "status",
       });
     }
@@ -902,16 +1520,6 @@ export class BlueprintBuilder {
         severity: "warning",
         message: "explicitPatternHints 仅作为 tie-break 输入，不代表最终 pattern authority",
         path: "moduleNeeds",
-      });
-    }
-
-    if (schema.requiredClarifications?.some((item) => item.blocksFinalization && !isResolvableExistingSeamIssue(item.question, schema))) {
-      issues.push({
-        code: "REQUIRED_CLARIFICATION_BLOCKS_FINALIZATION",
-        scope: "blueprint",
-        severity: "error",
-        message: "存在 blocksFinalization 的澄清项，无法输出 ready FinalBlueprint",
-        path: "requiredClarifications",
       });
     }
 
@@ -932,26 +1540,6 @@ export class BlueprintBuilder {
         severity: "warning",
         message: warning,
         path: "moduleNeeds",
-      });
-    }
-
-    for (const blocker of featureAuthoring.blockers) {
-      issues.push({
-        code: "FINAL_BLUEPRINT_FEATURE_AUTHORING_BLOCKER",
-        scope: "blueprint",
-        severity: "error",
-        message: blocker,
-        path: "featureAuthoring",
-      });
-    }
-
-    for (const warning of featureAuthoring.warnings) {
-      issues.push({
-        code: "FINAL_BLUEPRINT_FEATURE_AUTHORING_WARNING",
-        scope: "blueprint",
-        severity: "warning",
-        message: warning,
-        path: "featureAuthoring",
       });
     }
 
@@ -976,4 +1564,12 @@ export function buildBlueprint(
 ): BlueprintBuildResult {
   const builder = new BlueprintBuilder(config);
   return builder.build(schema);
+}
+
+export function buildUpdateBlueprint(
+  updateIntent: UpdateIntent,
+  config?: BlueprintBuilderConfig,
+): BlueprintBuildResult {
+  const builder = new BlueprintBuilder(config);
+  return builder.buildUpdate(updateIntent);
 }

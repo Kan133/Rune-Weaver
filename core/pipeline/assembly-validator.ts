@@ -41,7 +41,7 @@ export function validateAssemblyPlan(plan: AssemblyPlan): AssemblyValidationResu
   const warnings: ValidationIssue[] = [];
 
   // 1. 验证 selectedPatterns
-  const patternIssues = validateSelectedPatterns(plan.selectedPatterns);
+  const patternIssues = validateSelectedPatterns(plan);
   errors.push(...patternIssues.errors);
   warnings.push(...patternIssues.warnings);
 
@@ -78,21 +78,31 @@ export function validateAssemblyPlan(plan: AssemblyPlan): AssemblyValidationResu
 /**
  * 验证 selectedPatterns
  */
-function validateSelectedPatterns(patterns: SelectedPattern[]): {
+function validateSelectedPatterns(plan: AssemblyPlan): {
   errors: ValidationIssue[];
   warnings: ValidationIssue[];
 } {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
+  const patterns = plan.selectedPatterns;
 
   // 检查非空
   if (patterns.length === 0) {
-    errors.push({
+    const hasModuleTruth =
+      (plan.moduleRecords?.length || 0) > 0
+      || (plan.modules?.length || 0) > 0
+      || (plan.synthesizedArtifacts?.length || 0) > 0;
+    (hasModuleTruth ? warnings : errors).push({
       code: "EMPTY_SELECTED_PATTERNS",
       scope: "assembly",
-      severity: "error",
-      message: "AssemblyPlan must have at least one selected pattern",
+      severity: hasModuleTruth ? "warning" : "error",
+      message: hasModuleTruth
+        ? "AssemblyPlan has no selected reusable patterns, but module-level truth/artifact synthesis is present"
+        : "AssemblyPlan must have at least one selected pattern",
     });
+    if (hasModuleTruth) {
+      return { errors, warnings };
+    }
     return { errors, warnings };
   }
 

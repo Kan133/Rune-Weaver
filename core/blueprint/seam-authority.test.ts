@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 
 import {
-  hasStandaloneEntitySessionStateGap,
-  hasUnsupportedRewardProgressionSignals,
-  hasUnsupportedSchedulerTimerSignals,
-  hasUnsupportedSpawnEmissionSignals,
-  isAdmittedForwardLinearProjectileSlice,
-  isAdmittedLocalCooldownSchedulerSlice,
-  isAdmittedSelectionLocalProgressionSlice,
+  classifyRewardProgressionRisk,
+  classifySchedulerTimerRisk,
+  classifySpawnEmissionRisk,
+  classifyStandaloneSessionStateRisk,
+  detectForwardLinearProjectileReusableFit,
+  detectLocalCooldownSchedulerReusableFit,
+  detectSelectionLocalProgressionReusableFit,
 } from "./seam-authority";
 import type { IntentSchema } from "../schema/types";
 
@@ -245,11 +245,11 @@ function createStandaloneStateSchema(): IntentSchema {
 function testSchedulerLocalCooldownSliceIsAdmitted() {
   const schema = createCooldownSelfBuffSchema();
 
-  assert.equal(isAdmittedLocalCooldownSchedulerSlice(schema), true);
-  assert.equal(hasUnsupportedSchedulerTimerSignals(schema), false);
+  assert.equal(detectLocalCooldownSchedulerReusableFit(schema), true);
+  assert.equal(classifySchedulerTimerRisk(schema), "reusable_fit");
 }
 
-function testDelayAndPostSelectionSchedulerSignalsStayBlocked() {
+function testDelayAndPostSelectionSchedulerSignalsRequireSynthesis() {
   const delayedSchema: IntentSchema = {
     ...createCooldownSelfBuffSchema(),
     requirements: {
@@ -332,10 +332,10 @@ function testDelayAndPostSelectionSchedulerSignalsStayBlocked() {
     },
   };
 
-  assert.equal(isAdmittedLocalCooldownSchedulerSlice(delayedSchema), false);
-  assert.equal(hasUnsupportedSchedulerTimerSignals(delayedSchema), true);
-  assert.equal(isAdmittedLocalCooldownSchedulerSlice(postSelectionSchema), false);
-  assert.equal(hasUnsupportedSchedulerTimerSignals(postSelectionSchema), true);
+  assert.equal(detectLocalCooldownSchedulerReusableFit(delayedSchema), false);
+  assert.equal(classifySchedulerTimerRisk(delayedSchema), "synthesis_required");
+  assert.equal(detectLocalCooldownSchedulerReusableFit(postSelectionSchema), false);
+  assert.equal(classifySchedulerTimerRisk(postSelectionSchema), "synthesis_required");
 }
 
 function testSelectionLocalProgressionAdmitsOnlyBoundedSlice() {
@@ -367,10 +367,10 @@ function testSelectionLocalProgressionAdmitsOnlyBoundedSlice() {
     },
   };
 
-  assert.equal(isAdmittedSelectionLocalProgressionSlice(admittedSchema), true);
-  assert.equal(hasUnsupportedRewardProgressionSignals(admittedSchema), false);
-  assert.equal(isAdmittedSelectionLocalProgressionSlice(blockedSchema), false);
-  assert.equal(hasUnsupportedRewardProgressionSignals(blockedSchema), true);
+  assert.equal(detectSelectionLocalProgressionReusableFit(admittedSchema), true);
+  assert.equal(classifyRewardProgressionRisk(admittedSchema), "reusable_fit");
+  assert.equal(detectSelectionLocalProgressionReusableFit(blockedSchema), false);
+  assert.equal(classifyRewardProgressionRisk(blockedSchema), "governance_blocked");
 }
 
 function testForwardProjectileAdmissionStaysBounded() {
@@ -409,22 +409,22 @@ function testForwardProjectileAdmissionStaysBounded() {
     },
   };
 
-  assert.equal(isAdmittedForwardLinearProjectileSlice(admittedSchema), true);
-  assert.equal(hasUnsupportedSpawnEmissionSignals(admittedSchema), false);
-  assert.equal(isAdmittedForwardLinearProjectileSlice(blockedSchema), false);
-  assert.equal(hasUnsupportedSpawnEmissionSignals(blockedSchema), true);
+  assert.equal(detectForwardLinearProjectileReusableFit(admittedSchema), true);
+  assert.equal(classifySpawnEmissionRisk(admittedSchema), "reusable_fit");
+  assert.equal(detectForwardLinearProjectileReusableFit(blockedSchema), false);
+  assert.equal(classifySpawnEmissionRisk(blockedSchema), "synthesis_required");
 }
 
 function testStandaloneStateGapRemainsExplicit() {
   const standaloneStateSchema = createStandaloneStateSchema();
   const progressionSchema = createSelectionLocalProgressionSchema();
 
-  assert.equal(hasStandaloneEntitySessionStateGap(standaloneStateSchema), true);
-  assert.equal(hasStandaloneEntitySessionStateGap(progressionSchema), false);
+  assert.equal(classifyStandaloneSessionStateRisk(standaloneStateSchema), "synthesis_required");
+  assert.equal(classifyStandaloneSessionStateRisk(progressionSchema), "reusable_fit");
 }
 
 testSchedulerLocalCooldownSliceIsAdmitted();
-testDelayAndPostSelectionSchedulerSignalsStayBlocked();
+testDelayAndPostSelectionSchedulerSignalsRequireSynthesis();
 testSelectionLocalProgressionAdmitsOnlyBoundedSlice();
 testForwardProjectileAdmissionStaysBounded();
 testStandaloneStateGapRemainsExplicit();

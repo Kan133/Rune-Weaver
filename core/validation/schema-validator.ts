@@ -26,19 +26,13 @@ export function validateIntentSchema(schema: IntentSchema): ValidationIssue[] {
   const functionalIssues = validateFunctionalRequirements(schema);
   issues.push(...functionalIssues);
 
-  // 3. 验证 isReadyForBlueprint 与 openQuestions 是否矛盾
-  const completionIssue = validateCompletionState(schema);
-  if (completionIssue) {
-    issues.push(completionIssue);
-  }
-
-  // 4. 验证 request.goal 是否存在
+  // 3. 验证 request.goal 是否存在
   const goalIssue = validateGoal(schema);
   if (goalIssue) {
     issues.push(goalIssue);
   }
 
-  // 5. 验证 version 是否存在
+  // 4. 验证 version 是否存在
   const versionIssue = validateVersion(schema);
   if (versionIssue) {
     issues.push(versionIssue);
@@ -118,49 +112,6 @@ function validateFunctionalRequirements(schema: IntentSchema): ValidationIssue[]
   }
 
   return issues;
-}
-
-/**
- * 验证完成状态是否自洽
- * 检查：isReadyForBlueprint 为 true 时，不应存在 openQuestions
- */
-function validateCompletionState(schema: IntentSchema): ValidationIssue | null {
-  const { isReadyForBlueprint } = schema;
-  const { openQuestions } = schema;
-
-  if (isReadyForBlueprint && openQuestions.length > 0) {
-    return {
-      code: "CONTRADICTORY_COMPLETION_STATE",
-      scope: "schema",
-      severity: "error",
-      message: `isReadyForBlueprint 为 true，但存在 ${openQuestions.length} 个未解决问题`,
-      path: "isReadyForBlueprint",
-    };
-  }
-
-  // 额外检查：isReadyForBlueprint 为 true 但 functional 为空的情况
-  if (isReadyForBlueprint && (!schema.requirements.functional || schema.requirements.functional.length === 0)) {
-    return {
-      code: "READY_BUT_NO_FUNCTIONAL",
-      scope: "schema",
-      severity: "error",
-      message: "isReadyForBlueprint 为 true，但 functional 需求为空",
-      path: "isReadyForBlueprint",
-    };
-  }
-
-  // 警告：isReadyForBlueprint 为 false 但没有 openQuestions
-  if (!isReadyForBlueprint && openQuestions.length === 0) {
-    return {
-      code: "NOT_READY_BUT_NO_QUESTIONS",
-      scope: "schema",
-      severity: "warning",
-      message: "isReadyForBlueprint 为 false，但 openQuestions 为空",
-      path: "isReadyForBlueprint",
-    };
-  }
-
-  return null;
 }
 
 /**

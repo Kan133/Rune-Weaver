@@ -1,41 +1,10 @@
-import { runWizardToIntentSchema } from "../../core/wizard/index.js";
+import { createFallbackIntentSchema, runWizardToIntentSchema } from "../../core/wizard/index.js";
 import type { WizardIntentOptions } from "../../core/wizard/index.js";
-import type { IntentSchema } from "../../core/schema/types.js";
 import type { WizardDegradationInfo } from "./types.js";
 
 export interface WizardRunResult {
   wizardResult: Awaited<ReturnType<typeof runWizardToIntentSchema>>;
   wizardDegradation?: WizardDegradationInfo;
-}
-
-function createFallbackSchema(userRequest: string): IntentSchema {
-  return {
-    version: "1.0",
-    host: {
-      kind: "dota2-x-template",
-    },
-    request: {
-      rawPrompt: userRequest,
-      goal: `Partial feature based on: "${userRequest.substring(0, 50)}..."`,
-    },
-    classification: {
-      intentKind: "unknown",
-      confidence: "low",
-    },
-    requirements: {
-      functional: [],
-    },
-    constraints: {
-      nonFunctional: [],
-    },
-    uiRequirements: {
-      needed: false,
-    },
-    normalizedMechanics: {},
-    openQuestions: [],
-    resolvedAssumptions: [],
-    isReadyForBlueprint: false,
-  };
 }
 
 export async function runWorkbenchWizard(
@@ -53,7 +22,10 @@ export async function runWorkbenchWizard(
     return {
       wizardResult: {
         valid: false,
-        schema: createFallbackSchema(userRequest),
+        schema: createFallbackIntentSchema(userRequest),
+        interpretation: {
+          intentSchema: createFallbackIntentSchema(userRequest),
+        },
         issues: [{
           severity: "error" as const,
           code: "WIZARD_FORCED_DEGRADATION",
@@ -100,7 +72,10 @@ export async function runWorkbenchWizard(
     return {
       wizardResult: {
         valid: false,
-        schema: createFallbackSchema(userRequest),
+        schema: createFallbackIntentSchema(userRequest),
+        interpretation: {
+          intentSchema: createFallbackIntentSchema(userRequest),
+        },
         issues: [{
           severity: "error" as const,
           code: isOverload ? "WIZARD_OVERLOAD" : "WIZARD_ERROR",

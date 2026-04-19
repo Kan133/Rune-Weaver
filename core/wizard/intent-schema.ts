@@ -1,40 +1,45 @@
 /**
  * Rune Weaver - Wizard -> IntentSchema
- * 
- * 与 docs/SCHEMA.md 4.2 节对齐
  */
 
 import type {
   HostDescriptor,
   IntentActor,
   IntentClassification,
+  IntentCompositionContract,
+  IntentContentModelContract,
   IntentConstraints,
   IntentEffectContract,
   IntentFlowContract,
+  IntentInteractionContract,
   IntentIntegrationContract,
   IntentInvariant,
-  IntentReadiness,
+  IntentOutcomeContract,
   IntentRequirements,
   IntentSchema,
   IntentSelectionContract,
+  IntentSpatialContract,
   IntentStateContract,
+  IntentTargetingContract,
+  IntentTimingContract,
   IntentUncertainty,
   NormalizedMechanics,
-  RequiredClarification,
   UIRequirementSummary,
   UserRequestSummary,
+  ValidationIssue,
 } from "../schema/types";
-import {
-  DOTA2_X_TEMPLATE_HOST_KIND,
-} from "../host/types.js";
+import { DOTA2_X_TEMPLATE_HOST_KIND } from "../host/types.js";
+import { buildWizardCreatePromptPackage } from "../llm/prompt-packages.js";
+import { buildDota2RetrievalBundle } from "../retrieval/index.js";
 import { validateIntentSchema } from "../validation";
 import type { WizardIntentOptions, WizardIntentResult } from "./types";
+import { buildWizardClarificationPlan } from "./clarification-plan";
 
 const DEFAULT_HOST: HostDescriptor = {
   kind: DOTA2_X_TEMPLATE_HOST_KIND,
 };
 
-const INTENT_SCHEMA_REFERENCE = {
+export const INTENT_SCHEMA_REFERENCE = {
   version: "string",
   host: {
     kind: "string",
@@ -50,7 +55,6 @@ const INTENT_SCHEMA_REFERENCE = {
     intentKind: "micro-feature | standalone-system | cross-system-composition | ui-surface | unknown",
     confidence: "low | medium | high",
   },
-  readiness: "ready | weak | blocked",
   actors: [
     {
       id: "string",
@@ -63,7 +67,7 @@ const INTENT_SCHEMA_REFERENCE = {
     typed: [
       {
         id: "string",
-        kind: "trigger | state | rule | effect | resource | ui | integration",
+        kind: "trigger | state | rule | effect | resource | ui | integration | generic",
         summary: "string",
         actors: ["string?"],
         inputs: ["string?"],
@@ -82,6 +86,50 @@ const INTENT_SCHEMA_REFERENCE = {
     forbiddenPatterns: ["string?"],
     hostConstraints: ["string?"],
     nonFunctional: ["string?"],
+  },
+  interaction: {
+    activations: [
+      {
+        actor: "string?",
+        kind: "key | mouse | event | passive | system",
+        input: "string?",
+        phase: "press | release | hold | enter | occur",
+        repeatability: "one-shot | repeatable | toggle | persistent",
+        confirmation: "none | implicit | explicit",
+      },
+    ],
+  },
+  targeting: {
+    subject: "self | ally | enemy | unit | point | area | direction | global",
+    selector: "cursor | current-target | nearest | random | none",
+    teamScope: "self | ally | enemy | any",
+  },
+  timing: {
+    cooldownSeconds: "number?",
+    delaySeconds: "number?",
+    intervalSeconds: "number?",
+    duration: {
+      kind: "instant | timed | persistent",
+      seconds: "number?",
+    },
+  },
+  spatial: {
+    motion: {
+      kind: "dash | teleport | knockback | none",
+      distance: "number?",
+      direction: "cursor | facing | target | fixed",
+    },
+    area: {
+      shape: "circle | line | cone",
+      radius: "number?",
+      length: "number?",
+      width: "number?",
+    },
+    emission: {
+      kind: "projectile | pulse | wave | none",
+      speed: "number?",
+      count: "number?",
+    },
   },
   uiRequirements: {
     needed: "boolean",
@@ -108,9 +156,13 @@ const INTENT_SCHEMA_REFERENCE = {
   },
   selection: {
     mode: "deterministic | weighted | filtered | user-chosen | hybrid",
+    source: "none | candidate-collection | weighted-pool | filtered-pool",
+    choiceMode: "none | user-chosen | random | weighted | hybrid",
     cardinality: "single | multiple",
+    choiceCount: "number?",
     repeatability: "one-shot | repeatable | persistent",
     duplicatePolicy: "allow | avoid | forbid",
+    commitment: "immediate | confirm | deferred",
     inventory: {
       enabled: "boolean",
       capacity: "number",
@@ -124,6 +176,39 @@ const INTENT_SCHEMA_REFERENCE = {
     operations: ["apply | remove | stack | expire | consume | restore"],
     targets: ["string?"],
     durationSemantics: "instant | timed | persistent",
+  },
+  outcomes: {
+    operations: [
+      "apply-effect | move | spawn | grant-feature | update-state | consume-resource | emit-event",
+    ],
+  },
+  contentModel: {
+    collections: [
+      {
+        id: "string",
+        role: "candidate-options | spawnables | progress-items | generic",
+        ownership: "feature | shared | external",
+        updateMode: "replace | merge | append",
+        itemSchema: [
+          {
+            name: "string",
+            type: "string | number | boolean | enum | effect-ref | object-ref",
+            required: "boolean?",
+            semanticRole: "string?",
+          },
+        ],
+      },
+    ],
+  },
+  composition: {
+    dependencies: [
+      {
+        kind: "same-feature | cross-feature | external-system",
+        relation: "reads | writes | triggers | grants | syncs-with",
+        target: "string?",
+        required: "boolean?",
+      },
+    ],
   },
   integrations: {
     expectedBindings: [
@@ -159,190 +244,355 @@ const INTENT_SCHEMA_REFERENCE = {
       severity: "low | medium | high",
     },
   ],
-  requiredClarifications: [
-    {
-      id: "string",
-      question: "string",
-      blocksFinalization: "boolean",
-    },
-  ],
-  openQuestions: ["string"],
   resolvedAssumptions: ["string"],
-  isReadyForBlueprint: "boolean",
+  parameters: "object?",
 };
 
+interface PromptSemanticHints {
+  normalizedText: string;
+  candidateCount?: number;
+  committedCount?: number;
+  inventoryCapacity?: number;
+  inventoryFullMessage?: string;
+  candidatePool: boolean;
+  weightedDraw: boolean;
+  playerChoice: boolean;
+  inventory: boolean;
+  inventoryBlocksWhenFull: boolean;
+  noRepeatAfterSelection: boolean;
+  immediateOutcome: boolean;
+  explicitPersistence: boolean;
+  rarityDisplay: boolean;
+  uiSurface: boolean;
+}
+
+interface LegacyRequiredClarification {
+  id?: string;
+  question?: string;
+  blocksFinalization?: boolean;
+}
+
 export async function runWizardToIntentSchema(
-  options: WizardIntentOptions
+  options: WizardIntentOptions,
 ): Promise<WizardIntentResult> {
   const host = options.input.host ?? DEFAULT_HOST;
-
-  const result = await options.client.generateObject<Partial<IntentSchema>>({
-    messages: buildWizardMessages(options.input.rawText, host),
-    schemaName: "IntentSchema",
-    schemaDescription:
-      "Transform a Rune Weaver user request into a stable IntentSchema for blueprint generation.",
-    schema: INTENT_SCHEMA_REFERENCE,
-    model: options.input.model,
-    temperature: options.input.temperature,
-    providerOptions: options.input.providerOptions,
+  let schema: IntentSchema;
+  let raw: unknown;
+  const preValidationIssues: ValidationIssue[] = [];
+  const retrievalBundle = await buildDota2RetrievalBundle({
+    promptPackageId: "wizard.create",
+    queryText: options.input.rawText,
+    projectRoot: host.projectRoot || process.cwd(),
+  });
+  const promptPackage = buildWizardCreatePromptPackage({
+    rawText: options.input.rawText,
+    hostSummary: JSON.stringify(host),
+    retrievalBundle,
+    refinementContext: options.input.refinementContext,
   });
 
-  const schema = normalizeIntentSchema(result.object, options.input.rawText, host);
-  const issues = validateIntentSchema(schema);
+  try {
+    const result = await options.client.generateObject<Partial<IntentSchema>>({
+      messages: promptPackage.messages,
+      schemaName: "IntentSchema",
+      schemaDescription:
+        "Transform a Rune Weaver user request into a stable IntentSchema for blueprint generation.",
+      schema: INTENT_SCHEMA_REFERENCE,
+      model: options.input.model,
+      temperature: options.input.temperature,
+      providerOptions: options.input.providerOptions,
+    });
+
+    raw = result.raw;
+    schema = normalizeIntentSchema(result.object, options.input.rawText, host);
+  } catch (error) {
+    schema = createFallbackIntentSchema(options.input.rawText, host);
+    preValidationIssues.push({
+      code: "WIZARD_GENERIC_FALLBACK",
+      scope: "schema",
+      severity: "warning",
+      message: `Wizard fell back to generic semantic interpretation: ${error instanceof Error ? error.message : String(error)}`,
+      path: "wizard",
+    });
+  }
+
+  const clarificationPlan = buildWizardClarificationPlan({
+    rawText: options.input.rawText,
+    schema,
+  });
+  const issues = [...preValidationIssues, ...validateIntentSchema(schema)];
 
   return {
     schema,
+    interpretation: {
+      intentSchema: schema,
+      ...(clarificationPlan ? { clarificationPlan } : {}),
+      promptPackageId: promptPackage.id,
+      promptConstraints: promptPackage.promptConstraints,
+      ...(promptPackage.retrievalBundle ? { retrievalBundle: promptPackage.retrievalBundle } : {}),
+    },
+    ...(clarificationPlan ? { clarificationPlan } : {}),
     issues,
     valid: !issues.some((issue) => issue.severity === "error"),
-    raw: result.raw,
+    raw,
   };
 }
 
 export function buildWizardMessages(
   rawText: string,
-  host: HostDescriptor
-): Array<{ role: "system" | "user"; content: string }> {
-  return [
+  host: HostDescriptor,
+  refinementContext?: WizardIntentOptions["input"]["refinementContext"],
+): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  return buildWizardCreatePromptPackage({
+    rawText,
+    hostSummary: JSON.stringify(host),
+    refinementContext,
+  }).messages;
+}
+
+function buildWizardFewShotMessages(): Array<{ role: "user" | "assistant"; content: string }> {
+  const examples = [
     {
-      role: "system",
-      content: [
-        "You are Rune Weaver's wizard layer.",
-        "Do not write code.",
-        "Convert the user request into a stable IntentSchema.",
-        "Prefer explicit structure over vague prose.",
-        "If requirements are incomplete, preserve uncertainties and requiredClarifications.",
-        "Use readiness = ready | weak | blocked honestly.",
-        "Only use isReadyForBlueprint as a compatibility field.",
-        "Use the new simplified schema structure aligned with SCHEMA.md.",
-        `Current host: ${JSON.stringify(host)}`,
-      ].join("\n"),
+      user: "Create a skill that moves the player 400 units toward the cursor when G is pressed.",
+      assistant: {
+        classification: { intentKind: "micro-feature", confidence: "high" },
+        requirements: { functional: ["Pressing G moves the player 400 units toward the cursor."] },
+        interaction: { activations: [{ kind: "key", input: "G", phase: "press", repeatability: "repeatable" }] },
+        targeting: { subject: "self", selector: "cursor", teamScope: "self" },
+        spatial: { motion: { kind: "dash", distance: 400, direction: "cursor" } },
+        outcomes: { operations: ["move"] },
+        uncertainties: [],
+      },
     },
     {
-      role: "user",
-      content: rawText,
+      user: "Press F4 to draw 3 weighted candidates from a pool, show rarity on cards, let the player pick 1, and apply the chosen result immediately.",
+      assistant: {
+        classification: { intentKind: "micro-feature", confidence: "high" },
+        requirements: { functional: ["F4 opens a weighted 3-choice draft and applies the selected result immediately."] },
+        interaction: { activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }] },
+        selection: {
+          mode: "weighted",
+          source: "weighted-pool",
+          choiceMode: "user-chosen",
+          choiceCount: 3,
+          cardinality: "single",
+          repeatability: "repeatable",
+          commitment: "immediate",
+        },
+        contentModel: {
+          collections: [{ id: "candidate_options", role: "candidate-options", ownership: "feature", updateMode: "replace" }],
+        },
+        uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+        outcomes: { operations: ["apply-effect"] },
+      },
+    },
+    {
+      user: "Create a passive aura that gives nearby allies bonus armor.",
+      assistant: {
+        classification: { intentKind: "micro-feature", confidence: "high" },
+        requirements: { functional: ["A passive aura grants nearby allies bonus armor."] },
+        interaction: { activations: [{ kind: "passive", repeatability: "persistent" }] },
+        targeting: { subject: "ally", selector: "area", teamScope: "ally" },
+        effects: { operations: ["apply"], durationSemantics: "persistent", targets: ["nearby allies"] },
+        uncertainties: [],
+      },
+    },
+    {
+      user: "After drawing one option, grant another feature and persist it across matches.",
+      assistant: {
+        classification: { intentKind: "cross-system-composition", confidence: "medium" },
+        requirements: { functional: ["After one draw result is committed, grant another feature and persist it across matches."] },
+        outcomes: { operations: ["grant-feature", "update-state"] },
+        timing: { duration: { kind: "persistent" } },
+        composition: {
+          dependencies: [
+            { kind: "cross-feature", relation: "grants", required: true },
+            { kind: "external-system", relation: "writes", required: true },
+          ],
+        },
+        uncertainties: [
+          { id: "unc_target_feature", summary: "The exact granted feature target is not specified.", affects: ["intent", "blueprint"], severity: "high" },
+        ],
+      },
+    },
+    {
+      user: "Make a system where collected echoes tune a reality lattice and change future pulses.",
+      assistant: {
+        classification: { intentKind: "standalone-system", confidence: "low" },
+        requirements: {
+          functional: ["Collected echoes tune a shared reality lattice and influence future pulse behavior."],
+          typed: [{ id: "generic_reality_lattice", kind: "generic", summary: "Track and apply the reality-lattice tuning semantics described by the user.", priority: "must" }],
+        },
+        contentModel: {
+          collections: [{ id: "echoes", role: "generic", ownership: "feature", updateMode: "merge" }],
+        },
+        uncertainties: [
+          { id: "unc_reality_lattice", summary: "The exact operational meaning of the reality lattice and pulse transformation is still domain-specific.", affects: ["intent", "blueprint"], severity: "high" },
+        ],
+      },
     },
   ];
+
+  return examples.flatMap((example) => [
+    { role: "user" as const, content: example.user },
+    { role: "assistant" as const, content: JSON.stringify(example.assistant, null, 2) },
+  ]);
 }
 
 export function normalizeIntentSchema(
   candidate: Partial<IntentSchema>,
   rawText: string,
-  host: HostDescriptor
+  host: HostDescriptor,
 ): IntentSchema {
-  const requiredClarifications = normalizeRequiredClarifications(candidate.requiredClarifications);
-  const openQuestions = normalizeStringArray(candidate.openQuestions);
-  const uncertainties = normalizeUncertainties(candidate.uncertainties);
+  const promptHints = collectPromptSemanticHints(rawText);
+  const requirements = normalizeRequirements(candidate.requirements);
+  const constraints = normalizeConstraints(candidate.constraints);
+  const interaction = normalizeInteraction(candidate.interaction);
+  const targeting = normalizeTargeting(candidate.targeting);
+  const timing = normalizeTiming(candidate.timing);
+  const spatial = normalizeSpatial(candidate.spatial);
+  const stateModel = normalizeStateModel(candidate.stateModel);
+  const flow = normalizeFlow(candidate.flow, rawText);
+  const selection = normalizeSelection(candidate.selection, promptHints);
+  const effects = normalizeEffects(candidate.effects);
+  const outcomes = normalizeOutcomes(candidate.outcomes);
+  const contentModel = normalizeContentModel(candidate.contentModel, promptHints);
+  const composition = normalizeComposition(candidate.composition);
+  const integrations = normalizeIntegrations(candidate.integrations);
+  const uiRequirements = normalizeUIRequirements(candidate.uiRequirements);
+  const uncertainties = mergeUncertainties(
+    normalizeUncertainties(candidate.uncertainties, promptHints),
+    normalizeLegacyClarificationSignals(candidate, promptHints),
+  );
+  const normalizedCandidate: Partial<IntentSchema> = {
+    ...candidate,
+    requirements,
+    constraints,
+    interaction,
+    targeting,
+    timing,
+    spatial,
+    stateModel,
+    flow,
+    selection,
+    effects,
+    outcomes,
+    contentModel,
+    composition,
+    integrations,
+    uiRequirements,
+  };
+  const classification = normalizeClassification(candidate.classification, normalizedCandidate);
+  const normalizedMechanics = normalizeNormalizedMechanics(
+    candidate.normalizedMechanics,
+    normalizedCandidate,
+    promptHints,
+  );
+  const resolvedAssumptions = normalizeResolvedAssumptions(
+    candidate.resolvedAssumptions,
+    promptHints,
+  );
 
   return {
     version: typeof candidate.version === "string" ? candidate.version : "1.0",
     host: normalizeHost(candidate.host, host),
     request: normalizeRequest(candidate.request, rawText),
-    classification: normalizeClassification(candidate.classification),
-    readiness: normalizeReadiness(candidate, requiredClarifications, openQuestions, uncertainties),
+    classification,
     actors: normalizeActors(candidate.actors),
-    requirements: normalizeRequirements(candidate.requirements),
-    constraints: normalizeConstraints(candidate.constraints),
-    stateModel: normalizeStateModel(candidate.stateModel),
-    flow: normalizeFlow(candidate.flow),
-    selection: normalizeSelection(candidate.selection),
-    effects: normalizeEffects(candidate.effects),
-    integrations: normalizeIntegrations(candidate.integrations),
-    uiRequirements: normalizeUIRequirements(candidate.uiRequirements),
-    normalizedMechanics: normalizeNormalizedMechanics(candidate.normalizedMechanics),
+    requirements,
+    constraints,
+    interaction,
+    targeting,
+    timing,
+    spatial,
+    stateModel,
+    flow,
+    selection,
+    effects,
+    outcomes,
+    contentModel,
+    composition,
+    integrations,
+    uiRequirements,
+    normalizedMechanics,
     acceptanceInvariants: normalizeInvariants(candidate.acceptanceInvariants),
     uncertainties,
-    requiredClarifications,
-    openQuestions,
-    resolvedAssumptions: normalizeStringArray(candidate.resolvedAssumptions),
-    isReadyForBlueprint: deriveLegacyBlueprintReadiness(candidate, requiredClarifications, openQuestions, uncertainties),
+    resolvedAssumptions,
+    parameters: normalizeModuleSafeParameters(candidate.parameters),
   };
 }
 
-function normalizeReadiness(
-  candidate: Partial<IntentSchema>,
-  requiredClarifications = normalizeRequiredClarifications(candidate.requiredClarifications) || [],
-  openQuestions = normalizeStringArray(candidate.openQuestions),
-  uncertainties = normalizeUncertainties(candidate.uncertainties) || []
-): IntentReadiness {
-  const blockingClarifications = requiredClarifications.filter(
-    (item) => item.blocksFinalization && !isResolvableExistingSeamIssue(item.question, candidate)
+export function createFallbackIntentSchema(
+  rawText: string,
+  host: HostDescriptor = DEFAULT_HOST,
+): IntentSchema {
+  const promptHints = collectPromptSemanticHints(rawText);
+  const parameters = extractFallbackScalarParameters(rawText);
+  const interaction = buildFallbackInteraction(rawText);
+  const targeting = buildFallbackTargeting(rawText);
+  const timing = buildFallbackTiming(rawText);
+  const spatial = buildFallbackSpatial(rawText);
+  const selection = buildFallbackSelection(rawText, promptHints);
+  const outcomes = buildFallbackOutcomes(rawText, spatial, selection);
+  const composition = buildFallbackComposition(rawText);
+  const uiRequirements = buildFallbackUiRequirements(rawText, promptHints, selection);
+  const contentModel = buildFallbackContentModel(promptHints, selection);
+  const stateModel = buildFallbackStateModel(rawText, selection, composition);
+  const uncertainties = buildFallbackUncertainties(rawText, composition);
+
+  return normalizeIntentSchema(
+    {
+      version: "1.0",
+      host,
+      request: {
+        rawPrompt: rawText,
+        goal: rawText.trim() || "Interpret the requested feature semantics.",
+        nameHint: buildFallbackNameHint(rawText),
+      },
+      classification: {
+        intentKind: inferFallbackIntentKind(rawText, composition, uiRequirements),
+        confidence: "low",
+      },
+      requirements: {
+        functional: [buildFallbackFunctionalRequirement(rawText)],
+        typed: buildFallbackTypedRequirements({
+          rawText,
+          interaction,
+          selection,
+          spatial,
+          outcomes,
+          composition,
+          uiRequirements,
+        }),
+      },
+      interaction,
+      targeting,
+      timing,
+      spatial,
+      selection,
+      outcomes,
+      contentModel,
+      composition,
+      stateModel,
+      uiRequirements,
+      uncertainties,
+      resolvedAssumptions: [
+        "Using generic wizard fallback after LLM generation failed.",
+      ],
+      parameters,
+    },
+    rawText,
+    host,
   );
-  const blockingOpenQuestions = openQuestions.filter(
-    (question) => !isResolvableExistingSeamIssue(question, candidate)
-  );
-  const blockingUncertainties = uncertainties.filter(
-    (item) => !isResolvableExistingSeamIssue(item.summary, candidate)
-  );
-
-  if (blockingClarifications.length > 0) {
-    return "blocked";
-  }
-
-  if (blockingOpenQuestions.length > 0 || blockingUncertainties.length > 0) {
-    return "weak";
-  }
-
-  if (shouldPromoteExistingSeamSupportedIntent(candidate, requiredClarifications, openQuestions, uncertainties)) {
-    return "ready";
-  }
-
-  if ((candidate.isReadyForBlueprint === true || candidate.readiness === "ready") && hasBlueprintSemanticMinimum(candidate)) {
-    return "ready";
-  }
-
-  if (requiredClarifications.length > 0 || openQuestions.length > 0 || uncertainties.length > 0) {
-    return "weak";
-  }
-
-  return "blocked";
-}
-
-function deriveLegacyBlueprintReadiness(
-  candidate: Partial<IntentSchema>,
-  requiredClarifications = normalizeRequiredClarifications(candidate.requiredClarifications) || [],
-  openQuestions = normalizeStringArray(candidate.openQuestions),
-  uncertainties = normalizeUncertainties(candidate.uncertainties) || []
-): boolean {
-  if (candidate.isReadyForBlueprint === true && hasBlueprintSemanticMinimum(candidate)) {
-    return true;
-  }
-
-  const readiness = normalizeReadiness(candidate, requiredClarifications, openQuestions, uncertainties);
-  return readiness === "ready";
-}
-
-function hasBlueprintSemanticMinimum(candidate: Partial<IntentSchema>): boolean {
-  const hasRequirementSignal =
-    normalizeStringArray(candidate.requirements?.functional).length > 0 ||
-    normalizeStringArray(candidate.requirements?.interactions).length > 0 ||
-    normalizeStringArray(candidate.requirements?.outputs).length > 0 ||
-    normalizeStringArray(candidate.requirements?.dataNeeds).length > 0 ||
-    (candidate.requirements?.typed?.length || 0) > 0;
-
-  const hasStructuredSemanticSignal =
-    !!candidate.selection?.mode ||
-    !!candidate.selection?.cardinality ||
-    !!candidate.effects?.durationSemantics ||
-    (candidate.effects?.operations?.length || 0) > 0 ||
-    (candidate.integrations?.expectedBindings?.length || 0) > 0 ||
-    (candidate.uiRequirements?.surfaces?.length || 0) > 0 ||
-    (candidate.stateModel?.states?.length || 0) > 0 ||
-    Object.values(candidate.normalizedMechanics || {}).some((value) => value === true);
-
-  return hasRequirementSignal || hasStructuredSemanticSignal;
 }
 
 function normalizeHost(
   host: Partial<HostDescriptor> | undefined,
-  fallback: HostDescriptor
+  fallback: HostDescriptor,
 ): HostDescriptor {
   return {
-    kind: typeof host?.kind === "string" && host.kind.trim()
-      ? host.kind
-      : fallback.kind,
-    projectRoot: typeof host?.projectRoot === "string" 
-      ? host.projectRoot 
-      : fallback.projectRoot,
+    kind: typeof host?.kind === "string" && host.kind.trim() ? host.kind : fallback.kind,
+    projectRoot: typeof host?.projectRoot === "string" ? host.projectRoot : fallback.projectRoot,
     capabilities: Array.isArray(host?.capabilities)
       ? host.capabilities.filter((value): value is string => typeof value === "string")
       : fallback.capabilities,
@@ -351,21 +601,18 @@ function normalizeHost(
 
 function normalizeRequest(
   request: Partial<UserRequestSummary> | undefined,
-  rawText: string
+  rawText: string,
 ): UserRequestSummary {
   return {
     rawPrompt: rawText,
-    goal: typeof request?.goal === "string" && request.goal.trim()
-      ? request.goal
-      : rawText,
-    nameHint: typeof request?.nameHint === "string" 
-      ? request.nameHint 
-      : undefined,
+    goal: typeof request?.goal === "string" && request.goal.trim() ? request.goal : rawText,
+    nameHint: typeof request?.nameHint === "string" ? request.nameHint : undefined,
   };
 }
 
 function normalizeClassification(
-  classification: Partial<IntentClassification> | undefined
+  classification: Partial<IntentClassification> | undefined,
+  candidate?: Partial<IntentSchema>,
 ): IntentClassification {
   const validKinds = new Set([
     "micro-feature",
@@ -375,11 +622,21 @@ function normalizeClassification(
     "unknown",
   ]);
 
+  let intentKind =
+    typeof classification?.intentKind === "string" && validKinds.has(classification.intentKind)
+      ? classification.intentKind
+      : "unknown";
+
+  if (candidate && hasCrossSystemCompositionSemantics(candidate)) {
+    intentKind = "cross-system-composition";
+  }
+
+  if (intentKind === "ui-surface" && candidate && hasNonUiGameplaySemantics(candidate)) {
+    intentKind = "micro-feature";
+  }
+
   return {
-    intentKind:
-      typeof classification?.intentKind === "string" && validKinds.has(classification.intentKind)
-        ? classification.intentKind
-        : "unknown",
+    intentKind,
     confidence: isOneOf(classification?.confidence, ["low", "medium", "high"])
       ? classification.confidence
       : "medium",
@@ -387,24 +644,33 @@ function normalizeClassification(
 }
 
 function normalizeRequirements(
-  requirements: Partial<IntentRequirements> | undefined
+  requirements: Partial<IntentRequirements> | undefined,
 ): IntentRequirements {
   return {
     functional: normalizeStringArray(requirements?.functional),
     typed: Array.isArray(requirements?.typed)
       ? requirements.typed
-          .filter((item): item is NonNullable<IntentRequirements["typed"]>[number] => typeof item === "object" && item !== null)
+          .filter(
+            (item): item is NonNullable<IntentRequirements["typed"]>[number] =>
+              typeof item === "object" && item !== null,
+          )
           .map((item, index) => ({
             id: typeof item.id === "string" && item.id.trim() ? item.id : `req_${index}`,
-            kind: isOneOf(item.kind, ["trigger", "state", "rule", "effect", "resource", "ui", "integration"])
+            kind: isOneOf(item.kind, ["trigger", "state", "rule", "effect", "resource", "ui", "integration", "generic"])
               ? item.kind
-              : "effect",
-            summary: typeof item.summary === "string" && item.summary.trim() ? item.summary : "Unspecified requirement",
+              : "generic",
+            summary:
+              typeof item.summary === "string" && item.summary.trim()
+                ? item.summary
+                : "Unspecified requirement",
             actors: normalizeStringArray(item.actors),
             inputs: normalizeStringArray(item.inputs),
             outputs: normalizeStringArray(item.outputs),
             invariants: normalizeStringArray(item.invariants),
-            parameters: typeof item.parameters === "object" && item.parameters !== null ? item.parameters : undefined,
+            parameters:
+              typeof item.parameters === "object" && item.parameters !== null
+                ? item.parameters
+                : undefined,
             priority: isOneOf(item.priority, ["must", "should", "could"]) ? item.priority : undefined,
           }))
       : undefined,
@@ -431,18 +697,148 @@ function normalizeActors(actors: unknown): IntentActor[] | undefined {
 }
 
 function normalizeConstraints(
-  constraints: Partial<IntentConstraints> | undefined
+  constraints: Partial<IntentConstraints> | undefined,
 ): IntentConstraints {
   return {
-    requiredPatterns: normalizeStringArray(constraints?.requiredPatterns),
-    forbiddenPatterns: normalizeStringArray(constraints?.forbiddenPatterns),
+    requiredPatterns: undefined,
+    forbiddenPatterns: undefined,
     hostConstraints: normalizeStringArray(constraints?.hostConstraints),
     nonFunctional: normalizeStringArray(constraints?.nonFunctional),
   };
 }
 
+function inferInventoryStoreSelectedItems(rawText: string): boolean {
+  return /store|stored|save to inventory|加入库存|进入库存|放进去|存入/i.test(rawText);
+}
+
+function normalizeInteraction(
+  interaction: Partial<IntentInteractionContract> | undefined,
+): IntentInteractionContract | undefined {
+  if (!interaction || !Array.isArray(interaction.activations)) {
+    return undefined;
+  }
+
+  const activations = interaction.activations
+    .filter(
+      (item): item is NonNullable<IntentInteractionContract["activations"]>[number] =>
+        typeof item === "object" && item !== null,
+    )
+    .map((item) => ({
+      actor: typeof item.actor === "string" && item.actor.trim() ? item.actor : undefined,
+      kind: isOneOf(item.kind, ["key", "mouse", "event", "passive", "system"]) ? item.kind : "event",
+      input: typeof item.input === "string" && item.input.trim() ? item.input : undefined,
+      phase: isOneOf(item.phase, ["press", "release", "hold", "enter", "occur"]) ? item.phase : undefined,
+      repeatability: isOneOf(item.repeatability, ["one-shot", "repeatable", "toggle", "persistent"])
+        ? item.repeatability
+        : undefined,
+      confirmation: isOneOf(item.confirmation, ["none", "implicit", "explicit"])
+        ? item.confirmation
+        : undefined,
+    }))
+    .filter((item) => !!item.input || item.kind === "passive" || item.kind === "system" || item.kind === "event");
+
+  return activations.length > 0 ? { activations } : undefined;
+}
+
+function normalizeTargeting(
+  targeting: Partial<IntentTargetingContract> | undefined,
+): IntentTargetingContract | undefined {
+  if (!targeting) {
+    return undefined;
+  }
+
+  const normalized: IntentTargetingContract = {
+    subject: isOneOf(targeting.subject, ["self", "ally", "enemy", "unit", "point", "area", "direction", "global"])
+      ? targeting.subject
+      : undefined,
+    selector: isOneOf(targeting.selector, ["cursor", "current-target", "nearest", "random", "none"])
+      ? targeting.selector
+      : undefined,
+    teamScope: isOneOf(targeting.teamScope, ["self", "ally", "enemy", "any"])
+      ? targeting.teamScope
+      : undefined,
+  };
+
+  return normalized.subject || normalized.selector || normalized.teamScope ? normalized : undefined;
+}
+
+function normalizeTiming(
+  timing: Partial<IntentTimingContract> | undefined,
+): IntentTimingContract | undefined {
+  if (!timing) {
+    return undefined;
+  }
+
+  const normalized: IntentTimingContract = {
+    cooldownSeconds: normalizePositiveNumber(timing.cooldownSeconds),
+    delaySeconds: normalizePositiveNumber(timing.delaySeconds),
+    intervalSeconds: normalizePositiveNumber(timing.intervalSeconds),
+    duration:
+      timing.duration && isOneOf(timing.duration.kind, ["instant", "timed", "persistent"])
+        ? {
+            kind: timing.duration.kind,
+            seconds: normalizePositiveNumber(timing.duration.seconds),
+          }
+        : undefined,
+  };
+
+  return normalized.cooldownSeconds !== undefined ||
+    normalized.delaySeconds !== undefined ||
+    normalized.intervalSeconds !== undefined ||
+    normalized.duration !== undefined
+    ? normalized
+    : undefined;
+}
+
+function normalizeSpatial(
+  spatial: Partial<IntentSpatialContract> | undefined,
+): IntentSpatialContract | undefined {
+  if (!spatial) {
+    return undefined;
+  }
+
+  const normalized: IntentSpatialContract = {
+    motion:
+      spatial.motion && isOneOf(spatial.motion.kind, ["dash", "teleport", "knockback", "none"])
+        && spatial.motion.kind !== "none"
+        ? {
+            kind: spatial.motion.kind,
+            distance: normalizePositiveNumber(spatial.motion.distance),
+            direction: isOneOf(spatial.motion.direction, ["cursor", "facing", "target", "fixed"])
+              ? spatial.motion.direction
+              : undefined,
+          }
+        : undefined,
+    area:
+      spatial.area && isOneOf(spatial.area.shape, ["circle", "line", "cone"])
+      && (
+        normalizePositiveNumber(spatial.area.radius) !== undefined ||
+        normalizePositiveNumber(spatial.area.length) !== undefined ||
+        normalizePositiveNumber(spatial.area.width) !== undefined
+      )
+        ? {
+            shape: spatial.area.shape,
+            radius: normalizePositiveNumber(spatial.area.radius),
+            length: normalizePositiveNumber(spatial.area.length),
+            width: normalizePositiveNumber(spatial.area.width),
+          }
+        : undefined,
+    emission:
+      spatial.emission && isOneOf(spatial.emission.kind, ["projectile", "pulse", "wave", "none"])
+        && spatial.emission.kind !== "none"
+        ? {
+            kind: spatial.emission.kind,
+            speed: normalizePositiveNumber(spatial.emission.speed),
+            count: normalizePositiveInteger(spatial.emission.count),
+          }
+        : undefined,
+  };
+
+  return normalized.motion || normalized.area || normalized.emission ? normalized : undefined;
+}
+
 function normalizeUIRequirements(
-  ui: Partial<UIRequirementSummary> | undefined
+  ui: Partial<UIRequirementSummary> | undefined,
 ): UIRequirementSummary | undefined {
   if (!ui) {
     return undefined;
@@ -456,19 +852,30 @@ function normalizeUIRequirements(
 }
 
 function normalizeStateModel(
-  stateModel: Partial<IntentStateContract> | undefined
+  stateModel: Partial<IntentStateContract> | undefined,
 ): IntentStateContract | undefined {
   if (!stateModel || !Array.isArray(stateModel.states)) {
     return undefined;
   }
 
   const states = stateModel.states
-    .filter((item): item is IntentStateContract["states"][number] => typeof item === "object" && item !== null)
+    .filter(
+      (item): item is IntentStateContract["states"][number] =>
+        typeof item === "object" && item !== null,
+    )
     .map((item, index) => ({
       id: typeof item.id === "string" && item.id.trim() ? item.id : `state_${index}`,
-      summary: typeof item.summary === "string" && item.summary.trim() ? item.summary : "Unspecified state",
+      summary:
+        typeof item.summary === "string" && item.summary.trim()
+          ? item.summary
+          : "Unspecified state",
       owner: isOneOf(item.owner, ["feature", "session", "external"]) ? item.owner : undefined,
-      lifetime: isOneOf(item.lifetime, ["ephemeral", "session", "persistent"]) ? item.lifetime : undefined,
+      lifetime: isOneOf(item.lifetime, ["ephemeral", "session", "persistent"])
+        ? item.lifetime
+        : undefined,
+      kind: isOneOf(item.kind, ["scalar", "counter", "collection", "inventory", "selection-session", "generic"])
+        ? item.kind
+        : undefined,
       mutationMode: isOneOf(item.mutationMode, ["create", "update", "consume", "expire", "remove"])
         ? item.mutationMode
         : undefined,
@@ -478,63 +885,137 @@ function normalizeStateModel(
 }
 
 function normalizeFlow(
-  flow: Partial<IntentFlowContract> | undefined
+  flow: Partial<IntentFlowContract> | undefined,
+  rawText: string,
 ): IntentFlowContract | undefined {
   if (!flow) {
     return undefined;
   }
 
+  const loweredPrompt = rawText.toLowerCase();
+
   return {
     triggerSummary: typeof flow.triggerSummary === "string" ? flow.triggerSummary : undefined,
     sequence: normalizeStringArray(flow.sequence),
-    supportsCancel: flow.supportsCancel === true,
-    supportsRetry: flow.supportsRetry === true,
-    requiresConfirmation: flow.requiresConfirmation === true,
+    supportsCancel: flow.supportsCancel === true && mentionsCancelSemantics(loweredPrompt),
+    supportsRetry: flow.supportsRetry === true && mentionsRetrySemantics(loweredPrompt),
+    requiresConfirmation: flow.requiresConfirmation === true && mentionsConfirmationSemantics(loweredPrompt),
   };
 }
 
 function normalizeSelection(
-  selection: Partial<IntentSelectionContract> | undefined
+  selection: Partial<IntentSelectionContract> | undefined,
+  promptHints: PromptSemanticHints,
 ): IntentSelectionContract | undefined {
-  if (!selection) {
+  if (!selection && !promptHints.candidatePool && !promptHints.playerChoice) {
     return undefined;
   }
 
-  return {
-    mode: isOneOf(selection.mode, ["deterministic", "weighted", "filtered", "user-chosen", "hybrid"])
-      ? selection.mode
-      : undefined,
-    cardinality: isOneOf(selection.cardinality, ["single", "multiple"]) ? selection.cardinality : undefined,
-    repeatability: isOneOf(selection.repeatability, ["one-shot", "repeatable", "persistent"])
+  const inferredMode = promptHints.weightedDraw
+    ? "weighted"
+    : promptHints.playerChoice && promptHints.candidatePool
+      ? "user-chosen"
+      : undefined;
+  const inferredSource = promptHints.weightedDraw
+    ? "weighted-pool"
+    : promptHints.candidatePool
+      ? "candidate-collection"
+      : undefined;
+  const inferredChoiceMode = promptHints.playerChoice
+    ? "user-chosen"
+    : promptHints.weightedDraw
+      ? "weighted"
+      : undefined;
+  const inferredCardinality = promptHints.committedCount === 1
+    ? "single"
+    : promptHints.committedCount && promptHints.committedCount > 1
+      ? "multiple"
+      : undefined;
+  const normalizedInventory =
+    promptHints.inventory || selection?.inventory?.enabled === true
+      ? {
+          enabled: true,
+          capacity: promptHints.inventoryCapacity,
+          storeSelectedItems:
+            inferInventoryStoreSelectedItems(promptHints.normalizedText)
+            || selection?.inventory?.storeSelectedItems === true
+              ? true
+              : undefined,
+          blockDrawWhenFull:
+            promptHints.inventoryBlocksWhenFull || selection?.inventory?.blockDrawWhenFull === true
+              ? true
+              : undefined,
+          fullMessage: promptHints.inventoryFullMessage,
+          presentation:
+            promptHints.inventory || selection?.inventory?.presentation === "persistent_panel"
+              ? "persistent_panel" as const
+              : undefined,
+        }
+      : undefined;
+
+  const normalizedSelection: IntentSelectionContract = {
+    mode: promptHints.weightedDraw
+      ? "weighted"
+      : isOneOf(selection?.mode, ["deterministic", "weighted", "filtered", "user-chosen", "hybrid"])
+        ? selection.mode
+        : inferredMode,
+    source: promptHints.weightedDraw
+      ? "weighted-pool"
+      : isOneOf(selection?.source, ["none", "candidate-collection", "weighted-pool", "filtered-pool"])
+        ? selection.source
+        : inferredSource,
+    choiceMode: isOneOf(selection?.choiceMode, ["none", "user-chosen", "random", "weighted", "hybrid"])
+      ? promptHints.playerChoice
+        ? "user-chosen"
+        : selection.choiceMode
+      : inferredChoiceMode,
+    cardinality: isOneOf(selection?.cardinality, ["single", "multiple"])
+      ? selection.cardinality
+      : inferredCardinality,
+    choiceCount: promptHints.candidateCount ?? normalizePositiveInteger(selection?.choiceCount),
+    repeatability: isOneOf(selection?.repeatability, ["one-shot", "repeatable", "persistent"])
       ? selection.repeatability
       : undefined,
-    duplicatePolicy: isOneOf(selection.duplicatePolicy, ["allow", "avoid", "forbid"])
-      ? selection.duplicatePolicy
-      : undefined,
-    inventory:
-      selection.inventory &&
-      selection.inventory.enabled === true &&
-      typeof selection.inventory.capacity === "number" &&
-      isFinite(selection.inventory.capacity)
-        ? {
-            enabled: true,
-            capacity: Math.max(1, Math.floor(selection.inventory.capacity)),
-            storeSelectedItems: selection.inventory.storeSelectedItems === true,
-            blockDrawWhenFull: selection.inventory.blockDrawWhenFull === true,
-            fullMessage:
-              typeof selection.inventory.fullMessage === "string" && selection.inventory.fullMessage.trim()
-                ? selection.inventory.fullMessage
-                : "Inventory full",
-            presentation: selection.inventory.presentation === "persistent_panel"
-              ? "persistent_panel"
-              : "persistent_panel",
-          }
+    duplicatePolicy: promptHints.noRepeatAfterSelection
+      ? "forbid"
+      : isOneOf(selection?.duplicatePolicy, ["allow", "avoid", "forbid"])
+        ? selection.duplicatePolicy
         : undefined,
+    commitment: promptHints.immediateOutcome
+      ? "immediate"
+      : isOneOf(selection?.commitment, ["immediate", "confirm", "deferred"])
+        ? selection.commitment
+        : undefined,
+    inventory: promptHints.inventory ? normalizedInventory : undefined,
   };
+
+  const hasExplicitSelectionSemantics =
+    promptHints.candidatePool ||
+    promptHints.playerChoice ||
+    promptHints.weightedDraw ||
+    normalizedSelection.mode === "weighted" ||
+    normalizedSelection.mode === "filtered" ||
+    normalizedSelection.mode === "user-chosen" ||
+    normalizedSelection.mode === "hybrid" ||
+    normalizedSelection.source === "candidate-collection" ||
+    normalizedSelection.source === "weighted-pool" ||
+    normalizedSelection.source === "filtered-pool" ||
+    normalizedSelection.choiceMode === "user-chosen" ||
+    normalizedSelection.choiceMode === "random" ||
+    normalizedSelection.choiceMode === "weighted" ||
+    normalizedSelection.choiceMode === "hybrid" ||
+    typeof normalizedSelection.choiceCount === "number" ||
+    normalizedSelection.inventory?.enabled === true;
+
+  if (!hasExplicitSelectionSemantics) {
+    return undefined;
+  }
+
+  return normalizedSelection;
 }
 
 function normalizeEffects(
-  effects: Partial<IntentEffectContract> | undefined
+  effects: Partial<IntentEffectContract> | undefined,
 ): IntentEffectContract | undefined {
   if (!effects) {
     return undefined;
@@ -542,7 +1023,8 @@ function normalizeEffects(
 
   const operations = Array.isArray(effects.operations)
     ? effects.operations.filter((item): item is IntentEffectContract["operations"][number] =>
-        isOneOf(item, ["apply", "remove", "stack", "expire", "consume", "restore"]))
+        isOneOf(item, ["apply", "remove", "stack", "expire", "consume", "restore"]),
+      )
     : [];
 
   if (operations.length === 0 && !effects.targets && !effects.durationSemantics) {
@@ -558,21 +1040,143 @@ function normalizeEffects(
   };
 }
 
+function normalizeOutcomes(
+  outcomes: Partial<IntentOutcomeContract> | undefined,
+): IntentOutcomeContract | undefined {
+  if (!outcomes) {
+    return undefined;
+  }
+
+  const operations = Array.isArray(outcomes.operations)
+    ? outcomes.operations.filter((item): item is NonNullable<IntentOutcomeContract["operations"]>[number] =>
+        isOneOf(item, [
+          "apply-effect",
+          "move",
+          "spawn",
+          "grant-feature",
+          "update-state",
+          "consume-resource",
+          "emit-event",
+        ]),
+      )
+    : [];
+
+  return operations.length > 0 ? { operations } : undefined;
+}
+
+function normalizeContentModel(
+  contentModel: Partial<IntentContentModelContract> | undefined,
+  promptHints: PromptSemanticHints,
+): IntentContentModelContract | undefined {
+  if (!contentModel || !Array.isArray(contentModel.collections)) {
+    if (!promptHints.candidatePool) {
+      return undefined;
+    }
+
+    return {
+      collections: [buildPromptDerivedCandidateCollection(promptHints)],
+    };
+  }
+
+  const collections = contentModel.collections
+    .filter(
+      (item): item is NonNullable<IntentContentModelContract["collections"]>[number] =>
+        typeof item === "object" && item !== null,
+    )
+    .map((item, index) => ({
+      id: typeof item.id === "string" && item.id.trim() ? item.id : `collection_${index}`,
+      role: isOneOf(item.role, ["candidate-options", "spawnables", "progress-items", "generic"])
+        ? item.role
+        : promptHints.candidatePool
+          ? "candidate-options"
+          : "generic",
+      ownership: isOneOf(item.ownership, ["feature", "shared", "external"])
+        ? item.ownership
+        : promptHints.candidatePool
+          ? "feature"
+          : undefined,
+      updateMode: isOneOf(item.updateMode, ["replace", "merge", "append"])
+        ? item.updateMode
+        : promptHints.candidatePool
+          ? "replace"
+          : undefined,
+      itemSchema: Array.isArray(item.itemSchema)
+        ? item.itemSchema
+            .filter(
+              (schemaItem): schemaItem is NonNullable<
+                NonNullable<IntentContentModelContract["collections"]>[number]["itemSchema"]
+              >[number] => typeof schemaItem === "object" && schemaItem !== null,
+            )
+            .map((schemaItem) => ({
+              name: typeof schemaItem.name === "string" && schemaItem.name.trim() ? schemaItem.name : "field",
+              type: isOneOf(schemaItem.type, ["string", "number", "boolean", "enum", "effect-ref", "object-ref"])
+                ? schemaItem.type
+                : "string",
+              required: schemaItem.required === true,
+              semanticRole:
+                typeof schemaItem.semanticRole === "string" && schemaItem.semanticRole.trim()
+                  ? schemaItem.semanticRole
+                  : undefined,
+            }))
+        : promptHints.candidatePool
+          ? buildPromptDerivedCandidateCollection(promptHints).itemSchema
+          : undefined,
+    }));
+
+  return collections.length > 0
+    ? { collections }
+    : promptHints.candidatePool
+      ? { collections: [buildPromptDerivedCandidateCollection(promptHints)] }
+      : undefined;
+}
+
+function normalizeComposition(
+  composition: Partial<IntentCompositionContract> | undefined,
+): IntentCompositionContract | undefined {
+  if (!composition || !Array.isArray(composition.dependencies)) {
+    return undefined;
+  }
+
+  const dependencies = composition.dependencies
+    .filter(
+      (item): item is NonNullable<IntentCompositionContract["dependencies"]>[number] =>
+        typeof item === "object" && item !== null,
+    )
+    .map((item) => ({
+      kind: isOneOf(item.kind, ["same-feature", "cross-feature", "external-system"])
+        ? item.kind
+        : "external-system",
+      relation: isOneOf(item.relation, ["reads", "writes", "triggers", "grants", "syncs-with"])
+        ? item.relation
+        : "reads",
+      target: typeof item.target === "string" && item.target.trim() ? item.target : undefined,
+      required: item.required === true,
+    }));
+
+  return dependencies.length > 0 ? { dependencies } : undefined;
+}
+
 function normalizeIntegrations(
-  integrations: Partial<IntentIntegrationContract> | undefined
+  integrations: Partial<IntentIntegrationContract> | undefined,
 ): IntentIntegrationContract | undefined {
   if (!integrations || !Array.isArray(integrations.expectedBindings)) {
     return undefined;
   }
 
   const expectedBindings = integrations.expectedBindings
-    .filter((item): item is IntentIntegrationContract["expectedBindings"][number] => typeof item === "object" && item !== null)
+    .filter(
+      (item): item is IntentIntegrationContract["expectedBindings"][number] =>
+        typeof item === "object" && item !== null,
+    )
     .map((item, index) => ({
       id: typeof item.id === "string" && item.id.trim() ? item.id : `binding_${index}`,
       kind: isOneOf(item.kind, ["entry-point", "event-hook", "bridge-point", "ui-surface", "data-source"])
         ? item.kind
         : "entry-point",
-      summary: typeof item.summary === "string" && item.summary.trim() ? item.summary : "Unspecified binding",
+      summary:
+        typeof item.summary === "string" && item.summary.trim()
+          ? item.summary
+          : "Unspecified binding",
       required: item.required === true,
     }));
 
@@ -588,14 +1192,20 @@ function normalizeInvariants(invariants: unknown): IntentInvariant[] | undefined
     .filter((item): item is IntentInvariant => typeof item === "object" && item !== null)
     .map((item, index) => ({
       id: typeof item.id === "string" && item.id.trim() ? item.id : `invariant_${index}`,
-      summary: typeof item.summary === "string" && item.summary.trim() ? item.summary : "Unspecified invariant",
+      summary:
+        typeof item.summary === "string" && item.summary.trim()
+          ? item.summary
+          : "Unspecified invariant",
       severity: isOneOf(item.severity, ["error", "warning"]) ? item.severity : "warning",
     }));
 
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function normalizeUncertainties(uncertainties: unknown): IntentUncertainty[] | undefined {
+function normalizeUncertainties(
+  uncertainties: unknown,
+  promptHints: PromptSemanticHints,
+): IntentUncertainty[] | undefined {
   if (!Array.isArray(uncertainties)) {
     return undefined;
   }
@@ -604,54 +1214,934 @@ function normalizeUncertainties(uncertainties: unknown): IntentUncertainty[] | u
     .filter((item): item is IntentUncertainty => typeof item === "object" && item !== null)
     .map((item, index) => ({
       id: typeof item.id === "string" && item.id.trim() ? item.id : `uncertainty_${index}`,
-      summary: typeof item.summary === "string" && item.summary.trim() ? item.summary : "Unspecified uncertainty",
+      summary:
+        typeof item.summary === "string" && item.summary.trim()
+          ? item.summary
+          : "Unspecified uncertainty",
       affects: Array.isArray(item.affects)
         ? item.affects.filter((value): value is IntentUncertainty["affects"][number] =>
-            isOneOf(value, ["intent", "blueprint", "pattern", "realization"]))
+            isOneOf(value, ["intent", "blueprint", "pattern", "realization"]),
+          )
         : [],
       severity: isOneOf(item.severity, ["low", "medium", "high"]) ? item.severity : "medium",
-    }));
+    }))
+    .filter((item) => !shouldSuppressBoundedCandidateDrawDetail(item.summary, promptHints));
 
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function normalizeRequiredClarifications(
-  clarifications: unknown
-): RequiredClarification[] | undefined {
-  if (!Array.isArray(clarifications)) {
+function mergeUncertainties(
+  primary: IntentUncertainty[] | undefined,
+  secondary: IntentUncertainty[] | undefined,
+): IntentUncertainty[] | undefined {
+  const merged = [...(primary || []), ...(secondary || [])];
+  if (merged.length === 0) {
     return undefined;
   }
 
-  const normalized = clarifications
-    .filter((item): item is RequiredClarification => typeof item === "object" && item !== null)
+  const deduped = new Map<string, IntentUncertainty>();
+  for (const item of merged) {
+    const key = `${item.summary}::${item.affects.join(",")}::${item.severity}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, item);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
+function normalizeLegacyClarificationSignals(
+  candidate: Partial<IntentSchema>,
+  promptHints: PromptSemanticHints,
+): IntentUncertainty[] | undefined {
+  const legacyCandidate = candidate as Partial<IntentSchema> & {
+    requiredClarifications?: unknown;
+    openQuestions?: unknown;
+  };
+  const legacyClarifications = Array.isArray(legacyCandidate.requiredClarifications)
+    ? legacyCandidate.requiredClarifications
+    : [];
+  const legacyOpenQuestions = normalizeStringArray(legacyCandidate.openQuestions);
+
+  const clarifications = legacyClarifications
+    .filter((item): item is LegacyRequiredClarification => typeof item === "object" && item !== null)
+    .filter(
+      (item) =>
+        !shouldSuppressBoundedCandidateDrawDetail(item.question || "", promptHints)
+        && !isBoundedVariabilityQuestion(item.question || ""),
+    )
     .map((item, index) => ({
-      id: typeof item.id === "string" && item.id.trim() ? item.id : `clarification_${index}`,
-      question: typeof item.question === "string" && item.question.trim() ? item.question : "Clarification required",
-      blocksFinalization: item.blocksFinalization === true && !isBoundedVariabilityQuestion(item.question),
+      id: typeof item.id === "string" && item.id.trim() ? item.id : `legacy_clarification_${index + 1}`,
+      summary:
+        typeof item.question === "string" && item.question.trim()
+          ? item.question.trim()
+          : "Legacy clarification signal retained as uncertainty.",
+      affects: ["intent", "blueprint"] as IntentUncertainty["affects"],
+      severity: item.blocksFinalization === true ? ("high" as const) : ("medium" as const),
     }));
 
-  return normalized.length > 0 ? normalized : undefined;
+  const openQuestionUncertainties = legacyOpenQuestions
+    .filter((question) => !shouldSuppressBoundedCandidateDrawDetail(question, promptHints))
+    .map((question, index) => ({
+      id: `legacy_open_question_${index + 1}`,
+      summary: question,
+      affects: ["intent"] as IntentUncertainty["affects"],
+      severity: "medium" as const,
+    }));
+
+  const merged = [...clarifications, ...openQuestionUncertainties];
+  return merged.length > 0 ? merged : undefined;
 }
 
 function normalizeNormalizedMechanics(
-  mechanics: Partial<NormalizedMechanics> | undefined
+  mechanics: Partial<NormalizedMechanics> | undefined,
+  candidate: Partial<IntentSchema>,
+  promptHints: PromptSemanticHints,
 ): NormalizedMechanics {
+  const interaction = candidate.interaction;
+  const selection = candidate.selection;
+  const uiRequirements = candidate.uiRequirements;
+  const outcomes = candidate.outcomes;
+  const effects = candidate.effects;
+  const contentModel = candidate.contentModel;
+
+  const hasInteractiveActivation =
+    (interaction?.activations || []).some((activation) => activation.kind !== "passive");
+  const hasCandidateCollection =
+    selection?.source === "candidate-collection" ||
+    selection?.source === "weighted-pool" ||
+    selection?.source === "filtered-pool" ||
+    selection?.choiceMode === "user-chosen" ||
+    selection?.choiceMode === "weighted" ||
+    selection?.choiceMode === "hybrid" ||
+    selection?.mode === "weighted" ||
+    selection?.mode === "filtered" ||
+    selection?.mode === "user-chosen" ||
+    selection?.mode === "hybrid" ||
+    (contentModel?.collections || []).some((collection) => collection.role === "candidate-options");
+  const hasWeightedSelection =
+    selection?.choiceMode === "weighted" ||
+    selection?.choiceMode === "hybrid" ||
+    selection?.source === "weighted-pool" ||
+    selection?.mode === "weighted" ||
+    selection?.mode === "hybrid" ||
+    promptHints.weightedDraw;
+  const hasPlayerChoice =
+    selection?.choiceMode === "user-chosen" ||
+    selection?.choiceMode === "hybrid" ||
+    selection?.mode === "user-chosen" ||
+    selection?.mode === "hybrid";
+  const hasModalSurface =
+    (uiRequirements?.surfaces || []).some((surface) => {
+      const normalized = surface.toLowerCase();
+      return normalized.includes("modal") || normalized.includes("dialog");
+    }) || hasPlayerChoice;
+  const hasOutcomeApplication =
+    (outcomes?.operations || []).length > 0 ||
+    (effects?.operations || []).length > 0 ||
+    !!candidate.spatial?.motion ||
+    !!candidate.spatial?.emission;
+  const hasResourceConsumption =
+    (outcomes?.operations || []).includes("consume-resource") ||
+    (candidate.requirements?.typed || []).some(
+      (requirement) =>
+        requirement.kind === "resource" &&
+        /consume|cost|spend|mana|health|energy|resource cost/i.test(
+          `${requirement.summary} ${(requirement.inputs || []).join(" ")} ${(requirement.outputs || []).join(" ")}`,
+        ),
+    );
+  const hasFacetEvidence =
+    !!interaction ||
+    !!selection ||
+    !!uiRequirements ||
+    !!outcomes ||
+    !!effects ||
+    !!candidate.spatial ||
+    !!contentModel;
+
   return {
-    trigger: mechanics?.trigger === true,
-    candidatePool: mechanics?.candidatePool === true,
-    weightedSelection: mechanics?.weightedSelection === true,
-    playerChoice: mechanics?.playerChoice === true,
-    uiModal: mechanics?.uiModal === true,
-    outcomeApplication: mechanics?.outcomeApplication === true,
-    resourceConsumption: mechanics?.resourceConsumption === true,
+    trigger: hasInteractiveActivation || (!hasFacetEvidence && mechanics?.trigger === true),
+    candidatePool: hasCandidateCollection || (!hasFacetEvidence && mechanics?.candidatePool === true),
+    weightedSelection: hasWeightedSelection || (!hasFacetEvidence && mechanics?.weightedSelection === true),
+    playerChoice: hasPlayerChoice || (!hasFacetEvidence && mechanics?.playerChoice === true),
+    uiModal: hasModalSurface || (!hasFacetEvidence && mechanics?.uiModal === true),
+    outcomeApplication: hasOutcomeApplication || (!hasFacetEvidence && mechanics?.outcomeApplication === true),
+    resourceConsumption: hasResourceConsumption || (!hasFacetEvidence && mechanics?.resourceConsumption === true),
   };
+}
+
+function normalizeModuleSafeParameters(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean") {
+      result[key] = entry;
+      continue;
+    }
+
+    if (Array.isArray(entry) && entry.every((item) => typeof item === "string" || typeof item === "number" || typeof item === "boolean")) {
+      result[key] = entry;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
+
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function normalizeResolvedAssumptions(
+  value: unknown,
+  promptHints: PromptSemanticHints,
+): string[] {
+  const normalized = new Set(normalizeStringArray(value));
+
+  if (promptHints.noRepeatAfterSelection && !promptHints.explicitPersistence) {
+    normalized.add("Selection no-repeat history defaults to session scope unless persistence is explicitly requested.");
+  }
+
+  return [...normalized];
+}
+
+function buildPromptDerivedCandidateCollection(
+  promptHints: PromptSemanticHints,
+): NonNullable<IntentContentModelContract["collections"]>[number] {
+  const itemSchema: NonNullable<
+    NonNullable<IntentContentModelContract["collections"]>[number]["itemSchema"]
+  > = [
+    {
+      name: "id",
+      type: "string",
+      required: true,
+      semanticRole: "stable-option-id",
+    },
+  ];
+
+  if (promptHints.weightedDraw) {
+    itemSchema.push({
+      name: "weight",
+      type: "number",
+      required: false,
+      semanticRole: "selection-weight",
+    });
+  }
+
+  if (promptHints.rarityDisplay) {
+    itemSchema.push({
+      name: "rarity",
+      type: "enum",
+      required: false,
+      semanticRole: "display-rarity",
+    });
+  }
+
+  if (promptHints.immediateOutcome) {
+    itemSchema.push({
+      name: "effect",
+      type: "effect-ref",
+      required: false,
+      semanticRole: "selected-outcome",
+    });
+  }
+
+  return {
+    id: "candidate_options",
+    role: "candidate-options",
+    ownership: "feature",
+    updateMode: "replace",
+    itemSchema,
+  };
+}
+
+function withGlobalFlag(pattern: RegExp): RegExp {
+  return new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+}
+
+function hasNegatedSignalPrefix(rawText: string, index: number): boolean {
+  const prefix = rawText.slice(Math.max(0, index - 24), index).toLowerCase();
+  return /(?:不要|不需要|无需|别|不能|禁止|without|no|do not)\s*(?:any\s*)?$/iu.test(prefix);
+}
+
+function hasUnnegatedSignal(rawText: string, pattern: RegExp): boolean {
+  const matcher = withGlobalFlag(pattern);
+  for (const match of rawText.matchAll(matcher)) {
+    const index = match.index ?? -1;
+    if (index < 0 || !hasNegatedSignalPrefix(rawText, index)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const PERSISTENCE_SIGNAL_PATTERN =
+  /persist|persistence|save|saved|cross match|cross-session|persistent|across matches|cross-match|跨局|跨对局|跨会话|持久|持久化|永久保存/iu;
+const CROSS_FEATURE_SIGNAL_PATTERN =
+  /grant feature|grant another feature|cross-feature|cross feature|授予另一个|授予技能|另一个技能|跨 feature/iu;
+const UI_SIGNAL_PATTERN =
+  /ui|modal|dialog|panel|window|cards?|界面|窗口|卡牌|弹窗|面板/iu;
+const INVENTORY_SIGNAL_PATTERN =
+  /inventory|backpack|storage|persistent panel|库存|仓库|背包|槽位|格子/iu;
+
+function collectPromptSemanticHints(rawText: string): PromptSemanticHints {
+  const normalizedText = rawText.toLowerCase();
+  const triChoiceMatch = rawText.match(/([1-5一二两三四五])\s*选\s*([1-5一二两三四五])/i);
+  const candidateCount =
+    (triChoiceMatch ? parsePromptCountToken(triChoiceMatch[1]) : undefined) ||
+    extractPromptCount(
+      rawText,
+      /(\d+|[一二两三四五])\s*(?:个|张)?\s*(?:候选对象|候选项|候选|选项|choices?|options?|candidates?)/i,
+    ) ||
+    extractPromptCount(
+      rawText,
+      /(?:show|draw|draft|display|抽出|抽取|展示|显示)\s*(\d+|[一二两三四五])/i,
+    );
+  const committedCount =
+    (triChoiceMatch ? parsePromptCountToken(triChoiceMatch[2]) : undefined) ||
+    extractPromptCount(
+      rawText,
+      /(?:choose|select|pick|选|选择)\s*(\d+|[一二两三四五])\s*(?:个|张)?/i,
+    );
+  const candidatePool =
+    /candidate|pool|draw|draft|deck|候选|对象池|候选池|池|抽取|抽卡|抽出|卡池/i.test(rawText);
+  const playerChoice = /choose|select|pick|选择|选中|从.+选/i.test(rawText);
+  const rarityDisplay = /weight|weighted|rarity|tier|权重|加权|稀有度|稀有/i.test(rawText);
+  const weightedDraw =
+    /weight|weighted|权重|加权/i.test(rawText) ||
+    (rarityDisplay && candidatePool);
+  const inventory = hasUnnegatedSignal(rawText, INVENTORY_SIGNAL_PATTERN);
+  const inventoryCapacity =
+    extractPromptCount(rawText, /(\d+)\s*(?:slots?|格)/i) ||
+    extractPromptCount(rawText, /(?:inventory|panel|capacity|容量)(?:\s*(?:to|of|为|=))?\s*(\d+)/i);
+  const inventoryFullMessageMatch =
+    rawText.match(/(?:inventory\s+full|库存已满|库存满了|满了后(?:显示)?|显示)\s*["“]([^"”]+)["”]/i) ||
+    rawText.match(/["“]([^"”]+)["”].*(?:inventory\s+full|库存已满|库存满了)/i);
+  const inventoryBlocksWhenFull =
+    /inventory full.*(?:stop|block|no longer|cannot)|库存满了.*(?:不再|停止|不能|无法)|满了后.*(?:不再|停止|不能|无法)/i.test(
+      rawText,
+    );
+  const noRepeatAfterSelection =
+    /no longer appear|do not appear again|not appear again|remove from future draws|already selected.*not appear|已选.*不再出现|后续不再出现|不会再出现|不再重复出现/i.test(
+      rawText,
+    );
+  const immediateOutcome =
+    /immediately|immediate|apply.*immediately|立即应用|立刻生效|马上生效|选中后立即/i.test(rawText);
+  const explicitPersistence = hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN);
+  const uiSurface = hasUnnegatedSignal(rawText, UI_SIGNAL_PATTERN);
+
+  return {
+    normalizedText,
+    candidateCount,
+    committedCount,
+    inventoryCapacity,
+    inventoryFullMessage:
+      typeof inventoryFullMessageMatch?.[1] === "string" && inventoryFullMessageMatch[1].trim()
+        ? inventoryFullMessageMatch[1].trim()
+        : undefined,
+    candidatePool,
+    weightedDraw,
+    playerChoice,
+    inventory,
+    inventoryBlocksWhenFull,
+    noRepeatAfterSelection,
+    immediateOutcome,
+    explicitPersistence,
+    rarityDisplay,
+    uiSurface,
+  };
+}
+
+function buildFallbackNameHint(rawText: string): string | undefined {
+  const tokens = rawText
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .split("_")
+    .filter(Boolean)
+    .slice(0, 6);
+  return tokens.length > 0 ? tokens.join("_") : undefined;
+}
+
+function buildFallbackFunctionalRequirement(rawText: string): string {
+  const trimmed = rawText.trim();
+  return trimmed.length > 0
+    ? trimmed
+    : "Interpret the user's requested gameplay or UI behavior.";
+}
+
+function inferFallbackIntentKind(
+  rawText: string,
+  composition: IntentCompositionContract | undefined,
+  uiRequirements: UIRequirementSummary | undefined,
+): IntentClassification["intentKind"] {
+  const text = rawText.toLowerCase();
+  if ((composition?.dependencies || []).some((dependency) => dependency.kind === "cross-feature" || dependency.kind === "external-system")) {
+    return "cross-system-composition";
+  }
+
+  const gameplaySignals = [
+    "press",
+    "key",
+    "trigger",
+    "dash",
+    "move",
+    "draw",
+    "draft",
+    "apply",
+    "passive",
+    "aura",
+    "按",
+    "触发",
+    "冲刺",
+    "移动",
+    "抽",
+    "选择",
+    "被动",
+    "光环",
+  ];
+  const hasPositiveUiSignal = hasUnnegatedSignal(rawText, UI_SIGNAL_PATTERN);
+
+  const hasGameplay = gameplaySignals.some((signal) => text.includes(signal));
+  const hasUi = hasPositiveUiSignal || uiRequirements?.needed === true;
+
+  if (!hasGameplay && hasUi) {
+    return "ui-surface";
+  }
+
+  if (text.includes("system") || text.includes("framework") || text.includes("engine") || text.includes("系统")) {
+    return "standalone-system";
+  }
+
+  return "micro-feature";
+}
+
+function buildFallbackInteraction(rawText: string): IntentInteractionContract | undefined {
+  const text = rawText.toLowerCase();
+  const keyMatch =
+    rawText.match(/(?:press|hit|tap|bind|when)\s+(f\d+|[a-z])/i) ||
+    rawText.match(/按(?:下)?\s*(f\d+|[a-z])/i) ||
+    rawText.match(/触发键[：:\s]*(f\d+|[a-z])/i);
+
+  if (keyMatch?.[1]) {
+    return {
+      activations: [
+        {
+          kind: "key",
+          input: keyMatch[1].toUpperCase(),
+          phase: "press",
+          repeatability: text.includes("toggle") || text.includes("切换")
+            ? "toggle"
+            : text.includes("hold") || text.includes("持续按住")
+              ? "persistent"
+              : "repeatable",
+        },
+      ],
+    };
+  }
+
+  if (text.includes("passive") || text.includes("aura") || text.includes("被动") || text.includes("光环")) {
+    return {
+      activations: [
+        {
+          kind: "passive",
+          repeatability: "persistent",
+        },
+      ],
+    };
+  }
+
+  return undefined;
+}
+
+function buildFallbackTargeting(rawText: string): IntentTargetingContract | undefined {
+  const text = rawText.toLowerCase();
+
+  if (text.includes("cursor") || text.includes("mouse") || text.includes("鼠标")) {
+    return {
+      subject: text.includes("direction") || text.includes("toward") || text.includes("朝") || text.includes("向")
+        ? "direction"
+        : "point",
+      selector: "cursor",
+      teamScope: "self",
+    };
+  }
+
+  if (text.includes("ally") || text.includes("friendly") || text.includes("友军")) {
+    return {
+      subject: "ally",
+      selector: "none",
+      teamScope: "ally",
+    };
+  }
+
+  if (text.includes("enemy") || text.includes("敌人") || text.includes("敌方")) {
+    return {
+      subject: "enemy",
+      selector: "none",
+      teamScope: "enemy",
+    };
+  }
+
+  if (text.includes("self") || text.includes("自身")) {
+    return {
+      subject: "self",
+      selector: "none",
+      teamScope: "self",
+    };
+  }
+
+  return undefined;
+}
+
+function buildFallbackTiming(rawText: string): IntentTimingContract | undefined {
+  const text = rawText.toLowerCase();
+  const cooldownMatch = rawText.match(/(?:cooldown|冷却(?:时间)?)(?:\s*(?:to|of|为|=))?\s*(\d+(?:\.\d+)?)/i);
+  const durationMatch = rawText.match(/(?:duration|持续(?:时间)?)(?:\s*(?:to|of|为|=))?\s*(\d+(?:\.\d+)?)/i);
+  const intervalMatch = rawText.match(/(?:every|interval|每隔)\s*(\d+(?:\.\d+)?)\s*(?:seconds?|秒)?/i);
+  const persistent = hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN);
+
+  if (!cooldownMatch && !durationMatch && !intervalMatch && !persistent) {
+    return undefined;
+  }
+
+  return {
+    cooldownSeconds: normalizePositiveNumber(cooldownMatch?.[1]),
+    delaySeconds: undefined,
+    intervalSeconds: normalizePositiveNumber(intervalMatch?.[1]),
+    duration: persistent
+      ? { kind: "persistent" }
+      : durationMatch
+        ? { kind: "timed", seconds: normalizePositiveNumber(durationMatch[1]) }
+        : undefined,
+  };
+}
+
+function buildFallbackSpatial(rawText: string): IntentSpatialContract | undefined {
+  const text = rawText.toLowerCase();
+  const distanceMatch =
+    rawText.match(/(\d+(?:\.\d+)?)\s*(?:units?|码|yards?)/i) ||
+    rawText.match(/(?:distance|range|距离|冲刺距离)(?:\s*(?:to|of|为|=))?\s*(\d+(?:\.\d+)?)/i);
+
+  if (text.includes("dash") || text.includes("move") || text.includes("teleport") || text.includes("冲刺") || text.includes("移动") || text.includes("传送")) {
+    return {
+      motion: {
+        kind: text.includes("teleport") || text.includes("传送") ? "teleport" : "dash",
+        distance: normalizePositiveNumber(distanceMatch?.[1]),
+        direction: text.includes("cursor") || text.includes("mouse") || text.includes("鼠标")
+          ? "cursor"
+          : text.includes("facing") || text.includes("朝向")
+            ? "facing"
+            : undefined,
+      },
+    };
+  }
+
+  return undefined;
+}
+
+function buildFallbackSelection(
+  rawText: string,
+  promptHints: PromptSemanticHints,
+): IntentSelectionContract | undefined {
+  if (!promptHints.candidatePool && !promptHints.playerChoice) {
+    return undefined;
+  }
+
+  const text = rawText.toLowerCase();
+  const capacityMatch =
+    rawText.match(/(\d+)\s*(?:slots?|格)/i) ||
+    rawText.match(/(?:inventory|panel|capacity|容量)(?:\s*(?:to|of|为|=))?\s*(\d+)/i);
+
+  return {
+    mode: promptHints.weightedDraw ? "weighted" : promptHints.playerChoice ? "user-chosen" : "deterministic",
+    source: promptHints.weightedDraw ? "weighted-pool" : promptHints.candidatePool ? "candidate-collection" : "none",
+    choiceMode: promptHints.playerChoice ? "user-chosen" : promptHints.weightedDraw ? "weighted" : "none",
+    choiceCount: promptHints.candidateCount,
+    cardinality: promptHints.committedCount && promptHints.committedCount > 1 ? "multiple" : "single",
+    repeatability: text.includes("repeatable") || text.includes("可重复") ? "repeatable" : promptHints.explicitPersistence ? "persistent" : "one-shot",
+    duplicatePolicy: promptHints.noRepeatAfterSelection ? "forbid" : undefined,
+    commitment: promptHints.immediateOutcome ? "immediate" : text.includes("confirm") || text.includes("确认") ? "confirm" : undefined,
+    inventory: promptHints.inventory
+      ? {
+          enabled: true,
+          capacity: normalizePositiveInteger(capacityMatch?.[1]),
+          storeSelectedItems: inferInventoryStoreSelectedItems(rawText) ? true : undefined,
+          blockDrawWhenFull: promptHints.inventoryBlocksWhenFull ? true : undefined,
+          fullMessage: promptHints.inventoryFullMessage,
+          presentation: promptHints.uiSurface ? "persistent_panel" : undefined,
+        }
+      : undefined,
+  };
+}
+
+function buildFallbackOutcomes(
+  rawText: string,
+  spatial: IntentSpatialContract | undefined,
+  selection: IntentSelectionContract | undefined,
+): IntentOutcomeContract | undefined {
+  const operations = new Set<NonNullable<IntentOutcomeContract["operations"]>[number]>();
+
+  if (spatial?.motion) {
+    operations.add("move");
+  }
+  if (selection) {
+    operations.add("apply-effect");
+  }
+  if (hasUnnegatedSignal(rawText, CROSS_FEATURE_SIGNAL_PATTERN)) {
+    operations.add("grant-feature");
+  }
+  if (hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN)) {
+    operations.add("update-state");
+  }
+
+  return operations.size > 0 ? { operations: [...operations] } : undefined;
+}
+
+function buildFallbackContentModel(
+  promptHints: PromptSemanticHints,
+  selection: IntentSelectionContract | undefined,
+): IntentContentModelContract | undefined {
+  if (!promptHints.candidatePool && !selection) {
+    return undefined;
+  }
+
+  return {
+    collections: [
+      {
+        id: "feature_content",
+        role: promptHints.candidatePool ? "candidate-options" : "generic",
+        ownership: "feature",
+        updateMode: "replace",
+      },
+    ],
+  };
+}
+
+function buildFallbackComposition(rawText: string): IntentCompositionContract | undefined {
+  const dependencies: NonNullable<IntentCompositionContract["dependencies"]> = [];
+
+  if (hasUnnegatedSignal(rawText, CROSS_FEATURE_SIGNAL_PATTERN)) {
+    dependencies.push({
+      kind: "cross-feature",
+      relation: "grants",
+      required: true,
+    });
+  }
+
+  if (hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN)) {
+    dependencies.push({
+      kind: "external-system",
+      relation: "writes",
+      required: true,
+    });
+  }
+
+  return dependencies.length > 0 ? { dependencies } : undefined;
+}
+
+function buildFallbackUiRequirements(
+  rawText: string,
+  promptHints: PromptSemanticHints,
+  selection: IntentSelectionContract | undefined,
+): UIRequirementSummary | undefined {
+  const text = rawText.toLowerCase();
+  const needed =
+    promptHints.uiSurface ||
+    hasUnnegatedSignal(rawText, UI_SIGNAL_PATTERN);
+
+  if (!needed) {
+    return undefined;
+  }
+
+  const surfaces = new Set<string>();
+  if (selection) {
+    surfaces.add("selection_modal");
+  }
+  if (promptHints.rarityDisplay || text.includes("rarity") || text.includes("稀有度")) {
+    surfaces.add("rarity_cards");
+  }
+  if (promptHints.inventory || hasUnnegatedSignal(rawText, INVENTORY_SIGNAL_PATTERN)) {
+    surfaces.add("inventory_panel");
+  }
+
+  return {
+    needed: true,
+    surfaces: [...surfaces],
+  };
+}
+
+function buildFallbackStateModel(
+  rawText: string,
+  selection: IntentSelectionContract | undefined,
+  composition: IntentCompositionContract | undefined,
+): IntentStateContract | undefined {
+  const states: NonNullable<IntentStateContract["states"]> = [];
+
+  if (selection) {
+    states.push({
+      id: "active_selection_state",
+      summary: "Tracks the active selection or draw session state.",
+      owner: "feature",
+      lifetime: selection.repeatability === "persistent" ? "persistent" : "session",
+      kind: selection.inventory?.enabled ? "inventory" : "selection-session",
+      mutationMode: "update",
+    });
+  }
+
+  if (
+    (composition?.dependencies || []).some((dependency) => dependency.kind === "external-system") ||
+    hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN)
+  ) {
+    states.push({
+      id: "persistent_progression_state",
+      summary: "Tracks behavior or progression that the user wants to preserve across sessions or matches.",
+      owner: "external",
+      lifetime: "persistent",
+      kind: "generic",
+      mutationMode: "update",
+    });
+  }
+
+  return states.length > 0 ? { states } : undefined;
+}
+
+function buildFallbackUncertainties(
+  rawText: string,
+  composition: IntentCompositionContract | undefined,
+): IntentUncertainty[] | undefined {
+  const uncertainties: IntentUncertainty[] = [];
+  const text = rawText.toLowerCase();
+
+  if (
+    (composition?.dependencies || []).some((dependency) => dependency.kind === "cross-feature") &&
+    hasUnnegatedSignal(rawText, CROSS_FEATURE_SIGNAL_PATTERN) &&
+    !text.includes("feature ") &&
+    !text.includes("feature_") &&
+    !text.includes("技能 ")
+  ) {
+    uncertainties.push({
+      id: "unc_cross_feature_target",
+      summary: "The request implies cross-feature coupling, but the exact target feature is not specified.",
+      affects: ["intent", "blueprint"],
+      severity: "high" as const,
+    });
+  }
+
+  if (
+    (composition?.dependencies || []).some((dependency) => dependency.kind === "external-system") &&
+    hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN) &&
+    !text.includes("save") &&
+    !text.includes("storage") &&
+    !text.includes("nettable") &&
+    !text.includes("数据库")
+  ) {
+    uncertainties.push({
+      id: "unc_persistence_owner",
+      summary: "Persistence is requested, but the exact storage or ownership boundary is not specified.",
+      affects: ["intent", "blueprint"],
+      severity: "high" as const,
+    });
+  }
+
+  return uncertainties.length > 0 ? uncertainties : undefined;
+}
+
+function buildFallbackTypedRequirements(input: {
+  rawText: string;
+  interaction: IntentInteractionContract | undefined;
+  selection: IntentSelectionContract | undefined;
+  spatial: IntentSpatialContract | undefined;
+  outcomes: IntentOutcomeContract | undefined;
+  composition: IntentCompositionContract | undefined;
+  uiRequirements: UIRequirementSummary | undefined;
+}): IntentRequirements["typed"] | undefined {
+  const typed: NonNullable<IntentRequirements["typed"]> = [];
+
+  if (input.interaction?.activations?.length) {
+    typed.push({
+      id: "fallback_trigger",
+      kind: "trigger",
+      summary: "Capture and interpret the requested activation boundary.",
+      priority: "must",
+    });
+  }
+
+  if (input.selection) {
+    typed.push({
+      id: "fallback_selection",
+      kind: "rule",
+      summary: "Run the requested candidate selection or draft flow.",
+      priority: "must",
+    });
+  }
+
+  if (input.spatial?.motion || (input.outcomes?.operations || []).includes("move")) {
+    typed.push({
+      id: "fallback_motion",
+      kind: "effect",
+      summary: "Apply the requested movement or spatial outcome.",
+      priority: "must",
+    });
+  }
+
+  if (input.uiRequirements?.needed) {
+    typed.push({
+      id: "fallback_ui",
+      kind: "ui",
+      summary: "Expose the requested player-facing UI surface or feedback.",
+      priority: "should",
+    });
+  }
+
+  if ((input.composition?.dependencies || []).length > 0) {
+    typed.push({
+      id: "fallback_composition",
+      kind: "integration",
+      summary: "Preserve the requested coupling with another feature or external system.",
+      priority: "must",
+    });
+  }
+
+  if (typed.length === 0) {
+    typed.push({
+      id: "fallback_generic",
+      kind: "generic",
+      summary: buildFallbackFunctionalRequirement(input.rawText),
+      priority: "must",
+    });
+  }
+
+  return typed;
+}
+
+function extractFallbackScalarParameters(rawText: string): Record<string, unknown> | undefined {
+  const parameters: Record<string, unknown> = {};
+  const keyMatch =
+    rawText.match(/(?:press|hit|tap|bind|when)\s+(f\d+|[a-z])/i) ||
+    rawText.match(/按(?:下)?\s*(f\d+|[a-z])/i) ||
+    rawText.match(/触发键[：:\s]*(f\d+|[a-z])/i);
+  const choiceCountMatch =
+    rawText.match(/(\d+)\s*(?:choices?|options?|candidates?|选项|候选)/i) ||
+    rawText.match(/(?:show|draw|open|生成)\s*(\d+)/i);
+  const committedCountMatch =
+    rawText.match(/pick\s*(\d+)/i) ||
+    rawText.match(/choose\s*(\d+)/i) ||
+    rawText.match(/选\s*(\d+)/i);
+  const distanceMatch =
+    rawText.match(/(\d+(?:\.\d+)?)\s*(?:units?|码|yards?)/i) ||
+    rawText.match(/(?:distance|range|距离|冲刺距离)(?:\s*(?:to|of|为|=))?\s*(\d+(?:\.\d+)?)/i);
+  const durationMatch = rawText.match(/(?:duration|持续(?:时间)?)(?:\s*(?:to|of|为|=))?\s*(\d+(?:\.\d+)?)/i);
+  const capacityMatch =
+    rawText.match(/(\d+)\s*(?:slots?|格)/i) ||
+    rawText.match(/(?:inventory|panel|capacity|容量)(?:\s*(?:to|of|为|=))?\s*(\d+)/i);
+
+  if (keyMatch?.[1]) {
+    parameters.triggerKey = keyMatch[1].toUpperCase();
+  }
+  if (choiceCountMatch?.[1]) {
+    const value = normalizePositiveInteger(choiceCountMatch[1]);
+    if (typeof value === "number") {
+      parameters.choiceCount = value;
+    }
+  }
+  if (committedCountMatch?.[1]) {
+    const value = normalizePositiveInteger(committedCountMatch[1]);
+    if (typeof value === "number") {
+      parameters.commitCount = value;
+    }
+  }
+  if (distanceMatch?.[1]) {
+    const value = normalizePositiveNumber(distanceMatch[1]);
+    if (typeof value === "number") {
+      parameters.distance = value;
+    }
+  }
+  if (durationMatch?.[1]) {
+    const value = normalizePositiveNumber(durationMatch[1]);
+    if (typeof value === "number") {
+      parameters.durationSeconds = value;
+    }
+  }
+  if (capacityMatch?.[1]) {
+    const value = normalizePositiveInteger(capacityMatch[1]);
+    if (typeof value === "number") {
+      parameters.capacity = value;
+    }
+  }
+
+  return Object.keys(parameters).length > 0 ? parameters : undefined;
+}
+
+function parsePromptCountToken(token: string | undefined): number | undefined {
+  if (!token) {
+    return undefined;
+  }
+
+  const trimmed = token.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  const map: Record<string, number> = {
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+  };
+
+  return map[trimmed];
+}
+
+function extractPromptCount(rawText: string, pattern: RegExp): number | undefined {
+  const match = rawText.match(pattern);
+  return match ? parsePromptCountToken(match[1]) : undefined;
+}
+
+function isStructuredCandidateDrawPrompt(promptHints: PromptSemanticHints): boolean {
+  return Boolean(
+    promptHints.candidatePool &&
+      promptHints.playerChoice &&
+      (promptHints.candidateCount || promptHints.weightedDraw || promptHints.rarityDisplay),
+  );
+}
+
+function shouldSuppressBoundedCandidateDrawDetail(
+  value: unknown,
+  promptHints: PromptSemanticHints,
+): boolean {
+  if (typeof value !== "string" || !isStructuredCandidateDrawPrompt(promptHints)) {
+    return false;
+  }
+
+  const text = value.toLowerCase();
+  const isPersistenceNoise =
+    !promptHints.explicitPersistence &&
+    /persist|persistence|cross match|cross-session|current session|current match|session-only|跨局|跨会话|持久|持久化|本局|当前会话/i.test(
+      value,
+    );
+  const isPoolDepletionNoise =
+    /remaining.*less than|fewer than|pool exhaustion|exhaustion|show fewer|reset the pool|剩余.*少于|不足\s*\d|候选.*少于|候选池耗尽|重置候选池/i.test(
+      value,
+    );
+  const isCatalogNoise =
+    /specific|concrete|catalog|candidate contents|effect definitions|what are the choices|which choices|which options|object definitions|具体效果|具体内容|候选对象的来源和具体内容|对象池中的对象|图标|名称|描述|稀有度有哪几个等级|label|icon|copy/i.test(
+      value,
+    );
+  const isPresentationNoise =
+    promptHints.uiSurface &&
+    /modal|dialog|panel|popup|presentation|surface|界面形式|弹窗|面板|窗口/i.test(text);
+
+  return isPersistenceNoise || isPoolDepletionNoise || isCatalogNoise || isPresentationNoise;
 }
 
 function isBoundedVariabilityQuestion(value: unknown): boolean {
@@ -660,421 +2150,189 @@ function isBoundedVariabilityQuestion(value: unknown): boolean {
   }
 
   const question = value.toLowerCase();
-  const mentionsDetail =
-    question.includes("具体内容") ||
-    question.includes("具体数值") ||
-    question.includes("具体的增益列表") ||
-    question.includes("增益列表") ||
-    question.includes("属性类型") ||
-    question.includes("力量") ||
-    question.includes("敏捷") ||
-    question.includes("智力") ||
-    question.includes("攻击力") ||
-    question.includes("护甲") ||
-    question.includes("数值") ||
-    question.includes("名称") ||
-    question.includes("图标") ||
-    question.includes("icon") ||
-    question.includes("resource path") ||
-    question.includes("资源路径") ||
-    question.includes("attribute values") ||
-    question.includes("属性加成数值");
-  const mentionsArchitectureGap =
-    question.includes("what triggers") ||
-    question.includes("trigger") ||
-    question.includes("which existing systems") ||
-    question.includes("integrate with") ||
-    question.includes("multi-factor") ||
-    question.includes("abilities") ||
-    question.includes("items") ||
-    question.includes("custom hero mechanics") ||
-    question.includes("联动") ||
-    question.includes("触发") ||
-    question.includes("已有系统");
-
-  return mentionsDetail && !mentionsArchitectureGap;
-}
-
-function isEffectLifecycleVariabilityQuestion(value: unknown): boolean {
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  const question = value.toLowerCase();
-  const mentionsReplacementConcept =
-    question.includes("replace") ||
-    question.includes("replaced") ||
-    question.includes("existing one") ||
-    question.includes("existing buff") ||
-    question.includes("current buff") ||
-    question.includes("previous buff") ||
-    question.includes("replace old") ||
-    question.includes("new selection replace old") ||
-    question.includes("保留最高值") ||
-    question.includes("highest value") ||
-    question.includes("retention priority") ||
-    question.includes("替换") ||
-    question.includes("旧增益") ||
-    question.includes("当前增益");
-  const mentionsStackingConcept =
-    question.includes("stack") ||
-    question.includes("stacking") ||
-    question.includes("additively") ||
-    question.includes("accumulate") ||
-    question.includes("叠加");
-  const mentionsCoexistenceConcept =
-    question.includes("hold multiple buffs") ||
-    question.includes("multiple buffs simultaneously") ||
-    question.includes("multiple buffs") ||
-    question.includes("same type") ||
-    question.includes("same-type") ||
-    question.includes("多次使用系统") ||
-    question.includes("repeated uses") ||
-    question.includes("same match") ||
-    question.includes("simultaneously") ||
-    question.includes("coexist") ||
-    question.includes("coexisting") ||
-    question.includes("同时拥有多个增益") ||
-    question.includes("多个增益同时") ||
-    question.includes("多个增益") ||
-    question.includes("同类型");
-  const mentionsLifecycle =
-    question.includes("clarify-stacking") ||
-    question.includes("clarify-duration") ||
-    question.includes("叠加") ||
-    question.includes("替换") ||
-    question.includes("多次打开") ||
-    question.includes("永久的") ||
-    question.includes("永久保留") ||
-    question.includes("临时的") ||
-    question.includes("持续多久") ||
-    question.includes("永久持续") ||
-    question.includes("限时") ||
-    question.includes("limited duration") ||
-    question.includes("多少秒") ||
-    question.includes("几秒") ||
-    question.includes("一段时间") ||
-    question.includes("持续到游戏结束") ||
-    question.includes("until next selection") ||
-    question.includes("仅在特定条件下生效") ||
-    question.includes("是否可叠加") ||
-    question.includes("禁止选择同类型") ||
-    question.includes("可以在一局游戏中多次打开") ||
-    question.includes("移除旧效果") ||
-    question.includes("持续时间") ||
-    question.includes("duration") ||
-    question.includes("stacking") ||
-    question.includes("temporary") ||
-    question.includes("permanent") ||
-    question.includes("permanent for the match") ||
-    question.includes("temporary with duration") ||
-    question.includes("until next selection") ||
-    question.includes("accumulate multiple buffs") ||
-    question.includes("replace the previous buff") ||
-    question.includes("reopen") ||
-    question.includes("open multiple times") ||
-    question.includes("replace current buff") ||
-    question.includes("remove old effect");
-
-  return (
-    mentionsLifecycle ||
-    (mentionsReplacementConcept && (mentionsStackingConcept || mentionsCoexistenceConcept))
-  );
-}
-
-function hasSupportedModifierLifecycleContext(candidate: Partial<IntentSchema>): boolean {
-  return (
-    candidate.normalizedMechanics?.outcomeApplication === true &&
-    (candidate.normalizedMechanics?.playerChoice === true || candidate.selection?.mode === "user-chosen") &&
-    hasRepeatableSelectionIntent(candidate) &&
-    hasChoiceStateCarryThroughIntent(candidate) &&
-    (!!candidate.effects?.durationSemantics || candidate.normalizedMechanics?.uiModal === true)
-  );
-}
-
-function hasRepeatableSelectionIntent(candidate: Partial<IntentSchema>): boolean {
-  if (candidate.selection?.repeatability === "repeatable" || candidate.selection?.repeatability === "persistent") {
-    return true;
-  }
-
-  if (candidate.flow?.supportsRetry === true) {
-    return true;
-  }
-
-  if ((candidate.flow?.sequence || []).some((step) => {
-    const text = step.toLowerCase();
-    return text.includes("每次") || text.includes("再次") || text.includes("repeat");
-  })) {
-    return true;
-  }
-
-  return collectIntentStrings(candidate).some((value) => {
-    const text = value.toLowerCase();
-    return (
-      text.includes("repeatable") ||
-      text.includes("repeated") ||
-      text.includes("repeat trigger") ||
-      text.includes("reopen") ||
-      text.includes("open again") ||
-      text.includes("open multiple times") ||
-      text.includes("每次打开") ||
-      text.includes("再次打开") ||
-      text.includes("多次打开") ||
-      text.includes("重复触发") ||
-      text.includes("反复触发")
-    );
-  });
-}
-
-function hasChoiceStateCarryThroughIntent(candidate: Partial<IntentSchema>): boolean {
-  const stateModel = candidate.stateModel;
-  const hasPersistedChoiceState = !!stateModel?.states?.some((state) => {
-    const summary = typeof state.summary === "string" ? state.summary.toLowerCase() : "";
-    const id = typeof state.id === "string" ? state.id.toLowerCase() : "";
-    return (
-      state.lifetime === "persistent" ||
-      state.lifetime === "session" ||
-      summary.includes("active buff") ||
-      summary.includes("active state") ||
-      summary.includes("current buff") ||
-      summary.includes("current selection") ||
-      summary.includes("current choice") ||
-      summary.includes("selected state") ||
-      summary.includes("selection state") ||
-      summary.includes("当前增益") ||
-      summary.includes("当前选择") ||
-      summary.includes("当前状态") ||
-      summary.includes("已选择") ||
-      summary.includes("选择状态") ||
-      summary.includes("状态同步") ||
-      summary.includes("active-buff") ||
-      id.includes("active_buff") ||
-      id.includes("current_buff") ||
-      id.includes("current_selection") ||
-      id.includes("current_choice") ||
-      id.includes("active_state") ||
-      id.includes("selected_state") ||
-      id.includes("selection_state")
-    );
-  });
-
-  if (hasPersistedChoiceState) {
-    return true;
-  }
-
-  return collectIntentStrings(candidate).some((value) => {
-    const text = value.toLowerCase();
-    return (
-      text.includes("current choice") ||
-      text.includes("current selection") ||
-      text.includes("current state") ||
-      text.includes("selected state") ||
-      text.includes("selection state") ||
-      text.includes("status sync") ||
-      text.includes("state sync") ||
-      text.includes("display current") ||
-      text.includes("show current") ||
-      text.includes("已选择") ||
-      text.includes("当前选择") ||
-      text.includes("当前状态") ||
-      text.includes("当前选择状态") ||
-      text.includes("选择状态") ||
-      text.includes("状态同步")
-    );
-  });
-}
-
-function collectIntentStrings(candidate: Partial<IntentSchema>): string[] {
-  const values: string[] = [];
-  values.push(candidate.request?.goal || "");
-  values.push(candidate.flow?.triggerSummary || "");
-  values.push(...normalizeStringArray(candidate.flow?.sequence));
-  values.push(...normalizeStringArray(candidate.requirements?.functional));
-  values.push(...normalizeStringArray(candidate.requirements?.interactions));
-  values.push(...normalizeStringArray(candidate.requirements?.dataNeeds));
-  values.push(...normalizeStringArray(candidate.requirements?.outputs));
-  values.push(...normalizeStringArray(candidate.uiRequirements?.surfaces));
-  values.push(...normalizeStringArray(candidate.uiRequirements?.feedbackNeeds));
-  values.push(...normalizeStringArray(candidate.openQuestions));
-  values.push(...normalizeStringArray(candidate.resolvedAssumptions));
-
-  for (const requirement of candidate.requirements?.typed || []) {
-    values.push(requirement.summary || "");
-    values.push(...normalizeStringArray(requirement.inputs));
-    values.push(...normalizeStringArray(requirement.outputs));
-    values.push(...normalizeStringArray(requirement.invariants));
-  }
-
-  for (const binding of candidate.integrations?.expectedBindings || []) {
-    values.push(binding.summary || "");
-    values.push(binding.id || "");
-  }
-
-  return values.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-}
-
-function isNonBlockingClarification(
-  question: unknown,
-  candidate: Partial<IntentSchema>
-): boolean {
-  return (
-    isBoundedVariabilityQuestion(question) ||
-    (isEffectLifecycleVariabilityQuestion(question) && hasSupportedModifierLifecycleContext(candidate))
-  );
-}
-
-function shouldPromoteExistingSeamSupportedIntent(
-  candidate: Partial<IntentSchema>,
-  requiredClarifications: RequiredClarification[],
-  openQuestions: string[],
-  uncertainties: IntentUncertainty[]
-): boolean {
-  if (!hasBlueprintSemanticMinimum(candidate)) {
-    return false;
-  }
-
-  const issues = [
-    ...requiredClarifications.map((item) => item.question),
-    ...openQuestions,
-    ...uncertainties.map((item) => item.summary),
+  const detailHints = [
+    "specific",
+    "specific choices",
+    "specific options",
+    "catalog",
+    "list",
+    "names",
+    "descriptions",
+    "available choices",
+    "available options",
+    "choice list",
+    "option list",
+    "exact effects",
+    "selected result",
+    "result list",
+    "effect list",
+    "icon",
+    "resource path",
+    "attribute values",
+    "stat values",
+    "what are the three choices",
+    "which choices",
+    "which options",
+    "具体内容",
+    "具体数值",
+    "具体选项",
+    "选项内容",
+    "候选池内容",
+    "效果列表",
+    "结果列表",
+    "列表",
+    "名称",
+    "描述",
+    "图标",
+    "资源路径",
+    "属性",
+    "选项",
+    "结果",
+    "效果",
+  ];
+  const architectureHints = [
+    "what triggers",
+    "trigger condition",
+    "which system",
+    "integrate with",
+    "state model",
+    "persist",
+    "persistence",
+    "触发",
+    "联动",
+    "系统",
+    "状态模型",
+    "持久化",
   ];
 
-  return issues.length > 0 && issues.every((issue) => isResolvableExistingSeamIssue(issue, candidate));
+  const mentionsDetail = detailHints.some((hint) => question.includes(hint));
+  const mentionsArchitecture = architectureHints.some((hint) => question.includes(hint));
+
+  return mentionsDetail && !mentionsArchitecture;
 }
 
-function isSupportedTriChoiceBuffFamilyContext(candidate: Partial<IntentSchema>): boolean {
-  const hasMechanicShape =
-    candidate.normalizedMechanics?.trigger === true &&
-    candidate.normalizedMechanics?.candidatePool === true &&
-    candidate.normalizedMechanics?.playerChoice === true &&
-    candidate.normalizedMechanics?.uiModal === true &&
-    candidate.normalizedMechanics?.outcomeApplication === true;
-  const hasSelectionShape =
-    (candidate.selection?.mode === "user-chosen" || candidate.normalizedMechanics?.playerChoice === true) &&
-    hasRepeatableSelectionIntent(candidate);
-  const bindings = candidate.integrations?.expectedBindings || [];
-  const hasIntegrationShape =
-    bindings.some((binding) => binding.kind === "ui-surface") &&
-    bindings.some((binding) => binding.kind === "bridge-point") &&
-    bindings.some((binding) => binding.kind === "entry-point" || binding.kind === "data-source");
-
-  return hasMechanicShape && hasSelectionShape && hasIntegrationShape && hasSupportedModifierLifecycleContext(candidate);
-}
-
-function isSupportedTriChoicePolishQuestion(value: unknown): boolean {
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  const question = value.toLowerCase();
-  return (
-    question.includes("rebind") ||
-    question.includes("可重绑") ||
-    question.includes("rebindable") ||
-    question.includes("cooldown") ||
-    question.includes("冷却") ||
-    question.includes("visual") ||
-    question.includes("audio") ||
-    question.includes("反馈") ||
-    question.includes("音效") ||
-    question.includes("特效") ||
-    question.includes("f4")
-  );
-}
-
-function isSupportedTriChoiceCatalogQuestion(value: unknown): boolean {
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  const question = value.toLowerCase();
-  return (
-    isBoundedVariabilityQuestion(question) ||
-    question.includes("pool size") ||
-    question.includes("total pool size") ||
-    question.includes("buff list") ||
-    question.includes("buff types") ||
-    question.includes("specific buff types") ||
-    question.includes("pool composition") ||
-    question.includes("modifier examples") ||
-    question.includes("buff option list") ||
-    question.includes("stat values") ||
-    question.includes("duplicate across sessions") ||
-    question.includes("总池大小") ||
-    question.includes("总候选池") ||
-    question.includes("完整 buff 列表") ||
-    question.includes("完整增益列表") ||
-    question.includes("具体 buff 类型") ||
-    question.includes("具体增益类型") ||
-    question.includes("池组成") ||
-    question.includes("具体属性加成示例") ||
-    question.includes("具体增益选项") ||
-    question.includes("跨局重复") ||
-    question.includes("同类型") ||
-    question.includes("same type") ||
-    question.includes("same-type") ||
-    question.includes("duplicate")
-  );
-}
-
-function isResolvableExistingSeamIssue(
-  value: unknown,
-  candidate: Partial<IntentSchema>
-): boolean {
-  if (isBoundedVariabilityQuestion(value)) {
+function hasNonUiGameplaySemantics(candidate: Partial<IntentSchema>): boolean {
+  if ((candidate.requirements?.typed || []).some((requirement) => requirement.kind !== "ui")) {
     return true;
   }
 
-  if (isEffectLifecycleVariabilityQuestion(value) && hasSupportedModifierLifecycleContext(candidate)) {
+  if ((candidate.interaction?.activations?.length || 0) > 0) {
     return true;
   }
 
-  if (!isSupportedTriChoiceBuffFamilyContext(candidate)) {
-    return false;
+  if (
+    !!candidate.selection?.mode ||
+    !!candidate.selection?.choiceMode ||
+    !!candidate.selection?.choiceCount ||
+    !!candidate.selection?.source
+  ) {
+    return true;
   }
 
-  return (
-    !explicitlyReopensSupportedFamilyArchitecture(value) &&
-    (isSupportedTriChoicePolishQuestion(value) || isSupportedTriChoiceCatalogQuestion(value))
-  );
+  if ((candidate.effects?.operations?.length || 0) > 0 || (candidate.outcomes?.operations?.length || 0) > 0) {
+    return true;
+  }
+
+  if (!!candidate.spatial?.motion || !!candidate.spatial?.emission) {
+    return true;
+  }
+
+  if ((candidate.stateModel?.states?.length || 0) > 0 || (candidate.contentModel?.collections?.length || 0) > 0) {
+    return true;
+  }
+
+  if ((candidate.composition?.dependencies?.length || 0) > 0) {
+    return true;
+  }
+
+  return (candidate.integrations?.expectedBindings || []).some((binding) => binding.kind !== "ui-surface");
 }
 
-function explicitlyReopensSupportedFamilyArchitecture(value: unknown): boolean {
-  if (typeof value !== "string") {
-    return false;
+function hasCrossSystemCompositionSemantics(candidate: Partial<IntentSchema>): boolean {
+  if (
+    (candidate.composition?.dependencies || []).some(
+      (dependency) => dependency.kind === "cross-feature" || dependency.kind === "external-system",
+    )
+  ) {
+    return true;
   }
 
-  const text = value.toLowerCase();
-  const reopensTrigger =
-    text.includes("what triggers") ||
-    text.includes("trigger condition") ||
-    text.includes("when does the selection happen") ||
-    text.includes("how is f4 triggered") ||
-    text.includes("触发条件") ||
-    text.includes("什么触发") ||
-    text.includes("何时触发");
-  const reopensIntegration =
-    text.includes("which system") ||
-    text.includes("which existing systems") ||
-    text.includes("integrate with") ||
-    text.includes("what does it sync with") ||
-    text.includes("bridge target") ||
-    text.includes("联动哪个系统") ||
-    text.includes("同步到哪里") ||
-    text.includes("桥接到哪里");
-  const reopensStateShape =
-    text.includes("what state is persisted") ||
-    text.includes("whether state should persist") ||
-    text.includes("where is current buff stored") ||
-    text.includes("candidate pool state") ||
-    text.includes("state model") ||
-    text.includes("存什么状态") ||
-    text.includes("状态模型") ||
-    text.includes("候选池状态");
+  if (
+    (candidate.outcomes?.operations || []).includes("grant-feature") &&
+    (
+      candidate.timing?.duration?.kind === "persistent" ||
+      (candidate.stateModel?.states || []).some((state) => state.lifetime === "persistent") ||
+      (candidate.integrations?.expectedBindings || []).some((binding) => binding.kind === "data-source")
+    )
+  ) {
+    return true;
+  }
 
-  return reopensTrigger || reopensIntegration || reopensStateShape;
+  return false;
+}
+
+function mentionsCancelSemantics(value: string): boolean {
+  return [
+    "cancel",
+    "dismiss",
+    "close without",
+    "close the modal",
+    "cancelable",
+    "取消",
+    "关闭",
+    "可取消",
+  ].some((token) => value.includes(token));
+}
+
+function mentionsRetrySemantics(value: string): boolean {
+  return [
+    "retry",
+    "try again",
+    "重试",
+    "再次尝试",
+  ].some((token) => value.includes(token));
+}
+
+function mentionsConfirmationSemantics(value: string): boolean {
+  return [
+    "confirm",
+    "confirmation",
+    "double confirm",
+    "二次确认",
+    "确认",
+  ].some((token) => value.includes(token));
 }
 
 function isOneOf<T extends string>(value: unknown, choices: readonly T[]): value is T {
   return typeof value === "string" && choices.includes(value as T);
+}
+
+function normalizePositiveNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.floor(parsed);
+    }
+  }
+
+  return undefined;
 }

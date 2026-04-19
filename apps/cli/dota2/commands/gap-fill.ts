@@ -178,7 +178,7 @@ export async function runGapFillCommand(options: Dota2CLIOptions): Promise<boole
   const effectiveBoundaryId = resolvedBoundary.boundaryId || options.boundaryId;
 
   console.log("=".repeat(70));
-  console.log("Rune Weaver - Dota2 Gap Fill");
+  console.log("Rune Weaver - Dota2 Local Repair / Muscle Fill (gap-fill compatibility alias)");
   console.log("=".repeat(70));
   console.log(`\nHost: ${options.hostRoot}`);
   console.log(`Feature: ${options.featureId || "(not specified)"}`);

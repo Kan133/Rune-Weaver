@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-phase-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-18
 > Read when: entering the repo and locating the right control docs
 > Do not use for: overriding DOC-STATUS-REGISTRY or AGENT-DOC-ROUTING
 
@@ -41,7 +41,7 @@ Rule:
 
 Rune Weaver currently has:
 
-- stable low-frequency baseline docs for lifecycle, architecture, and workspace truth
+- stable low-frequency baseline docs for the ratified V2 lifecycle, architecture, and workspace truth
 - fresh session-sync notes for same-day mainline status
 - a shared plan for cross-track coordination
 
@@ -64,11 +64,11 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 - [HANDOFF.md](/D:/Rune%20Weaver/docs/HANDOFF.md)
   - operational entry and next-action guidance
 - [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
-  - active execution queue after the post-ABCD reset
+  - active Dota2 V2 execution queue
 - [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
-  - current execution layering
+  - current governance-first execution layering
 - [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
-  - workspace truth, ownership, create/update/delete semantics
+  - workspace truth, ownership, dependency, and lifecycle semantics
 
 ### Governance
 
@@ -93,6 +93,8 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 ### Host-Specific Docs
 
 - Dota2-specific docs now live under [docs/hosts/dota2](/D:/Rune%20Weaver/docs/hosts/dota2)
+- [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md)
+  - current Dota2-specific V2 implementation reference; use with the latest Dota2 session-sync and root baseline docs
 - the frozen Talent Draw acceptance support docs now also live under [docs/hosts/dota2](/D:/Rune%20Weaver/docs/hosts/dota2):
   - [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md)
   - [TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md)

@@ -9,9 +9,13 @@ export function createUpdateReviewArtifact(options: Dota2CLIOptions): Dota2Revie
       "intentSchema",
       "blueprint",
       "patternResolution",
+      "artifactSynthesis",
       "assemblyPlan",
       "hostRealization",
       "generator",
+      "localRepair",
+      "dependencyRevalidation",
+      "finalCommitDecision",
       "updateDiff",
       "writeExecutor",
       "hostValidation",
@@ -23,13 +27,31 @@ export function createUpdateReviewArtifact(options: Dota2CLIOptions): Dota2Revie
   artifact.intentSchema.usedFallback = false;
   artifact.intentSchema.intentKind = "";
   artifact.stages.intentSchema = { success: false, summary: "", issues: [] };
-  artifact.stages.blueprint = { success: false, summary: "", moduleCount: 0, patternHints: [], issues: [] };
+  artifact.stages.blueprint = {
+    success: false,
+    summary: "",
+    moduleCount: 0,
+    patternHints: [],
+    issues: [],
+    moduleSourceBreakdown: { family: 0, pattern: 0, synthesized: 0 },
+  };
   artifact.stages.patternResolution = {
     success: false,
     resolvedPatterns: [],
     unresolvedPatterns: [],
     issues: [],
     complete: false,
+    resolvedModules: [],
+    unresolvedModuleNeeds: [],
+  };
+  artifact.stages.artifactSynthesis = {
+    success: true,
+    triggered: false,
+    artifacts: [],
+    synthesizedModuleIds: [],
+    warnings: [],
+    blockers: [],
+    skipped: true,
   };
   artifact.stages.assemblyPlan = {
     success: false,
@@ -40,6 +62,34 @@ export function createUpdateReviewArtifact(options: Dota2CLIOptions): Dota2Revie
   };
   artifact.stages.hostRealization = { success: false, units: [], blockers: [] };
   artifact.stages.generator = { success: false, generatedFiles: [], issues: [] };
+  artifact.stages.localRepair = {
+    success: true,
+    triggered: false,
+    attempted: false,
+    repairedTargets: [],
+    warnings: [],
+    blockers: [],
+    skipped: true,
+  };
+  artifact.stages.dependencyRevalidation = {
+    success: true,
+    impactedFeatures: [],
+    blockers: [],
+    downgradedFeatures: [],
+    compatibleFeatures: [],
+    skipped: true,
+  };
+  artifact.stages.finalCommitDecision = {
+    success: false,
+    outcome: "blocked",
+    requiresReview: true,
+    reasons: [],
+    reviewModules: [],
+    impactedFeatures: [],
+    dependencyBlockers: [],
+    downgradedFeatures: [],
+    skipped: true,
+  };
   artifact.stages.writeExecutor = {
     success: false,
     executedActions: 0,

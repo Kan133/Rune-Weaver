@@ -5,7 +5,7 @@
  */
 
 import assert from "assert";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { printPostGenerationReport, validatePostGeneration } from "./post-generation-validator.js";
 
@@ -187,6 +187,32 @@ async function runTests(): Promise<void> {
     assert(result6.summary.total === result6.checks.length);
     assert(result6.summary.passed + result6.summary.failed === result6.summary.total);
     assert(result6.summary.failed === result6.checks.filter((check) => !check.passed).length);
+    console.log("  PASS");
+
+    console.log("\nTest 8: Missing key binding source is reported without throwing...");
+    const workspacePath = join(testHost, "game/scripts/src/rune_weaver/rune-weaver.workspace.json");
+    const workspace = JSON.parse(readFileSync(workspacePath, "utf-8"));
+    workspace.features[0].selectedPatterns = ["input.key_binding"];
+    workspace.features[0].generatedFiles = [
+      "game/scripts/src/rune_weaver/generated/server/test_feature_1_input_input_key_binding.ts",
+    ];
+    writeFileSync(workspacePath, JSON.stringify(workspace, null, 2), "utf-8");
+    const result8 = validatePostGeneration(testHost);
+    const keyBindingCheck = result8.checks.find((check) => check.check === "active_key_binding_conflicts");
+    assert(keyBindingCheck && !keyBindingCheck.passed);
+    assert(keyBindingCheck.message.includes("missing their key binding sources"));
+    console.log("  PASS");
+
+    console.log("\nTest 9: Missing weighted pool source is reported without throwing...");
+    workspace.features[0].selectedPatterns = ["rule.selection_flow", "data.weighted_pool"];
+    workspace.features[0].generatedFiles = [
+      "game/scripts/src/rune_weaver/generated/shared/test_feature_1_data_weighted_pool.ts",
+    ];
+    writeFileSync(workspacePath, JSON.stringify(workspace, null, 2), "utf-8");
+    const result9 = validatePostGeneration(testHost);
+    const seedCheck = result9.checks.find((check) => check.check === "selection_pool_seed_data");
+    assert(seedCheck && !seedCheck.passed);
+    assert(seedCheck.message.includes("missing weighted pool sources"));
     console.log("  PASS");
 
     console.log("\n" + "=".repeat(50));

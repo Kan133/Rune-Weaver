@@ -89,7 +89,7 @@ export interface BlueprintReviewArtifact {
   sourceSchema: {
     goal: string;
     intentKind: string;
-    isReadyForBlueprint: boolean;
+    uncertaintyCount: number;
   };
   blueprint: {
     id: string;

@@ -1,0 +1,242 @@
+import assert from "node:assert/strict";
+
+import type { Blueprint } from "../../../core/schema/types.js";
+import {
+  buildSynthesizedAssemblyPlan,
+  buildSynthesizedAssemblyPlanWithLLM,
+} from "./index.js";
+
+function makeExploratoryBlueprint(): Blueprint {
+  return {
+    id: "rw_fire_dash",
+    version: "1.0",
+    summary: "An exploratory fire dash ability.",
+    sourceIntent: {
+      intentKind: "micro-feature",
+      goal: "Create a fire dash ability.",
+      normalizedMechanics: {
+        trigger: true,
+        outcomeApplication: true,
+      },
+    },
+    modules: [
+      {
+        id: "fire_dash_core",
+        role: "Fire dash core",
+        category: "effect",
+        responsibilities: ["Dash forward and leave fire at the destination."],
+        inputs: [],
+        outputs: ["damage_over_time"],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: false,
+    implementationStrategy: "exploratory",
+    unresolvedModuleNeeds: [
+      {
+        moduleId: "fire_dash_core",
+        semanticRole: "Fire dash core",
+        category: "effect",
+        reason: "No reusable implementation was admitted for this module.",
+        requiredCapabilities: [],
+        requiredOutputs: ["server.runtime", "host.config.kv"],
+        artifactTargets: ["server", "config", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+    ],
+  } as Blueprint;
+}
+
+function makeBundledExploratoryBlueprint(): Blueprint {
+  return {
+    id: "rw_fire_orbit",
+    version: "1.0",
+    summary: "An exploratory fire-orbit ability.",
+    sourceIntent: {
+      intentKind: "micro-feature",
+      goal: "Create a fire orb that follows the hero for 5 seconds and burns nearby enemies every second.",
+      normalizedMechanics: {
+        trigger: true,
+        outcomeApplication: true,
+      },
+    },
+    modules: [
+      {
+        id: "orbit_timing",
+        role: "timed_rule",
+        category: "rule",
+        responsibilities: ["Run the 5-second orbit duration."],
+      },
+      {
+        id: "orbit_state",
+        role: "session_state",
+        category: "data",
+        responsibilities: ["Track the spawned orb instance."],
+      },
+      {
+        id: "orbit_spawn",
+        role: "spawn_emitter",
+        category: "effect",
+        responsibilities: ["Spawn the orb and apply burn pulses."],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: false,
+    implementationStrategy: "exploratory",
+    unresolvedModuleNeeds: [
+      {
+        moduleId: "orbit_timing",
+        semanticRole: "timed_rule",
+        category: "rule",
+        reason: "No reusable timing implementation matched.",
+        requiredCapabilities: ["timing.interval.local"],
+        requiredOutputs: ["server.runtime", "host.config.kv"],
+        artifactTargets: ["server", "config", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+      {
+        moduleId: "orbit_state",
+        semanticRole: "session_state",
+        category: "data",
+        reason: "No reusable state implementation matched.",
+        requiredCapabilities: ["state.session.feature_owned"],
+        requiredOutputs: ["server.runtime"],
+        artifactTargets: ["server", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+      {
+        moduleId: "orbit_spawn",
+        semanticRole: "spawn_emitter",
+        category: "effect",
+        reason: "No reusable spawn implementation matched.",
+        requiredCapabilities: ["emission.spawn.feature_owned"],
+        requiredOutputs: ["server.runtime", "host.config.kv"],
+        artifactTargets: ["server", "config", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+    ],
+  } as Blueprint;
+}
+
+async function withDisabledLLM<T>(run: () => Promise<T>): Promise<T> {
+  const keys = [
+    "RW_LLM_PROCESS_ENV_OVERRIDES",
+    "LLM_PROVIDER",
+    "OPENAI_BASE_URL",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+  ] as const;
+  const snapshot = new Map<string, string | undefined>(keys.map((key) => [key, process.env[key]]));
+
+  process.env.RW_LLM_PROCESS_ENV_OVERRIDES = "1";
+  process.env.LLM_PROVIDER = "";
+  process.env.OPENAI_BASE_URL = "";
+  process.env.OPENAI_API_KEY = "";
+  process.env.OPENAI_MODEL = "";
+  process.env.ANTHROPIC_API_KEY = "";
+  process.env.ANTHROPIC_MODEL = "";
+
+  try {
+    return await run();
+  } finally {
+    for (const key of keys) {
+      const value = snapshot.get(key);
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+async function testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPlan() {
+  const blueprint = makeExploratoryBlueprint();
+  const deterministic = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+  const withFallback = await withDisabledLLM(() =>
+    buildSynthesizedAssemblyPlanWithLLM(blueprint, blueprint.id)
+  );
+
+  assert.equal(withFallback.synthesis.artifacts.length, 2);
+  assert.equal(withFallback.plan.writeTargets.length, 2);
+  assert.deepEqual(
+    withFallback.synthesis.artifacts.map((artifact) => artifact.targetPath),
+    deterministic.synthesis.artifacts.map((artifact) => artifact.targetPath),
+  );
+  assert.ok(withFallback.synthesis.artifacts.some((artifact) => artifact.hostTarget === "lua_ability"));
+  assert.ok(withFallback.synthesis.artifacts.some((artifact) => artifact.hostTarget === "ability_kv"));
+  assert.ok((withFallback.synthesis.grounding || []).length >= 2);
+  assert.equal(
+    (withFallback.synthesis.grounding || []).every((item) => item.unknownSymbols.length === 0),
+    true,
+  );
+  assert.equal(
+    (withFallback.synthesis.grounding || []).every((item) => item.warnings.length === 0),
+    true,
+  );
+}
+
+async function testGroundingIgnoresLocallyDefinedLuaHelpers(): Promise<void> {
+  const blueprint = makeBundledExploratoryBlueprint();
+  const result = await withDisabledLLM(() =>
+    buildSynthesizedAssemblyPlanWithLLM(blueprint, blueprint.id)
+  );
+
+  const luaGrounding = (result.synthesis.grounding || []).find((item) =>
+    item.targetProfile === "lua_ability"
+  );
+  assert.ok(luaGrounding);
+  assert.equal(luaGrounding!.unknownSymbols.includes("BurnNearbyEnemies"), false);
+  assert.equal(
+    luaGrounding!.warnings.some((warning) => warning.includes("BurnNearbyEnemies")),
+    false,
+  );
+}
+
+function testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility(): void {
+  const blueprint = makeBundledExploratoryBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+
+  assert.equal(result.synthesis.bundles?.length, 1);
+  assert.equal(result.plan.synthesisBundles?.length, 1);
+  assert.equal(result.synthesis.artifacts.length, 2);
+  assert.equal(result.plan.writeTargets.length, 2);
+  assert.equal(result.plan.modules?.length, 1);
+  assert.equal(
+    result.synthesis.moduleRecords?.every((record) => record.bundleId === result.synthesis.bundles?.[0]?.bundleId),
+    true,
+  );
+  assert.equal(
+    result.synthesis.artifacts.every((artifact) => artifact.bundleId === result.synthesis.bundles?.[0]?.bundleId),
+    true,
+  );
+  assert.equal(
+    result.synthesis.artifacts.some((artifact) => artifact.outputKind === "ui"),
+    false,
+  );
+}
+
+async function runTests() {
+  testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility();
+  await testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPlan();
+  await testGroundingIgnoresLocallyDefinedLuaHelpers();
+  console.log("adapters/dota2/synthesis/index.test.ts passed");
+}
+
+runTests();

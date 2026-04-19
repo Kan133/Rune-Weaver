@@ -16,6 +16,8 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 import {
+  analyzeDependencyRevalidation,
+  applyDependencyRevalidationEffects,
   initializeWorkspace,
   saveWorkspace,
   checkDuplicateFeature,
@@ -35,7 +37,15 @@ import type { VerdictInput, HostValidationResult, RuntimeValidationResult, Works
 import { checkWriteConflicts } from "./helpers/governance-check.js";
 import { realizeDota2Host, summarizeRealization } from "../../adapters/dota2/realization/index.js";
 import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } from "../../adapters/dota2/routing/index.js";
-import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
+import type { AssemblyPlan, HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
+import type {
+  CurrentFeatureContext,
+  IntentSchema as ReviewIntentSchema,
+  RelationCandidate,
+  UpdateIntent,
+  WizardClarificationPlan,
+  WorkspaceSemanticContext,
+} from "../../core/schema/types.js";
 import { isHostFullyReady } from "../../adapters/dota2/scanner/host-status.js";
 import {
   generateCleanupPlan,
@@ -45,8 +55,10 @@ import {
 } from "../../adapters/dota2/regenerate/index.js";
 import type { CleanupPlan, CleanupExecutionResult } from "../../adapters/dota2/regenerate/index.js";
 import type { RollbackPlan, RollbackExecutionResult } from "../../adapters/dota2/rollback/index.js";
-import { getDefaultReviewArtifactOutputDir, saveDefaultReviewArtifact, saveReviewArtifact } from "./dota2/review-artifacts.js";
+import { shouldUseArtifactSynthesis } from "../../adapters/dota2/synthesis/index.js";
+import { resolveReviewArtifactOutputDir } from "./dota2/review-artifacts.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
+import { saveCreateSemanticArtifacts, type SemanticArtifactSummary } from "./dota2/semantic-artifacts.js";
 import { runDeleteCommand } from "./dota2/commands/delete.js";
 import { runGapFillCommand } from "./dota2/commands/gap-fill.js";
 import type { GapFillMode } from "../../core/gap-fill/index.js";
@@ -61,7 +73,9 @@ import { runLifecycleProofCommand } from "./dota2/commands/lifecycle-proof.js";
 import {
   buildAssemblyPlan,
   buildBlueprint,
+  buildUpdateBlueprint,
   createIntentSchema,
+  createUpdateIntent,
   createWritePlan,
   getFeatureMode,
   resolveStableFeatureId,
@@ -70,6 +84,8 @@ import {
 } from "./dota2/planning.js";
 import type { Dota2BlueprintBuildResult } from "./dota2/planning.js";
 import { executeWrite } from "./dota2/write-executor.js";
+import { runLocalRepairWithLLM } from "../../core/local-repair/index.js";
+import { buildFinalValidationStatus, calculateFinalCommitDecision } from "../../core/pipeline/final-commit-gate.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -120,19 +136,126 @@ export interface Dota2ReviewArtifact {
     uiNeeded: boolean;
     readiness?: string;
     mechanics: string[];
+    promptPackageId?: string;
+    promptConstraints?: {
+      mustPreserve: string[];
+      mustNotAdd: string[];
+      exactScalars: Record<string, string | number | boolean>;
+      openSemanticGaps: string[];
+    };
+    retrieval?: {
+      summary: string;
+      tiersUsed: number[];
+      evidenceRefs: Array<{ title: string; sourceKind: string; path?: string }>;
+    };
+  };
+  updateContext?: {
+    currentFeatureContext: CurrentFeatureContext;
+    requestedChangeIntentSchema: ReviewIntentSchema;
+    updateIntent: UpdateIntent;
+  };
+  clarificationPlan?: WizardClarificationPlan;
+  relationCandidates?: RelationCandidate[];
+  workspaceSemanticContext?: WorkspaceSemanticContext;
+  semanticArtifacts?: SemanticArtifactSummary;
+  moduleTruth?: {
+    totalModules: number;
+    sourceBreakdown: { family: number; pattern: number; synthesized: number };
+    unresolvedModuleNeeds: string[];
   };
   stages: {
     intentSchema: { success: boolean; summary: string; issues: string[]; usedFallback?: boolean; skipped?: boolean };
-    blueprint: { success: boolean; summary: string; moduleCount: number; patternHints: string[]; issues: string[]; skipped?: boolean };
-    patternResolution: { success: boolean; resolvedPatterns: string[]; unresolvedPatterns: string[]; issues: string[]; complete: boolean; skipped?: boolean };
+    blueprint: {
+      success: boolean;
+      summary: string;
+      moduleCount: number;
+      patternHints: string[];
+      issues: string[];
+      moduleSourceBreakdown?: { family: number; pattern: number; synthesized: number };
+      skipped?: boolean;
+    };
+    patternResolution: {
+      success: boolean;
+      resolvedPatterns: string[];
+      unresolvedPatterns: string[];
+      issues: string[];
+      complete: boolean;
+      resolvedModules?: Array<{ moduleId: string; sourceKind: string; patternId?: string; familyId?: string }>;
+      unresolvedModuleNeeds?: Array<{ moduleId: string; reason: string; category: string; role: string }>;
+      skipped?: boolean;
+    };
+    artifactSynthesis?: {
+      success: boolean;
+      triggered: boolean;
+      strategy?: string;
+      sourceKind?: string;
+      promptPackageId?: string;
+      artifacts: Array<{ id: string; moduleId: string; outputKind: string; targetPath: string; summary: string }>;
+      bundles?: Array<{
+        bundleId: string;
+        kind: string;
+        primaryModuleId: string;
+        moduleIds: string[];
+        artifactIds: string[];
+      }>;
+      moduleBundleMap?: Array<{ moduleId: string; bundleId: string }>;
+      bundleArtifacts?: Array<{ bundleId: string; artifactIds: string[]; targetPaths: string[] }>;
+      synthesizedModuleIds?: string[];
+      warnings: string[];
+      blockers: string[];
+      retrievalSummary?: string;
+      evidenceRefs?: Array<{ title: string; sourceKind: string; path?: string }>;
+      mustNotAddViolations?: string[];
+      grounding?: Array<{
+        artifactId: string;
+        verifiedSymbols: string[];
+        allowlistedSymbols: string[];
+        weakSymbols: string[];
+        unknownSymbols: string[];
+        warnings: string[];
+      }>;
+      skipped?: boolean;
+    };
     assemblyPlan: { success: boolean; selectedPatterns: string[]; writeTargets: string[]; readyForHostWrite: boolean; blockers: string[]; skipped?: boolean };
-    hostRealization: { success: boolean; units: Array<{ id: string; sourceModuleId: string; sourcePatternIds: string[]; role: string; realizationType: string; hostTargets: string[]; confidence: string; blockers?: string[] }>; blockers: string[]; skipped?: boolean };
+    hostRealization: { success: boolean; units: Array<{ id: string; sourceModuleId: string; sourcePatternIds: string[]; sourceKind?: string; role: string; realizationType: string; hostTargets: string[]; confidence: string; blockers?: string[] }>; blockers: string[]; skipped?: boolean };
     /** T115: Generator routing - routes realization to generator families */
-    generatorRouting?: { success: boolean; routes: Array<{ id: string; sourceUnitId: string; generatorFamily: string; routeKind: string; hostTarget: string; rationale: string[]; blockers?: string[] }>; warnings: string[]; blockers: string[]; skipped?: boolean };
+    generatorRouting?: { success: boolean; routes: Array<{ id: string; sourceUnitId: string; sourceKind?: string; generatorFamily: string; routeKind: string; hostTarget: string; rationale: string[]; blockers?: string[] }>; warnings: string[]; blockers: string[]; skipped?: boolean };
     /** Packet D: Governance pre-flight check */
     governanceCheck?: { success: boolean; hasConflict: boolean; conflicts: Array<{ kind: string; severity: string; conflictingPoint: string; existingFeatureId: string; existingFeatureLabel: string; explanation: string }>; recommendedAction: string; status: string; summary: string };
     /** T115-R2: Added deferredEntries to track deferred entries separately from generatedFiles */
     generator: { success: boolean; generatedFiles: string[]; issues: string[]; skipped?: boolean; deferredEntries?: Array<{ pattern: string; reason: string }>; /** T112-R1: Realization context from write plan */ realizationContext?: { version: string; host: string; sourceBlueprintId: string; units: Array<{ id: string; sourcePatternIds: string[]; realizationType: string; hostTargets: string[]; confidence: string }>; isFallback: boolean }; /** T112-R2: Warnings for deferred entries */ deferredWarnings?: string[] };
+    localRepair?: {
+      success: boolean;
+      triggered: boolean;
+      attempted: boolean;
+      repairedTargets: string[];
+      warnings: string[];
+      blockers: string[];
+      promptPackageId?: string;
+      evidenceRefs?: Array<{ title: string; sourceKind: string; path?: string }>;
+      boundaryHonored?: boolean;
+      revalidationPassed?: boolean;
+      skipped?: boolean;
+    };
+    dependencyRevalidation?: {
+      success: boolean;
+      impactedFeatures: Array<{ featureId: string; label: string; outcome: string; issues: string[] }>;
+      blockers: string[];
+      downgradedFeatures: string[];
+      compatibleFeatures: string[];
+      skipped?: boolean;
+    };
+    finalCommitDecision?: {
+      success: boolean;
+      outcome: string;
+      requiresReview: boolean;
+      reasons: string[];
+      reviewModules?: string[];
+      impactedFeatures: string[];
+      dependencyBlockers: string[];
+      downgradedFeatures: string[];
+      skipped?: boolean;
+    };
     writeExecutor: { success: boolean; executedActions: number; skippedActions: number; failedActions: number; createdFiles: string[]; modifiedFiles: string[]; blockedByReadinessGate?: boolean; readinessBlockers?: string[]; skipped?: boolean };
     hostValidation: { success: boolean; checks: string[]; issues: string[]; details: Record<string, unknown>; skipped?: boolean };
     runtimeValidation: { success: boolean; serverPassed: boolean; uiPassed: boolean; serverErrors: number; uiErrors: number; limitations: string[]; skipped?: boolean };
@@ -214,20 +337,20 @@ export function showDota2Help(): void {
   dry-run    预演模式，不写入文件
   review     生成 review artifact，不写入文件
   regenerate 重新生成已有 feature
-  validate   验证生成的文�?  repair     修复验证失败的问�?  doctor     检查宿主运行准备状�?  demo       生成 demo prepare runbook
+  validate   验证生成的文�?  repair     bounded local repair / muscle fill  doctor     检查宿主运行准备状�?  demo       生成 demo prepare runbook
   lifecycle  运行 Talent Draw 生命周期证明计划
   launch     启动 Dota2 Tools 进行测试
-  gap-fill   生成 boundary �?dry-run patch plan
+  gap-fill   repair 的兼容 alias，用于 boundary-local muscle fill
 
 选项:
   --host <path>       宿主项目根目�?(必需)
   --feature <id>      Feature ID (regenerate 必需)
-  --boundary <id>     gap-fill boundary ID
-  --feature <id>      gap-fill 可选：从 workspace 解析适用 boundary
-  --instruction <s>   gap-fill instruction text
-  --mode <mode>       gap-fill lifecycle mode: review | apply | validate-applied
+  --boundary <id>     repair / muscle boundary ID
+  --feature <id>      repair 可选：从 workspace 解析适用 boundary
+  --instruction <s>   repair / muscle instruction text
+  --mode <mode>       repair lifecycle mode: review | apply | validate-applied
   --apply             兼容旧参数：等同于 --mode apply
-  --approve <file>    批准并执行先前生成的 gap-fill approval record
+  --approve <file>    批准并执行先前生成的 repair approval record
   --addon-name <name> Dota2 addon 名称 (demo prepare/init 使用)
   --map <name>        Dota2 地图�?(demo prepare/launch 使用)
   --scenario <id>     lifecycle/demo scenario id
@@ -300,8 +423,8 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
 
   if (options.command === "update") {
     return await runUpdateCommand(options, {
-      createIntentSchema,
-      buildBlueprint,
+      createUpdateIntent,
+      buildUpdateBlueprint,
       resolvePatternsFromBlueprint,
       buildAssemblyPlan,
       createWritePlan,
@@ -335,7 +458,7 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
 
   const artifact = await runPipeline(options);
 
-  const outputDir = join(process.cwd(), "tmp", "cli-review");
+  const outputDir = resolveReviewArtifactOutputDir(options.output);
   mkdirSync(outputDir, { recursive: true });
 
   const outputPath = options.output || join(outputDir, `dota2-review-${Date.now()}.json`);
@@ -348,15 +471,80 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
   return (
     artifact.stages.writeExecutor.success &&
     artifact.stages.hostValidation.success &&
+    (artifact.stages.finalCommitDecision?.success ?? true) &&
     artifact.stages.workspaceState.success
   );
 }
 
-function getIntentReadiness(schema: { readiness?: string; isReadyForBlueprint?: boolean }): "ready" | "weak" | "blocked" {
-  if (schema.readiness === "ready" || schema.readiness === "weak" || schema.readiness === "blocked") {
-    return schema.readiness;
+function getIntentSemanticPosture(schema: { uncertainties?: Array<unknown> }): "ready" | "weak" {
+  return (schema.uncertainties?.length || 0) > 0 ? "weak" : "ready";
+}
+
+function summarizeModuleSources(
+  moduleRecords: Array<{ sourceKind?: string }> | undefined,
+): { family: number; pattern: number; synthesized: number } {
+  const summary = { family: 0, pattern: 0, synthesized: 0 };
+  if (!moduleRecords) {
+    return summary;
   }
-  return schema.isReadyForBlueprint ? "ready" : "blocked";
+
+  for (const record of moduleRecords) {
+    if (record.sourceKind === "family") {
+      summary.family += 1;
+    } else if (record.sourceKind === "pattern") {
+      summary.pattern += 1;
+    } else if (record.sourceKind === "synthesized") {
+      summary.synthesized += 1;
+    }
+  }
+
+  return summary;
+}
+
+function buildSynthesisBundleView(plan: AssemblyPlan | null | undefined): NonNullable<Dota2ReviewArtifact["stages"]["artifactSynthesis"]>["bundles"] {
+  if (!plan?.artifactSynthesisResult?.bundles || plan.artifactSynthesisResult.bundles.length === 0) {
+    return [];
+  }
+
+  return plan.artifactSynthesisResult.bundles.map((bundle) => ({
+    bundleId: bundle.bundleId,
+    kind: bundle.kind,
+    primaryModuleId: bundle.primaryModuleId,
+    moduleIds: bundle.moduleIds,
+    artifactIds: (plan.artifactSynthesisResult?.artifacts || [])
+      .filter((artifact) => artifact.bundleId === bundle.bundleId)
+      .map((artifact) => artifact.id),
+  }));
+}
+
+function buildSynthesisModuleBundleMap(plan: AssemblyPlan | null | undefined): NonNullable<Dota2ReviewArtifact["stages"]["artifactSynthesis"]>["moduleBundleMap"] {
+  if (!plan?.moduleRecords || plan.moduleRecords.length === 0) {
+    return [];
+  }
+
+  return plan.moduleRecords
+    .filter((record) => record.sourceKind === "synthesized" && typeof record.bundleId === "string")
+    .map((record) => ({
+      moduleId: record.moduleId,
+      bundleId: record.bundleId!,
+    }));
+}
+
+function buildSynthesisBundleArtifacts(plan: AssemblyPlan | null | undefined): NonNullable<Dota2ReviewArtifact["stages"]["artifactSynthesis"]>["bundleArtifacts"] {
+  if (!plan?.artifactSynthesisResult?.bundles || plan.artifactSynthesisResult.bundles.length === 0) {
+    return [];
+  }
+
+  return plan.artifactSynthesisResult.bundles.map((bundle) => {
+    const artifacts = (plan.artifactSynthesisResult?.artifacts || []).filter(
+      (artifact) => artifact.bundleId === bundle.bundleId,
+    );
+    return {
+      bundleId: bundle.bundleId,
+      artifactIds: artifacts.map((artifact) => artifact.id),
+      targetPaths: artifacts.map((artifact) => artifact.targetPath),
+    };
+  });
 }
 
 async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifact> {
@@ -366,6 +554,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   console.log(`\n📝 Input: "${options.prompt}"`);
   console.log(`📁 Host: ${options.hostRoot}`);
   console.log(`⚙️  Mode: ${options.dryRun ? "dry-run" : options.write ? (options.force ? "write (force)" : "write") : "dry-run"}`);
+  const reviewArtifactOutputDir = resolveReviewArtifactOutputDir(options.output);
 
   const artifact: Dota2ReviewArtifact = {
     version: "1.0",
@@ -375,10 +564,14 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       "intentSchema",
       "blueprint",
       "patternResolution",
+      "artifactSynthesis",
       "assemblyPlan",
       "hostRealization",
       "generatorRouting",
       "generator",
+      "localRepair",
+      "dependencyRevalidation",
+      "finalCommitDecision",
       "writeExecutor",
       "hostValidation",
       "runtimeValidation",
@@ -407,9 +600,13 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       intentSchema: { success: false, summary: "", issues: [] },
       blueprint: { success: false, summary: "", moduleCount: 0, patternHints: [], issues: [] },
       patternResolution: { success: false, resolvedPatterns: [], unresolvedPatterns: [], issues: [], complete: false },
+      artifactSynthesis: { success: true, triggered: false, artifacts: [], warnings: [], blockers: [], skipped: true },
       assemblyPlan: { success: false, selectedPatterns: [], writeTargets: [], readyForHostWrite: false, blockers: [] },
       hostRealization: { success: false, units: [], blockers: [] },
       generator: { success: false, generatedFiles: [], issues: [] },
+      localRepair: { success: true, triggered: false, attempted: false, repairedTargets: [], warnings: [], blockers: [], skipped: true },
+      dependencyRevalidation: { success: true, impactedFeatures: [], blockers: [], downgradedFeatures: [], compatibleFeatures: [], skipped: true },
+      finalCommitDecision: { success: false, outcome: "blocked", requiresReview: true, reasons: [], reviewModules: [], impactedFeatures: [], dependencyBlockers: [], downgradedFeatures: [], skipped: true },
       writeExecutor: { success: false, executedActions: 0, skippedActions: 0, failedActions: 0, createdFiles: [], modifiedFiles: [] },
       hostValidation: { success: false, checks: [], issues: [], details: {} },
       runtimeValidation: { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [] },
@@ -474,15 +671,24 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 1: IntentSchema (try real Wizard first, fallback if needed)
-  const { schema, usedFallback } = await createIntentSchema(options.prompt, options.hostRoot, {
+  const intentSchemaResult = await createIntentSchema(options.prompt, options.hostRoot, {
     mode: featureMode,
     featureId: options.featureId || existingFeatureContext.feature?.featureId,
     existingFeature: existingFeatureContext.feature,
+    interactive: process.stdin.isTTY && process.stdout.isTTY,
   });
+  const {
+    schema,
+    usedFallback,
+    clarificationPlan,
+    relationCandidates,
+    workspaceSemanticContext,
+    requiresClarification,
+  } = intentSchemaResult;
   artifact.stages.intentSchema = {
     success: schema !== null,
-    summary: schema ? `${schema.request.goal} [${getIntentReadiness(schema)}]` : "",
-    issues: schema ? [`IntentSchema readiness: ${getIntentReadiness(schema)}`] : [],
+    summary: schema ? `${schema.request.goal} [${getIntentSemanticPosture(schema)}]` : "",
+    issues: schema ? [`IntentSchema uncertainties: ${schema.uncertainties?.length || 0}`] : [],
     usedFallback,
   };
 
@@ -490,11 +696,34 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     usedFallback,
     intentKind: schema?.classification.intentKind || "unknown",
     uiNeeded: schema?.uiRequirements?.needed || false,
-    readiness: schema ? getIntentReadiness(schema) : undefined,
+    readiness: schema ? getIntentSemanticPosture(schema) : undefined,
     mechanics: schema ? Object.entries(schema.normalizedMechanics)
       .filter(([, v]) => v === true)
       .map(([k]) => k) : [],
+    promptPackageId: intentSchemaResult.promptPackageId,
+    promptConstraints: intentSchemaResult.promptConstraints
+      ? {
+          mustPreserve: intentSchemaResult.promptConstraints.mustPreserve,
+          mustNotAdd: intentSchemaResult.promptConstraints.mustNotAdd,
+          exactScalars: intentSchemaResult.promptConstraints.exactScalars,
+          openSemanticGaps: intentSchemaResult.promptConstraints.openSemanticGaps,
+        }
+      : undefined,
+    retrieval: intentSchemaResult.retrievalBundle
+      ? {
+          summary: intentSchemaResult.retrievalBundle.summary,
+          tiersUsed: intentSchemaResult.retrievalBundle.tiersUsed,
+          evidenceRefs: intentSchemaResult.retrievalBundle.evidenceRefs.map((item) => ({
+            title: item.title,
+            sourceKind: item.sourceKind,
+            path: item.path,
+          })),
+        }
+      : undefined,
   };
+  artifact.clarificationPlan = clarificationPlan;
+  artifact.relationCandidates = relationCandidates;
+  artifact.workspaceSemanticContext = workspaceSemanticContext;
 
   if (!schema) {
     artifact.finalVerdict.weakestStage = "intentSchema";
@@ -502,14 +731,36 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
+  if (requiresClarification) {
+    artifact.finalVerdict.weakestStage = "intentSchema";
+    artifact.finalVerdict.remainingRisks = [
+      "IntentSchema requires clarification before Blueprint generation can continue.",
+    ];
+    artifact.finalVerdict.nextSteps = [
+      "Answer the clarification questions and rerun the command.",
+    ];
+    return artifact;
+  }
+
   // Stage 2: Blueprint
-  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount }: Dota2BlueprintBuildResult = buildBlueprint(schema);
+  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount }: Dota2BlueprintBuildResult = buildBlueprint(
+    schema,
+    {
+      prompt: options.prompt,
+      hostRoot: options.hostRoot,
+      mode: featureMode,
+      featureId: options.featureId || existingFeatureContext.feature?.featureId,
+      existingFeature: existingFeatureContext.feature,
+      proposalSource: usedFallback ? "fallback" : "llm",
+    },
+  );
   artifact.stages.blueprint = {
     success: blueprint !== null,
     summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
     moduleCount: blueprint?.modules.length || 0,
     patternHints: blueprint?.patternHints.flatMap((h) => h.suggestedPatterns) || [],
     issues: blueprintIssues,
+    moduleSourceBreakdown: summarizeModuleSources(blueprint?.moduleRecords),
   };
 
   if (!blueprint) {
@@ -526,25 +777,64 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     prompt: options.prompt,
     blueprintId: blueprint.id,
   });
+  try {
+    artifact.semanticArtifacts = saveCreateSemanticArtifacts({
+      hostRoot: options.hostRoot,
+      featureId: stableFeatureId,
+      dryRun: options.dryRun || !options.write,
+      reviewOutputDir: reviewArtifactOutputDir,
+      intentSchema: schema,
+      commandKind: "create",
+      generatedAt: artifact.generatedAt,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    artifact.finalVerdict.remainingRisks.push(`Failed to export create semantic artifacts: ${message}`);
+  }
 
   // Stage 3: Pattern Resolution
   const resolutionResult = resolvePatternsFromBlueprint(blueprint);
+  const usesArtifactSynthesis = shouldUseArtifactSynthesis(blueprint, resolutionResult);
+  const resolvedModuleSourceBreakdown = summarizeModuleSources(resolutionResult.moduleRecords);
   artifact.stages.patternResolution = {
-    success: resolutionResult.patterns.length > 0,
+    success: resolutionResult.patterns.length > 0 || usesArtifactSynthesis,
     resolvedPatterns: resolutionResult.patterns.map((p) => p.patternId),
     unresolvedPatterns: resolutionResult.unresolved.map((u) => u.requestedId),
     issues: resolutionResult.issues.map((i) => i.message),
     complete: resolutionResult.complete,
+    resolvedModules: resolutionResult.moduleRecords.map((record) => ({
+      moduleId: record.moduleId,
+      sourceKind: record.sourceKind,
+      patternId: record.patternId,
+      familyId: record.familyId,
+    })),
+    unresolvedModuleNeeds: resolutionResult.unresolvedModuleNeeds.map((need) => ({
+      moduleId: need.moduleId,
+      reason: need.reason,
+      category: need.category,
+      role: need.role,
+    })),
   };
 
-  if (resolutionResult.patterns.length === 0) {
+  console.log(`  Resolved modules: ${resolutionResult.moduleRecords.length}`);
+  console.log(
+    `    - family: ${resolvedModuleSourceBreakdown.family}, pattern: ${resolvedModuleSourceBreakdown.pattern}, synthesized: ${resolvedModuleSourceBreakdown.synthesized}`,
+  );
+  console.log(`  Unresolved module needs: ${resolutionResult.unresolvedModuleNeeds.length}`);
+
+  if (resolutionResult.patterns.length === 0 && !usesArtifactSynthesis) {
     artifact.finalVerdict.weakestStage = "patternResolution";
     artifact.finalVerdict.remainingRisks = ["No patterns resolved"];
     return artifact;
   }
 
   // Stage 4: AssemblyPlan
-  const { plan, blockers } = buildAssemblyPlan(blueprint, resolutionResult, options.hostRoot);
+  const { plan, blockers } = await buildAssemblyPlan(
+    blueprint,
+    resolutionResult,
+    options.hostRoot,
+    stableFeatureId,
+  );
   artifact.stages.assemblyPlan = {
     success: plan !== null,
     selectedPatterns: plan?.selectedPatterns.map((p) => p.patternId) || [],
@@ -553,10 +843,69 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     blockers,
   };
 
+  artifact.stages.artifactSynthesis = plan?.artifactSynthesisResult
+    ? {
+        success: plan.artifactSynthesisResult.success,
+        triggered: true,
+        strategy: plan.artifactSynthesisResult.strategy,
+        sourceKind: plan.artifactSynthesisResult.sourceKind,
+        promptPackageId: plan.artifactSynthesisResult.promptPackageId,
+        artifacts: plan.artifactSynthesisResult.artifacts.map((item) => ({
+          id: item.id,
+          moduleId: item.moduleId,
+          outputKind: item.outputKind,
+          targetPath: item.targetPath,
+          summary: item.summary,
+        })),
+        bundles: buildSynthesisBundleView(plan),
+        moduleBundleMap: buildSynthesisModuleBundleMap(plan),
+        bundleArtifacts: buildSynthesisBundleArtifacts(plan),
+        synthesizedModuleIds: plan.artifactSynthesisResult.moduleResults?.map((item) => item.moduleId) || [],
+        warnings: plan.artifactSynthesisResult.warnings,
+        blockers: plan.artifactSynthesisResult.blockers,
+        retrievalSummary: plan.artifactSynthesisResult.retrievalSummary?.tiersUsed.length
+          ? `${plan.artifactSynthesisResult.retrievalSummary.evidenceCount} refs across tiers ${plan.artifactSynthesisResult.retrievalSummary.tiersUsed.join(", ")}`
+          : undefined,
+        evidenceRefs: plan.artifactSynthesisResult.evidenceRefs?.map((item) => ({
+          title: item.title,
+          sourceKind: item.sourceKind,
+          path: item.path,
+        })),
+        mustNotAddViolations: plan.artifactSynthesisResult.moduleResults?.flatMap((item) => item.mustNotAddViolations || []) || [],
+        grounding: plan.artifactSynthesisResult.grounding?.map((item) => ({
+          artifactId: item.artifactId,
+          verifiedSymbols: item.verifiedSymbols,
+          allowlistedSymbols: item.allowlistedSymbols,
+          weakSymbols: item.weakSymbols,
+          unknownSymbols: item.unknownSymbols,
+          warnings: item.warnings,
+        })),
+      }
+    : {
+        success: true,
+        triggered: false,
+        artifacts: [],
+        warnings: [],
+        blockers: [],
+        skipped: true,
+      };
+
   if (!plan) {
     artifact.finalVerdict.weakestStage = "assemblyPlan";
     artifact.finalVerdict.remainingRisks = blockers;
     return artifact;
+  }
+
+  if (plan.artifactSynthesisResult?.bundles?.length) {
+    console.log(`     Synthesized Bundles: ${plan.artifactSynthesisResult.bundles.length}`);
+    for (const bundle of plan.artifactSynthesisResult.bundles) {
+      const bundleArtifacts = plan.artifactSynthesisResult.artifacts.filter(
+        (artifactItem) => artifactItem.bundleId === bundle.bundleId,
+      );
+      console.log(
+        `       - ${bundle.bundleId}: ${bundle.kind} | modules=${bundle.moduleIds.join(", ")} | artifacts=${bundleArtifacts.length}`,
+      );
+    }
   }
 
   // Stage 4.5: Host Realization
@@ -574,6 +923,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
         id: u.id,
         sourceModuleId: u.sourceModuleId,
         sourcePatternIds: u.sourcePatternIds,
+        sourceKind: u.sourceKind,
         role: u.role,
         realizationType: u.realizationType,
         hostTargets: u.hostTargets,
@@ -638,6 +988,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       routes: generatorRoutingPlan.routes.map(r => ({
         id: r.id,
         sourceUnitId: r.sourceUnitId,
+        sourceKind: r.sourceKind,
         generatorFamily: r.generatorFamily,
         routeKind: r.routeKind,
         hostTarget: r.hostTarget,
@@ -684,6 +1035,51 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
+  artifact.moduleTruth = {
+    totalModules: plan.moduleRecords?.length || resolutionResult.moduleRecords.length,
+    sourceBreakdown: summarizeModuleSources(plan.moduleRecords || resolutionResult.moduleRecords),
+    unresolvedModuleNeeds: (plan.unresolvedModuleNeeds || resolutionResult.unresolvedModuleNeeds).map((need) => need.moduleId),
+  };
+
+  const localRepairResult = await runLocalRepairWithLLM(blueprint, writePlan);
+  artifact.stages.localRepair = {
+    success: localRepairResult.success,
+    triggered: localRepairResult.triggered,
+    attempted: localRepairResult.attempted,
+    repairedTargets: localRepairResult.repairedTargets,
+    warnings: localRepairResult.warnings,
+    blockers: localRepairResult.blockers,
+    promptPackageId: localRepairResult.promptPackageId,
+    evidenceRefs: localRepairResult.evidenceRefs.map((item) => ({
+      title: item.title,
+      sourceKind: item.sourceKind,
+      path: item.path,
+    })),
+    boundaryHonored: localRepairResult.boundaryHonored,
+    revalidationPassed: localRepairResult.revalidationPassed,
+    skipped: !localRepairResult.triggered,
+  };
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 5.4: Local Repair");
+  console.log("=".repeat(70));
+  console.log(`  Triggered: ${localRepairResult.triggered ? "yes" : "no"}`);
+  console.log(`  Attempted: ${localRepairResult.attempted ? "yes" : "no"}`);
+  if (localRepairResult.repairedTargets.length > 0) {
+    console.log(`  Repaired Targets: ${localRepairResult.repairedTargets.length}`);
+  }
+  if (localRepairResult.warnings.length > 0) {
+    for (const warning of localRepairResult.warnings) {
+      console.log(`    - ${warning}`);
+    }
+  }
+
+  if (!localRepairResult.success) {
+    artifact.finalVerdict.weakestStage = "localRepair";
+    artifact.finalVerdict.remainingRisks = localRepairResult.blockers;
+    return artifact;
+  }
+
   // Stage 5.5: Governance Pre-flight Check
   console.log("\n" + "=".repeat(70));
   console.log("Stage 5.5: Governance Pre-flight Check");
@@ -727,17 +1123,58 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     console.log(`\n  �?${governanceCheck.summary}`);
   }
 
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 5.6: Dependency Revalidation");
+  console.log("=".repeat(70));
+
+  const dependencyRevalidation = analyzeDependencyRevalidation({
+    workspace: workspaceResult.success ? workspaceResult.workspace : null,
+    providerFeatureId: stableFeatureId,
+    nextFeatureContract: blueprint.featureContract,
+    lifecycleAction: featureMode,
+  });
+  artifact.stages.dependencyRevalidation = {
+    success: dependencyRevalidation.success,
+    impactedFeatures: dependencyRevalidation.impactedFeatures,
+    blockers: dependencyRevalidation.blockers,
+    downgradedFeatures: dependencyRevalidation.downgradedFeatures,
+    compatibleFeatures: dependencyRevalidation.compatibleFeatures,
+    skipped: dependencyRevalidation.impactedFeatures.length === 0,
+  };
+
+  if (dependencyRevalidation.impactedFeatures.length > 0) {
+    console.log(`  Impacted Features: ${dependencyRevalidation.impactedFeatures.length}`);
+    for (const impact of dependencyRevalidation.impactedFeatures) {
+      console.log(`    - ${impact.featureId}: ${impact.outcome}`);
+      for (const issue of impact.issues) {
+        console.log(`      * ${issue}`);
+      }
+    }
+  } else {
+    console.log("  ✅ No dependent features impacted");
+  }
+  console.log(`  Compatible dependents: ${dependencyRevalidation.compatibleFeatures.length}`);
+  console.log(`  Downgraded dependents: ${dependencyRevalidation.downgradedFeatures.length}`);
+
+  if (!dependencyRevalidation.success) {
+    artifact.finalVerdict.weakestStage = "dependencyRevalidation";
+    artifact.finalVerdict.remainingRisks = dependencyRevalidation.blockers;
+    return artifact;
+  }
+
   // Stage 6: Write Executor
   const { result, review } = await executeWrite(writePlan, options, stableFeatureId);
+  const dryRunExecution = Boolean(options.dryRun || !options.write);
   artifact.stages.writeExecutor = {
     success: result?.success || false,
-    executedActions: result?.executed.length || 0,
-    skippedActions: result?.skipped.length || 0,
+    executedActions: dryRunExecution ? 0 : result?.executed.length || 0,
+    skippedActions: dryRunExecution ? (result?.executed.length || 0) + (result?.skipped.length || 0) : result?.skipped.length || 0,
     failedActions: result?.failed.length || 0,
-    createdFiles: result?.createdFiles || [],
-    modifiedFiles: result?.modifiedFiles || [],
+    createdFiles: dryRunExecution ? [] : result?.createdFiles || [],
+    modifiedFiles: dryRunExecution ? [] : result?.modifiedFiles || [],
     blockedByReadinessGate: result?.blockedByReadinessGate,
     readinessBlockers: result?.readinessBlockers,
+    skipped: dryRunExecution,
   };
 
   if (!result || !result.success) {
@@ -746,71 +1183,24 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
-  // Stage 7: Workspace State Update (only on real write, not dry-run)
-  let workspaceStateResult: { success: boolean; featureId: string; totalFeatures: number; error?: string; skipped?: boolean } = 
-    { success: true, featureId: "", totalFeatures: 0, skipped: true };
-  
-  if (!options.dryRun && result.success) {
-    console.log("\n" + "=".repeat(70));
-    console.log("Stage 7: Workspace State Update");
-    console.log("=".repeat(70));
-
-    const workspaceResult = updateWorkspaceState(
-      options.hostRoot,
-      blueprint,
-      plan,
-      writePlan,
-      featureMode,
-      stableFeatureId,
-      existingFeatureContext.feature,
-      result
-    );
-
-    workspaceStateResult = {
-      success: workspaceResult.success,
-      featureId: workspaceResult.featureId,
-      totalFeatures: workspaceResult.totalFeatures,
-      error: workspaceResult.error,
-      skipped: false,
-    };
-
-    if (workspaceResult.success) {
-      console.log(`  �?Workspace state updated`);
-      console.log(`     Feature ID: ${workspaceResult.featureId}`);
-      console.log(`     Total features: ${workspaceResult.totalFeatures}`);
-    } else {
-      console.log(`  ⚠️  Failed to update workspace state: ${workspaceResult.error}`);
-    }
-  } else if (options.dryRun) {
-    console.log("\n" + "=".repeat(70));
-    console.log("Stage 7: Workspace State Update");
-    console.log("=".repeat(70));
-    console.log(`  ℹ️  Skipped (dry-run mode)`);
-    workspaceStateResult = { success: true, featureId: "", totalFeatures: 0, skipped: true };
-  } else {
-    // Write failed, skip workspace state update
-    workspaceStateResult = { success: true, featureId: "", totalFeatures: 0, skipped: true };
-  }
-
-  // Update artifact with workspace state result
-  artifact.stages.workspaceState = {
-    success: workspaceStateResult.success,
-    featureId: workspaceStateResult.featureId,
-    totalFeatures: workspaceStateResult.totalFeatures,
-    error: workspaceStateResult.error,
-    skipped: workspaceStateResult.skipped,
-  };
-
-  // Stage 8: Host Validation (enhanced)
-  const hostValidation = validateHost(options.hostRoot, writePlan, result, stableFeatureId, deferredEntriesInfo);
+  // Stage 7: Host Validation (enhanced)
+  const hostValidation = validateHost(
+    options.hostRoot,
+    writePlan,
+    result,
+    stableFeatureId,
+    deferredEntriesInfo,
+    dryRunExecution,
+  );
   artifact.stages.hostValidation = {
     success: hostValidation.success,
     checks: hostValidation.checks,
     issues: hostValidation.issues,
     details: hostValidation.details,
+    skipped: hostValidation.skipped,
   };
 
-  // Stage 9: Runtime Validation
+  // Stage 8: Runtime Validation
   let runtimeValidationResult: RuntimeValidationResult = 
     { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [], skipped: true };
 
@@ -844,6 +1234,162 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   artifact.stages.runtimeValidation = runtimeValidationResult;
+
+  const finalCommitDecision = calculateFinalCommitDecision({
+    blueprint,
+    hostBlockers: hostRealizationPlan?.blockers,
+    routingBlockers: generatorRoutingPlan?.blockers,
+    governanceBlockers:
+      governanceCheck.hasConflict && governanceCheck.recommendedAction === "block"
+        ? governanceCheck.conflicts.map((conflict) => conflict.explanation)
+        : [],
+    localRepair: {
+      success: localRepairResult.success,
+      blockers: localRepairResult.blockers,
+      warnings: localRepairResult.warnings,
+    },
+    dependencyRevalidation,
+    hostValidation: {
+      success: hostValidation.success,
+      issues: hostValidation.issues,
+    },
+    runtimeValidation: {
+      success: runtimeValidationResult.success,
+      limitations: runtimeValidationResult.limitations,
+      skipped: runtimeValidationResult.skipped,
+    },
+    dryRun: options.dryRun,
+  });
+  const finalValidationStatus = buildFinalValidationStatus(
+    blueprint,
+    {
+      blueprint,
+      hostBlockers: hostRealizationPlan?.blockers,
+      routingBlockers: generatorRoutingPlan?.blockers,
+      governanceBlockers:
+        governanceCheck.hasConflict && governanceCheck.recommendedAction === "block"
+          ? governanceCheck.conflicts.map((conflict) => conflict.explanation)
+          : [],
+      localRepair: {
+        success: localRepairResult.success,
+        blockers: localRepairResult.blockers,
+        warnings: localRepairResult.warnings,
+      },
+      dependencyRevalidation,
+      hostValidation: {
+        success: hostValidation.success,
+        issues: hostValidation.issues,
+      },
+      runtimeValidation: {
+        success: runtimeValidationResult.success,
+        limitations: runtimeValidationResult.limitations,
+        skipped: runtimeValidationResult.skipped,
+      },
+      dryRun: options.dryRun,
+    },
+    finalCommitDecision,
+  );
+
+  artifact.stages.finalCommitDecision = {
+    success: finalCommitDecision.outcome !== "blocked",
+    outcome: finalCommitDecision.outcome,
+    requiresReview: finalCommitDecision.requiresReview,
+    reasons: finalCommitDecision.reasons,
+    reviewModules: finalCommitDecision.reviewModules || [],
+    impactedFeatures: finalCommitDecision.impactedFeatures || [],
+    dependencyBlockers: finalCommitDecision.dependencyBlockers || [],
+    downgradedFeatures: finalCommitDecision.downgradedFeatures || [],
+  };
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 9: Final Commit Decision");
+  console.log("=".repeat(70));
+  console.log(`  Outcome: ${finalCommitDecision.outcome}`);
+  console.log(`  Requires Review: ${finalCommitDecision.requiresReview ? "yes" : "no"}`);
+  if ((finalCommitDecision.reviewModules || []).length > 0) {
+    console.log(`  Review Modules: ${(finalCommitDecision.reviewModules || []).join(", ")}`);
+  }
+  if (finalCommitDecision.reasons.length > 0) {
+    for (const reason of finalCommitDecision.reasons) {
+      console.log(`    - ${reason}`);
+    }
+  }
+
+  // Stage 10: Workspace State Update (only on real write, and only after final gate)
+  let workspaceStateResult: { success: boolean; featureId: string; totalFeatures: number; error?: string; skipped?: boolean } =
+    { success: true, featureId: "", totalFeatures: 0, skipped: true };
+
+  if (!options.dryRun && result.success && finalCommitDecision.outcome !== "blocked") {
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 10: Workspace State Update");
+    console.log("=".repeat(70));
+
+    const finalizedBlueprint = {
+      ...blueprint,
+      commitDecision: finalCommitDecision,
+      validationStatus: finalValidationStatus,
+    };
+
+    const workspaceUpdate = updateWorkspaceState(
+      options.hostRoot,
+      finalizedBlueprint,
+      plan,
+      writePlan,
+      featureMode,
+      stableFeatureId,
+      existingFeatureContext.feature,
+      result
+    );
+
+    workspaceStateResult = {
+      success: workspaceUpdate.success,
+      featureId: workspaceUpdate.featureId,
+      totalFeatures: workspaceUpdate.totalFeatures,
+      error: workspaceUpdate.error,
+      skipped: false,
+    };
+
+    if (workspaceUpdate.success && dependencyRevalidation.impactedFeatures.length > 0) {
+      const refreshedWorkspace = initializeWorkspace(options.hostRoot);
+      if (refreshedWorkspace.success && refreshedWorkspace.workspace) {
+        const updatedWorkspace = applyDependencyRevalidationEffects(
+          refreshedWorkspace.workspace,
+          dependencyRevalidation,
+        );
+        const saveDependentResult = saveWorkspace(options.hostRoot, updatedWorkspace);
+        if (!saveDependentResult.success) {
+          workspaceStateResult.success = false;
+          workspaceStateResult.error = `Workspace saved, but dependent revalidation state failed: ${saveDependentResult.issues.join(", ")}`;
+        }
+      }
+    }
+
+    if (workspaceStateResult.success) {
+      console.log(`  ✅ Workspace state updated`);
+      console.log(`     Feature ID: ${workspaceStateResult.featureId}`);
+      console.log(`     Total features: ${workspaceStateResult.totalFeatures}`);
+    } else {
+      console.log(`  ⚠️  Failed to update workspace state: ${workspaceStateResult.error}`);
+    }
+  } else if (options.dryRun) {
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 10: Workspace State Update");
+    console.log("=".repeat(70));
+    console.log(`  ℹ️  Skipped (dry-run mode)`);
+  } else if (finalCommitDecision.outcome === "blocked") {
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 10: Workspace State Update");
+    console.log("=".repeat(70));
+    console.log("  ⚠️  Skipped because final commit decision is blocked");
+  }
+
+  artifact.stages.workspaceState = {
+    success: workspaceStateResult.success,
+    featureId: workspaceStateResult.featureId,
+    totalFeatures: workspaceStateResult.totalFeatures,
+    error: workspaceStateResult.error,
+    skipped: workspaceStateResult.skipped,
+  };
 
   // T120-R1: Use helper for final verdict calculation
   const verdictInput: VerdictInput = {

@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "kind": "gap-fill-approval",
+  "approvalId": "3fc323a7-0350-4902-b3d2-3c658709d2ea",
+  "createdAt": "2026-04-14T13:42:17.777Z",
+  "hostRoot": "D:\\test3",
+  "boundaryId": "weighted_pool.selection_policy",
+  "instruction": "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。",
+  "instructionSummary": "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。",
+  "targetFile": "adapters/dota2/generator/server/weighted-pool.ts",
+  "targetFileHash": "1026b1153611d1299e3a5f3ecb10aa320e675ac8be43c9a35ab27b63cae2eb15",
+  "patchPlanSummary": "Update tierToNumber mapping to provide 1/2/4/7 all-attributes for R/SR/SSR/UR tiers while preserving trigger keys, bridging, event channels and UI interactions. (1 op)",
+  "patchPlanHash": "2823a9804f56072e7ba02a0d373ed7881f52338047e9347e4877011bc457cfd2",
+  "decision": {
+    "decision": "require_confirmation",
+    "riskLevel": "low",
+    "reasons": [
+      {
+        "code": "apply_not_requested",
+        "category": "approval_required",
+        "message": "Patch is safe enough for auto-apply, but apply was not requested."
+      }
+    ],
+    "userSummary": "Patch is safe enough for direct apply, but apply was not requested.",
+    "canApplyDirectly": false,
+    "failureCategories": [
+      "approval_required"
+    ]
+  },
+  "decisionRecord": {
+    "requestedBoundaryId": "weighted_pool.selection_policy",
+    "requestedBoundaryLabel": "Weighted pool selection policy",
+    "targetFile": "adapters/dota2/generator/server/weighted-pool.ts",
+    "originalInstruction": "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。",
+    "source": "user_provided",
+    "canonicalAssistUsed": false,
+    "assumptionsMade": [
+      "Do not introduce persistence or session ownership changes."
+    ],
+    "userInputsUsed": [
+      "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。"
+    ],
+    "inferredInputsUsed": [],
+    "approvalDecision": "require_confirmation",
+    "failureCategories": [
+      "approval_required"
+    ],
+    "recommendedNextStep": "Approve this record before applying the patch."
+  },
+  "patchPlan": {
+    "boundaryId": "weighted_pool.selection_policy",
+    "targetFile": "adapters/dota2/generator/server/weighted-pool.ts",
+    "summary": "Update tierToNumber mapping to provide 1/2/4/7 all-attributes for R/SR/SSR/UR tiers while preserving trigger keys, bridging, event channels and UI interactions.",
+    "operations": [
+      {
+        "kind": "replace",
+        "target": "lines 0282-0285",
+        "reason": "Update rarity tier mapping to new all-attributes values: R=1, SR=2, SSR=4, UR=7 as specified in instruction",
+        "excerpt": "  private tierToNumber(tier: string): number {\n    const tierMap: Record<string, number> = { 'R': 1, 'SR': 2, 'SSR': 3, 'UR': 4 };\n    return tierMap[tier] || 1;\n  }",
+        "replacement": "  private tierToNumber(tier: string): number {\n    const tierMap: Record<string, number> = { 'R': 1, 'SR': 2, 'SSR': 4, 'UR': 7 };\n    return tierMap[tier] || 1;\n  }"
+      }
+    ],
+    "notes": [
+      "Only modified the tierToNumber mapping inside the declared boundary",
+      "Preserved all trigger keys, bridge registration, event channels and UI interaction patterns",
+      "No changes to host wiring, imports, exports, contracts, lifecycle code or unrelated call sites"
+    ]
+  },
+  "recordHash": "c02a94db3f15f8818f11e0c9865cddabb5b75d5eaca02ef644c40c5fd2b938ff"
+}

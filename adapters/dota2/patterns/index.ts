@@ -172,7 +172,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { text: "不处理跨局持久化", alternative: "MVP 只需单局持久化" },
       { text: "不处理网络同步", alternative: "使用 data.networked_pool" },
       { text: "不负责 selection-confirmed commit 行为", alternative: "由 rule.selection_flow 负责" },
-      { text: "不删除静态 talent definitions", alternative: "静态定义不可变，只追踪会话状态" },
+      { text: "不删除静态 entry definitions", alternative: "静态定义不可变，只追踪会话状态" },
     ],
     capabilities: ["data.pool.weighted", "selection.pool.weighted_candidates", "selection.candidate_pool", "selection.weighted_sampling", "weighted_selection", "tier_management", "random_draw", "session_state_tracking"],
     traits: ["stateful.session", "shared_runtime_candidate", "deterministic_parameterization"],
@@ -190,8 +190,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     ],
     outputs: [
       { name: "selected", type: "any" },
-      { name: "remainingTalentIds", type: "string[]", required: false },
-      { name: "ownedTalentIds", type: "string[]", required: false },
+      { name: "remainingSelectionIds", type: "string[]", required: false },
+      { name: "ownedSelectionIds", type: "string[]", required: false },
       { name: "currentChoiceIds", type: "string[]", required: false },
     ],
     parameters: [
@@ -213,17 +213,17 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     validationHints: [
       {
         stage: "host",
-        rule: "poolStateTracking=session 时必须生成 remainingTalentIds/ownedTalentIds 状态",
+        rule: "poolStateTracking=session 时必须生成 remainingSelectionIds/ownedSelectionIds 状态",
         message: "会话状态追踪需要生成对应的状态变量",
         severity: "warning",
       },
     ],
     examples: [
       {
-        name: "天赋抽取池",
-        description: "带 R/SR/SSR/UR 稀有度的天赋池，支持会话状态追踪",
+        name: "候选抽取池",
+        description: "带 R/SR/SSR/UR 稀有度的候选池，支持会话状态追踪",
         params: { tiers: ["R", "SR", "SSR", "UR"], weights: { R: 50, SR: 30, SSR: 15, UR: 5 }, choiceCount: 3, drawMode: "multiple_without_replacement", duplicatePolicy: "forbid", poolStateTracking: "session" },
-        useCase: "三选一天赋系统",
+        useCase: "三选一候选系统",
       },
     ],
     hostTarget: "dota2.server",
@@ -292,8 +292,8 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       "candidates 长度必须大于等于 choiceCount",
       "如果 postSelectionPoolBehavior !== none，需要兼容的池状态源",
       "如果 trackSelectedItems = true，已选 id 必须追加到会话 owned 列表",
-      "未选中的候选项必须保持 eligible（Talent Draw MVP）",
-      'inventory 当前仅支持 session-only + "persistent_panel" 的窄 Talent Draw 扩展，不扩展为通用库存框架',
+      "未选中的候选项必须保持 eligible（current selection_pool skeleton）",
+      'inventory 当前仅支持 session-only + "persistent_panel" 的窄 selection_pool 扩展，不扩展为通用库存框架',
       "progression 当前仅支持 same-feature + session-local + threshold-based round counter；不承诺 persistence / economy / cross-feature grant",
     ],
     dependencies: [
@@ -332,7 +332,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
             },
           },
         },
-        useCase: "天赋抽取系统",
+        useCase: "候选抽取系统",
       },
     ],
     hostTarget: "dota2.server",
@@ -1064,9 +1064,72 @@ const PATTERN_LINEAR_PROJECTILE_EMIT: Dota2PatternMeta = createDota2Pattern({
   },
 });
 
+const PATTERN_EXPLORATORY_ABILITY: Dota2PatternMeta = createDota2Pattern({
+  id: "dota2.exploratory_ability",
+  category: "ability",
+  summary: "探索式 Dota2 Ability Shell",
+  description:
+    "当 family/pattern 检索不足以稳定装配时，提供一个最小可写的 Dota2 host-native ability shell。" +
+    "它不会宣称 mechanic 已被模板化；职责是保留治理边界并允许生成候选 Lua/KV artifact 继续验证。",
+  responsibilities: [
+    { text: "生成一个可写出的 ability_lua + KV 基础骨架", core: true },
+    { text: "保留来自 Blueprint/ModuleNeed 的探索语义提示", core: true },
+    { text: "为后续 repair / graduation 提供宿主级候选产物", core: false },
+  ],
+  nonGoals: [
+    { text: "不宣称 mechanic 已被 family/pattern fully admitted", alternative: "成功后再进入 graduation" },
+    { text: "不替代显式的 ownership / dependency governance", alternative: "仍以 Feature Contract 为准" },
+    { text: "不生成跨 feature 自由写入", alternative: "仅生成当前 feature owned artifact" },
+  ],
+  capabilities: [
+    "ability.exploratory.shell",
+    "ability_lua_shell",
+    "kv_ability_definition",
+    "host_native_scaffold",
+  ],
+  traits: ["requires_runtime", "supports_static_config", "exploratory_runtime_shell"],
+  semanticOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+  integrationHints: ["ability.execution"],
+  invariants: ["exploratory ability artifacts must stay inside the current feature owned scope"],
+  inputs: [
+    { name: "abilityName", type: "string", required: false, description: "能力名称（默认由 feature 推导）" },
+    { name: "abilityBehavior", type: "string", required: false, description: "Dota2 行为枚举" },
+  ],
+  outputs: [
+    { name: "luaAbility", type: "file", required: true },
+    { name: "kvAbility", type: "file", required: true },
+  ],
+  parameters: [
+    { name: "exploratoryGoal", type: "string", required: false, description: "原始意图摘要" },
+    { name: "exploratoryCapabilities", type: "string[]", required: false, description: "待满足的能力提示" },
+  ],
+  constraints: [
+    "仅用于 exploratory / guided_native 策略下的宿主候选写出",
+    "不绕过 Blueprint / workspace ownership 规则",
+  ],
+  validationHints: [
+    {
+      stage: "host",
+      rule: "exploratory ability must still emit valid Lua/KV shell artifacts",
+      message: "探索式能力至少要写出可验证的 ability shell",
+      severity: "warning",
+    },
+  ],
+  hostTarget: "dota2.server",
+  outputTypes: ["lua", "kv"],
+  allowedFamilies: ["composite-static-runtime"],
+  preferredFamily: "composite-static-runtime",
+  requiredHostCapabilities: ["ability-lua"],
+  dota2Params: {
+    requiresAbility: true,
+    requiresModifier: false,
+  },
+});
+
 // Push all patterns into registry
 dota2Patterns.push(PATTERN_SHORT_TIME_BUFF);
 dota2Patterns.push(PATTERN_LINEAR_PROJECTILE_EMIT);
+dota2Patterns.push(PATTERN_EXPLORATORY_ABILITY);
 
 export function getPatternMeta(patternId: string): Dota2PatternMeta | undefined {
   return dota2Patterns.find((p) => p.id === patternId);

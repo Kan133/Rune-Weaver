@@ -6,6 +6,10 @@
  */
 
 import {
+  buildSynthesizedAssemblyPlan,
+  shouldUseArtifactSynthesis,
+} from "../../adapters/dota2/synthesis/index.js";
+import {
   Blueprint,
   AssemblyPlan,
   AssemblyModule,
@@ -17,6 +21,8 @@ import {
   BridgeUpdate,
   ValidationContract,
   RealizationRole,
+  ModuleImplementationRecord,
+  ModuleSourceKind,
 } from "../schema/types";
 import { resolvePatterns, PatternResolutionResult, ResolvedPattern } from "../patterns/resolver";
 import {
@@ -134,15 +140,18 @@ export class AssemblyPlanBuilder {
 
     // Gate 2: Unresolved 检查
     const noUnresolved = result.unresolved.length === 0;
+    const unresolvedOk = this.config.allowUnresolved || noUnresolved;
     checks.push({
       name: "NO_UNRESOLVED",
-      passed: noUnresolved,
-      severity: "error",
+      passed: unresolvedOk,
+      severity: this.config.allowUnresolved ? "warning" : "error",
       message: noUnresolved
         ? "All patterns resolved"
-        : `${result.unresolved.length} unresolved: ${result.unresolved.map(u => u.requestedId).join(", ")}`,
+        : this.config.allowUnresolved
+          ? `${result.unresolved.length} unresolved pattern(s) deferred to synthesis`
+          : `${result.unresolved.length} unresolved: ${result.unresolved.map(u => u.requestedId).join(", ")}`,
     });
-    if (!noUnresolved) blockers.push(`Unresolved patterns: ${result.unresolved.map(u => u.requestedId).join(", ")}`);
+    if (!unresolvedOk) blockers.push(`Unresolved patterns: ${result.unresolved.map(u => u.requestedId).join(", ")}`);
 
     // Gate 3: Error issues 检查
     const noErrors = !result.issues.some((i) => i.severity === "error");
@@ -304,12 +313,14 @@ export class AssemblyPlanBuilder {
   ): AssemblyPlan {
     // 转换 patterns（去除解析元数据）
     const selectedPatterns = this.convertToSelectedPatterns(resolutionResult.patterns);
-    
+
+    const modules = this.buildAssemblyModules(blueprint, resolutionResult);
+
     // 构建写入目标（候选目标，不是已确认可写入）
-    const writeTargets = this.buildWriteTargets(blueprint, selectedPatterns);
-    
+    const writeTargets = this.buildWriteTargets(blueprint, selectedPatterns, modules);
+
     // 构建桥接更新指令
-    const bridgeUpdates = this.buildBridgeUpdates(selectedPatterns);
+    const bridgeUpdates = this.buildBridgeUpdates(selectedPatterns, modules);
     
     // 构建验证合约（描述性，不是 actual errors）
     const validations = this.buildValidations(resolutionResult);
@@ -334,7 +345,9 @@ export class AssemblyPlanBuilder {
     return {
       blueprintId: blueprint.id,
       selectedPatterns,
-      modules: this.buildAssemblyModules(blueprint, resolutionResult),
+      moduleRecords: resolutionResult.moduleRecords,
+      unresolvedModuleNeeds: resolutionResult.unresolvedModuleNeeds,
+      modules,
       // T154: Propagate connections from Blueprint for composite relationship hints
       connections: blueprint.connections || [],
       writeTargets,
@@ -346,6 +359,11 @@ export class AssemblyPlanBuilder {
       parameters: blueprint.parameters,
       featureAuthoring: blueprint.featureAuthoring,
       fillContracts: blueprint.fillContracts,
+      implementationStrategy: blueprint.implementationStrategy,
+      validationStatus: blueprint.validationStatus,
+      dependencyEdges: blueprint.dependencyEdges,
+      commitDecision: blueprint.commitDecision,
+      sourceKind: deriveAssemblyPlanSourceKind(resolutionResult.moduleRecords),
     };
   }
 
@@ -358,13 +376,22 @@ export class AssemblyPlanBuilder {
     resolutionResult: PatternResolutionResult
   ): AssemblyModule[] {
     const modules: AssemblyModule[] = [];
+    const moduleRecordById = new Map(
+      (resolutionResult.moduleRecords || []).map((record) => [record.moduleId, record] as const),
+    );
 
     // 如果 Blueprint 有模块，使用 Blueprint 模块结构
     if (blueprint.modules && blueprint.modules.length > 0) {
       for (const bpModule of blueprint.modules) {
+        const moduleRecord = moduleRecordById.get(bpModule.id);
+
         let modulePatterns = resolutionResult.patterns
           .filter((pattern) => pattern.moduleId === bpModule.id)
           .map((pattern) => pattern.patternId);
+
+        if (modulePatterns.length === 0 && moduleRecord?.selectedPatternIds?.length) {
+          modulePatterns = [...moduleRecord.selectedPatternIds];
+        }
 
         if (modulePatterns.length === 0 && bpModule.patternIds && bpModule.patternIds.length > 0) {
           const explicitPatternIds = new Set(bpModule.patternIds);
@@ -373,11 +400,22 @@ export class AssemblyPlanBuilder {
             .map((pattern) => pattern.patternId);
         }
 
-        if (modulePatterns.length === 0) continue;
+        modulePatterns = [...new Set(modulePatterns)];
 
+        const outputKinds =
+          moduleRecord?.outputKinds && moduleRecord.outputKinds.length > 0
+            ? [...moduleRecord.outputKinds]
+            : inferOutputKinds(modulePatterns);
         const role = inferModuleRole(bpModule.category, modulePatterns);
-        const outputKinds = inferOutputKinds(modulePatterns);
         const realizationHints = inferRealizationHints(modulePatterns);
+
+        if (modulePatterns.length === 0 && !moduleRecord) {
+          continue;
+        }
+
+        if (modulePatterns.length === 0 && outputKinds.length === 0) {
+          continue;
+        }
 
         const outputs = generateAssemblyOutputs(modulePatterns, outputKinds);
 
@@ -386,9 +424,13 @@ export class AssemblyPlanBuilder {
           role,
           selectedPatterns: modulePatterns,
           outputKinds,
+          sourceKind: normalizeAssemblyModuleSourceKind(moduleRecord?.sourceKind),
           outputs,
           parameters: bpModule.parameters,
-          realizationHints,
+          realizationHints: {
+            ...realizationHints,
+            ...(moduleRecord?.sourceKind === "family" ? { isFallback: false } : {}),
+          },
         });
       }
     } else {
@@ -411,6 +453,7 @@ export class AssemblyPlanBuilder {
           role: "gameplay-core",
           selectedPatterns: gameplayPatterns,
           outputKinds,
+          sourceKind: "pattern",
           outputs: generateAssemblyOutputs(gameplayPatterns, outputKinds),
           realizationHints: {
             kvCapable: gameplayPatterns.some((patternId) => this.isConfigPattern(patternId)),
@@ -428,6 +471,7 @@ export class AssemblyPlanBuilder {
           role: "ui-surface",
           selectedPatterns: uiPatterns,
           outputKinds,
+          sourceKind: "pattern",
           outputs: generateAssemblyOutputs(uiPatterns, outputKinds),
           realizationHints: {
             uiRequired: true,
@@ -444,6 +488,7 @@ export class AssemblyPlanBuilder {
           role: "shared-support",
           selectedPatterns: sharedPatterns,
           outputKinds,
+          sourceKind: "pattern",
           outputs: generateAssemblyOutputs(sharedPatterns, outputKinds),
           // T112-R1: Mark as fallback
           realizationHints: { isFallback: true },
@@ -471,14 +516,23 @@ export class AssemblyPlanBuilder {
    */
   private buildWriteTargets(
     blueprint: Blueprint,
-    bindings: SelectedPattern[]
+    bindings: SelectedPattern[],
+    modules: AssemblyModule[]
   ): WriteTarget[] {
     const targets: WriteTarget[] = [];
 
-    const hasServerCode = bindings.some((b) => this.isServerPattern(b.patternId));
-    const hasSharedCode = bindings.some((b) => this.isSharedPattern(b.patternId));
-    const hasUICode = bindings.some((b) => this.isUIPattern(b.patternId));
-    const hasConfig = bindings.some((b) => this.isConfigPattern(b.patternId));
+    const hasServerCode =
+      bindings.some((b) => this.isServerPattern(b.patternId))
+      || modules.some((module) => module.outputKinds.includes("server"));
+    const hasSharedCode =
+      bindings.some((b) => this.isSharedPattern(b.patternId))
+      || modules.some((module) => module.outputKinds.includes("shared"));
+    const hasUICode =
+      bindings.some((b) => this.isUIPattern(b.patternId))
+      || modules.some((module) => module.outputKinds.includes("ui"));
+    const hasConfig =
+      bindings.some((b) => this.isConfigPattern(b.patternId))
+      || modules.some((module) => module.outputs?.some((output) => output.kind === "kv"));
 
     if (hasServerCode && this.config.targetKinds.includes("server")) {
       targets.push({
@@ -528,11 +582,15 @@ export class AssemblyPlanBuilder {
    * - refresh: content/panorama/src/rune_weaver/generated/ui/index.tsx (RW owned)
    * - inject_once: content/panorama/src/hud/script.tsx (host owned)
    */
-  private buildBridgeUpdates(bindings: SelectedPattern[]): BridgeUpdate[] {
+  private buildBridgeUpdates(bindings: SelectedPattern[], modules: AssemblyModule[]): BridgeUpdate[] {
     const updates: BridgeUpdate[] = [];
 
-    const hasServerCode = bindings.some((b) => this.isServerPattern(b.patternId));
-    const hasUICode = bindings.some((b) => this.isUIPattern(b.patternId));
+    const hasServerCode =
+      bindings.some((b) => this.isServerPattern(b.patternId))
+      || modules.some((module) => module.outputKinds.includes("server"));
+    const hasUICode =
+      bindings.some((b) => this.isUIPattern(b.patternId))
+      || modules.some((module) => module.outputKinds.includes("ui"));
 
     // Server Bridge Plan
     if (hasServerCode) {
@@ -591,19 +649,23 @@ export class AssemblyPlanBuilder {
    */
   private buildValidations(resolutionResult: PatternResolutionResult): ValidationContract[] {
     const validations: ValidationContract[] = [];
+    const unresolvedSeverity = this.config.allowUnresolved ? "warning" : "error";
 
     // 基础合约：必须有至少一个 pattern
     validations.push({
       scope: "assembly",
-      rule: "At least one pattern must be selected",
-      severity: resolutionResult.patterns.length === 0 ? "error" : "warning",
+      rule: "At least one reusable module or pattern should be selected when templated reuse is expected",
+      severity:
+        resolutionResult.patterns.length === 0 && resolutionResult.moduleRecords.length === 0
+          ? unresolvedSeverity
+          : "warning",
     });
 
     // 基础合约：所有 pattern 必须可解析
     validations.push({
       scope: "assembly",
       rule: "All patterns must be resolvable to catalog entries",
-      severity: resolutionResult.unresolved.length > 0 ? "error" : "warning",
+      severity: resolutionResult.unresolved.length > 0 ? unresolvedSeverity : "warning",
     });
 
     // 基础合约：宿主环境必须支持
@@ -628,7 +690,7 @@ export class AssemblyPlanBuilder {
       validations.push({
         scope: "assembly",
         rule: `${resolutionResult.unresolved.length} pattern(s) could not be resolved: ${resolutionResult.unresolved.map(u => u.requestedId).join(", ")}`,
-        severity: "error",
+        severity: unresolvedSeverity,
       });
     }
 
@@ -649,11 +711,13 @@ export class AssemblyPlanBuilder {
     result: PatternResolutionResult,
     selectedPatterns: SelectedPattern[]
   ): boolean {
-    // 必须有 pattern
-    if (result.patterns.length === 0) return false;
+    const hasReusableModules =
+      result.patterns.length > 0
+      || result.moduleRecords.some((record) => record.sourceKind === "family" || record.sourceKind === "pattern");
+    if (!hasReusableModules) return false;
 
     // 必须没有 unresolved
-    if (result.unresolved.length > 0) return false;
+    if (!this.config.allowUnresolved && result.unresolved.length > 0) return false;
 
     // 必须没有 error issues
     if (result.issues.some((i) => i.severity === "error")) return false;
@@ -665,8 +729,12 @@ export class AssemblyPlanBuilder {
     }
 
     // 必须有至少一个 write target
-    const hasServer = selectedPatterns.some((p) => this.isServerPattern(p.patternId));
-    const hasUI = selectedPatterns.some((p) => this.isUIPattern(p.patternId));
+    const hasServer =
+      selectedPatterns.some((p) => this.isServerPattern(p.patternId))
+      || result.moduleRecords.some((record) => record.outputKinds?.includes("server"));
+    const hasUI =
+      selectedPatterns.some((p) => this.isUIPattern(p.patternId))
+      || result.moduleRecords.some((record) => record.outputKinds?.includes("ui"));
     if (!hasServer && !hasUI) return false;
 
     return true;
@@ -771,6 +839,37 @@ function generateAssemblyOutputs(
   }
 
   return outputs;
+}
+
+function normalizeAssemblyModuleSourceKind(
+  sourceKind: ModuleImplementationRecord["sourceKind"] | undefined,
+): ModuleSourceKind {
+  switch (sourceKind) {
+    case "family":
+    case "pattern":
+    case "synthesized":
+      return sourceKind;
+    default:
+      return "pattern";
+  }
+}
+
+function deriveAssemblyPlanSourceKind(
+  moduleRecords: ModuleImplementationRecord[],
+): ModuleSourceKind {
+  if (moduleRecords.length === 0) {
+    return "pattern";
+  }
+
+  if (moduleRecords.every((record) => record.sourceKind === "family")) {
+    return "family";
+  }
+
+  if (moduleRecords.some((record) => record.sourceKind === "pattern" || record.sourceKind === "family")) {
+    return "pattern";
+  }
+
+  return "synthesized";
 }
 
 function inferModuleRole(
@@ -940,7 +1039,13 @@ export function createAssemblyPlan(
   const builder = new AssemblyPlanBuilder(config);
   
   try {
-    const plan = builder.build(blueprint, resolutionResult);
+    const templatedPlan = builder.build(blueprint, resolutionResult);
+    const plan = shouldUseArtifactSynthesis(blueprint, resolutionResult)
+      ? mergeAssemblyPlans(
+          templatedPlan,
+          buildSynthesizedAssemblyPlan(blueprint, blueprint.id, resolutionResult).plan,
+        )
+      : templatedPlan;
     // 将 resolver issues 转换为 ValidationIssue 格式
     const issues: ValidationIssue[] = resolutionResult.issues.map((i) => ({
       code: i.code,
@@ -967,6 +1072,69 @@ export function createAssemblyPlan(
 
 function getDota2Binding(patternId: string) {
   return getPatternHostBinding(patternId, "dota2");
+}
+
+function mergeAssemblyPlans(
+  templatedPlan: AssemblyPlan,
+  synthesizedPlan: AssemblyPlan,
+): AssemblyPlan {
+  const mergedSelectedPatterns = [...templatedPlan.selectedPatterns];
+  const mergedModules = [...(templatedPlan.modules || []), ...(synthesizedPlan.modules || [])];
+  const mergedModuleRecords = [
+    ...(templatedPlan.moduleRecords || []),
+    ...(synthesizedPlan.moduleRecords || []),
+  ];
+  const mergedWriteTargets = [...templatedPlan.writeTargets, ...synthesizedPlan.writeTargets];
+  const mergedBridgeUpdates = dedupeBridgeUpdates([
+    ...(templatedPlan.bridgeUpdates || []),
+    ...(synthesizedPlan.bridgeUpdates || []),
+  ]);
+  const mergedValidations = [...templatedPlan.validations, ...synthesizedPlan.validations];
+  const mergedArtifacts = [
+    ...(templatedPlan.synthesizedArtifacts || []),
+    ...(synthesizedPlan.synthesizedArtifacts || []),
+  ];
+  const mergedArtifactSynthesisResult = synthesizedPlan.artifactSynthesisResult
+    ? {
+        ...synthesizedPlan.artifactSynthesisResult,
+        artifacts: mergedArtifacts,
+        moduleRecords: mergedModuleRecords,
+        unresolvedModuleNeeds: [],
+      }
+    : templatedPlan.artifactSynthesisResult;
+
+  const synthesisReady = synthesizedPlan.hostWriteReadiness?.ready ?? false;
+
+  return {
+    ...templatedPlan,
+    moduleRecords: mergedModuleRecords,
+    unresolvedModuleNeeds: [],
+    modules: mergedModules,
+    writeTargets: mergedWriteTargets,
+    bridgeUpdates: mergedBridgeUpdates,
+    validations: mergedValidations,
+    readyForHostWrite: templatedPlan.readyForHostWrite || synthesisReady,
+    hostWriteReadiness: synthesizedPlan.hostWriteReadiness || templatedPlan.hostWriteReadiness,
+    sourceKind: deriveAssemblyPlanSourceKind(mergedModuleRecords),
+    synthesizedArtifacts: mergedArtifacts,
+    artifactSynthesisResult: mergedArtifactSynthesisResult,
+  };
+}
+
+function dedupeBridgeUpdates(bridgeUpdates: BridgeUpdate[]): BridgeUpdate[] {
+  const seen = new Set<string>();
+  const merged: BridgeUpdate[] = [];
+
+  for (const update of bridgeUpdates) {
+    const key = `${update.target}:${update.file}:${update.action}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(update);
+  }
+
+  return merged;
 }
 
 function patternHasSemanticOutput(patternId: string, signal: string): boolean {

@@ -147,10 +147,13 @@ function runStep(step: LifecycleProofStep): LifecycleProofStepResult {
   console.log(formatCommand(step.command));
 
   const [command, ...args] = step.command;
-  const result = spawnSync(command, args, {
+  const useShell = process.platform === "win32";
+  const spawnCommand = useShell ? formatCommand(step.command) : command;
+  const spawnArgs = useShell ? [] : args;
+  const result = spawnSync(spawnCommand, spawnArgs, {
     cwd: process.cwd(),
     encoding: "utf-8",
-    shell: process.platform === "win32",
+    shell: useShell,
   });
 
   const output = `${result.stdout || ""}${result.stderr || ""}`;

@@ -1,246 +1,257 @@
 import assert from "node:assert/strict";
 
-import { normalizeIntentSchema } from "./intent-schema";
+import type { IntentSchema } from "../schema/types.js";
+import {
+  buildWizardMessages,
+  createFallbackIntentSchema,
+  normalizeIntentSchema,
+  runWizardToIntentSchema,
+} from "./intent-schema.js";
 
 const host = { kind: "dota2-x-template" as const };
 
-function testNormalizeReadySchema() {
+function testNormalizeIntentSchemaStaysSemanticOnly() {
   const schema = normalizeIntentSchema(
     {
-      version: "1.1",
-      request: { goal: "Build a weighted draft flow" },
-      classification: { intentKind: "standalone-system", confidence: "high" },
-      readiness: "ready",
-      actors: [{ id: "player", role: "triggering-actor", label: "Player" }],
-      requirements: {
-        functional: ["Open a draft flow"],
-        typed: [
-          {
-            id: "req_selection",
-            kind: "rule",
-            summary: "Select one option from weighted candidates",
-            invariants: ["exactly one option is committed"],
-            parameters: { choiceCount: 1 },
-            priority: "must",
-          },
-        ],
-      },
-      stateModel: {
-        states: [{ id: "draft_state", summary: "Current draft choice", owner: "feature", lifetime: "session" }],
-      },
-      selection: {
-        mode: "weighted",
-        cardinality: "single",
-        repeatability: "repeatable",
-      },
-      uncertainties: [{ id: "u1", summary: "Need final balance tuning", affects: ["intent"], severity: "low" }],
-      requiredClarifications: [],
-      openQuestions: [],
-      resolvedAssumptions: ["Draft is session-scoped"],
-      normalizedMechanics: {
-        candidatePool: true,
-        weightedSelection: true,
-      },
-      isReadyForBlueprint: true,
-    },
-    "Create a weighted draft system",
-    host
-  );
-
-  assert.equal(schema.readiness, "ready");
-  assert.equal(schema.isReadyForBlueprint, true);
-  assert.equal(schema.requirements.typed?.[0]?.kind, "rule");
-  assert.equal(schema.selection?.mode, "weighted");
-  assert.equal(schema.stateModel?.states[0]?.owner, "feature");
-}
-
-function testNormalizeBlockedSchemaFromClarification() {
-  const schema = normalizeIntentSchema(
-    {
-      request: { goal: "Build an unclear mechanic" },
-      classification: { intentKind: "unknown" },
-      requirements: {
-        functional: ["Do something"],
-      },
-      normalizedMechanics: {},
-      openQuestions: ["What triggers it?"],
-      requiredClarifications: [
-        { id: "c1", question: "What triggers it?", blocksFinalization: true },
-      ],
-      resolvedAssumptions: [],
-      isReadyForBlueprint: false,
-    },
-    "Make something cool",
-    host
-  );
-
-  assert.equal(schema.readiness, "blocked");
-  assert.equal(schema.isReadyForBlueprint, false);
-  assert.equal(schema.requiredClarifications?.[0]?.blocksFinalization, true);
-}
-
-function testNormalizeSupportedDetailClarificationAsReady() {
-  const schema = normalizeIntentSchema(
-    {
-      request: { goal: "Build a three-choice buff system" },
+      request: { goal: "Press F4 to draw 3 weighted candidates and pick 1." },
       classification: { intentKind: "micro-feature", confidence: "high" },
       requirements: {
-        functional: ["Open a three-choice buff UI", "Apply the chosen buff immediately"],
-      },
-      normalizedMechanics: {
-        trigger: true,
-        candidatePool: true,
-        playerChoice: true,
-        uiModal: true,
-        outcomeApplication: true,
-      },
-      requiredClarifications: [
-        {
-          id: "c_buff_details",
-          question: "请提供增益候选池的具体内容：每个增益的名称、属性加成数值、图标资源路径",
-          blocksFinalization: true,
-        },
-      ],
-      openQuestions: [
-        "请提供增益候选池的具体内容：每个增益的名称、属性加成数值、图标资源路径",
-      ],
-      resolvedAssumptions: [],
-      isReadyForBlueprint: false,
-    },
-    "做一个按 F4 打开的三选一增益系统",
-    host
-  );
-
-  assert.equal(schema.readiness, "ready");
-  assert.equal(schema.isReadyForBlueprint, true);
-  assert.equal(schema.requiredClarifications?.[0]?.blocksFinalization, false);
-}
-
-function testNormalizeBoundedDetailClarificationWithoutTriChoicePromotionStillReady() {
-  const schema = normalizeIntentSchema(
-    {
-      request: { goal: "Build a weighted draft flow" },
-      classification: { intentKind: "standalone-system", confidence: "high" },
-      readiness: "ready",
-      requirements: {
-        functional: ["Open a weighted draft flow"],
+        functional: ["Press F4 to draw 3 weighted candidates and pick 1."],
         typed: [
           {
-            id: "req_rule",
+            id: "req_draw",
             kind: "rule",
-            summary: "Select one weighted option",
+            summary: "Resolve a three-choice weighted draw.",
           },
         ],
       },
       selection: {
         mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "user-chosen",
+        choiceCount: 3,
         cardinality: "single",
       },
-      normalizedMechanics: {
-        candidatePool: true,
-        weightedSelection: true,
-        uiModal: true,
+      constraints: {
+        requiredPatterns: ["weighted pool modal"],
+        forbiddenPatterns: ["new family invention"],
+        hostConstraints: ["Dota2 only"],
       },
       requiredClarifications: [
         {
-          id: "c_weights",
-          question: "请提供候选池的具体数值和图标资源路径",
+          id: "legacy_catalog",
+          question: "Please provide the exact candidate catalog.",
           blocksFinalization: true,
         },
       ],
-      openQuestions: ["请提供候选池的具体数值和图标资源路径"],
+      openQuestions: ["Please provide the exact candidate catalog."],
       resolvedAssumptions: [],
-      isReadyForBlueprint: false,
     },
-    "Build a weighted draft flow",
-    host
+    "Press F4 to draw 3 weighted candidates and pick 1.",
+    host,
   );
 
-  assert.equal(schema.readiness, "ready");
-  assert.equal(schema.isReadyForBlueprint, true);
+  assert.equal(schema.selection?.choiceCount, 3);
+  assert.equal(schema.selection?.cardinality, "single");
+  assert.equal(schema.readiness, undefined);
+  assert.equal(schema.isReadyForBlueprint, undefined);
+  assert.equal(schema.requiredClarifications, undefined);
+  assert.equal(schema.openQuestions, undefined);
+  assert.equal(schema.constraints.requiredPatterns, undefined);
+  assert.equal(schema.constraints.forbiddenPatterns, undefined);
+  assert.deepEqual(schema.constraints.hostConstraints, ["Dota2 only"]);
 }
 
-function testReadyFlagWithoutSemanticMinimumDoesNotOverPromote() {
+function testBuildWizardMessagesExplicitlyBanImplementationAuthority() {
+  const systemMessage = buildWizardMessages(
+    "Create a skill that moves the player 400 units toward the cursor when G is pressed.",
+    host,
+  )[0]?.content || "";
+
+  assert.match(systemMessage, /Always return a best-effort semantic IntentSchema/i);
+  assert.match(systemMessage, /Do not judge implementation readiness/i);
+  assert.match(systemMessage, /Do not output readiness, blocked, weak/i);
+  assert.match(systemMessage, /Do not infer or name implementation families/i);
+}
+
+function testCreateFallbackIntentSchemaPreservesDashFacts() {
+  const schema = createFallbackIntentSchema(
+    "Create a skill that moves the player 400 units toward the cursor when G is pressed.",
+    host,
+  );
+
+  assert.equal(schema.classification.intentKind, "micro-feature");
+  assert.equal(schema.interaction?.activations?.[0]?.input, "G");
+  assert.equal(schema.spatial?.motion?.distance, 400);
+  assert.equal(schema.spatial?.motion?.direction, "cursor");
+  assert.deepEqual(schema.outcomes?.operations, ["move"]);
+  assert.equal(schema.selection, undefined);
+}
+
+function testCreateFallbackIntentSchemaPreservesWeightedDrawFacts() {
+  const schema = createFallbackIntentSchema(
+    "Press F4 to draw 3 weighted candidates from a pool, show rarity on cards, let the player pick 1, and apply the chosen result immediately.",
+    host,
+  );
+
+  assert.equal(schema.interaction?.activations?.[0]?.input, "F4");
+  assert.equal(schema.selection?.source, "weighted-pool");
+  assert.equal(schema.selection?.choiceCount, 3);
+  assert.equal(schema.selection?.cardinality, "single");
+  assert.equal(schema.uiRequirements?.needed, true);
+  assert.equal(schema.contentModel?.collections?.[0]?.role, "candidate-options");
+}
+
+function testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints() {
+  const schema = createFallbackIntentSchema(
+    "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离。",
+    host,
+  );
+
+  assert.equal(schema.interaction?.activations?.[0]?.input, "Q");
+  assert.equal(schema.uiRequirements, undefined);
+  assert.equal(schema.selection?.inventory, undefined);
+  assert.equal(schema.timing?.duration?.kind, undefined);
+  assert.equal(schema.composition?.dependencies, undefined);
+  assert.equal(Boolean(schema.stateModel?.states?.some((state) => state.lifetime === "persistent")), false);
+}
+
+function testNormalizeIntentSchemaDoesNotInventInventoryDetails() {
   const schema = normalizeIntentSchema(
     {
-      request: { goal: "Do something unspecified" },
-      classification: { intentKind: "unknown" },
-      readiness: "ready",
-      requirements: {
-        functional: [],
+      request: {
+        goal: "Add a persistent inventory panel and store each confirmed selection.",
       },
-      normalizedMechanics: {},
-      requiredClarifications: [],
-      openQuestions: [],
-      resolvedAssumptions: [],
-      isReadyForBlueprint: true,
-    },
-    "Do something unspecified",
-    host
-  );
-
-  assert.equal(schema.readiness, "blocked");
-  assert.equal(schema.isReadyForBlueprint, false);
-}
-
-function testNormalizeSelectionInventoryContract() {
-  const schema = normalizeIntentSchema(
-    {
-      request: { goal: "Extend talent draw with persistent inventory panel" },
-      classification: { intentKind: "standalone-system", confidence: "high" },
+      classification: {
+        intentKind: "standalone-system",
+        confidence: "high",
+      },
       requirements: {
-        functional: ["Store confirmed talents in a 15-slot inventory panel"],
+        functional: ["Add a persistent inventory panel and store each confirmed selection."],
       },
       selection: {
-        mode: "user-chosen",
-        cardinality: "single",
-        repeatability: "repeatable",
-        duplicatePolicy: "forbid",
         inventory: {
           enabled: true,
-          capacity: 15.9,
+          capacity: 1,
           storeSelectedItems: true,
-          blockDrawWhenFull: true,
-          fullMessage: "Talent inventory full",
+          blockDrawWhenFull: false,
+          fullMessage: "Inventory full",
           presentation: "persistent_panel",
         },
       },
-      normalizedMechanics: {
-        playerChoice: true,
-        uiModal: true,
-      },
-      requiredClarifications: [],
-      openQuestions: [],
       resolvedAssumptions: [],
-      isReadyForBlueprint: true,
     },
-    "Extend talent draw with inventory",
-    host
+    "给 talent_draw_demo 增加一个常驻库存界面，玩家每次确认后都放进去",
+    host,
   );
 
-  assert.deepEqual(schema.selection?.inventory, {
-    enabled: true,
-    capacity: 15,
-    storeSelectedItems: true,
-    blockDrawWhenFull: true,
-    fullMessage: "Talent inventory full",
-    presentation: "persistent_panel",
+  assert.equal(schema.selection?.inventory?.enabled, true);
+  assert.equal(schema.selection?.inventory?.capacity, undefined);
+  assert.equal(schema.selection?.inventory?.fullMessage, undefined);
+  assert.equal(schema.selection?.inventory?.storeSelectedItems, true);
+}
+
+function testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSemantics() {
+  const schema = normalizeIntentSchema(
+    {
+      request: {
+        goal: "Create a dash ability with no UI or persistence.",
+      },
+      classification: {
+        intentKind: "micro-feature",
+        confidence: "high",
+      },
+      requirements: {
+        functional: ["Dash 400 units toward the cursor on Q."],
+      },
+      selection: {
+        mode: "deterministic",
+        source: "none",
+        choiceMode: "none",
+        cardinality: "single",
+      },
+      resolvedAssumptions: [],
+    },
+    "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离。",
+    host,
+  );
+
+  assert.equal(schema.selection, undefined);
+}
+
+async function testRunWizardToIntentSchemaFallsBackOnProviderFailure() {
+  const result = await runWizardToIntentSchema({
+    client: {
+      async generateObject() {
+        throw new Error("provider offline");
+      },
+    },
+    input: {
+      rawText: "Create a passive aura that gives nearby allies bonus armor.",
+    },
   });
-  assert.equal(schema.readiness, "ready");
+
+  assert.equal(result.valid, true);
+  assert.equal(result.schema.classification.intentKind, "micro-feature");
+  assert.equal(result.schema.interaction?.activations?.[0]?.kind, "passive");
+  assert.ok(result.issues.some((issue) => issue.code === "WIZARD_GENERIC_FALLBACK"));
 }
 
-function runTests() {
-  testNormalizeReadySchema();
-  testNormalizeBlockedSchemaFromClarification();
-  testNormalizeSupportedDetailClarificationAsReady();
-  testNormalizeBoundedDetailClarificationWithoutTriChoicePromotionStillReady();
-  testReadyFlagWithoutSemanticMinimumDoesNotOverPromote();
-  testNormalizeSelectionInventoryContract();
-  console.log("intent-schema.test.ts: PASS");
+async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
+  const schemaObject: Partial<IntentSchema> = {
+    request: {
+      goal: "After drawing one option, grant another feature and persist it across matches.",
+    },
+    classification: {
+      intentKind: "cross-system-composition",
+      confidence: "high",
+    },
+    requirements: {
+      functional: ["After drawing one option, grant another feature and persist it across matches."],
+    },
+    outcomes: {
+      operations: ["grant-feature", "update-state"],
+    },
+    timing: {
+      duration: { kind: "persistent" },
+    },
+    composition: {
+      dependencies: [
+        { kind: "cross-feature", relation: "grants", required: true },
+        { kind: "external-system", relation: "writes", required: true },
+      ],
+    },
+    resolvedAssumptions: [],
+  };
+
+  const result = await runWizardToIntentSchema({
+    client: {
+      async generateObject() {
+        return { object: schemaObject, raw: schemaObject };
+      },
+    },
+    input: {
+      rawText: "After drawing one option, grant another feature and persist it across matches.",
+    },
+  });
+
+  assert.equal(result.schema.readiness, undefined);
+  assert.ok((result.clarificationPlan?.questions.length || 0) >= 2);
+  assert.ok(result.clarificationPlan?.questions.some((question) => question.id === "clarify-cross-feature-target"));
+  assert.ok(result.clarificationPlan?.questions.some((question) => question.id === "clarify-persistence-scope"));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runTests();
+async function runTests() {
+  testNormalizeIntentSchemaStaysSemanticOnly();
+  testBuildWizardMessagesExplicitlyBanImplementationAuthority();
+  testCreateFallbackIntentSchemaPreservesDashFacts();
+  testCreateFallbackIntentSchemaPreservesWeightedDrawFacts();
+  testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints();
+  testNormalizeIntentSchemaDoesNotInventInventoryDetails();
+  testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSemantics();
+  await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
+  await testRunWizardToIntentSchemaProducesClarificationSidecar();
+  console.log("core/wizard/intent-schema.test.ts passed");
 }
 
-export { runTests };
+runTests();

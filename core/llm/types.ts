@@ -49,9 +49,12 @@ export interface GenerateObjectResult<T> {
 
 export type LLMThinkingMode = "enabled" | "disabled";
 export type OpenAICompatibleThinkingPayloadMode = "auto" | "type-object" | "none";
+export type LLMReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 
 export type LLMWorkflowKind =
   | "wizard"
+  | "synthesis"
+  | "local-repair"
   | "blueprint"
   | "dota2-planning"
   | "gap-fill"
@@ -62,6 +65,7 @@ export interface LLMExecutionConfig {
   temperature?: number;
   providerOptions?: Record<string, unknown>;
   thinking?: LLMThinkingMode;
+  reasoningEffort?: LLMReasoningEffort;
 }
 
 export interface LLMClient {

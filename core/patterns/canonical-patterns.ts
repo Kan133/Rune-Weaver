@@ -174,6 +174,7 @@ export const CORE_PATTERN_IDS = {
   UI_KEY_HINT: "ui.key_hint",
   UI_RESOURCE_BAR: "ui.resource_bar",
   DOTA2_SHORT_TIME_BUFF: "dota2.short_time_buff",
+  DOTA2_EXPLORATORY_ABILITY: "dota2.exploratory_ability",
 } as const;
 
 export type CorePatternId = typeof CORE_PATTERN_IDS[keyof typeof CORE_PATTERN_IDS];

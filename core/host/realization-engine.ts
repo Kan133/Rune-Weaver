@@ -3,6 +3,7 @@ import type {
   AssemblyPlan,
   HostRealizationPlan,
   HostRealizationUnit,
+  ModuleSourceKind,
   RealizationRole,
   RealizationType,
 } from "../schema/types.js";
@@ -50,6 +51,22 @@ export interface HostRealizationEngineConfig {
   buildFallback?: (assemblyPlan: AssemblyPlan) => HostFallbackDecision;
 }
 
+function resolveUnitSourceKind(
+  assemblyPlan: AssemblyPlan,
+  module?: AssemblyModule,
+): ModuleSourceKind {
+  if (module?.sourceKind && module.sourceKind !== "templated") {
+    return module.sourceKind;
+  }
+  if (assemblyPlan.sourceKind && assemblyPlan.sourceKind !== "templated") {
+    return assemblyPlan.sourceKind;
+  }
+  if (module?.selectedPatterns?.length || assemblyPlan.selectedPatterns.length > 0) {
+    return "pattern";
+  }
+  return "synthesized";
+}
+
 export function findMatchingRule(
   module: AssemblyModule,
   rules: HostRealizationRule[]
@@ -81,6 +98,7 @@ export function createHostRealizer(config: HostRealizationEngineConfig) {
           id: "default",
           sourceModuleId: "default",
           sourcePatternIds: assemblyPlan.selectedPatterns.map((p) => p.patternId),
+          sourceKind: resolveUnitSourceKind(assemblyPlan),
           role: fallback.role,
           realizationType: fallback.realizationType,
           hostTargets: fallback.hostTargets,
@@ -140,6 +158,7 @@ export function createHostRealizer(config: HostRealizationEngineConfig) {
         id: module.id,
         sourceModuleId: module.id,
         sourcePatternIds: module.selectedPatterns,
+        sourceKind: resolveUnitSourceKind(assemblyPlan, module),
         role,
         realizationType,
         hostTargets,
@@ -170,7 +189,7 @@ export function summarizeRealization(plan: HostRealizationPlan): string {
   const unitSummary = plan.units
     .map(
       (unit) =>
-        `  - ${unit.id}: ${unit.realizationType} (${unit.confidence}) from [${unit.sourcePatternIds.join(", ")}]`
+        `  - ${unit.id}: ${unit.realizationType} (${unit.confidence}, ${unit.sourceKind}) from [${unit.sourcePatternIds.join(", ")}]`
     )
     .join("\n");
 
@@ -206,6 +225,27 @@ export function inferRealizationTypeFromModule(
   module: AssemblyModule,
   classifier?: HostPatternClassifier
 ): RealizationType {
+  const hasLuaOutput = module.outputs?.some((output) => output.kind === "lua") || false;
+  const hasKvOutput = module.outputs?.some((output) => output.kind === "kv") || false;
+  const hasUiOutput = module.outputs?.some((output) => output.kind === "ui") || false;
+  const hasBridgeOutput = module.outputs?.some((output) => output.kind === "bridge") || false;
+
+  if (hasLuaOutput && hasKvOutput) {
+    return "kv+lua";
+  }
+
+  if (hasLuaOutput) {
+    return "lua";
+  }
+
+  if (hasUiOutput && !hasKvOutput && !module.selectedPatterns.length) {
+    return "ui";
+  }
+
+  if (hasBridgeOutput && !module.selectedPatterns.length) {
+    return "bridge-only";
+  }
+
   const preferredFamilies = module.selectedPatterns
     .map((pattern) => classifier?.getPreferredFamily?.(pattern))
     .filter((family): family is string => !!family);

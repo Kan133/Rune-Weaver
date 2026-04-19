@@ -46,12 +46,10 @@ export const dashIntentSchemaExample: IntentSchema = {
     trigger: true,
     outcomeApplication: true,
   },
-  openQuestions: [],
   resolvedAssumptions: [
     "Q键作为默认触发键",
     "向前方向为英雄面朝方向",
   ],
-  isReadyForBlueprint: true,
 };
 
 /**
@@ -89,13 +87,11 @@ export const talentSystemIntentSchemaExample: IntentSchema = {
     uiModal: true,
     outcomeApplication: true,
   },
-  openQuestions: [],
   resolvedAssumptions: [
     "每级升级触发一次",
     "三选一机制",
     "从预定义天赋池中抽取",
   ],
-  isReadyForBlueprint: true,
 };
 
 // ============================================================================

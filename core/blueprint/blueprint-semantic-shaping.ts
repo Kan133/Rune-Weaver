@@ -7,14 +7,19 @@ import {
 import { CORE_PATTERN_IDS } from "../patterns/canonical-patterns";
 import {
   buildSelectionLocalProgressionConfig,
-  isAdmittedForwardLinearProjectileSlice,
-  isAdmittedLocalCooldownSchedulerSlice,
-  isAdmittedSelectionLocalProgressionSlice,
-  isSelectionLocalProgressionStateRequirement,
+  classifySchedulerTimerRisk,
+  detectFollowOwnerMotionSignals,
+  detectForwardLinearProjectileReusableFit,
+  detectLocalCooldownSchedulerReusableFit,
+  detectSelectionFlowAsk,
+  detectSelectionLocalProgressionReusableFit,
+  detectSelectionLocalProgressionStateRequirement,
+  detectSpawnEmitterSignals,
   shouldUseShortTimeBuffCapability,
   stateLooksLikeCommittedSelection,
   stateLooksLikePoolState,
 } from "./seam-authority";
+import { stripNegativeConstraintFragments } from "./semantic-lexical";
 
 export function inferCategoriesFromMechanics(
   schema: IntentSchema
@@ -28,7 +33,11 @@ export function inferCategoriesFromMechanics(
   if (mechanics.candidatePool) {
     categories.push("data");
   }
-  if (mechanics.weightedSelection || mechanics.playerChoice) {
+  if (
+    mechanics.weightedSelection ||
+    mechanics.playerChoice ||
+    classifySchedulerTimerRisk(schema) === "synthesis_required"
+  ) {
     categories.push("rule");
   }
   if (mechanics.uiModal) {
@@ -48,7 +57,7 @@ export function resolveRequirementCategory(
   req: IntentRequirement,
   schema: IntentSchema
 ): BlueprintModule["category"] {
-  if (isSelectionLocalProgressionStateRequirement(req, schema)) {
+  if (detectSelectionLocalProgressionStateRequirement(req, schema)) {
     return "rule";
   }
 
@@ -62,13 +71,25 @@ export function resolveRequirementRole(
   contextSignals: string[]
 ): string {
   if (req.kind === "state") {
-    if (category === "rule" && isSelectionLocalProgressionStateRequirement(req, schema)) {
+    if (category === "rule" && detectSelectionLocalProgressionStateRequirement(req, schema)) {
       return "selection_flow";
     }
 
     if (!schema.normalizedMechanics.candidatePool) {
       return "session_state";
     }
+  }
+
+  if (category === "rule") {
+    return inferRuleSemanticRole(contextSignals, detectSelectionFlowAsk(schema));
+  }
+
+  if (
+    category === "effect" &&
+    detectSpawnEmitterSignals(schema) &&
+    !detectForwardLinearProjectileReusableFit(schema)
+  ) {
+    return "spawn_emitter";
   }
 
   return inferRoleFromCategory(category, contextSignals);
@@ -105,7 +126,7 @@ export function describeMechanicResponsibility(
     case "data":
       return "Provide candidate data and pool state";
     case "rule":
-      return "Orchestrate selection and commit behavior";
+      return "Orchestrate rule evaluation, timing, and commit behavior";
     case "ui":
       return "Present interactive selection surface";
     case "effect":
@@ -123,14 +144,22 @@ export function inferRoleFromCategory(
   category: BlueprintModule["category"],
   contextSignals: string[] = []
 ): string {
+  const sanitizedSignals = contextSignals
+    .map((signal) => stripNegativeConstraintFragments(signal))
+    .filter((signal) => signal.trim().length > 0);
+
   if (category === "ui") {
-    return inferUISemanticRole(contextSignals);
+    return inferUISemanticRole(sanitizedSignals);
+  }
+
+  if (category === "rule") {
+    return inferRuleSemanticRole(sanitizedSignals, true);
   }
 
   const roleMap: Record<BlueprintModule["category"], string> = {
     trigger: "input_trigger",
     data: "weighted_pool",
-    rule: "selection_flow",
+    rule: "rule_orchestrator",
     effect: "effect_application",
     ui: "selection_modal",
     resource: "resource_pool",
@@ -162,7 +191,7 @@ export function extractModuleParameters(
 export function inferCategoryFromRequirement(
   req: string
 ): BlueprintModule["category"] {
-  const reqLower = req.toLowerCase();
+  const reqLower = stripNegativeConstraintFragments(req).toLowerCase();
 
   if (reqLower.includes("按键") || reqLower.includes("触发") || reqLower.includes("输入")) {
     return "trigger";
@@ -199,7 +228,7 @@ export function getCanonicalPatternIds(
       }
       return [CORE_PATTERN_IDS.DATA_WEIGHTED_POOL];
     case "rule":
-      return [CORE_PATTERN_IDS.RULE_SELECTION_FLOW];
+      return role === "selection_flow" ? [CORE_PATTERN_IDS.RULE_SELECTION_FLOW] : [];
     case "ui":
       if (role === "resource_bar") {
         return [CORE_PATTERN_IDS.UI_RESOURCE_BAR];
@@ -301,6 +330,66 @@ function inferUISemanticRole(
   }
 
   return "selection_modal";
+}
+
+function inferRuleSemanticRole(
+  contextSignals: string[],
+  allowSelectionFlow: boolean
+): "selection_flow" | "timed_rule" | "rule_orchestrator" {
+  const context = contextSignals
+    .flatMap((signal) => signal.split(/\s+/))
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    allowSelectionFlow &&
+    contextSignalsContainAny(context, [
+      "selection",
+      "select",
+      "choice",
+      "choose",
+      "pick",
+      "candidate",
+      "draw",
+      "draft",
+      "weighted",
+      "modal",
+      "候选",
+      "选择",
+      "选项",
+      "抽取",
+      "抽卡",
+      "加权",
+      "稀有",
+    ])
+  ) {
+    return "selection_flow";
+  }
+
+  if (
+    contextSignalsContainAny(context, [
+      "periodic",
+      "interval",
+      "tick",
+      "timer",
+      "timed",
+      "duration",
+      "cooldown",
+      "scheduler",
+      "every",
+      "burn",
+      "damage over time",
+      "每隔",
+      "周期",
+      "持续",
+      "定时",
+      "冷却",
+    ])
+  ) {
+    return "timed_rule";
+  }
+
+  return "rule_orchestrator";
 }
 
 function extractTriggerParams(params: Record<string, unknown>): Record<string, unknown> {
@@ -465,29 +554,49 @@ function inferRequiredCapabilities(
       break;
     case "data":
       if (module.role === "session_state") {
-        capabilities.add("state.session.snapshot");
+        capabilities.add("state.session.feature_owned");
       } else if (schema.normalizedMechanics.candidatePool) {
         capabilities.add("selection.pool.weighted_candidates");
       } else {
-        capabilities.add("state.session.snapshot");
+        capabilities.add("state.session.feature_owned");
       }
       break;
     case "rule":
-      if (
+      if (module.role === "selection_flow" && (
         schema.normalizedMechanics.playerChoice ||
         schema.selection?.mode === "user-chosen" ||
         schema.normalizedMechanics.uiModal ||
         schema.uiRequirements?.needed
-      ) {
+      )) {
         capabilities.add("selection.flow.player_confirmed");
-      } else if (schema.selection?.mode === "weighted" || schema.normalizedMechanics.weightedSelection) {
+      } else if (
+        module.role === "selection_flow" &&
+        (schema.selection?.mode === "weighted" || schema.normalizedMechanics.weightedSelection)
+      ) {
         capabilities.add("selection.flow.weighted_resolve");
+      } else if (module.role === "timed_rule") {
+        if (hasDelayTimingSignal(schema, module)) {
+          capabilities.add("timing.delay.local");
+        }
+        if (hasIntervalTimingSignal(schema, module)) {
+          capabilities.add("timing.interval.local");
+        }
+        if (hasCooldownTimingSignal(schema, module)) {
+          capabilities.add("timing.cooldown.local");
+        }
+        if (capabilities.size === 0) {
+          capabilities.add("rule.execution.orchestrate");
+        }
       } else {
-        capabilities.add("selection.flow.resolve");
+        capabilities.add("rule.execution.orchestrate");
       }
       break;
     case "effect":
-      if (isAdmittedForwardLinearProjectileSlice(schema)) {
+      if (module.role === "spawn_emitter") {
+        capabilities.add("emission.spawn.feature_owned");
+        break;
+      }
+      if (detectForwardLinearProjectileReusableFit(schema)) {
         capabilities.add("emission.projectile.linear.forward");
         break;
       }
@@ -531,7 +640,7 @@ function inferOptionalCapabilities(
   if (
     module.category === "rule" &&
     module.role === "selection_flow" &&
-    isAdmittedSelectionLocalProgressionSlice(schema)
+    detectSelectionLocalProgressionReusableFit(schema)
   ) {
     optional.add("progression.selection.local_threshold");
   }
@@ -552,8 +661,16 @@ function inferOptionalCapabilities(
   if (module.category === "effect" && schema.effects?.durationSemantics) {
     optional.add(`effect-duration/${schema.effects.durationSemantics}`);
   }
-  if (module.category === "effect" && isAdmittedLocalCooldownSchedulerSlice(schema)) {
+  if (module.category === "effect" && detectLocalCooldownSchedulerReusableFit(schema)) {
     optional.add("timing.cooldown.local");
+  }
+  if (
+    module.category === "effect" &&
+    module.role === "spawn_emitter" &&
+    detectSpawnEmitterSignals(schema) &&
+    detectFollowOwnerMotionSignals(schema)
+  ) {
+    optional.add("entity.motion.follow_owner");
   }
 
   return optional.size > 0 ? [...optional] : undefined;
@@ -591,7 +708,7 @@ function inferRequiredOutputs(
     outputs.add("host.config.kv");
     if (
       shouldUseShortTimeBuffCapability(schema.effects) ||
-      isAdmittedForwardLinearProjectileSlice(schema)
+      detectForwardLinearProjectileReusableFit(schema)
     ) {
       outputs.add("host.runtime.lua");
     }
@@ -641,7 +758,7 @@ function inferStateExpectations(
   if (
     module.category === "rule" &&
     module.role === "selection_flow" &&
-    isAdmittedSelectionLocalProgressionSlice(schema)
+    detectSelectionLocalProgressionReusableFit(schema)
   ) {
     expectations.add("progression.round_counter_state");
     expectations.add("progression.level_state");
@@ -707,6 +824,34 @@ function inferIntegrationHints(
   }
 
   return hints.size > 0 ? [...hints] : undefined;
+}
+
+function hasDelayTimingSignal(
+  schema: IntentSchema,
+  module: BlueprintModule,
+): boolean {
+  return schema.timing?.delaySeconds !== undefined
+    || typeof module.parameters?.initialDelaySeconds === "number"
+    || typeof module.parameters?.delaySeconds === "number";
+}
+
+function hasIntervalTimingSignal(
+  schema: IntentSchema,
+  module: BlueprintModule,
+): boolean {
+  return schema.timing?.intervalSeconds !== undefined
+    || typeof module.parameters?.tickSeconds === "number"
+    || typeof module.parameters?.intervalSeconds === "number";
+}
+
+function hasCooldownTimingSignal(
+  schema: IntentSchema,
+  module: BlueprintModule,
+): boolean {
+  return schema.timing?.cooldownSeconds !== undefined
+    || typeof module.parameters?.cooldownSeconds === "number"
+    || typeof module.parameters?.cooldown === "number"
+    || typeof module.parameters?.abilityCooldown === "number";
 }
 
 function inferInvariants(

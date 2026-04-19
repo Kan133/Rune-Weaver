@@ -355,14 +355,18 @@ function testSchedulerTimerGapDoesNotMasqueradeAsReadySupport() {
   };
 
   const result = buildBlueprint(schema);
+  const resolution = resolvePatterns(result.finalBlueprint!);
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(resolution.viable, true);
+  assert.equal(resolution.complete, false);
+  assert.ok(resolution.unresolved.length > 0);
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("cooldown-local effect slice")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Scheduler/timer semantics need synthesis")
     )
   );
 }
@@ -533,7 +537,7 @@ function testBroaderRewardProgressionGapStillBlocks() {
     result.normalizationReport?.issues.some(
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("selection-local threshold progression slice")
+        issue.message.includes("persistent/economy/inventory scope")
     )
   );
 }
@@ -661,13 +665,13 @@ function testSpawnEmissionGapDoesNotCollapseIntoLinearProjectileSupport() {
 
   const result = buildBlueprint(schema);
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("helper-unit / follow / effect-coupled spawn choreography")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Spawn/emission semantics require synthesis")
     )
   );
 }
@@ -722,13 +726,13 @@ function testStandaloneStateBoundaryStillBlocks() {
 
   const result = buildBlueprint(schema);
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("Standalone entity/session state semantics")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("feature-owned session state")
     )
   );
 }

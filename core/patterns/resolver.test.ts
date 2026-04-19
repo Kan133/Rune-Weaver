@@ -87,8 +87,8 @@ function withSyntheticPatterns<T>(run: () => T): T {
     ...baseBlueprint,
     moduleNeeds: [
       {
-        moduleId: "unsupported_case",
-        semanticRole: "unsupported_case",
+        moduleId: "catalog_miss_case",
+        semanticRole: "catalog_miss_case",
         requiredCapabilities: ["capability.missing.from.catalog"],
       },
     ],
@@ -96,7 +96,62 @@ function withSyntheticPatterns<T>(run: () => T): T {
 
   assert.equal(result.patterns.length, 0);
   assert.equal(result.unresolved.length, 1);
+  assert.equal(result.unresolvedModuleNeeds.length, 1);
+  assert.equal(result.viable, true);
+  assert.equal(result.complete, false);
   assert.deepEqual(result.unresolved[0].missingCapabilities, ["capability.missing.from.catalog"]);
+  assert.equal(result.unresolvedModuleNeeds[0].moduleId, "catalog_miss_case");
+  assert.match(result.unresolved[0].reason, /module synthesis/i);
+  assert.match(result.unresolved[0].suggestedAlternative || "", /module synthesis/i);
+  assert.doesNotMatch(result.unresolved[0].reason, /admitted|unsupported|seam/i);
+  assert.ok(
+    result.issues.some((issue) => issue.code === "NO_PATTERNS_RESOLVED" && issue.severity === "warning"),
+  );
+}
+
+{
+  const result = resolvePatterns({
+    ...baseBlueprint,
+    status: "weak",
+    implementationStrategy: "exploratory",
+    designDraft: {
+      retrievedFamilyCandidates: [],
+      retrievedPatternCandidates: [],
+      reuseConfidence: "low",
+      chosenImplementationStrategy: "exploratory",
+    },
+    commitDecision: {
+      outcome: "exploratory",
+      canAssemble: true,
+      canWriteHost: true,
+      requiresReview: true,
+      reasons: ["unknown mechanic should continue via exploratory fallback"],
+    },
+    moduleNeeds: [
+      {
+        moduleId: "exploratory_case",
+        semanticRole: "exploratory_case",
+        requiredCapabilities: ["capability.missing.from.catalog"],
+        requiredOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+        integrationHints: ["ability.execution"],
+      },
+    ],
+  });
+
+  assert.equal(result.patterns.length, 0);
+  assert.equal(result.unresolved.length, 1);
+  assert.equal(result.unresolvedModuleNeeds.length, 1);
+  assert.equal(result.viable, true);
+  assert.equal(result.unresolvedModuleNeeds[0].moduleId, "exploratory_case");
+  assert.equal(result.unresolvedModuleNeeds[0].strategy, "exploratory");
+  assert.match(result.unresolved[0].suggestedAlternative || "", /module synthesis/i);
+  assert.doesNotMatch(result.unresolved[0].reason, /admitted|unsupported|seam/i);
+  assert.ok(
+    result.issues.some((issue) => issue.code === "MODULE_NEED_UNRESOLVED"),
+  );
+  assert.ok(
+    result.issues.some((issue) => issue.code === "NO_PATTERNS_RESOLVED" && issue.severity === "warning"),
+  );
 }
 
 withSyntheticPatterns(() => {
@@ -113,8 +168,11 @@ withSyntheticPatterns(() => {
   });
 
   assert.equal(result.patterns.length, 1);
+  assert.equal(result.moduleRecords.length, 1);
+  assert.equal(result.viable, true);
   assert.equal(result.patterns[0].patternId, "test.synthetic.beta");
   assert.equal(result.patterns[0].source, "hint-tiebreak");
+  assert.equal(result.moduleRecords[0].moduleId, "tie_case");
 });
 
 {
@@ -132,8 +190,11 @@ withSyntheticPatterns(() => {
   });
 
   assert.equal(result.patterns.length, 1);
+  assert.equal(result.moduleRecords.length, 1);
+  assert.equal(result.viable, true);
   assert.equal(result.patterns[0].patternId, "effect.dash");
   assert.equal(result.patterns[0].source, "need");
+  assert.equal(result.moduleRecords[0].selectedPatternIds[0], "effect.dash");
 }
 
 {
@@ -153,8 +214,10 @@ withSyntheticPatterns(() => {
   });
 
   assert.equal(result.patterns.length, 1);
+  assert.equal(result.viable, true);
   assert.equal(result.patterns[0].patternId, "dota2.short_time_buff");
   assert.equal(result.patterns[0].source, "need");
+  assert.equal(result.unresolvedModuleNeeds.length, 0);
 }
 
 {
@@ -233,6 +296,7 @@ withSyntheticPatterns(() => {
   const selectionFlow = result.patterns.find((pattern) => pattern.patternId === "rule.selection_flow");
 
   assert.equal(result.unresolved.length, 0);
+  assert.equal(result.viable, true);
   assert.ok(selectionFlow);
   assert.deepEqual(selectionFlow?.parameters?.progression, {
     enabled: true,
@@ -302,6 +366,7 @@ withSyntheticPatterns(() => {
   const projectilePattern = result.patterns.find((pattern) => pattern.patternId === "dota2.linear_projectile_emit");
 
   assert.equal(result.unresolved.length, 0);
+  assert.equal(result.viable, true);
   assert.ok(projectilePattern);
   assert.equal(projectilePattern?.parameters?.projectileDistance, 900);
   assert.equal(projectilePattern?.parameters?.projectileSpeed, 1200);

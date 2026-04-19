@@ -11,7 +11,7 @@
  * Both repairs are idempotent and safe to re-run.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   RuneWeaverFeatureRecord,
@@ -828,6 +828,52 @@ export interface HostEntryInjectionResult {
   errors: string[];
 }
 
+function ensureServerHostEntry(projectPath: string): void {
+  const serverEntryPath = join(projectPath, "game/scripts/src/modules/index.ts");
+  if (existsSync(serverEntryPath)) {
+    return;
+  }
+
+  mkdirSync(join(projectPath, "game/scripts/src/modules"), { recursive: true });
+  writeFileSync(
+    serverEntryPath,
+    `import { activateRuneWeaverModules } from "../rune_weaver";
+
+export function ActivateModules() {
+  activateRuneWeaverModules();
+}
+`,
+    "utf-8",
+  );
+}
+
+function ensureUIHostEntry(projectPath: string): void {
+  const uiEntryPath = join(projectPath, "content/panorama/src/hud/script.tsx");
+  if (existsSync(uiEntryPath)) {
+    return;
+  }
+
+  mkdirSync(join(projectPath, "content/panorama/src/hud"), { recursive: true });
+  writeFileSync(
+    uiEntryPath,
+    `import React from "react";
+import { render } from "react-panorama-x";
+import { RuneWeaverHUDRoot } from "../rune_weaver";
+
+function Root() {
+  return (
+    <>
+      <RuneWeaverHUDRoot />
+    </>
+  );
+}
+
+render(<Root />, $.GetContextPanel());
+`,
+    "utf-8",
+  );
+}
+
 export function injectHostEntryBridge(projectPath: string): HostEntryInjectionResult {
   const result: HostEntryInjectionResult = {
     success: false,
@@ -838,6 +884,18 @@ export function injectHostEntryBridge(projectPath: string): HostEntryInjectionRe
 
   const serverEntryPath = join(projectPath, "game/scripts/src/modules/index.ts");
   const uiEntryPath = join(projectPath, "content/panorama/src/hud/script.tsx");
+
+  try {
+    ensureServerHostEntry(projectPath);
+    ensureUIHostEntry(projectPath);
+  } catch (error) {
+    result.errors.push(
+      `Failed to ensure host entry shells: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return result;
+  }
 
   if (existsSync(serverEntryPath)) {
     try {

@@ -2,7 +2,7 @@
  * Dota2 Adapter - Post-Generation Validator (P0)
  *
  * Validates the state of generated files after code generation.
- * Based on Talent Draw runtime bugs - these are critical checks
+ * Based on selection_pool runtime bugs - these are critical checks
  * that must pass before the game can run correctly.
  */
 
@@ -755,6 +755,7 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
   }
 
   const keyToFeatures = new Map<string, string[]>();
+  const missingBindingSources: string[] = [];
   for (const feature of workspaceResult.workspace.features) {
     if (feature.status !== "active") {
       continue;
@@ -765,7 +766,13 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
       continue;
     }
 
-    const content = readFileSync(join(hostRoot, keyBindingFile), "utf8");
+    const keyBindingPath = join(hostRoot, keyBindingFile);
+    if (!existsSync(keyBindingPath)) {
+      missingBindingSources.push(`${feature.featureId}: missing key binding source ${keyBindingFile}`);
+      continue;
+    }
+
+    const content = readFileSync(keyBindingPath, "utf8");
     const match = content.match(/configuredKey:\s*string\s*=\s*"([^"]+)"/);
     if (!match) {
       continue;
@@ -775,6 +782,16 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
     const featureIds = keyToFeatures.get(key) || [];
     featureIds.push(feature.featureId);
     keyToFeatures.set(key, featureIds);
+  }
+
+  if (missingBindingSources.length > 0) {
+    return {
+      check: checkName,
+      passed: false,
+      message: `${missingBindingSources.length} active features are missing their key binding sources`,
+      details: missingBindingSources,
+      suggestion: "Regenerate or clean the affected features so workspace.generatedFiles matches the on-disk key binding files.",
+    };
   }
 
   const conflicts = Array.from(keyToFeatures.entries())
@@ -812,6 +829,7 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
   }
 
   const emptySeedFeatures: string[] = [];
+  const missingPoolSources: string[] = [];
 
   for (const feature of workspaceResult.workspace.features) {
     if (feature.status !== "active") {
@@ -830,7 +848,13 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
       continue;
     }
 
-    const content = readFileSync(join(hostRoot, poolFile), "utf8");
+    const poolPath = join(hostRoot, poolFile);
+    if (!existsSync(poolPath)) {
+      missingPoolSources.push(`${feature.featureId}: missing weighted pool source ${poolFile}`);
+      continue;
+    }
+
+    const content = readFileSync(poolPath, "utf8");
     const hasTodoMarker = content.includes("TODO: Add initial talent entries");
     const initialEntriesMatch = content.match(/const initialEntries = \[([\s\S]*?)\]\s+as T\[];/);
     const initialEntryCount = initialEntriesMatch ? (initialEntriesMatch[1].match(/\{\s*id:/g) || []).length : 0;
@@ -847,13 +871,23 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
     }
   }
 
+  if (missingPoolSources.length > 0) {
+    return {
+      check: checkName,
+      passed: false,
+      message: `${missingPoolSources.length} active selection features are missing weighted pool sources`,
+      details: missingPoolSources,
+      suggestion: "Regenerate or clean the affected selection-pool features so workspace.generatedFiles matches the on-disk weighted pool files.",
+    };
+  }
+
   if (emptySeedFeatures.length > 0) {
     return {
       check: checkName,
       passed: false,
       message: `${emptySeedFeatures.length} active selection features have empty weighted pools`,
       details: emptySeedFeatures,
-      suggestion: "Regenerate the feature with seeded entries or use the canonical Talent Draw demo fixture before launching the host.",
+      suggestion: "Regenerate the feature with seeded entries or use a seeded selection_pool example fixture before launching the host.",
     };
   }
 

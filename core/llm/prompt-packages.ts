@@ -1,0 +1,396 @@
+import type {
+  Blueprint,
+  CurrentFeatureContext,
+  FeatureContract,
+  FeatureDependencyEdge,
+  PromptConstraintBundle,
+  PromptPackageId,
+  RetrievalBundle,
+  SynthesisTargetProfile,
+  UnresolvedModuleNeed,
+} from "../schema/types.js";
+import type { LLMMessage } from "./types.js";
+import type { WizardClarificationAnswer } from "../wizard/types.js";
+import { extractPromptConstraints, renderPromptConstraints } from "./prompt-constraints.js";
+
+export interface WorkflowPromptPackage {
+  id: PromptPackageId;
+  messages: LLMMessage[];
+  promptConstraints: PromptConstraintBundle;
+  retrievalBundle?: RetrievalBundle;
+}
+
+interface WizardPackageInput {
+  rawText: string;
+  hostSummary: string;
+  retrievalBundle?: RetrievalBundle;
+  refinementContext?: {
+    priorSchema?: unknown;
+    clarificationTranscript?: WizardClarificationAnswer[];
+  };
+}
+
+interface UpdateWizardPackageInput extends WizardPackageInput {
+  currentFeatureContext: CurrentFeatureContext;
+}
+
+interface SynthesisPromptInput {
+  featureId: string;
+  blueprint: Blueprint;
+  moduleNeed: UnresolvedModuleNeed;
+  targetProfile: SynthesisTargetProfile;
+  targetPath?: string;
+  existingContent?: string;
+  retrievalBundle?: RetrievalBundle;
+}
+
+interface RepairPromptInput {
+  featureId: string;
+  moduleId?: string;
+  boundaryId: string;
+  targetFile: string;
+  targetExcerpt: string;
+  diagnostics: string[];
+  fillContractSummary: string;
+  originalModuleContract?: Record<string, unknown>;
+  retrievalBundle?: RetrievalBundle;
+}
+
+function renderRetrievalBundle(bundle?: RetrievalBundle): string {
+  if (!bundle || bundle.evidenceRefs.length === 0) {
+    return "No retrieval evidence attached.";
+  }
+
+  return [
+    `Retrieval summary: ${bundle.summary}`,
+    `Tiers used: ${bundle.tiersUsed.join(", ")}`,
+    "Evidence refs:",
+    ...bundle.evidenceRefs.map((item) =>
+      `- [${item.sourceKind}] ${item.title}${item.section ? ` :: ${item.section}` : ""}${item.symbol ? ` (symbol=${item.symbol})` : ""}`,
+    ),
+  ].join("\n");
+}
+
+function buildWizardFewShots(): LLMMessage[] {
+  const examples = [
+    {
+      user: "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离。",
+      assistant: {
+        classification: { intentKind: "micro-feature", confidence: "high" },
+        requirements: { functional: ["Pressing Q dashes the player 400 units toward the cursor with no UI or persistence layers."] },
+        interaction: { activations: [{ kind: "key", input: "Q", phase: "press", repeatability: "repeatable" }] },
+        targeting: { subject: "self", selector: "cursor", teamScope: "self" },
+        spatial: { motion: { kind: "dash", distance: 400, direction: "cursor" } },
+        outcomes: { operations: ["move"] },
+        uiRequirements: { needed: false, surfaces: [] },
+        uncertainties: [],
+      },
+    },
+    {
+      user: "按F4从池里抽3个候选，玩家选1个立即生效，但不要做库存或常驻panel。",
+      assistant: {
+        classification: { intentKind: "micro-feature", confidence: "high" },
+        requirements: { functional: ["F4 opens a three-choice selection flow and applies the selected result immediately without inventory or persistent panel semantics."] },
+        interaction: { activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }] },
+        selection: {
+          mode: "user-chosen",
+          source: "candidate-collection",
+          choiceMode: "user-chosen",
+          choiceCount: 3,
+          cardinality: "single",
+          repeatability: "repeatable",
+          commitment: "immediate",
+        },
+        contentModel: {
+          collections: [{ id: "candidate_options", role: "candidate-options", ownership: "feature", updateMode: "replace" }],
+        },
+        uiRequirements: { needed: false, surfaces: [] },
+        outcomes: { operations: ["apply-effect"] },
+        uncertainties: [],
+      },
+    },
+    {
+      user: "Make a system where collected echoes tune a reality lattice and change future pulses.",
+      assistant: {
+        classification: { intentKind: "standalone-system", confidence: "low" },
+        requirements: {
+          functional: ["Collected echoes tune a shared reality lattice and influence future pulse behavior."],
+          typed: [{ id: "generic_reality_lattice", kind: "generic", summary: "Track the user-described reality-lattice tuning semantics honestly.", priority: "must" }],
+        },
+        uncertainties: [
+          { id: "unc_reality_lattice", summary: "The exact operational meaning of the reality lattice and pulse transformation is still domain-specific.", affects: ["intent", "blueprint"], severity: "high" },
+        ],
+      },
+    },
+  ];
+
+  return examples.flatMap((example) => [
+    { role: "user" as const, content: example.user },
+    { role: "assistant" as const, content: JSON.stringify(example.assistant, null, 2) },
+  ]);
+}
+
+function buildUpdateFewShots(): LLMMessage[] {
+  const examples = [
+    {
+      user: [
+        "Current feature context:",
+        JSON.stringify({
+          featureId: "selection_pool_demo",
+          preservedModuleBackbone: ["input.key_binding", "data.weighted_pool", "rule.selection_flow"],
+          admittedSkeleton: ["input.key_binding", "data.weighted_pool", "rule.selection_flow"],
+          preservedInvariants: ["Preserve unspecified existing behavior."],
+          boundedFields: { triggerKey: "F4", choiceCount: 3 },
+        }, null, 2),
+        "",
+        "Requested update:",
+        "只把触发键改成G，其他逻辑不要动。",
+      ].join("\n"),
+      assistant: {
+        requestedChange: {
+          classification: { intentKind: "standalone-system", confidence: "high" },
+          requirements: { functional: ["Rebind the existing trigger to G without changing other behavior."] },
+          interaction: { activations: [{ kind: "key", input: "G", phase: "press", repeatability: "repeatable" }] },
+          uncertainties: [],
+        },
+        delta: {
+          preserve: [{ path: "skeleton", kind: "composition", summary: "Preserve the module backbone composition." }],
+          modify: [{ path: "input.triggerKey", kind: "trigger", summary: "Rebind the existing trigger key to G." }],
+        },
+        resolvedAssumptions: ["Unspecified existing behavior remains preserved."],
+      },
+    },
+  ];
+
+  return examples.flatMap((example) => [
+    { role: "user" as const, content: example.user },
+    { role: "assistant" as const, content: JSON.stringify(example.assistant, null, 2) },
+  ]);
+}
+
+function renderUpdateFeatureContext(context: CurrentFeatureContext): string {
+  const compatibilityContext = context as CurrentFeatureContext & {
+    preservedModuleBackbone?: string[];
+  };
+
+  const preservedModuleBackbone =
+    compatibilityContext.preservedModuleBackbone && compatibilityContext.preservedModuleBackbone.length > 0
+      ? compatibilityContext.preservedModuleBackbone
+      : [...(context.admittedSkeleton || [])];
+
+  // Keep a one-round legacy alias for old fixtures/examples while promoting the new key.
+  return JSON.stringify(
+    {
+      ...context,
+      preservedModuleBackbone,
+      admittedSkeleton: preservedModuleBackbone,
+    },
+    null,
+    2,
+  );
+}
+
+export function buildWizardCreatePromptPackage(input: WizardPackageInput): WorkflowPromptPackage {
+  const promptConstraints = extractPromptConstraints({
+    rawText: input.rawText,
+    clarificationTranscript: input.refinementContext?.clarificationTranscript,
+  });
+  const messages: LLMMessage[] = [
+    {
+      role: "system",
+      content: [
+        "You are Rune Weaver's wizard.create prompt package.",
+        "Do not write code.",
+        "Convert the user request into a stable semantic IntentSchema.",
+        "Always return a best-effort semantic IntentSchema, even when the request is unfamiliar, cross-feature, partially unspecified, or currently unsupported downstream.",
+        "Governance is handled downstream; do not output readiness, blocked, weak, or implementation verdicts.",
+        "Do not judge implementation readiness, blocked state, blueprint legality, host write feasibility, or runtime support.",
+        "Preserve exact scalar facts and explicit negative constraints.",
+        "Use uncertainties only when you need to preserve missing or ambiguous semantic information that would materially change interpretation.",
+        "Do not invent UI, persistence, cross-feature coupling, inventory, or extra semantics that the user explicitly forbids.",
+        "Do not infer or name implementation families, pattern ids, profiles, source models, gap-fill boundaries, or workspace artifacts.",
+        "Use uncertainties only to preserve genuinely unresolved semantic gaps.",
+        `Host: ${input.hostSummary}`,
+        "",
+        renderPromptConstraints(promptConstraints),
+        "",
+        renderRetrievalBundle(input.retrievalBundle),
+      ].join("\n"),
+    },
+    ...buildWizardFewShots(),
+    {
+      role: "user",
+      content: input.refinementContext
+        ? [
+            `Original request:\n${input.rawText}`,
+            input.refinementContext.priorSchema
+              ? `Prior schema:\n${JSON.stringify(input.refinementContext.priorSchema, null, 2)}`
+              : "",
+            input.refinementContext.clarificationTranscript?.length
+              ? `Clarification transcript:\n${JSON.stringify(input.refinementContext.clarificationTranscript, null, 2)}`
+              : "",
+            "Return an updated best-effort IntentSchema that preserves earlier confirmed facts and explicit negative constraints.",
+          ].filter(Boolean).join("\n\n")
+        : input.rawText,
+    },
+  ];
+
+  return {
+    id: "wizard.create",
+    messages,
+    promptConstraints,
+    retrievalBundle: input.retrievalBundle,
+  };
+}
+
+export function buildWizardUpdatePromptPackage(input: UpdateWizardPackageInput): WorkflowPromptPackage {
+  const promptConstraints = extractPromptConstraints({
+    rawText: input.rawText,
+    clarificationTranscript: input.refinementContext?.clarificationTranscript,
+    currentFeatureContext: input.currentFeatureContext,
+  });
+  const messages: LLMMessage[] = [
+    {
+      role: "system",
+      content: [
+        "You are Rune Weaver's wizard.update prompt package.",
+        "Do not write code.",
+        "Interpret only the requested change against the current feature context.",
+        "Treat preservedModuleBackbone as the primary context field; admittedSkeleton is a one-round legacy alias and should be interpreted identically when present.",
+        "Prefer preserve semantics over rebuild semantics.",
+        "Do not restate or rebuild the whole existing feature unless the user explicitly asks for a rewrite.",
+        "Keep the requestedChange semantic-only and return compact delta notes.",
+        "Do not output readiness, blocked/weak labels, or implementation verdicts.",
+        "Represent unknown or change-sensitive gaps with uncertainties in the requestedChange schema instead of pretending the update is blocked.",
+        renderPromptConstraints(promptConstraints),
+        "",
+        renderRetrievalBundle(input.retrievalBundle),
+      ].join("\n"),
+    },
+    ...buildUpdateFewShots(),
+    {
+      role: "user",
+      content: [
+        `Current feature context:\n${renderUpdateFeatureContext(input.currentFeatureContext)}`,
+        `Requested update:\n${input.rawText}`,
+        input.refinementContext?.priorSchema
+          ? `Prior requested-change schema:\n${JSON.stringify(input.refinementContext.priorSchema, null, 2)}`
+          : "",
+        input.refinementContext?.clarificationTranscript?.length
+          ? `Clarification transcript:\n${JSON.stringify(input.refinementContext.clarificationTranscript, null, 2)}`
+          : "",
+      ].filter(Boolean).join("\n\n"),
+    },
+  ];
+
+  return {
+    id: "wizard.update",
+    messages,
+    promptConstraints,
+    retrievalBundle: input.retrievalBundle,
+  };
+}
+
+function renderModuleContract(input: {
+  moduleNeed: UnresolvedModuleNeed;
+  featureContract?: FeatureContract;
+  dependencyEdges?: FeatureDependencyEdge[];
+}): string {
+  return JSON.stringify(
+    {
+      moduleNeed: input.moduleNeed,
+      featureContract: input.featureContract,
+      dependencyEdges: input.dependencyEdges || [],
+    },
+    null,
+    2,
+  );
+}
+
+export function buildModuleSynthesisPromptPackage(input: SynthesisPromptInput): WorkflowPromptPackage {
+  const promptConstraints = extractPromptConstraints({
+    rawText: input.blueprint.sourceIntent.goal,
+  });
+  const messages: LLMMessage[] = [
+    {
+      role: "system",
+      content: [
+        "You are Rune Weaver's synthesis.module prompt package.",
+        "Write host-native code only for the already-declared module need and target profile.",
+        "Do not invent new modules, ownership, bridge wiring, cross-feature writes, host targets, or dependency edges.",
+        "Stay inside the declared owned scope and declared target profile.",
+        "Return only content for the requested artifact target and keep assumptions explicit.",
+        renderPromptConstraints(promptConstraints),
+        "",
+        renderRetrievalBundle(input.retrievalBundle),
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Feature ID: ${input.featureId}`,
+        `Target profile: ${input.targetProfile}`,
+        input.targetPath ? `Target path: ${input.targetPath}` : "",
+        `Blueprint summary: ${input.blueprint.summary}`,
+        "Module contract:",
+        renderModuleContract({
+          moduleNeed: input.moduleNeed,
+          featureContract: input.blueprint.featureContract,
+          dependencyEdges: input.blueprint.dependencyEdges,
+        }),
+        input.existingContent
+          ? `Deterministic fallback content:\n${input.existingContent}`
+          : "",
+      ].join("\n\n"),
+    },
+  ];
+
+  return {
+    id: "synthesis.module",
+    messages,
+    promptConstraints,
+    retrievalBundle: input.retrievalBundle,
+  };
+}
+
+export function buildLocalRepairPromptPackage(input: RepairPromptInput): WorkflowPromptPackage {
+  const promptConstraints = extractPromptConstraints({
+    rawText: input.diagnostics.join("\n"),
+  });
+  const messages: LLMMessage[] = [
+    {
+      role: "system",
+      content: [
+        "You are Rune Weaver's repair.local prompt package.",
+        "Perform only bounded local repair inside the declared fill contract boundary.",
+        "Do not change feature contract, dependency edges, host target selection, module list, bridge/lifecycle wiring, or ownership.",
+        "Use the failure evidence first and keep the patch minimal.",
+        renderPromptConstraints(promptConstraints),
+        "",
+        renderRetrievalBundle(input.retrievalBundle),
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        `Feature ID: ${input.featureId}`,
+        `Module ID: ${input.moduleId || "(unknown)"}`,
+        `Boundary ID: ${input.boundaryId}`,
+        `Target file: ${input.targetFile}`,
+        `Fill contract summary: ${input.fillContractSummary}`,
+        `Diagnostics:\n${input.diagnostics.join("\n")}`,
+        `Target excerpt:\n${input.targetExcerpt}`,
+        input.originalModuleContract
+          ? `Original module contract:\n${JSON.stringify(input.originalModuleContract, null, 2)}`
+          : "",
+      ].filter(Boolean).join("\n\n"),
+    },
+  ];
+
+  return {
+    id: "repair.local",
+    messages,
+    promptConstraints,
+    retrievalBundle: input.retrievalBundle,
+  };
+}

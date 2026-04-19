@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "generated_on": "2026-04-19",
+  "scope": "workflow-consumption-posture",
+  "entries": [
+    {
+      "path": "knowledge/dota2-host/migration-staging/abilities-casting-and-gameplay-shells.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "exact-symbol-lookup"
+      ],
+      "recommendedTargetProfiles": [
+        "lua_ability",
+        "ability_kv"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Best used as a front-door gameplay shell doc, with raw reference for exact APIs and enums."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/ability-item-and-modifier-kv-contracts.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "pure-panorama-asks"
+      ],
+      "recommendedTargetProfiles": [
+        "lua_ability",
+        "ability_kv"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Strong host contract doc for ability/item/modifier semantics; not a replacement for exact lookup."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/panorama-ui-basics.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update"
+      ],
+      "shouldAvoidFor": [
+        "low-level-webpack-repair"
+      ],
+      "recommendedTargetProfiles": [
+        "panorama_tsx",
+        "panorama_less"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Best wizard-facing UI primer; pair with raw companion when exact Panorama APIs are needed."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/panorama-build-input-and-scene-patterns.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1.5",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "simple-gameplay-feature-ideation"
+      ],
+      "recommendedTargetProfiles": [
+        "panorama_tsx",
+        "panorama_less"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Better for layout/build/input/scene realization work than for broad front-door wizarding."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/custom-events-networking-and-state-sync.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "pure-style-only-ui-work"
+      ],
+      "recommendedTargetProfiles": [
+        "panorama_tsx",
+        "lua_ability"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Key shared seam doc for action vs state vs shared declaration boundaries."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/filters-particles-and-runtime-control.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1.5",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "generic-high-level-feature-ideation"
+      ],
+      "recommendedTargetProfiles": [
+        "lua_ability"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Useful low-level runtime-control doc; more implementation-facing than ideation-facing."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/unit-kv-creature-ai-and-wearables.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "pure-panorama-asks"
+      ],
+      "recommendedTargetProfiles": [
+        "lua_ability",
+        "ability_kv"
+      ],
+      "requiresRawReferenceCompanion": true,
+      "rawCompanionPaths": [
+        "references/dota2/dota-data/files/**"
+      ],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Strong front-door doc for summon/unit/AI realization surfaces."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/typescript-addon-structure-and-watchers.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "exact-module-synthesis-without-host-structure-concerns"
+      ],
+      "recommendedTargetProfiles": [
+        "lua_ability",
+        "panorama_tsx"
+      ],
+      "requiresRawReferenceCompanion": false,
+      "rawCompanionPaths": [],
+      "canonicalCandidate": true,
+      "readiness": "ready",
+      "notes": "Host structure/watcher guidance, not exact API guidance."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/tooltip-localization-and-ability-text-pipeline.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier1.5",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.update",
+        "synthesis.module",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "mechanics-only-asks"
+      ],
+      "recommendedTargetProfiles": [
+        "ability_kv",
+        "panorama_tsx"
+      ],
+      "requiresRawReferenceCompanion": false,
+      "rawCompanionPaths": [],
+      "canonicalCandidate": true,
+      "readiness": "partial",
+      "notes": "Useful when tooltip/localization is explicitly in scope; not broad enough for every wizard flow."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/host-realization-target-surfaces-and-boundaries.md",
+      "kind": "curated-host-knowledge",
+      "recommendedTier": "tier0-guardrail",
+      "recommendedSourceKind": "curated-knowledge",
+      "workflowConsumers": [
+        "wizard.create",
+        "wizard.update",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "exact-implementation-lookup"
+      ],
+      "recommendedTargetProfiles": [
+        "lua_ability",
+        "ability_kv",
+        "panorama_tsx",
+        "panorama_less"
+      ],
+      "requiresRawReferenceCompanion": false,
+      "rawCompanionPaths": [],
+      "canonicalCandidate": false,
+      "readiness": "ready",
+      "notes": "Guardrail doc to prevent over-expansion of realization surfaces; useful before deeper docs."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/PROVENANCE-MANIFEST.md",
+      "kind": "provenance",
+      "recommendedTier": "control",
+      "recommendedSourceKind": "provenance",
+      "workflowConsumers": [
+        "wizard.update",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "wizard.create",
+        "synthesis.module"
+      ],
+      "recommendedTargetProfiles": [],
+      "requiresRawReferenceCompanion": false,
+      "rawCompanionPaths": [],
+      "canonicalCandidate": false,
+      "readiness": "ready",
+      "notes": "Migration bookkeeping only."
+    },
+    {
+      "path": "knowledge/dota2-host/migration-staging/CUTOVER-CANDIDATES.md",
+      "kind": "provenance",
+      "recommendedTier": "control",
+      "recommendedSourceKind": "provenance",
+      "workflowConsumers": [
+        "wizard.update",
+        "repair.local"
+      ],
+      "shouldAvoidFor": [
+        "wizard.create",
+        "synthesis.module"
+      ],
+      "recommendedTargetProfiles": [],
+      "requiresRawReferenceCompanion": false,
+      "rawCompanionPaths": [],
+      "canonicalCandidate": false,
+      "readiness": "ready",
+      "notes": "Phase 3/4 cutover planning doc only."
+    }
+  ]
+}

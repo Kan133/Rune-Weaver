@@ -27,7 +27,7 @@ export async function runRepairCommand(
   flags: { safe: boolean }
 ): Promise<boolean> {
   console.log("=".repeat(70));
-  console.log("Rune Weaver - Post-Generation Repair");
+  console.log("Rune Weaver - Local Repair / Muscle Fill");
   console.log("=".repeat(70));
   console.log(`\nHost: ${options.hostRoot}`);
   console.log(`Mode: ${flags.safe ? "execute safe repairs" : "show repair plan only"}`);
@@ -57,7 +57,7 @@ export async function runRepairCommand(
 
   // Stage 2: Generate repair plan
   console.log("\n" + "=".repeat(70));
-  console.log("Stage 2: Repair Plan");
+  console.log("Stage 2: Local Repair Plan");
   console.log("=".repeat(70));
 
   const repairPlan = planPostGenerationRepairs(validationResult, options.hostRoot);
@@ -67,7 +67,7 @@ export async function runRepairCommand(
   // If not in safe mode, just show the plan and exit
   if (!flags.safe) {
     console.log("\n" + "=".repeat(70));
-    console.log("Repair plan shown. Use --safe to execute safe repairs.");
+    console.log("Repair plan shown. Use --safe to execute bounded safe repairs.");
     console.log("=".repeat(70));
     // Exit code 1 because validation failed even though we're just showing the plan
     return false;
@@ -89,7 +89,7 @@ export async function runRepairCommand(
 
   // Stage 3: Execute safe repairs
   console.log("\n" + "=".repeat(70));
-  console.log("Stage 3: Executing Safe Repairs");
+    console.log("Stage 3: Executing Safe Local Repairs");
   console.log("=".repeat(70));
 
   const repairResult = await executeSafePostGenerationRepairs(repairPlan, options.hostRoot);

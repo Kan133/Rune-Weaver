@@ -1,5 +1,27 @@
 import { IntentSchema } from "../schema/types";
 
+const NEGATIVE_CONSTRAINT_PATTERNS = [
+  /\bwith\s+no\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)(?:\s*(?:,|and|or)\s*(?:no\s+)?(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?))*\b/giu,
+  /\bwithout\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
+  /\b(?:do not|don't|must not|mustn't|should not)\s+add\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
+  /\bno\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
+  /(?:不要|不需要|无需|别)\s*(?:ui|界面|inventory|背包|库存|persistence|持久化|跨\s*feature|跨feature|跨功能|跨特性)/giu,
+];
+
+export function stripNegativeConstraintFragments(value: string): string {
+  let normalized = value;
+  for (const pattern of NEGATIVE_CONSTRAINT_PATTERNS) {
+    normalized = normalized.replace(pattern, " ");
+  }
+
+  return normalized
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:])/g, "$1")
+    .replace(/[,\s]*(?:and|or)[,\s]*(?=[,.;:]|$)/giu, " ")
+    .replace(/[ ,.;:]+$/g, "")
+    .trim();
+}
+
 export function collectIntentStrings(schema: IntentSchema): string[] {
   const values: string[] = [];
   values.push(schema.request.goal);
@@ -11,7 +33,7 @@ export function collectIntentStrings(schema: IntentSchema): string[] {
   values.push(...(schema.requirements.outputs || []));
   values.push(...(schema.uiRequirements?.surfaces || []));
   values.push(...(schema.uiRequirements?.feedbackNeeds || []));
-  values.push(...schema.openQuestions);
+  values.push(...((schema.uncertainties || []).map((item) => item.summary)));
   values.push(...schema.resolvedAssumptions);
 
   for (const requirement of schema.requirements.typed || []) {
@@ -26,7 +48,9 @@ export function collectIntentStrings(schema: IntentSchema): string[] {
     values.push(binding.id);
   }
 
-  return values.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return values
+    .map((value) => stripNegativeConstraintFragments(value))
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
 export function collectTypedParameterKeys(schema: IntentSchema): Set<string> {

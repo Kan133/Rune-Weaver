@@ -3,7 +3,7 @@ import { join } from "path";
 import { executeCleanup, formatCleanupPlan, formatCleanupResult, generateCleanupPlan } from "../../../../adapters/dota2/regenerate/index.js";
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
-import { findFeatureById, initializeWorkspace, saveWorkspace } from "../../../../core/workspace/index.js";
+import { findFeatureById, initializeWorkspace } from "../../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/index.js";
 import { saveReviewArtifact } from "../review-artifacts.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
@@ -16,15 +16,16 @@ export interface RegenerateCommandDeps {
   createIntentSchema: (
     prompt: string,
     hostRoot: string,
-    context?: { mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null }
-  ) => Promise<{ schema: IntentSchema | null; usedFallback: boolean }>;
-  buildBlueprint: (schema: IntentSchema) => Dota2BlueprintBuildResult;
+    context?: { mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null; interactive?: boolean }
+  ) => Promise<{ schema: IntentSchema | null; usedFallback: boolean; requiresClarification: boolean }>;
+  buildBlueprint: (schema: IntentSchema, context: { prompt: string; hostRoot: string; mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null; proposalSource?: "llm" | "fallback" }) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
     blueprint: Blueprint,
     resolutionResult: PatternResolutionResult,
     hostRoot: string,
-  ) => { plan: AssemblyPlan | null; blockers: string[] };
+    stableFeatureId?: string,
+  ) => Promise<{ plan: AssemblyPlan | null; blockers: string[] }>;
   createWritePlan: (
     plan: AssemblyPlan,
     hostRoot: string,
@@ -40,11 +41,8 @@ export async function runRegenerateCommand(
   options: Dota2CLIOptions,
   deps: RegenerateCommandDeps,
 ): Promise<boolean> {
-  const getIntentReadiness = (schema: { readiness?: string; isReadyForBlueprint?: boolean }): "ready" | "weak" | "blocked" => {
-    if (schema.readiness === "ready" || schema.readiness === "weak" || schema.readiness === "blocked") {
-      return schema.readiness;
-    }
-    return schema.isReadyForBlueprint ? "ready" : "blocked";
+  const getIntentSemanticPosture = (schema: { uncertainties?: Array<unknown> }): "ready" | "weak" => {
+    return (schema.uncertainties?.length || 0) > 0 ? "weak" : "ready";
   };
 
   console.log("=".repeat(70));
@@ -82,18 +80,34 @@ export async function runRegenerateCommand(
   console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
   console.log(`   Status: ${existingFeature.status}`);
 
-  const { schema } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
+  const { schema, usedFallback, requiresClarification } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
     mode: "regenerate",
     featureId: existingFeature.featureId,
     existingFeature,
+    interactive: process.stdin.isTTY && process.stdout.isTTY,
   });
   if (!schema) {
     console.error("\n❌ Failed to create IntentSchema");
     return false;
   }
-  console.log(`   IntentSchema Readiness: ${getIntentReadiness(schema)}`);
+  if (requiresClarification) {
+    console.error("\n❌ Regenerate requires clarification before Blueprint generation can continue");
+    return false;
+  }
+  console.log(`   IntentSchema Semantic Posture: ${getIntentSemanticPosture(schema)}`);
+  console.log(`   IntentSchema Uncertainties: ${schema.uncertainties?.length || 0}`);
 
-  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount } = deps.buildBlueprint(schema);
+  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount } = deps.buildBlueprint(
+    schema,
+    {
+      prompt: options.prompt,
+      hostRoot: options.hostRoot,
+      mode: "regenerate",
+      featureId: existingFeature.featureId,
+      existingFeature,
+      proposalSource: usedFallback ? "fallback" : "llm",
+    },
+  );
   if (!blueprint) {
     console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
     return false;
@@ -107,7 +121,12 @@ export async function runRegenerateCommand(
     return false;
   }
 
-  const { plan, blockers } = deps.buildAssemblyPlan(blueprint, resolutionResult, options.hostRoot);
+  const { plan, blockers } = await deps.buildAssemblyPlan(
+    blueprint,
+    resolutionResult,
+    options.hostRoot,
+    existingFeature.featureId,
+  );
   if (!plan) {
     console.error(`\n❌ Failed to build AssemblyPlan: ${blockers.join(", ")}`);
     return false;
@@ -183,9 +202,14 @@ export async function runRegenerateCommand(
     "intentSchema",
     "blueprint",
     "patternResolution",
+    "artifactSynthesis",
     "assemblyPlan",
     "hostRealization",
+    "generatorRouting",
     "generator",
+    "localRepair",
+    "dependencyRevalidation",
+    "finalCommitDecision",
     "writeExecutor",
     "hostValidation",
     "runtimeValidation",
@@ -206,52 +230,6 @@ export async function runRegenerateCommand(
   };
 
   const outputPath = saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
-
-  if (!options.dryRun && artifact.stages.workspaceState?.skipped && artifact.stages.generator?.generatedFiles) {
-    console.log("\n" + "=".repeat(70));
-    console.log("Stage 9: Workspace State Update (Post-Regenerate)");
-    console.log("=".repeat(70));
-
-    const initResult = initializeWorkspace(options.hostRoot);
-    if (!initResult.success) {
-      console.error("  ❌ Failed to initialize workspace");
-    } else {
-      const workspace = initResult.workspace!;
-      const featureIdToUpdate = options.featureId;
-      const featureToUpdate = findFeatureById(workspace, featureIdToUpdate);
-
-      if (featureToUpdate) {
-        const generatedFiles = artifact.stages.generator.generatedFiles as string[];
-        const updatedFeature: RuneWeaverFeatureRecord = {
-          ...featureToUpdate,
-          revision: featureToUpdate.revision + 1,
-          generatedFiles,
-          blueprintId: artifact.stages.blueprint?.summary || featureToUpdate.blueprintId,
-          selectedPatterns: artifact.stages.patternResolution?.resolvedPatterns || featureToUpdate.selectedPatterns,
-          updatedAt: new Date().toISOString(),
-        };
-
-        const updatedFeatures = workspace.features.map((feature) =>
-          feature.featureId === featureIdToUpdate ? updatedFeature : feature,
-        );
-
-        const updatedWorkspace = {
-          ...workspace,
-          features: updatedFeatures,
-        };
-
-        const saveResult = saveWorkspace(options.hostRoot, updatedWorkspace);
-        if (saveResult.success) {
-          console.log("  ✅ Workspace state updated");
-          console.log(`     Feature ID: ${featureIdToUpdate}`);
-          console.log(`     Revision: ${featureToUpdate.revision} -> ${updatedFeature.revision}`);
-          console.log(`     Generated Files: ${generatedFiles.length}`);
-        } else {
-          console.error(`  ❌ Failed to save workspace: ${saveResult.issues.join(", ")}`);
-        }
-      }
-    }
-  }
 
   console.log("\n" + "=".repeat(70));
   console.log("Final Verdict");

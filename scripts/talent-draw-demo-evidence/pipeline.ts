@@ -12,6 +12,7 @@ import { updateWorkspaceState } from "../../apps/cli/helpers/workspace-integrati
 import { findFeatureById, initializeWorkspace } from "../../core/workspace/index.js";
 import type { Dota2CLIOptions } from "../../apps/cli/dota2-cli.js";
 import type { IntentSchema, ValidationIssue } from "../../core/schema/types.js";
+import { enrichDota2CreateBlueprint } from "../../adapters/dota2/blueprint/index.js";
 import {
   getTalentDrawParameters,
   type TalentDrawFixture,
@@ -82,12 +83,26 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
 
   console.log("[Pipeline] Step 2: Building Blueprint...");
   const blueprintResult = buildBlueprint(schema);
-  if (!blueprintResult.success || !blueprintResult.blueprint) {
+  const baseBlueprint = blueprintResult.finalBlueprint || blueprintResult.blueprint || null;
+  const enrichedBlueprint = baseBlueprint
+    ? enrichDota2CreateBlueprint(baseBlueprint, {
+        schema,
+        prompt: fixture.prompt,
+        hostRoot: options.host,
+        mode: "create",
+        featureId: TALENT_DRAW_FEATURE_ID,
+        proposalSource: "fallback",
+      })
+    : null;
+  const blueprint = enrichedBlueprint?.blueprint || baseBlueprint;
+  if (!blueprintResult.success || !blueprint) {
     throw new Error(`Blueprint build failed: ${JSON.stringify(blueprintResult.issues)}`);
   }
-  const blueprint = blueprintResult.blueprint;
   console.log(`  ✓ Blueprint created: ${blueprint.id}`);
   console.log(`    - Modules: ${blueprint.modules.length} (${blueprint.modules.map((m) => m.category).join(", ")})`);
+  if (blueprint.featureAuthoring?.profile === "selection_pool") {
+    console.log("    - Enriched with selection_pool source-backed authoring");
+  }
 
   console.log("[Pipeline] Step 3: Resolving Patterns...");
   const resolution = resolvePatterns(blueprint);
@@ -102,6 +117,12 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
 
   const allIssues: ValidationIssue[] = [
     ...(blueprintResult.issues || []),
+    ...((enrichedBlueprint?.issues || []).map((message) => ({
+      code: "DOTA2_BLUEPRINT_ENRICHMENT",
+      scope: "blueprint" as const,
+      severity: "warning" as const,
+      message,
+    }))),
     ...resolution.issues.map((issue) => ({ ...issue, scope: issue.scope as ValidationIssue["scope"] })),
     ...(assemblyResult.issues || []),
   ];

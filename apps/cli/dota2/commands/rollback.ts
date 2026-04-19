@@ -1,4 +1,4 @@
-import { exportWorkspaceToBridge } from "../../../../adapters/dota2/bridge/index.js";
+import { exportWorkspaceToBridge, refreshBridge } from "../../../../adapters/dota2/bridge/index.js";
 import { executeRollback, formatRollbackPlan, formatRollbackResult, generateRollbackPlan } from "../../../../adapters/dota2/rollback/index.js";
 import { checkDeleteDependencyRisk } from "../../helpers/governance-check.js";
 import { performRollbackHostValidation } from "../../helpers/index.js";
@@ -11,11 +11,61 @@ import {
 } from "./lifecycle-runner.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import {
+  analyzeDependencyRevalidation,
   findFeatureById,
   initializeWorkspace,
   rollbackFeatureInWorkspace,
   saveWorkspace,
 } from "../../../../core/workspace/index.js";
+import { calculateFinalCommitDecision } from "../../../../core/pipeline/final-commit-gate.js";
+
+function buildMaintenanceGateBlueprint(existingFeature: {
+  featureId: string;
+  implementationStrategy?: string;
+  maturity?: string;
+  validationStatus?: unknown;
+  commitDecision?: unknown;
+}): any {
+  return {
+    id: `maintenance.${existingFeature.featureId}`,
+    version: "1.0",
+    summary: `Maintenance lifecycle gate for ${existingFeature.featureId}`,
+    sourceIntent: {
+      intentKind: "unknown",
+      goal: `maintenance ${existingFeature.featureId}`,
+      normalizedMechanics: {},
+    },
+    modules: [],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: true,
+    implementationStrategy: existingFeature.implementationStrategy ?? "pattern",
+    maturity: existingFeature.maturity ?? "templated",
+    validationStatus: existingFeature.validationStatus,
+    commitDecision: existingFeature.commitDecision,
+  };
+}
+
+function setBlockedCommitDecision(
+  artifact: ReturnType<typeof createRollbackReviewArtifact>,
+  reasons: string[],
+  impactedFeatures: string[] = [],
+  dependencyBlockers: string[] = [],
+  downgradedFeatures: string[] = [],
+): void {
+  artifact.stages.finalCommitDecision = {
+    success: false,
+    outcome: "blocked",
+    requiresReview: false,
+    reasons,
+    impactedFeatures,
+    dependencyBlockers,
+    downgradedFeatures,
+    skipped: false,
+  };
+}
 
 export async function runRollbackCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log("=".repeat(70));
@@ -35,7 +85,13 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
   const workspaceResult = initializeWorkspace(options.hostRoot);
   if (!workspaceResult.success || !workspaceResult.workspace) {
     console.error(`\n❌ Failed to load workspace: ${workspaceResult.issues.join(", ")}`);
-    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: 0, error: workspaceResult.issues.join(", ") };
+    artifact.stages.workspaceState = {
+      success: false,
+      featureId: options.featureId,
+      totalFeatures: 0,
+      error: workspaceResult.issues.join(", "),
+      skipped: false,
+    };
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks.push("Failed to load workspace");
@@ -46,7 +102,13 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
   const existingFeature = findFeatureById(workspaceResult.workspace, options.featureId);
   if (!existingFeature) {
     console.error(`\n❌ Feature '${options.featureId}' not found in workspace`);
-    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: workspaceResult.workspace.features.length, error: "Feature not found" };
+    artifact.stages.workspaceState = {
+      success: false,
+      featureId: options.featureId,
+      totalFeatures: workspaceResult.workspace.features.length,
+      error: "Feature not found",
+      skipped: false,
+    };
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks.push(`Feature '${options.featureId}' not found`);
@@ -57,7 +119,13 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
   if (existingFeature.status !== "active") {
     console.error(`\n❌ Feature '${options.featureId}' has status '${existingFeature.status}' and cannot be rolled back`);
     console.error("   Only features with status 'active' can be rolled back");
-    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: workspaceResult.workspace.features.length, error: `Feature status is '${existingFeature.status}', not 'active'` };
+    artifact.stages.workspaceState = {
+      success: false,
+      featureId: options.featureId,
+      totalFeatures: workspaceResult.workspace.features.length,
+      error: `Feature status is '${existingFeature.status}', not 'active'`,
+      skipped: false,
+    };
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks.push(`Feature status is '${existingFeature.status}', only 'active' features can be rolled back`);
@@ -75,46 +143,60 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
   console.log("Stage 0: Dependency Risk Check");
   console.log("=".repeat(70));
 
-  if (options.force) {
-    console.log("  ⚠️  Force mode: skipping dependency risk check");
-    console.log("     This may break features that depend on this feature.");
-  } else {
-    const dependencyConflicts = checkDeleteDependencyRisk(options.featureId, workspaceResult.workspace);
+  const dependencyConflicts = checkDeleteDependencyRisk(options.featureId, workspaceResult.workspace);
+  const dependencyRevalidation = analyzeDependencyRevalidation({
+    workspace: workspaceResult.workspace,
+    providerFeatureId: options.featureId,
+    lifecycleAction: "rollback",
+  });
+  artifact.stages.dependencyRevalidation = {
+    success: dependencyRevalidation.success,
+    impactedFeatures: dependencyRevalidation.impactedFeatures,
+    blockers: dependencyRevalidation.blockers,
+    downgradedFeatures: dependencyRevalidation.downgradedFeatures,
+    compatibleFeatures: dependencyRevalidation.compatibleFeatures,
+    skipped: dependencyRevalidation.impactedFeatures.length === 0,
+  };
 
-    if (dependencyConflicts.length > 0) {
-      console.error("\n❌ Cannot rollback feature: other features depend on it");
-      console.error("\n  Dependent features:");
-      for (const conflict of dependencyConflicts) {
-        console.error(`    - ${conflict.existingFeatureLabel} (${conflict.existingFeatureId})`);
-      }
-      console.error("\n  Recommendation:");
-      console.error("    1. Remove the dependency from dependent features first");
-      console.error("    2. Or use --force to force rollback (not recommended)");
-
-      artifact.stages.governanceCheck = {
-        success: false,
-        hasConflict: true,
-        conflicts: dependencyConflicts,
-        recommendedAction: "block",
-        status: "blocked",
-        summary: `Cannot rollback feature: ${dependencyConflicts.length} dependent feature(s) found.`,
-      };
-      artifact.finalVerdict.pipelineComplete = false;
-      artifact.finalVerdict.weakestStage = "governanceCheck";
-      artifact.finalVerdict.remainingRisks.push(...dependencyConflicts.map((conflict) => conflict.explanation));
-      saveDefaultReviewArtifact(artifact);
-      return false;
+  if (dependencyConflicts.length > 0) {
+    console.error("\n❌ Cannot rollback feature: other features depend on it");
+    console.error("\n  Dependent features:");
+    for (const conflict of dependencyConflicts) {
+      console.error(`    - ${conflict.existingFeatureLabel} (${conflict.existingFeatureId})`);
+    }
+    if (options.force) {
+      console.error("\n  Force mode does not bypass V2 dependency governance.");
     }
 
-    console.log("  ✅ No dependency conflicts detected");
+    artifact.stages.governanceCheck = {
+      success: false,
+      hasConflict: true,
+      conflicts: dependencyConflicts,
+      recommendedAction: "block",
+      status: "blocked",
+      summary: `Cannot rollback feature: ${dependencyConflicts.length} dependent feature(s) found.`,
+    };
+    setBlockedCommitDecision(
+      artifact,
+      dependencyRevalidation.blockers,
+      dependencyRevalidation.impactedFeatures.map((impact) => impact.featureId),
+      dependencyRevalidation.blockers,
+      dependencyRevalidation.downgradedFeatures,
+    );
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "dependencyRevalidation";
+    artifact.finalVerdict.remainingRisks.push(...dependencyConflicts.map((conflict) => conflict.explanation));
+    saveDefaultReviewArtifact(artifact);
+    return false;
   }
+
+  console.log("  ✅ No dependency conflicts detected");
 
   console.log("\n" + "=".repeat(70));
   console.log("Stage 1: Rollback Plan");
   console.log("=".repeat(70));
 
   const rollbackPlan = generateRollbackPlan(existingFeature, workspaceResult.workspace, options.hostRoot);
-
   console.log(formatRollbackPlan(rollbackPlan));
 
   if (!rollbackPlan.canExecute) {
@@ -135,6 +217,7 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
       skippedDeletes: [],
       indexRefreshSuccess: false,
     };
+    setBlockedCommitDecision(artifact, rollbackPlan.safetyIssues);
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "rollbackPlan";
     artifact.finalVerdict.remainingRisks.push(...rollbackPlan.safetyIssues);
@@ -170,6 +253,15 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
 
   if (!rollbackResult.success) {
     console.error("\n❌ Rollback execution failed");
+    setBlockedCommitDecision(
+      artifact,
+      rollbackResult.failed.map((failure) => `${failure.file}: ${failure.error}`).length > 0
+        ? rollbackResult.failed.map((failure) => `${failure.file}: ${failure.error}`)
+        : ["Rollback execution failed"],
+      dependencyRevalidation.impactedFeatures.map((impact) => impact.featureId),
+      dependencyRevalidation.blockers,
+      dependencyRevalidation.downgradedFeatures,
+    );
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "rollbackPlan";
     artifact.finalVerdict.remainingRisks.push("Rollback execution failed");
@@ -181,13 +273,80 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
   }
 
   console.log("\n" + "=".repeat(70));
-  console.log("Stage 3: Workspace State Update");
+  console.log("Stage 3: Host Validation");
   console.log("=".repeat(70));
 
-  let workspaceStateResult: { success: boolean; featureId: string; totalFeatures: number; error?: string; skipped?: boolean } =
-    { success: true, featureId: options.featureId, totalFeatures: 0, skipped: true };
+  const hostValidationResult = performRollbackHostValidation(
+    options.hostRoot,
+    rollbackPlan,
+    rollbackResult,
+  );
+  artifact.stages.hostValidation = hostValidationResult;
+  printHostValidationStage(hostValidationResult);
 
-  if (!options.dryRun) {
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 4: Runtime Validation");
+  console.log("=".repeat(70));
+
+  const runtimeValidationResult = await runDota2RuntimeValidation(
+    options,
+    !options.dryRun && rollbackResult.success,
+    "dry-run mode or rollback failure",
+  );
+  artifact.stages.runtimeValidation = runtimeValidationResult;
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 5: Final Commit Decision");
+  console.log("=".repeat(70));
+
+  const finalCommitDecision = calculateFinalCommitDecision({
+    blueprint: buildMaintenanceGateBlueprint(existingFeature),
+    dependencyRevalidation,
+    hostValidation: {
+      success: hostValidationResult.success,
+      issues: hostValidationResult.issues,
+    },
+    runtimeValidation: {
+      success: runtimeValidationResult.success,
+      limitations: runtimeValidationResult.limitations,
+      skipped: runtimeValidationResult.skipped,
+    },
+    dryRun: options.dryRun,
+  });
+  artifact.stages.finalCommitDecision = {
+    success: finalCommitDecision.outcome !== "blocked",
+    outcome: finalCommitDecision.outcome,
+    requiresReview: finalCommitDecision.requiresReview,
+    reasons: finalCommitDecision.reasons,
+    impactedFeatures: finalCommitDecision.impactedFeatures || [],
+    dependencyBlockers: finalCommitDecision.dependencyBlockers || [],
+    downgradedFeatures: finalCommitDecision.downgradedFeatures || [],
+    skipped: false,
+  };
+  console.log(`  Outcome: ${finalCommitDecision.outcome}`);
+  console.log(`  Requires Review: ${finalCommitDecision.requiresReview ? "yes" : "no"}`);
+  for (const reason of finalCommitDecision.reasons) {
+    console.log(`    - ${reason}`);
+  }
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 6: Workspace State Update");
+  console.log("=".repeat(70));
+
+  let workspaceStateResult: {
+    success: boolean;
+    featureId: string;
+    totalFeatures: number;
+    error?: string;
+    skipped?: boolean;
+  } = {
+    success: true,
+    featureId: options.featureId,
+    totalFeatures: 0,
+    skipped: true,
+  };
+
+  if (!options.dryRun && finalCommitDecision.outcome !== "blocked") {
     const updatedWorkspace = rollbackFeatureInWorkspace(
       workspaceResult.workspace,
       options.featureId,
@@ -211,6 +370,13 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
         skipped: false,
       };
 
+      const bridgeRefreshResult = refreshBridge(options.hostRoot, updatedWorkspace);
+      if (bridgeRefreshResult.success) {
+        console.log("✅ Bridge indexes refreshed");
+      } else {
+        console.error(`⚠️ Bridge refresh failed: ${bridgeRefreshResult.errors.join(", ")}`);
+      }
+
       const bridgeExportResult = exportWorkspaceToBridge(updatedWorkspace, {
         hostRoot: options.hostRoot,
       });
@@ -221,7 +387,11 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
       }
     }
   } else {
-    console.log("🔍 DRY-RUN MODE - Workspace state would be updated to mark feature as rolled_back");
+    console.log(
+      options.dryRun
+        ? "🔍 DRY-RUN MODE - Workspace state would be updated to mark feature as rolled_back"
+        : "⚠️ Workspace update skipped because final commit decision is blocked",
+    );
     workspaceStateResult = {
       success: true,
       featureId: options.featureId,
@@ -232,47 +402,28 @@ export async function runRollbackCommand(options: Dota2CLIOptions): Promise<bool
 
   artifact.stages.workspaceState = workspaceStateResult;
 
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4: Host Validation");
-  console.log("=".repeat(70));
-
-  const hostValidationResult = performRollbackHostValidation(
-    options.hostRoot,
-    rollbackPlan,
-    rollbackResult,
-  );
-
-  artifact.stages.hostValidation = hostValidationResult;
-  printHostValidationStage(hostValidationResult);
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 5: Runtime Validation");
-  console.log("=".repeat(70));
-
-  const runtimeValidationResult = await runDota2RuntimeValidation(
-    options,
-    !options.dryRun && rollbackResult.success,
-    "dry-run mode or rollback failure"
-  );
-  artifact.stages.runtimeValidation = runtimeValidationResult;
   const { pipelineComplete } = finalizeDota2MaintenanceArtifact({
     artifact,
     options,
     stageStatuses: [
+      { name: "dependencyRevalidation", success: artifact.stages.dependencyRevalidation?.success ?? true },
       { name: "rollbackPlan", success: artifact.stages.rollbackPlan?.canExecute ?? false },
+      { name: "finalCommitDecision", success: artifact.stages.finalCommitDecision?.success ?? false },
       { name: "workspaceState", success: artifact.stages.workspaceState.success },
       { name: "hostValidation", success: artifact.stages.hostValidation.success },
       { name: "runtimeValidation", success: artifact.stages.runtimeValidation.success },
     ],
     stageRiskMessages: {
+      dependencyRevalidation: "Dependency revalidation blocked the rollback.",
       rollbackPlan: "Rollback plan has safety issues",
+      finalCommitDecision: "Final commit decision blocked the rollback.",
       workspaceState: "Workspace state update failed",
       hostValidation: "Host validation failed",
       runtimeValidation: "Runtime validation failed",
     },
     dryRunNextStep: "Run with --write to execute the rollback plan.",
     successNextSteps: [
-      "Verify the feature has been completely removed.",
+      "Verify the feature has been rolled back cleanly.",
       "Check that no residual files remain.",
     ],
   });

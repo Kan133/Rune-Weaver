@@ -8,7 +8,7 @@
 import { generateSelectionFlowCode } from "./selection-flow.js";
 import { WritePlanEntry } from "../../assembler/index.js";
 
-// Example 1: Talent Draw MVP configuration
+// Example 1: selection_pool example configuration
 const talentDrawEntry: WritePlanEntry = {
   sourcePattern: "rule.selection_flow",
   sourceModule: "talent-draw",
@@ -43,7 +43,7 @@ const code = generateSelectionFlowCode(
 );
 
 console.log("=".repeat(80));
-console.log("Generated Selection Flow Code (Talent Draw MVP)");
+console.log("Generated Selection Flow Code (selection_pool example)");
 console.log("=".repeat(80));
 console.log(code);
 console.log("=".repeat(80));

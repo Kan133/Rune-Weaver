@@ -1,7 +1,7 @@
-import type { FeatureAuthoring } from "../../../../core/schema/types.js";
+import type { FeatureAuthoring as CoreFeatureAuthoring } from "../../../../core/schema/types.js";
 import type { FeatureSourceModelRef, FeatureWriteResult } from "../../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../../assembler/index.js";
-import { createSelectionPoolLifecycleState } from "./authoring.js";
+import { createSelectionPoolLifecycleState, isSelectionPoolFeatureAuthoring } from "./authoring.js";
 
 function isFeatureSourceModelRef(value: unknown): value is FeatureSourceModelRef {
   return Boolean(
@@ -16,7 +16,7 @@ function isFeatureSourceModelRef(value: unknown): value is FeatureSourceModelRef
 export function appendSelectionPoolSourceModelEntry(
   writePlan: WritePlan,
   featureId: string,
-  featureAuthoring: FeatureAuthoring | undefined,
+  featureAuthoring: CoreFeatureAuthoring | undefined,
 ): void {
   const lifecycleState = createSelectionPoolLifecycleState(featureId, featureAuthoring);
   if (!lifecycleState) {
@@ -29,7 +29,9 @@ export function appendSelectionPoolSourceModelEntry(
     operation: "create",
     targetPath: lifecycleState.sourceArtifactRef.path,
     contentType: "json",
-    contentSummary: `feature_source_model/selection_pool (json) objects:${lifecycleState.sourceArtifact.objects.length} kind:${lifecycleState.sourceArtifact.objectKind}`,
+    contentSummary: `feature_source_model/selection_pool (json) objects:${lifecycleState.sourceArtifact.objects.length}${
+      lifecycleState.sourceArtifact.objectKind ? ` metadata-kind:${lifecycleState.sourceArtifact.objectKind}` : ""
+    }`,
     sourcePattern: "rw.feature_source_model",
     sourceModule: "feature_source_model",
     safe: true,
@@ -61,13 +63,13 @@ export function extractSourceModelRefFromWritePlan(writePlan: WritePlan): Featur
     : undefined;
 }
 
-export function extractFeatureAuthoringFromWritePlan(writePlan: WritePlan): FeatureAuthoring | undefined {
+export function extractFeatureAuthoringFromWritePlan(writePlan: WritePlan): CoreFeatureAuthoring | undefined {
   const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
   const candidate = sourceEntry?.metadata?.featureAuthoring;
-  if (!candidate || typeof candidate !== "object") {
+  if (!isSelectionPoolFeatureAuthoring(candidate)) {
     return undefined;
   }
-  return candidate as FeatureAuthoring;
+  return candidate;
 }
 
 export function isFeatureSourceModelEntry(entry: WritePlanEntry | undefined): boolean {
@@ -85,7 +87,7 @@ export function resolveSelectionPoolWorkspaceFields(
   writePlan: WritePlan,
   featureId: string,
   mode: "create" | "update" | "regenerate",
-  blueprintFeatureAuthoring?: FeatureAuthoring,
+  blueprintFeatureAuthoring?: CoreFeatureAuthoring,
 ): Pick<FeatureWriteResult, "sourceModel" | "featureAuthoring"> {
   const sourceModel = extractSourceModelRefFromWritePlan(writePlan);
   const featureAuthoring = extractFeatureAuthoringFromWritePlan(writePlan);

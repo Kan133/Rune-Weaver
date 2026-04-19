@@ -24,7 +24,7 @@ export interface IntentActor {
 
 export interface IntentRequirement {
   id: string;
-  kind: "trigger" | "state" | "rule" | "effect" | "resource" | "ui" | "integration";
+  kind: "trigger" | "state" | "rule" | "effect" | "resource" | "ui" | "integration" | "generic";
   summary: string;
   actors?: string[];
   inputs?: string[];
@@ -40,6 +40,7 @@ export interface IntentStateContract {
     summary: string;
     owner?: "feature" | "session" | "external";
     lifetime?: "ephemeral" | "session" | "persistent";
+    kind?: "scalar" | "counter" | "collection" | "inventory" | "selection-session" | "generic";
     mutationMode?: "create" | "update" | "consume" | "expire" | "remove";
   }>;
 }
@@ -52,18 +53,68 @@ export interface IntentFlowContract {
   requiresConfirmation?: boolean;
 }
 
+export interface IntentInteractionContract {
+  activations?: Array<{
+    actor?: string;
+    kind: "key" | "mouse" | "event" | "passive" | "system";
+    input?: string;
+    phase?: "press" | "release" | "hold" | "enter" | "occur";
+    repeatability?: "one-shot" | "repeatable" | "toggle" | "persistent";
+    confirmation?: "none" | "implicit" | "explicit";
+  }>;
+}
+
+export interface IntentTargetingContract {
+  subject?: "self" | "ally" | "enemy" | "unit" | "point" | "area" | "direction" | "global";
+  selector?: "cursor" | "current-target" | "nearest" | "random" | "none";
+  teamScope?: "self" | "ally" | "enemy" | "any";
+}
+
+export interface IntentTimingContract {
+  cooldownSeconds?: number;
+  delaySeconds?: number;
+  intervalSeconds?: number;
+  duration?: {
+    kind: "instant" | "timed" | "persistent";
+    seconds?: number;
+  };
+}
+
+export interface IntentSpatialContract {
+  motion?: {
+    kind: "dash" | "teleport" | "knockback" | "none";
+    distance?: number;
+    direction?: "cursor" | "facing" | "target" | "fixed";
+  };
+  area?: {
+    shape: "circle" | "line" | "cone";
+    radius?: number;
+    length?: number;
+    width?: number;
+  };
+  emission?: {
+    kind: "projectile" | "pulse" | "wave" | "none";
+    speed?: number;
+    count?: number;
+  };
+}
+
 export interface IntentSelectionContract {
   mode?: "deterministic" | "weighted" | "filtered" | "user-chosen" | "hybrid";
+  source?: "none" | "candidate-collection" | "weighted-pool" | "filtered-pool";
+  choiceMode?: "none" | "user-chosen" | "random" | "weighted" | "hybrid";
   cardinality?: "single" | "multiple";
+  choiceCount?: number;
   repeatability?: "one-shot" | "repeatable" | "persistent";
   duplicatePolicy?: "allow" | "avoid" | "forbid";
+  commitment?: "immediate" | "confirm" | "deferred";
   inventory?: {
     enabled: boolean;
-    capacity: number;
-    storeSelectedItems: boolean;
-    blockDrawWhenFull: boolean;
-    fullMessage: string;
-    presentation: "persistent_panel";
+    capacity?: number;
+    storeSelectedItems?: boolean;
+    blockDrawWhenFull?: boolean;
+    fullMessage?: string;
+    presentation?: "persistent_panel";
   };
 }
 
@@ -73,11 +124,41 @@ export interface IntentEffectContract {
   durationSemantics?: "instant" | "timed" | "persistent";
 }
 
+export interface IntentOutcomeContract {
+  operations?: Array<
+    "apply-effect" | "move" | "spawn" | "grant-feature" | "update-state" | "consume-resource" | "emit-event"
+  >;
+}
+
 export interface IntentIntegrationContract {
   expectedBindings: Array<{
     id: string;
     kind: "entry-point" | "event-hook" | "bridge-point" | "ui-surface" | "data-source";
     summary: string;
+    required?: boolean;
+  }>;
+}
+
+export interface IntentContentModelContract {
+  collections?: Array<{
+    id: string;
+    role: "candidate-options" | "spawnables" | "progress-items" | "generic";
+    ownership?: "feature" | "shared" | "external";
+    updateMode?: "replace" | "merge" | "append";
+    itemSchema?: Array<{
+      name: string;
+      type: "string" | "number" | "boolean" | "enum" | "effect-ref" | "object-ref";
+      required?: boolean;
+      semanticRole?: string;
+    }>;
+  }>;
+}
+
+export interface IntentCompositionContract {
+  dependencies?: Array<{
+    kind: "same-feature" | "cross-feature" | "external-system";
+    relation: "reads" | "writes" | "triggers" | "grants" | "syncs-with";
+    target?: string;
     required?: boolean;
   }>;
 }
@@ -95,10 +176,25 @@ export interface IntentUncertainty {
   severity: "low" | "medium" | "high";
 }
 
-export interface RequiredClarification {
+export interface WizardClarificationQuestion {
   id: string;
   question: string;
-  blocksFinalization: boolean;
+  targetPaths?: string[];
+  reason: string;
+}
+
+export interface LegacyRequiredClarification {
+  id?: string;
+  question?: string;
+  blocksFinalization?: boolean;
+}
+
+export interface WizardClarificationPlan {
+  questions: WizardClarificationQuestion[];
+  maxQuestions: number;
+  requiredForFaithfulInterpretation: boolean;
+  targetPaths: string[];
+  reason: string;
 }
 
 export interface IntentSchema {
@@ -110,23 +206,202 @@ export interface IntentSchema {
   actors?: IntentActor[];
   requirements: IntentRequirements;
   constraints: IntentConstraints;
+  interaction?: IntentInteractionContract;
+  targeting?: IntentTargetingContract;
+  timing?: IntentTimingContract;
+  spatial?: IntentSpatialContract;
   stateModel?: IntentStateContract;
   flow?: IntentFlowContract;
   selection?: IntentSelectionContract;
   effects?: IntentEffectContract;
+  outcomes?: IntentOutcomeContract;
+  contentModel?: IntentContentModelContract;
+  composition?: IntentCompositionContract;
   integrations?: IntentIntegrationContract;
   uiRequirements?: UIRequirementSummary;
   normalizedMechanics: NormalizedMechanics;
   acceptanceInvariants?: IntentInvariant[];
   uncertainties?: IntentUncertainty[];
-  requiredClarifications?: RequiredClarification[];
-  openQuestions: string[];
+  requiredClarifications?: LegacyRequiredClarification[];
+  openQuestions?: string[];
   resolvedAssumptions: string[];
-  isReadyForBlueprint: boolean;
+  isReadyForBlueprint?: boolean;
   /** Planning-stage extracted scalar/module-safe parameters only */
   parameters?: Record<string, unknown>;
-  featureAuthoringProposal?: FeatureAuthoringProposal;
-  fillIntentCandidates?: FillIntentCandidate[];
+}
+
+export interface WorkspaceFeatureHandle {
+  featureId: string;
+  featureName?: string;
+  aliases: string[];
+  intentKind: string;
+  selectedPatterns: string[];
+  sourceBacked: boolean;
+  integrationPoints: string[];
+  semanticHints: string[];
+}
+
+export interface WorkspaceSemanticContext {
+  featureCount: number;
+  features: WorkspaceFeatureHandle[];
+}
+
+export type PromptPackageId =
+  | "wizard.create"
+  | "wizard.update"
+  | "synthesis.module"
+  | "repair.local";
+
+export type CorpusSourceKind =
+  | "governance"
+  | "curated_host"
+  | "raw_reference"
+  | "workspace_evidence";
+
+export type SynthesisTargetProfile =
+  | "lua_ability"
+  | "ability_kv"
+  | "panorama_tsx"
+  | "panorama_less";
+
+export interface EvidenceRef {
+  id: string;
+  sourceKind: CorpusSourceKind;
+  title: string;
+  path?: string;
+  section?: string;
+  snippet?: string;
+  symbol?: string;
+  score?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RetrievalSummary {
+  tiersUsed: Array<0 | 1 | 2 | 3>;
+  evidenceCount: number;
+  sourceKinds: CorpusSourceKind[];
+}
+
+export interface RetrievalQuery {
+  promptPackageId: PromptPackageId;
+  featureId?: string;
+  moduleId?: string;
+  targetProfile?: SynthesisTargetProfile;
+  hostKind?: string;
+  intentSummary?: string;
+  terms?: string[];
+  maxItems?: number;
+  allowRawReferences?: boolean;
+  workspaceEvidenceOnly?: boolean;
+}
+
+export interface RetrievalBundle {
+  promptPackageId: PromptPackageId;
+  tiersUsed: Array<0 | 1 | 2 | 3>;
+  summary: string;
+  evidenceRefs: EvidenceRef[];
+  warnings?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface PromptConstraintBundle {
+  mustPreserve: string[];
+  mustNotAdd: string[];
+  exactScalars: Record<string, string | number | boolean>;
+  openSemanticGaps: string[];
+  evidenceRefs?: EvidenceRef[];
+}
+
+export interface RelationCandidate {
+  relation:
+    | "reads"
+    | "writes"
+    | "triggers"
+    | "grants"
+    | "syncs-with"
+    | "depends-on"
+    | "extends"
+    | "conflicts-with";
+  targetFeatureId: string;
+  featureName?: string;
+  matchedAlias: string;
+  confidence: "low" | "medium" | "high";
+  score: number;
+  reason: string;
+}
+
+export interface WizardInterpretation {
+  intentSchema: IntentSchema;
+  clarificationPlan?: WizardClarificationPlan;
+  promptPackageId?: PromptPackageId;
+  promptConstraints?: PromptConstraintBundle;
+  retrievalBundle?: RetrievalBundle;
+}
+
+export interface CurrentFeatureContextSourceModel {
+  ref?: FeatureAuthoringSourceArtifactRef;
+  artifact?: Record<string, unknown>;
+}
+
+export interface CurrentFeatureContext {
+  featureId: string;
+  revision: number;
+  intentKind: string;
+  selectedPatterns: string[];
+  moduleRecords?: ModuleImplementationRecord[];
+  sourceBacked: boolean;
+  sourceModel?: CurrentFeatureContextSourceModel;
+  featureAuthoring?: FeatureAuthoring;
+  preservedModuleBackbone: string[];
+  admittedSkeleton?: string[];
+  preservedInvariants: string[];
+  boundedFields: Record<string, unknown>;
+}
+
+export type UpdateDeltaKind =
+  | "trigger"
+  | "selection"
+  | "state"
+  | "ui"
+  | "effect"
+  | "content"
+  | "integration"
+  | "composition"
+  | "generic";
+
+export interface UpdateDeltaItem {
+  path: string;
+  kind: UpdateDeltaKind;
+  summary: string;
+}
+
+export interface UpdateIntent {
+  version: string;
+  mode: "update";
+  target: {
+    featureId: string;
+    revision: number;
+    profile?: SourceBackedFeatureProfile;
+    sourceBacked: boolean;
+  };
+  currentFeatureContext: CurrentFeatureContext;
+  requestedChange: IntentSchema;
+  delta: {
+    preserve: UpdateDeltaItem[];
+    add: UpdateDeltaItem[];
+    modify: UpdateDeltaItem[];
+    remove: UpdateDeltaItem[];
+  };
+  resolvedAssumptions: string[];
+}
+
+export interface UpdateWizardInterpretation {
+  requestedChange: IntentSchema;
+  updateIntent: UpdateIntent;
+  clarificationPlan?: WizardClarificationPlan;
+  promptPackageId?: PromptPackageId;
+  promptConstraints?: PromptConstraintBundle;
+  retrievalBundle?: RetrievalBundle;
 }
 
 export interface UserRequestSummary {
@@ -189,6 +464,248 @@ export interface ValidationIssue {
   path?: string;
 }
 
+export type FeatureMaturity = "exploratory" | "stabilized" | "templated";
+
+export type ImplementationStrategy = "family" | "pattern" | "guided_native" | "exploratory";
+
+export type ValidationOutcome = "unvalidated" | "passed" | "needs_review" | "failed";
+
+export type CommitDecisionOutcome = "committable" | "exploratory" | "blocked";
+
+export type ModuleSourceKind = "templated" | "family" | "pattern" | "synthesized";
+
+export type ArtifactSourceKind = "templated" | "synthesized";
+
+export type SynthesisBundleKind = "gameplay_ability" | "ui_surface" | "supporting_surface";
+
+export type FeatureDependencyRelation = "reads" | "writes" | "triggers" | "grants" | "syncs_with";
+
+export interface Dota2CorpusRegistryEntry {
+  id: string;
+  tier: 0 | 1 | 2 | 3;
+  sourceKind: CorpusSourceKind;
+  canonicalPath: string;
+  legacyPaths?: string[];
+  workflowConsumers: PromptPackageId[];
+  stability: "active" | "transitional" | "legacy";
+}
+
+export interface FeatureContractSurface {
+  id: string;
+  kind: "event" | "data" | "capability" | "state" | "integration";
+  summary: string;
+}
+
+export interface FeatureStateScope {
+  stateId: string;
+  scope: "local" | "session" | "persistent";
+  owner: "feature" | "shared" | "external";
+  summary?: string;
+}
+
+export interface FeatureContract {
+  exports: FeatureContractSurface[];
+  consumes: FeatureContractSurface[];
+  integrationSurfaces: string[];
+  stateScopes: FeatureStateScope[];
+}
+
+export interface FeatureDependencyEdge {
+  relation: FeatureDependencyRelation;
+  targetFeatureId?: string;
+  targetSurfaceId?: string;
+  required?: boolean;
+  summary?: string;
+}
+
+export interface ValidationStageStatus {
+  status: ValidationOutcome;
+  warnings: string[];
+  blockers: string[];
+  summary?: string;
+  checkedAt?: string;
+}
+
+export interface ValidationStatus {
+  status: ValidationOutcome;
+  warnings: string[];
+  blockers: string[];
+  lastValidatedAt?: string;
+  blueprint?: ValidationStageStatus;
+  synthesis?: ValidationStageStatus;
+  repair?: ValidationStageStatus;
+  dependency?: ValidationStageStatus;
+  host?: ValidationStageStatus;
+  runtime?: ValidationStageStatus;
+}
+
+export interface DesignDraft {
+  retrievedFamilyCandidates: string[];
+  retrievedPatternCandidates: string[];
+  reuseConfidence: "high" | "medium" | "low";
+  chosenImplementationStrategy: ImplementationStrategy;
+  artifactTargets?: string[];
+  notes?: string[];
+}
+
+export interface CommitDecision {
+  outcome: CommitDecisionOutcome;
+  canAssemble: boolean;
+  canWriteHost: boolean;
+  requiresReview: boolean;
+  reasons: string[];
+  stage?: "blueprint" | "final";
+  impactedFeatures?: string[];
+  dependencyBlockers?: string[];
+  downgradedFeatures?: string[];
+  reviewModules?: string[];
+}
+
+export interface SynthesizedArtifact {
+  id: string;
+  moduleId: string;
+  bundleId: string;
+  sourceKind: ModuleSourceKind;
+  role: RealizationRole;
+  hostTarget: string;
+  outputKind: "kv" | "ts" | "ui" | "lua" | "bridge";
+  contentType: "typescript" | "tsx" | "less" | "kv" | "json" | "lua";
+  targetPath: string;
+  content: string;
+  summary: string;
+  rationale: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface SynthesisBundlePlan {
+  bundleId: string;
+  kind: SynthesisBundleKind;
+  primaryModuleId: string;
+  moduleIds: string[];
+  semanticRoles: string[];
+  categories: Array<BlueprintModule["category"]>;
+  artifactTargets: string[];
+  ownedScopeRoot: string;
+  entrySurface: "gameplay" | "ui" | "supporting";
+  lifecycleBoundary: string;
+  strategy: ImplementationStrategy;
+}
+
+export interface GroundingCheckResult {
+  artifactId: string;
+  targetProfile?: SynthesisTargetProfile;
+  verifiedSymbols: string[];
+  allowlistedSymbols: string[];
+  weakSymbols: string[];
+  unknownSymbols: string[];
+  warnings: string[];
+  evidenceRefs?: EvidenceRef[];
+}
+
+export interface ModuleImplementationRecord {
+  moduleId: string;
+  bundleId?: string;
+  role: string;
+  category?: BlueprintModule["category"];
+  sourceKind: ModuleSourceKind;
+  familyId?: string;
+  patternId?: string;
+  selectedPatternIds: string[];
+  artifactTargets?: string[];
+  ownedPaths?: string[];
+  fillContractIds?: string[];
+  reviewRequired?: boolean;
+  requiresReview?: boolean;
+  reviewReasons?: string[];
+  implementationStrategy?: ImplementationStrategy;
+  maturity?: FeatureMaturity;
+  outputKinds?: Array<"server" | "shared" | "ui" | "bridge">;
+  artifactPaths?: string[];
+  resolvedFrom?: "family" | "pattern" | "guided_native" | "exploratory" | "mixed";
+  summary?: string;
+  requiredOutputs?: string[];
+  integrationHints?: string[];
+  stateExpectations?: string[];
+  synthesizedArtifactIds?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface UnresolvedModuleNeed {
+  moduleId: string;
+  semanticRole: string;
+  category?: BlueprintModule["category"];
+  reason: string;
+  requiredCapabilities: string[];
+  optionalCapabilities?: string[];
+  requiredOutputs?: string[];
+  artifactTargets?: string[];
+  ownedScopeHints?: string[];
+  stateExpectations?: string[];
+  integrationHints?: string[];
+  invariants?: string[];
+  boundedVariability?: string[];
+  explicitPatternHints?: string[];
+  prohibitedTraits?: string[];
+  suggestedAlternative?: string;
+  strategy?: ImplementationStrategy;
+  familyId?: string;
+  source?: "module-need" | "derived-module" | "derived-mechanic";
+}
+
+export interface ModuleSynthesisResult {
+  moduleId?: string;
+  bundleId?: string;
+  moduleIds?: string[];
+  success: boolean;
+  strategy: ImplementationStrategy;
+  sourceKind: ModuleSourceKind;
+  promptPackageId?: PromptPackageId;
+  moduleRecords: ModuleImplementationRecord[];
+  unresolvedModuleNeeds: UnresolvedModuleNeed[];
+  artifacts: SynthesizedArtifact[];
+  warnings: string[];
+  blockers: string[];
+  evidenceRefs?: EvidenceRef[];
+  assumptions?: string[];
+  mustNotAddViolations?: string[];
+  grounding?: GroundingCheckResult[];
+  compatibilityPatternId?: string;
+}
+
+export interface ArtifactSynthesisResult {
+  success: boolean;
+  strategy: ImplementationStrategy;
+  sourceKind: ModuleSourceKind;
+  promptPackageId?: PromptPackageId;
+  moduleRecords?: ModuleImplementationRecord[];
+  unresolvedModuleNeeds?: UnresolvedModuleNeed[];
+  moduleResults?: ModuleSynthesisResult[];
+  bundles?: SynthesisBundlePlan[];
+  artifacts: SynthesizedArtifact[];
+  warnings: string[];
+  blockers: string[];
+  retrievalSummary?: RetrievalSummary;
+  evidenceRefs?: EvidenceRef[];
+  grounding?: GroundingCheckResult[];
+  compatibilityPatternId?: string;
+}
+
+export interface DependencyImpactRecord {
+  featureId: string;
+  label: string;
+  outcome: "validated" | "needs_review" | "blocked";
+  issues: string[];
+}
+
+export interface DependencyRevalidationResult {
+  success: boolean;
+  providerFeatureId: string;
+  impactedFeatures: DependencyImpactRecord[];
+  blockers: string[];
+  downgradedFeatures: string[];
+  compatibleFeatures: string[];
+}
+
 // ============================================================================
 // Blueprint Types - 实现编排层
 // 与 SCHEMA.md 5.2 节对齐
@@ -212,11 +729,20 @@ export interface Blueprint {
   status?: NormalizedBlueprintStatus;
   /** Step 2 migration: canonical pattern-facing seam */
   moduleNeeds?: ModuleNeed[];
+  moduleRecords?: ModuleImplementationRecord[];
+  unresolvedModuleNeeds?: UnresolvedModuleNeed[];
   /** Step 2 migration: legacy-compatible proposal linkage */
   proposalId?: string;
   /** Step 6 migration: Blueprint-authorized source-backed authoring contract */
   featureAuthoring?: FeatureAuthoring;
   fillContracts?: FillContract[];
+  designDraft?: DesignDraft;
+  maturity?: FeatureMaturity;
+  implementationStrategy?: ImplementationStrategy;
+  featureContract?: FeatureContract;
+  validationStatus?: ValidationStatus;
+  dependencyEdges?: FeatureDependencyEdge[];
+  commitDecision?: CommitDecision;
 }
 
 export interface BlueprintSourceIntent {
@@ -278,9 +804,13 @@ export interface ProposalConnection {
 }
 
 export type SourceBackedFeatureAuthoringMode = "source-backed";
-export type SourceBackedFeatureProfile = "selection_pool";
+export type SourceBackedFeatureProfile = string;
 export type SelectionPoolObjectKind = "talent" | "equipment" | "skill_card_placeholder";
 export type SelectionPoolObjectTier = "R" | "SR" | "SSR" | "UR";
+
+export interface SourceBackedParameterSurface {
+  invariants?: string[];
+}
 
 export interface FeatureAuthoringSourceArtifactRef {
   adapter: string;
@@ -313,7 +843,7 @@ export interface SelectionPoolEffectProfile {
 export interface SelectionPoolFeatureAuthoringParameters {
   triggerKey: string;
   choiceCount: number;
-  objectKind: SelectionPoolObjectKind;
+  objectKind?: SelectionPoolObjectKind;
   objects: SelectionPoolAuthoredObject[];
   drawMode?: "single" | "multiple_without_replacement" | "multiple_with_replacement";
   duplicatePolicy?: "allow" | "avoid_when_possible" | "forbid";
@@ -351,9 +881,6 @@ export interface SelectionPoolParameterSurface {
     minimum: number;
     maximum: number;
   };
-  objectKind: {
-    allowed: SelectionPoolObjectKind[];
-  };
   objects: {
     minItems: number;
     seededWhenMissing: boolean;
@@ -369,22 +896,28 @@ export interface SelectionPoolParameterSurface {
   invariants: string[];
 }
 
-export interface FeatureAuthoringProposal {
+export interface FeatureAuthoringProposal<
+  Parameters extends object = object,
+  Surface extends object = SourceBackedParameterSurface,
+> {
   mode: SourceBackedFeatureAuthoringMode;
   profile: SourceBackedFeatureProfile;
-  objectKind: SelectionPoolObjectKind;
-  parameters: SelectionPoolFeatureAuthoringParameters;
-  parameterSurface: SelectionPoolParameterSurface;
+  objectKind?: string;
+  parameters: Parameters;
+  parameterSurface: Surface;
   proposalSource?: "llm" | "fallback" | "existing-feature";
   notes?: string[];
 }
 
-export interface FeatureAuthoring {
+export interface FeatureAuthoring<
+  Parameters extends object = object,
+  Surface extends object = SourceBackedParameterSurface,
+> {
   mode: SourceBackedFeatureAuthoringMode;
   profile: SourceBackedFeatureProfile;
-  objectKind: SelectionPoolObjectKind;
-  parameters: SelectionPoolFeatureAuthoringParameters;
-  parameterSurface: SelectionPoolParameterSurface;
+  objectKind?: string;
+  parameters: Parameters;
+  parameterSurface: Surface;
   sourceArtifactRef?: FeatureAuthoringSourceArtifactRef;
   notes?: string[];
 }
@@ -454,7 +987,16 @@ export interface BlueprintNormalizationReport {
 export interface FinalBlueprint extends Blueprint {
   status: NormalizedBlueprintStatus;
   moduleNeeds: ModuleNeed[];
+  moduleRecords?: ModuleImplementationRecord[];
+  unresolvedModuleNeeds?: UnresolvedModuleNeed[];
   fillContracts?: FillContract[];
+  designDraft: DesignDraft;
+  maturity: FeatureMaturity;
+  implementationStrategy: ImplementationStrategy;
+  featureContract: FeatureContract;
+  validationStatus: ValidationStatus;
+  dependencyEdges: FeatureDependencyEdge[];
+  commitDecision: CommitDecision;
 }
 
 export interface ValidationContract {
@@ -513,6 +1055,9 @@ export interface ExtensionPoint {
 export interface AssemblyPlan {
   blueprintId: string;
   selectedPatterns: SelectedPattern[];
+  moduleRecords?: ModuleImplementationRecord[];
+  unresolvedModuleNeeds?: UnresolvedModuleNeed[];
+  synthesisBundles?: SynthesisBundlePlan[];
   modules?: AssemblyModule[];
   /** T154: Propagated from Blueprint for composite relationship hints */
   connections?: BlueprintConnection[];
@@ -526,6 +1071,13 @@ export interface AssemblyPlan {
   parameters?: Record<string, unknown>;
   featureAuthoring?: FeatureAuthoring;
   fillContracts?: FillContract[];
+  implementationStrategy?: ImplementationStrategy;
+  validationStatus?: ValidationStatus;
+  dependencyEdges?: FeatureDependencyEdge[];
+  commitDecision?: CommitDecision;
+  sourceKind?: ModuleSourceKind;
+  synthesizedArtifacts?: SynthesizedArtifact[];
+  artifactSynthesisResult?: ArtifactSynthesisResult;
 }
 
 /**
@@ -537,6 +1089,7 @@ export interface AssemblyModule {
   role: RealizationRole;
   selectedPatterns: string[];
   outputKinds: ("server" | "shared" | "ui" | "bridge")[];
+  sourceKind?: ModuleSourceKind;
   /** T172-R1: Propagate module-specific parameters from Blueprint for case-specific fill */
   parameters?: Record<string, unknown>;
   /** T149: Explicit outputs for finer-grained output expression (optional, for future composite features) */
@@ -654,6 +1207,8 @@ export interface HostRealizationUnit {
   sourceModuleId: string;
   /** Patterns that contribute to this unit */
   sourcePatternIds: string[];
+  /** Whether the unit came from templated assembly or synthesized artifacts */
+  sourceKind: ModuleSourceKind;
   /** Role in the host realization (e.g., "gameplay-core", "ui-surface") */
   role: RealizationRole;
   /** How this unit should be materialized */
@@ -702,6 +1257,8 @@ export interface GeneratorRoute {
   id: string;
   /** Source realization unit this route is derived from */
   sourceUnitId: string;
+  /** Whether the route came from templated assembly or synthesized artifacts */
+  sourceKind: ModuleSourceKind;
   /** Target generator family for this route */
   generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
   /** Kind of output this route produces */

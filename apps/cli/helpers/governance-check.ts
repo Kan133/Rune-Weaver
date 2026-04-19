@@ -10,6 +10,7 @@
 
 import type { RuneWeaverWorkspace, RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import type { WritePlan } from "../../../adapters/dota2/assembler/index.js";
+import { analyzeDependencyRevalidation } from "../../../core/workspace/index.js";
 
 export interface WriteConflict {
   kind: "ownership_overlap" | "bridge_contention" | "shared_integration_point" | "dependency_conflict";
@@ -65,20 +66,25 @@ export function checkDeleteDependencyRisk(
     return conflicts;
   }
 
-  for (const feature of workspace.features) {
-    if (feature.featureId === targetFeatureId) continue;
-    if (feature.status !== "active") continue;
+  const dependencyRevalidation = analyzeDependencyRevalidation({
+    workspace,
+    providerFeatureId: targetFeatureId,
+    lifecycleAction: "delete",
+  });
 
-    if (feature.dependsOn && feature.dependsOn.includes(targetFeatureId)) {
-      conflicts.push({
-        kind: "dependency_conflict",
-        severity: "error",
-        conflictingPoint: targetFeatureId,
-        existingFeatureId: feature.featureId,
-        existingFeatureLabel: feature.featureName || feature.intentKind || feature.featureId,
-        explanation: `Feature '${feature.featureId}' depends on the target feature. Deleting may break dependent features.`,
-      });
+  for (const impact of dependencyRevalidation.impactedFeatures) {
+    if (impact.outcome !== "blocked") {
+      continue;
     }
+
+    conflicts.push({
+      kind: "dependency_conflict",
+      severity: "error",
+      conflictingPoint: targetFeatureId,
+      existingFeatureId: impact.featureId,
+      existingFeatureLabel: impact.label,
+      explanation: impact.issues.join(" "),
+    });
   }
 
   return conflicts;

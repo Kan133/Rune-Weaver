@@ -4,6 +4,10 @@
 
 export * from "./types";
 export * from "./intent-schema";
+export * from "./update-intent";
+export * from "./clarification-plan";
+export * from "./relation-resolver";
+export * from "./stability-harness";
 
 export function extractNumericParameters(prompt: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};

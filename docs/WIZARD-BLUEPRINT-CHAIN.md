@@ -4,173 +4,129 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-16
+> Last verified: 2026-04-18
 > Read when: aligning the accepted Wizard / IntentSchema / Blueprint stage boundaries
-> Do not use for: execution priority, host realization policy, or old builder-only mapping truth by itself
+> Do not use for: execution priority, host realization policy, or treating blueprint status as final lifecycle authority
 
-## 1. Purpose
+## Purpose
 
-This document records the accepted cross-cutting chain from Wizard through the deterministic blueprint boundary.
+This document records the accepted chain from Wizard through the blueprint stage in the ratified V2 baseline.
 
-It keeps three things clear:
+It keeps four things clear:
 
-1. what Wizard and `IntentSchema` are responsible for
-2. where optional proposal assistance may exist
-3. where the final executable blueprint boundary actually is
+1. what Wizard is responsible for
+2. what blueprint stage is responsible for
+3. what remains downstream of blueprint
+4. where final lifecycle authority actually lives
 
-For current execution priority, prefer:
-
-- [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md)
-- [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md)
-
-## 2. Accepted Chain
+## Accepted Chain
 
 ```text
 User Request
   -> Wizard
   -> IntentSchema
-  -> optional BlueprintProposal
-  -> BlueprintNormalizer
-  -> FinalBlueprint
-  -> Pattern Resolution
+  -> optional clarification sidecars
+  -> Blueprint Stage
+       - optional BlueprintProposal
+       - deterministic normalization
+       - DesignDraft
+       - FeatureContract
+       - FeatureDependencyEdges
+       - Strategy Selection
+       - FinalBlueprint
+  -> Pattern Retrieval / Strategy Continuation
   -> AssemblyPlan
   -> HostRealizationPlan
   -> GeneratorRoutingPlan
-  -> Generators / Write / Validation
+  -> WritePlan
+  -> LocalRepair
+  -> Validation / Final CommitDecision
+  -> Workspace Lifecycle
+
+Update Request
+  -> CurrentFeatureContext
+  -> Update Wizard
+  -> requestedChange + UpdateIntent
+  -> Blueprint Stage
+  -> downstream lifecycle
 ```
 
-Important:
-
-- `BlueprintProposal` is optional
-- `BlueprintNormalizer` is deterministic
-- `FinalBlueprint` remains the downstream-trustable blueprint seam
-
-Planning-only note:
-
-- future feature-boundary / source-model shaping, if adopted, sits after `IntentSchema` and before deterministic blueprint normalization
-- it is not part of the current accepted chain
-- it must not be treated as a second downstream executable authority beside `FinalBlueprint`
-
-## 3. Stage Responsibilities
+## Stage Responsibilities
 
 | Stage | Responsibility | Must not do |
 |------|----------------|-------------|
-| `Wizard` | interpret the request and help produce structured intent | decide host realization or write targets |
-| `IntentSchema` | preserve semantic demand, constraints, invariants, uncertainty, and clarification needs | pretend missing semantics are resolved |
-| `BlueprintProposal` | surface candidate structure, candidate needs, and uncertainty | act as final blueprint authority |
-| `BlueprintNormalizer` | apply legality, canonicalization, and policy checks | become a second freeform LLM stage |
-| `FinalBlueprint` | expose deterministic modules, connections, assumptions, validations, and `ModuleNeed` seams | carry host family, generator family, or write-path authority |
+| `Wizard` | interpret the request and return best-effort semantics | decide legality, host routing, or write targets |
+| `IntentSchema` | capture demand, constraints, uncertainties, and semantic evidence | carry final readiness or lifecycle truth |
+| clarification sidecars | surface 0-3 structural questions when ambiguity would change ownership or dependency meaning | become execution authority |
+| `Blueprint Stage` | decide feature structure, owned scope, feature contract, dependency edges, and implementation strategy | decide final host routing or write targets |
+| `FinalBlueprint` | expose deterministic downstream planning structure | act as final lifecycle verdict |
 
-## 4. IntentSchema Input Expectations
+## Blueprint Stage In V2
 
-The accepted `IntentSchema` direction should preserve at least:
+Current blueprint stage may internally carry:
 
-- actors
-- typed requirements
-- state model
-- flow semantics
-- selection semantics
-- effect semantics
-- integration expectations
-- acceptance invariants
-- uncertainties
-- required clarifications
-- `ready | weak | blocked` readiness honesty
+- `DesignDraft`
+- retrieved family candidates
+- retrieved pattern candidates
+- reuse confidence
+- chosen implementation strategy
+- provisional `commitDecision`
 
-Migration note:
+Current rules:
 
-- `isReadyForBlueprint` may remain as a compatibility layer
-- richer typed fields should arrive as optional-fields-first
+- public names stay `Blueprint` / `FinalBlueprint`
+- strategy selection is blueprint authority
+- final lifecycle authority still comes later
 
-## 5. FinalBlueprint Output Expectations
+## Honest States
 
-`FinalBlueprint` should contain:
-
-- deterministic module partitioning
-- legal connections
-- canonical `ModuleNeed` entries
-- assumptions
-- validations
-- explicit normalized status
-
-`FinalBlueprint` must not contain:
-
-- final pattern selection
-- host realization family decisions
-- generator family decisions
-- write targets
-- freeform proposal rationale as authority
-
-## 6. Canonical ModuleNeed Seam
-
-The canonical module-level seam is `ModuleNeed`.
-
-It may express:
-
-- semantic role
-- required / optional capabilities
-- required outputs
-- state expectations
-- integration hints
-- invariants
-- bounded variability
-- explicit pattern hints
-- prohibited traits
-
-It must not express:
-
-- final pattern choice
-- final family selection
-- final generator choice
-- write targets
-
-## 7. Authority Boundary
-
-The accepted authority split is:
-
-- LLM may help produce `IntentSchema` and optional `BlueprintProposal`
-- `BlueprintNormalizer` decides what survives into deterministic blueprint output
-- `FinalBlueprint` is the only blueprint artifact downstream layers may trust as executable structure
-- `Pattern Resolution`, `HostRealization`, and `GeneratorRouting` keep their own deterministic authority
-
-## 8. Honest States
-
-Rune Weaver should preserve honest partial states instead of forcing fake certainty.
-
-Accepted status vocabulary:
+Blueprint-stage status remains:
 
 - `ready`
 - `weak`
 - `blocked`
 
-These states may appear in:
+Current meaning:
 
-- `IntentSchema` readiness
-- normalized blueprint status
+- these are planning-time compatibility states
+- they are not the final lifecycle verdict
 
-They must not be collapsed into silent success.
+Current final authority:
 
-## 9. Non-Goals
+- chain-end `CommitDecision`
 
-This chain does not authorize:
+## Current Boundary Rules
 
-- direct LLM final blueprint authority
-- host realization inside the blueprint stage
-- write-path authority inside the blueprint stage
-- pattern taxonomy decisions inside Wizard
-- gap fill as a substitute for architecture
+1. Wizard must always return best-effort semantics, even for unfamiliar asks.
+2. Blueprint stage may choose `family`, `pattern`, `guided_native`, or `exploratory`.
+3. Missing family/pattern hits must not automatically force `blocked`.
+4. `blocked` at blueprint stage should mean planning-time legality or safety issue, not “catalog has not seen this before”.
+5. Artifact synthesis and local repair happen after blueprint stage, not inside Wizard.
 
-## 10. Relationship To Other Docs
+## Update-Mode Rules
 
-- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
-  - object-level schema contracts
-- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
-  - provider and LLM placement rules
-- [MODULE-NEED-SEAM-PROPOSAL.md](/D:/Rune%20Weaver/docs/MODULE-NEED-SEAM-PROPOSAL.md)
-  - canonical planning seam until all baseline docs finish converging
+Update mode reads:
 
-When these docs disagree:
+- workspace-backed `CurrentFeatureContext`
+- not an old stored `IntentSchema`
 
-1. prefer [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md) for cross-cutting architecture boundary
-2. prefer [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md) for object contract wording
-3. prefer planning seam docs only for not-yet-baselined details
+Update mode produces:
+
+- `requestedChange: IntentSchema`
+- `UpdateIntent`
+
+Update mode must not:
+
+- bypass current ownership truth
+- infer undeclared cross-feature writes from prompt text
+- smuggle adapter-specific merge authority into Wizard
+
+## Summary
+
+The current blueprint chain is no longer a grammar-first admission funnel.
+
+It is a governance-first planning seam:
+
+- Wizard captures semantics
+- blueprint decides structure and strategy
+- downstream stages decide realization, validation, and final commit truth

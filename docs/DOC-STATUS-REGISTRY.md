@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-17
+> Last verified: 2026-04-18
 > Read when: deciding whether a doc is safe to trust, ignore, or archive
 > Do not use for: architecture design by itself; this is a routing/trust registry, not a subsystem spec
 
@@ -82,9 +82,9 @@ Minimum machine-readable header automation scope:
 | [AGENT-EXECUTION-BASELINE.md](/D:/Rune%20Weaver/docs/AGENT-EXECUTION-BASELINE.md) | authoritative | current | must-read | current lifecycle truth and scope |
 | [AGENT-TASK-CONTRACT.md](/D:/Rune%20Weaver/docs/AGENT-TASK-CONTRACT.md) | authoritative | current | must-read | worker task packet and review rules |
 | [AUTONOMOUS-DEVELOPMENT-POLICY.md](/D:/Rune%20Weaver/docs/AUTONOMOUS-DEVELOPMENT-POLICY.md) | authoritative | current | read-by-task | autonomy / escalation behavior |
-| [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md) | authoritative | current | must-read | active execution queue |
-| [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md) | authoritative | current | must-read | current execution layering |
-| [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md) | authoritative | current | must-read | workspace truth and ownership model |
+| [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md) | authoritative | current | must-read | active Dota2 V2 execution queue |
+| [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md) | authoritative | current | must-read | current governance-first execution layering |
+| [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md) | authoritative | current | must-read | workspace truth, ownership, dependency, and lifecycle model |
 
 ---
 
@@ -103,8 +103,8 @@ Minimum machine-readable header automation scope:
 | [SESSION-SYNC-PROTOCOL.md](/D:/Rune%20Weaver/docs/session-sync/SESSION-SYNC-PROTOCOL.md) | active-reference | current | read-by-task | session-sync note shape and shared-plan refresh rules |
 | [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md) | active-reference | needs-refresh | read-by-task | execution checklist for canonical acceptance work; packet-era wording may lag current shared truth, so cross-check same-day state against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [ACCEPTANCE-EVIDENCE-TEMPLATE.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-EVIDENCE-TEMPLATE.md) | active-reference | current | read-by-task | reporting template for acceptance evidence |
-| [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md) | active-reference | current | read-by-task | accepted Wizard / IntentSchema / Blueprint stage chain and authority boundary |
-| [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md) | active-reference | current | read-by-task | provider/client guidance plus current LLM placement and proposal-stage boundary |
+| [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md) | active-reference | current | read-by-task | accepted Wizard / IntentSchema / Blueprint chain and final-authority boundary |
+| [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md) | active-reference | current | read-by-task | provider/client guidance plus current LLM placement for Wizard, synthesis, and repair |
 
 ---
 
@@ -141,7 +141,8 @@ Minimum machine-readable header automation scope:
 | [DOTA2-KV-GENERATOR-SCOPE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-KV-GENERATOR-SCOPE.md) | active-reference | current | read-by-task | Dota2 KV generator boundary |
 | [DOTA2-TS-GENERATOR-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-GENERATOR-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 TS generator boundary |
 | [DOTA2-TS-LUA-AUTHORING-PATHS.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-LUA-AUTHORING-PATHS.md) | active-reference | current | read-by-task | Dota2 TS/Lua authoring-path reference |
-| [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 bounded gap-fill boundary |
+| [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 bounded local repair / muscle-fill boundary |
+| [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md) | active-reference | current | read-by-task | current Dota2-specific V2 implementation reference after baseline ratification |
 | [DOTA-DATA-INGESTION.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA-DATA-INGESTION.md) | active-reference | current | read-by-task | Dota2 reference-data ingestion model |
 | [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md) | active-reference | needs-refresh | read-by-task | Dota2-oriented pattern authoring guide |
 | [UI-SAFER-PROFILE.md](/D:/Rune%20Weaver/docs/hosts/dota2/UI-SAFER-PROFILE.md) | active-reference | current | read-by-task | Dota2 Panorama safer-generation profile |
