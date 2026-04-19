@@ -260,8 +260,10 @@ interface PromptSemanticHints {
   inventory: boolean;
   inventoryBlocksWhenFull: boolean;
   noRepeatAfterSelection: boolean;
+  returnsUnchosenToPool?: boolean;
   immediateOutcome: boolean;
   explicitPersistence: boolean;
+  explicitCrossFeature?: boolean;
   rarityDisplay: boolean;
   uiSurface: boolean;
 }
@@ -464,7 +466,11 @@ export function normalizeIntentSchema(
     normalizeUncertainties(candidate.uncertainties, promptHints),
     normalizeLegacyClarificationSignals(candidate, promptHints),
   );
-  const normalizedCandidate: Partial<IntentSchema> = {
+  const initialResolvedAssumptions = normalizeResolvedAssumptions(
+    candidate.resolvedAssumptions,
+    promptHints,
+  );
+  const initialCandidate: Partial<IntentSchema> = {
     ...candidate,
     requirements,
     constraints,
@@ -482,14 +488,18 @@ export function normalizeIntentSchema(
     integrations,
     uiRequirements,
   };
+  const canonicalized = canonicalizeStructuredCandidateDrawIntentSchema({
+    candidate: initialCandidate,
+    rawText,
+    promptHints,
+    uncertainties,
+    resolvedAssumptions: initialResolvedAssumptions,
+  });
+  const normalizedCandidate = canonicalized.candidate;
   const classification = normalizeClassification(candidate.classification, normalizedCandidate);
   const normalizedMechanics = normalizeNormalizedMechanics(
     candidate.normalizedMechanics,
     normalizedCandidate,
-    promptHints,
-  );
-  const resolvedAssumptions = normalizeResolvedAssumptions(
-    candidate.resolvedAssumptions,
     promptHints,
   );
 
@@ -499,26 +509,26 @@ export function normalizeIntentSchema(
     request: normalizeRequest(candidate.request, rawText),
     classification,
     actors: normalizeActors(candidate.actors),
-    requirements,
-    constraints,
-    interaction,
-    targeting,
-    timing,
-    spatial,
-    stateModel,
-    flow,
-    selection,
-    effects,
-    outcomes,
-    contentModel,
-    composition,
-    integrations,
-    uiRequirements,
+    requirements: normalizedCandidate.requirements ?? requirements,
+    constraints: normalizedCandidate.constraints ?? constraints,
+    interaction: normalizedCandidate.interaction ?? interaction,
+    targeting: normalizedCandidate.targeting ?? targeting,
+    timing: normalizedCandidate.timing,
+    spatial: normalizedCandidate.spatial ?? spatial,
+    stateModel: normalizedCandidate.stateModel,
+    flow: normalizedCandidate.flow ?? flow,
+    selection: normalizedCandidate.selection,
+    effects: normalizedCandidate.effects,
+    outcomes: normalizedCandidate.outcomes,
+    contentModel: normalizedCandidate.contentModel,
+    composition: normalizedCandidate.composition,
+    integrations: normalizedCandidate.integrations ?? integrations,
+    uiRequirements: normalizedCandidate.uiRequirements,
     normalizedMechanics,
     acceptanceInvariants: normalizeInvariants(candidate.acceptanceInvariants),
-    uncertainties,
-    resolvedAssumptions,
-    parameters: normalizeModuleSafeParameters(candidate.parameters),
+    uncertainties: canonicalized.uncertainties,
+    resolvedAssumptions: canonicalized.resolvedAssumptions,
+    parameters: normalizeModuleSafeParameters(normalizedCandidate.parameters ?? candidate.parameters),
   };
 }
 
@@ -631,6 +641,10 @@ function normalizeClassification(
     intentKind = "cross-system-composition";
   }
 
+  if (candidate && isCanonicalCandidateDrawGovernanceCore(candidate) && !hasCrossSystemCompositionSemantics(candidate)) {
+    intentKind = "standalone-system";
+  }
+
   if (intentKind === "ui-surface" && candidate && hasNonUiGameplaySemantics(candidate)) {
     intentKind = "micro-feature";
   }
@@ -641,6 +655,24 @@ function normalizeClassification(
       ? classification.confidence
       : "medium",
   };
+}
+
+function isCanonicalCandidateDrawGovernanceCore(candidate: Partial<IntentSchema>): boolean {
+  const hasCandidatePool =
+    candidate.selection?.source === "weighted-pool" ||
+    candidate.selection?.source === "candidate-collection" ||
+    (candidate.contentModel?.collections || []).some((collection) => collection.role === "candidate-options");
+  const hasSingleChoice =
+    candidate.selection?.choiceMode === "user-chosen" &&
+    candidate.selection?.cardinality === "single";
+  const hasUiSelectionSurface =
+    candidate.uiRequirements?.needed === true &&
+    (candidate.uiRequirements?.surfaces || []).some((surface) => {
+      const normalized = surface.toLowerCase();
+      return normalized.includes("selection") || normalized.includes("modal") || normalized.includes("card");
+    });
+
+  return Boolean(hasCandidatePool && hasSingleChoice && hasUiSelectionSurface);
 }
 
 function normalizeRequirements(
@@ -1411,6 +1443,380 @@ function normalizeResolvedAssumptions(
   return [...normalized];
 }
 
+interface IntentSchemaCanonicalizationResult {
+  candidate: Partial<IntentSchema>;
+  uncertainties?: IntentUncertainty[];
+  resolvedAssumptions: string[];
+}
+
+function canonicalizeStructuredCandidateDrawIntentSchema(input: {
+  candidate: Partial<IntentSchema>;
+  rawText: string;
+  promptHints: PromptSemanticHints;
+  uncertainties?: IntentUncertainty[];
+  resolvedAssumptions: string[];
+}): IntentSchemaCanonicalizationResult {
+  const { candidate, promptHints } = input;
+  const choiceCount = promptHints.candidateCount ?? normalizePositiveInteger(candidate.selection?.choiceCount);
+
+  if (
+    !choiceCount ||
+    !isStructuredCandidateDrawCanonicalizationEligible(candidate, input.rawText, promptHints)
+  ) {
+    return {
+      candidate,
+      uncertainties: input.uncertainties,
+      resolvedAssumptions: input.resolvedAssumptions,
+    };
+  }
+
+  return {
+    candidate: {
+      ...candidate,
+      requirements: buildCanonicalCandidateDrawRequirements(candidate, promptHints, choiceCount),
+      selection: buildCanonicalCandidateDrawSelection(choiceCount, promptHints),
+      stateModel: buildCanonicalCandidateDrawStateModel(),
+      contentModel: {
+        collections: [buildCanonicalCandidateDrawCollection(promptHints)],
+      },
+      composition: undefined,
+      timing: undefined,
+      effects: {
+        operations: ["apply", "remove"],
+      },
+      outcomes: {
+        operations: ["apply-effect", "update-state"],
+      },
+      uiRequirements: buildCanonicalCandidateDrawUiRequirements(promptHints),
+      parameters: buildCanonicalCandidateDrawParameters(candidate, choiceCount, promptHints),
+    },
+    uncertainties: filterStructuredCandidateDrawUncertainties(input.uncertainties, promptHints),
+    resolvedAssumptions: buildCanonicalCandidateDrawResolvedAssumptions(promptHints),
+  };
+}
+
+function isStructuredCandidateDrawCanonicalizationEligible(
+  candidate: Partial<IntentSchema>,
+  rawText: string,
+  promptHints: PromptSemanticHints,
+): boolean {
+  const choiceCount = promptHints.candidateCount ?? normalizePositiveInteger(candidate.selection?.choiceCount);
+  const cardinality =
+    candidate.selection?.cardinality ||
+    (promptHints.committedCount === 1 ? "single" : undefined);
+
+  if (!choiceCount || cardinality !== "single") {
+    return false;
+  }
+
+  if (promptHints.explicitPersistence || hasExplicitCrossFeatureSignal(rawText) || promptHints.inventory) {
+    return false;
+  }
+
+  const hasCandidatePoolSemantics =
+    promptHints.candidatePool ||
+    (candidate.contentModel?.collections || []).some((collection) => collection.role === "candidate-options") ||
+    candidate.selection?.source === "candidate-collection" ||
+    candidate.selection?.source === "weighted-pool" ||
+    candidate.selection?.source === "filtered-pool";
+  const hasUserChoiceSemantics =
+    promptHints.playerChoice ||
+    candidate.selection?.choiceMode === "user-chosen" ||
+    candidate.selection?.choiceMode === "hybrid" ||
+    candidate.selection?.mode === "user-chosen" ||
+    candidate.selection?.mode === "hybrid";
+  const hasWeightedCandidateSemantics =
+    promptHints.weightedDraw ||
+    promptHints.rarityDisplay ||
+    candidate.selection?.source === "weighted-pool" ||
+    candidate.selection?.mode === "weighted";
+  const hasUiSurface =
+    promptHints.uiSurface ||
+    candidate.uiRequirements?.needed === true ||
+    (candidate.uiRequirements?.surfaces || []).some((surface) => {
+      const normalizedSurface = surface.toLowerCase();
+      return normalizedSurface.includes("selection")
+        || normalizedSurface.includes("modal")
+        || normalizedSurface.includes("dialog")
+        || normalizedSurface.includes("card");
+    });
+  const hasPoolMutationSemantics =
+    promptHints.noRepeatAfterSelection ||
+    hasSelectionEligibilityRemovalSignal(rawText) ||
+    hasReturnToPoolSignal(rawText) ||
+    candidate.selection?.duplicatePolicy === "forbid" ||
+    (candidate.requirements?.functional || []).some((entry) =>
+      /future draws|future eligibility|return.*pool|unchosen.*pool/i.test(entry),
+    ) ||
+    (candidate.resolvedAssumptions || []).some((entry) =>
+      /future draws|session scope|return.*pool|unchosen.*pool/i.test(entry),
+    );
+  const requestsOneShotOnly = /one[- ]shot|single[- ]use|only once|一次性|只能一次/i.test(rawText);
+
+  return Boolean(
+    hasCandidatePoolSemantics &&
+      hasUserChoiceSemantics &&
+      hasWeightedCandidateSemantics &&
+      hasUiSurface &&
+      hasPoolMutationSemantics &&
+      !requestsOneShotOnly,
+  );
+}
+
+function buildCanonicalCandidateDrawRequirements(
+  candidate: Partial<IntentSchema>,
+  promptHints: PromptSemanticHints,
+  choiceCount: number,
+): IntentRequirements {
+  const functional = [
+    `${describeCanonicalCandidateDrawTrigger(candidate.interaction)} opens a current-feature candidate selection UI.`,
+    `Draw ${choiceCount} weighted candidates from a feature-owned pool.`,
+    "Present the drawn candidates for a single player choice.",
+    "Apply the chosen candidate result immediately.",
+    "Remove the selected candidate from future draw eligibility within the same feature/session.",
+    "Return unchosen candidates to the same feature-owned pool for future draws.",
+  ];
+
+  if (promptHints.rarityDisplay || promptHints.weightedDraw) {
+    functional.push("Candidate rarity influences draw weights and selection presentation.");
+  }
+
+  return {
+    functional,
+    typed: [
+      {
+        id: "candidate_draw_local_trigger",
+        kind: "trigger",
+        summary: "Capture one local trigger that opens the candidate selection flow.",
+        priority: "must",
+      },
+      {
+        id: "candidate_draw_feature_pool",
+        kind: "state",
+        summary: "Maintain a feature-owned candidate pool for future draws.",
+        priority: "must",
+      },
+      {
+        id: "candidate_draw_weighted_rule",
+        kind: "rule",
+        summary: `Draw ${choiceCount} weighted candidates from the local pool.`,
+        priority: "must",
+      },
+      {
+        id: "candidate_draw_single_choice_commit",
+        kind: "rule",
+        summary: "Let the player choose exactly one candidate and commit it immediately.",
+        priority: "must",
+      },
+      {
+        id: "candidate_draw_session_tracking",
+        kind: "state",
+        summary: "Track selected eligibility removal and pool updates in same-feature session state.",
+        priority: "must",
+      },
+    ],
+    interactions: candidate.requirements?.interactions,
+    dataNeeds: candidate.requirements?.dataNeeds,
+    outputs: candidate.requirements?.outputs,
+  };
+}
+
+function describeCanonicalCandidateDrawTrigger(
+  interaction: IntentInteractionContract | undefined,
+): string {
+  const activation = (interaction?.activations || []).find((entry) => entry.kind !== "passive");
+  if (!activation) {
+    return "A local trigger";
+  }
+
+  if (activation.kind === "key" && activation.input) {
+    return `Pressing ${activation.input.toUpperCase()}`;
+  }
+
+  if (activation.input) {
+    return `The local ${activation.kind} input ${activation.input}`;
+  }
+
+  return "A local trigger";
+}
+
+function buildCanonicalCandidateDrawSelection(
+  choiceCount: number,
+  promptHints: PromptSemanticHints,
+): IntentSelectionContract {
+  return {
+    mode: "weighted",
+    source: "weighted-pool",
+    choiceMode: "user-chosen",
+    cardinality: "single",
+    choiceCount,
+    repeatability: "repeatable",
+    duplicatePolicy: "forbid",
+    commitment: "immediate",
+  };
+}
+
+function buildCanonicalCandidateDrawStateModel(): IntentStateContract {
+  return {
+    states: [
+      {
+        id: "candidate_pool_state",
+        summary: "Tracks the feature-owned candidate pool and future draw eligibility.",
+        owner: "feature",
+        lifetime: "session",
+        kind: "collection",
+        mutationMode: "update",
+      },
+      {
+        id: "selection_commit_state",
+        summary: "Tracks the most recent committed candidate choice for the current feature session.",
+        owner: "feature",
+        lifetime: "session",
+        kind: "selection-session",
+        mutationMode: "update",
+      },
+    ],
+  };
+}
+
+function buildCanonicalCandidateDrawUiRequirements(
+  promptHints: PromptSemanticHints,
+): UIRequirementSummary {
+  const surfaces = new Set<string>(["selection_modal"]);
+  if (promptHints.rarityDisplay || promptHints.weightedDraw) {
+    surfaces.add("rarity_cards");
+  }
+
+  return {
+    needed: true,
+    surfaces: [...surfaces],
+  };
+}
+
+function buildCanonicalCandidateDrawCollection(
+  promptHints: PromptSemanticHints,
+): NonNullable<IntentContentModelContract["collections"]>[number] {
+  const collection = buildPromptDerivedCandidateCollection(promptHints);
+  const itemSchema = [...(collection.itemSchema || [])];
+
+  if (!itemSchema.some((item) => item.semanticRole === "selected-outcome")) {
+    itemSchema.push({
+      name: "effect",
+      type: "effect-ref",
+      required: false,
+      semanticRole: "selected-outcome",
+    });
+  }
+
+  return {
+    ...collection,
+    itemSchema,
+  };
+}
+
+function buildCanonicalCandidateDrawParameters(
+  candidate: Partial<IntentSchema>,
+  choiceCount: number,
+  promptHints: PromptSemanticHints,
+): Record<string, unknown> {
+  const triggerKey = (candidate.interaction?.activations || []).find((activation) => activation.kind === "key")?.input;
+  const parameters: Record<string, unknown> = {
+    drawCount: choiceCount,
+    selectionCount: 1,
+    applyImmediately: true,
+    removeChosenFromFutureDraws: true,
+    returnUnchosenToPool: true,
+  };
+
+  if (typeof triggerKey === "string" && triggerKey.trim()) {
+    parameters.triggerKey = triggerKey.toUpperCase();
+  }
+
+  if (promptHints.rarityDisplay || promptHints.weightedDraw) {
+    parameters.weightedBy = "rarity";
+  }
+
+  return parameters;
+}
+
+function stripPersistentTiming(
+  timing: IntentTimingContract | undefined,
+): IntentTimingContract | undefined {
+  if (!timing) {
+    return undefined;
+  }
+
+  const normalized: IntentTimingContract = {
+    cooldownSeconds: timing.cooldownSeconds,
+    delaySeconds: timing.delaySeconds,
+    intervalSeconds: timing.intervalSeconds,
+    duration:
+      timing.duration?.kind && timing.duration.kind !== "persistent"
+        ? timing.duration
+        : undefined,
+  };
+
+  return normalized.cooldownSeconds !== undefined ||
+    normalized.delaySeconds !== undefined ||
+    normalized.intervalSeconds !== undefined ||
+    normalized.duration !== undefined
+    ? normalized
+    : undefined;
+}
+
+function stripPersistentEffectSemantics(
+  effects: IntentEffectContract | undefined,
+): IntentEffectContract | undefined {
+  if (!effects) {
+    return undefined;
+  }
+
+  const operations = effects.operations.filter((operation) =>
+    isOneOf(operation, ["apply", "remove", "stack", "expire", "consume", "restore"]),
+  );
+
+  if (operations.length === 0 && effects.durationSemantics === "persistent") {
+    return undefined;
+  }
+
+  return {
+    operations: operations.length > 0 ? operations : ["apply"],
+    targets: normalizeStringArray(effects.targets),
+    durationSemantics: effects.durationSemantics === "persistent" ? undefined : effects.durationSemantics,
+  };
+}
+
+function filterStructuredCandidateDrawUncertainties(
+  uncertainties: IntentUncertainty[] | undefined,
+  promptHints: PromptSemanticHints,
+): IntentUncertainty[] | undefined {
+  if (!uncertainties) {
+    return undefined;
+  }
+
+  const filtered = uncertainties.filter((item) =>
+    !shouldSuppressBoundedCandidateDrawDetail(item.summary, promptHints),
+  );
+
+  return filtered.length > 0 ? filtered : undefined;
+}
+
+function buildCanonicalCandidateDrawResolvedAssumptions(
+  promptHints: PromptSemanticHints,
+): string[] {
+  const assumptions = new Set<string>([
+    "Selection eligibility updates stay feature-owned and session-local unless persistence is explicitly requested.",
+    "Selected candidates leave future draw eligibility within the same feature/session.",
+    "Unchosen candidates remain available in the same feature-owned pool for future draws.",
+  ]);
+
+  if (promptHints.rarityDisplay || promptHints.weightedDraw) {
+    assumptions.add("Rarity-weighted draw and presentation remain local to the same feature selection flow.");
+  }
+
+  return [...assumptions];
+}
+
 function buildPromptDerivedCandidateCollection(
   promptHints: PromptSemanticHints,
 ): NonNullable<IntentContentModelContract["collections"]>[number] {
@@ -1489,6 +1895,22 @@ const UI_SIGNAL_PATTERN =
   /ui|modal|dialog|panel|window|cards?|界面|窗口|卡牌|弹窗|面板/iu;
 const INVENTORY_SIGNAL_PATTERN =
   /inventory|backpack|storage|persistent panel|库存|仓库|背包|槽位|格子/iu;
+
+function hasExplicitCrossFeatureSignal(rawText: string): boolean {
+  return hasUnnegatedSignal(rawText, CROSS_FEATURE_SIGNAL_PATTERN);
+}
+
+function hasSelectionEligibilityRemovalSignal(rawText: string): boolean {
+  return /remove from future eligibility|remove from later draws|leave future draw eligibility|later draws|future draws|permanently remove|permanently removed|姘镐箙绉婚櫎|绉诲嚭鎶藉彇姹?/i.test(
+    rawText,
+  );
+}
+
+function hasReturnToPoolSignal(rawText: string): boolean {
+  return /unchosen.*return.*pool|return unchosen.*pool|return the unchosen.*pool|return the others.*pool|returns to the pool|back to the pool|back into the pool|put .* back into the pool|return .* to the pool|鏈€変腑.*杩斿洖.*姹?|鏈€変腑.*鍥炴睜/i.test(
+    rawText,
+  );
+}
 
 function collectPromptSemanticHints(rawText: string): PromptSemanticHints {
   const normalizedText = rawText.toLowerCase();

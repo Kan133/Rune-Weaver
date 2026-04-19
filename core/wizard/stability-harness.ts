@@ -9,6 +9,7 @@ import { hasAmbiguousRelationCandidates } from "./relation-resolver";
 export interface WizardStabilityCorpusEntry {
   id: string;
   prompt: string;
+  groupId?: string;
 }
 
 export interface WizardStabilityRunRecord {
@@ -31,6 +32,7 @@ export interface WizardSemanticCoverageSummary {
   distancePreservationRate: number;
   durationPreservationRate: number;
   relationPreservationRate: number;
+  governanceConsistencyRate: number;
   negativeConstraintPreservationRate: number;
   spuriousUiRate: number;
   spuriousPersistenceRate: number;
@@ -41,18 +43,28 @@ export interface WizardSemanticCoverageSummary {
 export interface WizardStabilityPromptSummary {
   id: string;
   prompt: string;
+  groupId?: string;
   runCount: number;
   validRate: number;
   intentKindDistribution: Record<string, number>;
   issueCodeDistribution: Record<string, number>;
   normalizedMechanicsVariantCount: number;
   coreFacetVariantCount: number;
+  governanceCoreVariantCount: number;
   uncertaintyCountDistribution: Record<string, number>;
   clarificationPlanRate: number;
   clarificationQuestionCountDistribution: Record<string, number>;
   relationHitRate: number;
   ambiguousRelationRate: number;
   semanticCoverage: WizardSemanticCoverageSummary;
+}
+
+export interface WizardStabilityGroupSummary {
+  groupId: string;
+  promptIds: string[];
+  governanceCoreVariantCount: number;
+  intentKindVariantCount: number;
+  blockedLikeVariantCount: number;
 }
 
 export interface WizardStabilityArtifact {
@@ -65,6 +77,7 @@ export interface WizardStabilityArtifact {
   corpus: WizardStabilityCorpusEntry[];
   promptResults: WizardStabilityPromptResult[];
   promptSummaries: WizardStabilityPromptSummary[];
+  groupSummaries: WizardStabilityGroupSummary[];
   summary: {
     validRate: number;
     intentKindDistribution: Record<string, number>;
@@ -140,6 +153,8 @@ interface SemanticCoverageAccumulator {
   durationHits: number;
   relationChecks: number;
   relationHits: number;
+  governanceConsistencyChecks: number;
+  governanceConsistencyHits: number;
   negativeConstraintChecks: number;
   negativeConstraintHits: number;
   spuriousUiChecks: number;
@@ -177,6 +192,7 @@ export function buildWizardStabilityArtifact(input: {
   promptResults: WizardStabilityPromptResult[];
 }): WizardStabilityArtifact {
   const promptSummaries = input.promptResults.map(summarizePromptResult);
+  const groupSummaries = summarizeGroups(input.promptResults);
 
   return {
     version: "1.0",
@@ -188,6 +204,7 @@ export function buildWizardStabilityArtifact(input: {
     corpus: input.corpus,
     promptResults: input.promptResults,
     promptSummaries,
+    groupSummaries,
     summary: summarizeAggregate(input.promptResults),
   };
 }
@@ -202,6 +219,9 @@ export function summarizePromptResult(result: WizardStabilityPromptResult): Wiza
   );
   const coreFacetVariantCount = countVariants(
     result.runs.map((run) => stableStringify(collectCoreFacetSummary(run.schema))),
+  );
+  const governanceCoreVariantCount = countVariants(
+    result.runs.map((run) => stableIntentSchemaGovernanceFingerprint(run.schema)),
   );
   const uncertaintyCountDistribution = countBy(
     result.runs.map((run) => String(run.schema.uncertainties?.length ?? 0)),
@@ -222,6 +242,7 @@ export function summarizePromptResult(result: WizardStabilityPromptResult): Wiza
   return {
     id: result.entry.id,
     prompt: result.entry.prompt,
+    groupId: result.entry.groupId,
     runCount: result.runs.length,
     validRate: result.runs.length === 0
       ? 0
@@ -230,6 +251,7 @@ export function summarizePromptResult(result: WizardStabilityPromptResult): Wiza
     issueCodeDistribution,
     normalizedMechanicsVariantCount,
     coreFacetVariantCount,
+    governanceCoreVariantCount,
     uncertaintyCountDistribution,
     clarificationPlanRate,
     clarificationQuestionCountDistribution,
@@ -287,6 +309,130 @@ export function collectCoreFacetSummary(schema: IntentSchema): Record<string, un
   };
 }
 
+export function extractIntentSchemaGovernanceCore(schema: IntentSchema): Record<string, unknown> {
+  return {
+    classification: {
+      intentKind: schema.classification.intentKind,
+    },
+    normalizedMechanics: schema.normalizedMechanics,
+    interaction: (schema.interaction?.activations || []).length > 0
+      ? {
+          activations: (schema.interaction?.activations || []).map((activation) => ({
+            actor: activation.actor,
+            kind: activation.kind,
+            input: activation.input,
+            phase: activation.phase,
+            repeatability: activation.repeatability,
+            confirmation: activation.confirmation,
+          })),
+        }
+      : undefined,
+    selection: schema.selection
+      ? {
+          mode: schema.selection.mode,
+          source: schema.selection.source,
+          choiceMode: schema.selection.choiceMode,
+          cardinality: schema.selection.cardinality,
+          choiceCount: schema.selection.choiceCount,
+          repeatability: schema.selection.repeatability,
+          duplicatePolicy: schema.selection.duplicatePolicy,
+          commitment: schema.selection.commitment,
+          inventory: schema.selection.inventory,
+        }
+      : undefined,
+    uiRequirements: schema.uiRequirements
+      ? {
+          needed: schema.uiRequirements.needed,
+          surfaces: schema.uiRequirements.surfaces,
+          feedbackNeeds: schema.uiRequirements.feedbackNeeds,
+        }
+      : undefined,
+    timing: schema.timing,
+    effects: schema.effects
+      ? {
+          operations: schema.effects.operations,
+          targets: schema.effects.targets && schema.effects.targets.length > 0 ? schema.effects.targets : undefined,
+          durationSemantics: schema.effects.durationSemantics,
+        }
+      : undefined,
+    outcomes: schema.outcomes,
+    stateModel: (schema.stateModel?.states || []).length > 0
+      ? {
+          states: (schema.stateModel?.states || []).map((state) => ({
+            id: state.id,
+            owner: state.owner,
+            lifetime: state.lifetime,
+            kind: state.kind,
+            mutationMode: state.mutationMode,
+          })),
+        }
+      : undefined,
+    contentModel: (schema.contentModel?.collections || []).length > 0
+      ? {
+          collections: (schema.contentModel?.collections || []).map((collection) => ({
+            role: collection.role,
+            ownership: collection.ownership,
+            updateMode: collection.updateMode,
+            itemSchema: (collection.itemSchema || []).map((item) => ({
+              name: item.name,
+              type: item.type,
+              semanticRole: item.semanticRole,
+              required: item.required,
+            })),
+          })),
+        }
+      : undefined,
+    composition: (schema.composition?.dependencies || []).length > 0
+      ? {
+          dependencies: (schema.composition?.dependencies || []).map((dependency) => ({
+            kind: dependency.kind,
+            relation: dependency.relation,
+            target: dependency.target,
+            required: dependency.required,
+          })),
+        }
+      : undefined,
+    parameters: schema.parameters,
+  };
+}
+
+export function stableIntentSchemaGovernanceFingerprint(schema: IntentSchema): string {
+  return stableStringify(extractIntentSchemaGovernanceCore(schema));
+}
+
+function summarizeGroups(results: WizardStabilityPromptResult[]): WizardStabilityGroupSummary[] {
+  const grouped = new Map<string, WizardStabilityPromptResult[]>();
+
+  for (const result of results) {
+    if (!result.entry.groupId) {
+      continue;
+    }
+
+    const current = grouped.get(result.entry.groupId) || [];
+    current.push(result);
+    grouped.set(result.entry.groupId, current);
+  }
+
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([groupId, groupResults]) => {
+      const runs = groupResults.flatMap((result) => result.runs);
+      return {
+        groupId,
+        promptIds: groupResults.map((result) => result.entry.id),
+        governanceCoreVariantCount: countVariants(
+          runs.map((run) => stableIntentSchemaGovernanceFingerprint(run.schema)),
+        ),
+        intentKindVariantCount: countVariants(
+          runs.map((run) => run.schema.classification.intentKind || "unknown"),
+        ),
+        blockedLikeVariantCount: countVariants(
+          runs.map((run) => stableStringify(collectBlockedLikeSummary(run.schema, run.issues))),
+        ),
+      };
+    });
+}
+
 function normalizeCorpusEntry(entry: unknown, index: number): WizardStabilityCorpusEntry | undefined {
   if (typeof entry === "string" && entry.trim()) {
     return {
@@ -308,6 +454,7 @@ function normalizeCorpusEntry(entry: unknown, index: number): WizardStabilityCor
   return {
     id: typeof raw.id === "string" && raw.id.trim() ? raw.id : `prompt_${index + 1}`,
     prompt,
+    groupId: typeof raw.groupId === "string" && raw.groupId.trim() ? raw.groupId : undefined,
   };
 }
 
@@ -327,11 +474,18 @@ function summarizeAggregateSemanticCoverage(results: WizardStabilityPromptResult
 function accumulateSemanticCoverage(result: WizardStabilityPromptResult): SemanticCoverageAccumulator {
   const expectations = extractPromptExpectations(result.entry.prompt);
   const accumulator = createEmptyCoverageAccumulator();
+  const governanceFingerprints = result.runs.map((run) => stableIntentSchemaGovernanceFingerprint(run.schema));
+  const majorityGovernanceFingerprint = selectMajorityVariant(governanceFingerprints);
 
-  for (const run of result.runs) {
+  result.runs.forEach((run, index) => {
     const hasUi = hasUiSemantics(run.schema);
     const hasPersistence = hasPersistenceSemantics(run.schema);
     const hasCrossFeature = hasCrossFeatureSemantics(run.schema);
+
+    accumulator.governanceConsistencyChecks += 1;
+    if (majorityGovernanceFingerprint && governanceFingerprints[index] === majorityGovernanceFingerprint) {
+      accumulator.governanceConsistencyHits += 1;
+    }
 
     if (expectations.key) {
       accumulator.keyChecks += 1;
@@ -404,7 +558,7 @@ function accumulateSemanticCoverage(result: WizardStabilityPromptResult): Semant
     if (isInappropriateClarification(result.entry.prompt, run.schema, run.clarificationPlan)) {
       accumulator.inappropriateClarificationHits += 1;
     }
-  }
+  });
 
   return accumulator;
 }
@@ -421,6 +575,8 @@ function createEmptyCoverageAccumulator(): SemanticCoverageAccumulator {
     durationHits: 0,
     relationChecks: 0,
     relationHits: 0,
+    governanceConsistencyChecks: 0,
+    governanceConsistencyHits: 0,
     negativeConstraintChecks: 0,
     negativeConstraintHits: 0,
     spuriousUiChecks: 0,
@@ -449,6 +605,8 @@ function mergeCoverage(
     durationHits: left.durationHits + right.durationHits,
     relationChecks: left.relationChecks + right.relationChecks,
     relationHits: left.relationHits + right.relationHits,
+    governanceConsistencyChecks: left.governanceConsistencyChecks + right.governanceConsistencyChecks,
+    governanceConsistencyHits: left.governanceConsistencyHits + right.governanceConsistencyHits,
     negativeConstraintChecks: left.negativeConstraintChecks + right.negativeConstraintChecks,
     negativeConstraintHits: left.negativeConstraintHits + right.negativeConstraintHits,
     spuriousUiChecks: left.spuriousUiChecks + right.spuriousUiChecks,
@@ -469,6 +627,10 @@ function finalizeSemanticCoverage(accumulator: SemanticCoverageAccumulator): Wiz
     distancePreservationRate: ratio(accumulator.distanceHits, accumulator.distanceChecks),
     durationPreservationRate: ratio(accumulator.durationHits, accumulator.durationChecks),
     relationPreservationRate: ratio(accumulator.relationHits, accumulator.relationChecks),
+    governanceConsistencyRate: ratio(
+      accumulator.governanceConsistencyHits,
+      accumulator.governanceConsistencyChecks,
+    ),
     negativeConstraintPreservationRate: ratio(
       accumulator.negativeConstraintHits,
       accumulator.negativeConstraintChecks,
@@ -666,6 +828,20 @@ function isInappropriateClarification(
   return !(hasActiveTriggerGap || hasCrossFeatureGap || hasPersistenceGap || hasSpatialGap);
 }
 
+function collectBlockedLikeSummary(
+  schema: IntentSchema,
+  issues: ValidationIssue[],
+): Record<string, unknown> {
+  return {
+    hasErrorIssue: issues.some((issue) => issue.severity === "error"),
+    persistent: hasPersistenceSemantics(schema),
+    crossFeature: hasCrossFeatureSemantics(schema),
+    externalWrites: (schema.composition?.dependencies || []).some((dependency) =>
+      dependency.kind === "external-system" && dependency.relation === "writes"
+    ),
+  };
+}
+
 function countBy(values: string[]): Record<string, number> {
   return values.reduce<Record<string, number>>((acc, value) => {
     acc[value] = (acc[value] || 0) + 1;
@@ -675,6 +851,16 @@ function countBy(values: string[]): Record<string, number> {
 
 function countVariants(values: string[]): number {
   return new Set(values).size;
+}
+
+function selectMajorityVariant(values: string[]): string | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  const distribution = countBy(values);
+  return Object.entries(distribution)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0];
 }
 
 function stableStringify(value: unknown): string {

@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-mainline-transition
-> Last verified: 2026-04-19
+> Last verified: 2026-04-20
 > Read when: coordinating Dota2 and War3 mainlines or deciding the current cross-track attention split
 > Do not use for: replacing latest session-sync notes or subsystem contract docs by itself
 
@@ -22,14 +22,14 @@ Use these status markers:
 Current step:
 
 - Step 6. Validation / evidence / case generalization
-- Current slice: Dota2 V2 exploratory/guided-native now has fresh initialized-host write evidence, not just dry-run proof. The active slice is to widen evidence beyond that proof by validating dependency-driven revalidation, reducing synthesis grounding warnings, and proving partial-pattern-plus-synthesis convergence without reintroducing grammar-era gating.
+- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, and bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster. The active slice is to refresh dependency-driven revalidation evidence, harden exploratory grounding quality, and decide which successful exploratory outputs are ready for stabilization or graduation.
 
 Primary blocker:
 
-- The blocker is no longer missing V2 control-plane pieces, templated `talent_draw` lifecycle stability, or initialized-host exploratory commit evidence.
+- The blocker is no longer missing V2 control-plane pieces, grammar gating removal, single-skill bundle convergence, facet-warning cleanup, source-backed update purity, templated `talent_draw` lifecycle stability, or initialized-host exploratory commit evidence.
 - The blocker is now:
-  - missing fresh dependency-driven revalidation evidence on provider/consumer changes
-  - synthesis grounding still emits host enum/API evidence warnings on exploratory cases
+  - dependency-driven revalidation needs a fresh provider/consumer proof pass on the converged planning/update surface
+  - synthesis grounding and deferred evidence warnings still need tighter exact-symbol backing on exploratory cases
   - exploratory outputs are still review-required and not yet converged into stabilized reusable assets
 
 Plan items:
@@ -43,14 +43,21 @@ Plan items:
 - `[done]` Ratify root baseline docs to V2 governance-first semantics.
 - `[done]` Re-prove the closed V2 chain for the templated `talent_draw` case on a real host, including create/update/delete/recreate plus doctor/validate at each checkpoint.
 - `[done]` Re-prove an initialized-host exploratory/guided-native write path with `requiresReview=true` on `D:\test3`, including host validation, runtime validation, and workspace persistence.
-- `[doing]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases.
-- `[doing]` Reduce negative-constraint drift and synthesis grounding warnings on exploratory asks.
+- `[done]` Land update-authority correctness so live module truth and source-backed invariants outrank legacy pattern-only preservation hints.
+- `[done]` Land backbone-and-facet planning convergence so eligible exploratory single-ability asks collapse to one gameplay backbone, one unresolved need, one synthesized bundle, and default Lua+KV outputs.
+- `[done]` Make must-requirement matching facet-aware and clean up remaining backbone warning noise.
+- `[done]` Tighten source-backed family update purity for bounded `selection_pool` updates.
+- `[done]` Re-prove the exact `talent_draw` demo prompt pair on a fresh host, including semantic artifact export, runtime validation, and the bounded 16-slot inventory update without `choiceCount` drift.
+- `[done]` Stabilize create-side `IntentSchema` governance semantics for the bounded local weighted-selection / `talent_draw` cluster, including a 3-prompt x 5-run wizard stability proof with `governance-core variants = 1`.
+- `[doing]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases on top of the cleaner planning/update surface.
+- `[doing]` Reduce synthesis grounding warnings further on exploratory asks.
 - `[todo]` Decide which repeated exploratory outputs are ready to graduate into reusable assets.
 
 Mainline rule:
 
 - Do not reintroduce grammar-v1 as a hard admission gate.
 - Do not treat repair as the primary generation model.
+- Do not let legacy pattern ids or advisory skeleton text outrank authoritative module truth on update.
 - Do not treat exploratory success as stabilized output without review and repeated evidence.
 
 ## War3 Mainline
@@ -103,7 +110,7 @@ Plan items:
 
 Latest Dota2 session-sync:
 
-- [dota2-mainline-20260419-1335.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260419-1335.md)
+- [dota2-mainline-20260420-0052.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260420-0052.md)
 
 Latest War3 session-sync:
 

@@ -110,6 +110,89 @@ function buildWizardFewShots(): LLMMessage[] {
       },
     },
     {
+      user: "Press F4 to draw 3 rarity-weighted candidates from a local pool, show them on cards, let the player choose 1, apply it immediately, remove the chosen one from future draws, and return the unchosen ones to the pool.",
+      assistant: {
+        classification: { intentKind: "standalone-system", confidence: "high" },
+        requirements: {
+          functional: [
+            "Pressing F4 opens a current-feature selection flow that draws 3 rarity-weighted candidates, lets the player choose 1, applies it immediately, removes the selected candidate from future draw eligibility, and returns unchosen candidates to the pool.",
+          ],
+        },
+        interaction: { activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }] },
+        selection: {
+          mode: "weighted",
+          source: "weighted-pool",
+          choiceMode: "user-chosen",
+          choiceCount: 3,
+          cardinality: "single",
+          repeatability: "repeatable",
+          duplicatePolicy: "forbid",
+          commitment: "immediate",
+        },
+        stateModel: {
+          states: [
+            {
+              id: "candidate_pool_state",
+              summary: "Track same-feature draw eligibility and pool mutation in session-local state.",
+              owner: "feature",
+              lifetime: "session",
+              kind: "collection",
+              mutationMode: "update",
+            },
+          ],
+        },
+        contentModel: {
+          collections: [{ id: "candidate_options", role: "candidate-options", ownership: "feature", updateMode: "replace" }],
+        },
+        uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+        outcomes: { operations: ["apply-effect", "update-state"] },
+        resolvedAssumptions: [
+          "Removing a selected candidate from future draws is a same-feature eligibility mutation, not persistence.",
+        ],
+        uncertainties: [],
+      },
+    },
+    {
+      user: "Press F4 to draw 3 rarity-weighted candidates, let the player choose 1, apply it immediately, remove it from future draws, and save the unlocked result across matches in external profile storage.",
+      assistant: {
+        classification: { intentKind: "cross-system-composition", confidence: "high" },
+        requirements: {
+          functional: [
+            "Pressing F4 runs a weighted local selection flow, applies the chosen result immediately, and persists the unlocked result across matches through an external system.",
+          ],
+        },
+        interaction: { activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }] },
+        selection: {
+          mode: "weighted",
+          source: "weighted-pool",
+          choiceMode: "user-chosen",
+          choiceCount: 3,
+          cardinality: "single",
+          repeatability: "repeatable",
+          duplicatePolicy: "forbid",
+          commitment: "immediate",
+        },
+        stateModel: {
+          states: [
+            {
+              id: "persistent_unlock_state",
+              summary: "Track unlocked results that must survive across matches.",
+              owner: "external",
+              lifetime: "persistent",
+              kind: "generic",
+              mutationMode: "update",
+            },
+          ],
+        },
+        composition: {
+          dependencies: [{ kind: "external-system", relation: "writes", required: true }],
+        },
+        uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+        outcomes: { operations: ["apply-effect", "update-state"] },
+        uncertainties: [],
+      },
+    },
+    {
       user: "Make a system where collected echoes tune a reality lattice and change future pulses.",
       assistant: {
         classification: { intentKind: "standalone-system", confidence: "low" },
@@ -160,6 +243,44 @@ function buildUpdateFewShots(): LLMMessage[] {
         resolvedAssumptions: ["Unspecified existing behavior remains preserved."],
       },
     },
+    {
+      user: [
+        "Current feature context:",
+        JSON.stringify({
+          featureId: "talent_draw_demo",
+          preservedModuleBackbone: ["input_trigger", "weighted_pool", "selection_flow", "selection_modal", "effect_application"],
+          sourceBackedInvariantRoles: ["input_trigger", "weighted_pool", "selection_flow", "selection_modal", "effect_application"],
+          boundedFields: { triggerKey: "F4", choiceCount: 3, inventoryCapacity: 15 },
+        }, null, 2),
+        "",
+        "Requested update:",
+        "16格的天赋仓库，如果满了则按F4不能继续抽取天赋。",
+      ].join("\n"),
+      assistant: {
+        requestedChange: {
+          classification: { intentKind: "standalone-system", confidence: "high" },
+          requirements: {
+            functional: ["Expand the existing inventory capacity to 16 and stop opening new draws when the inventory is full."],
+          },
+          selection: {
+            inventory: {
+              enabled: true,
+              capacity: 16,
+              storeSelectedItems: true,
+              blockDrawWhenFull: true,
+            },
+          },
+          uncertainties: [],
+        },
+        delta: {
+          preserve: [{ path: "skeleton", kind: "composition", summary: "Preserve the current selection backbone and bounded choice flow." }],
+          modify: [{ path: "selection.inventory.capacity", kind: "ui", summary: "Change inventory capacity to 16." }],
+        },
+        resolvedAssumptions: [
+          "The existing choiceCount remains unchanged unless the user explicitly changes candidate/display count.",
+        ],
+      },
+    },
   ];
 
   return examples.flatMap((example) => [
@@ -206,6 +327,7 @@ export function buildWizardCreatePromptPackage(input: WizardPackageInput): Workf
         "Governance is handled downstream; do not output readiness, blocked, weak, or implementation verdicts.",
         "Do not judge implementation readiness, blocked state, blueprint legality, host write feasibility, or runtime support.",
         "Preserve exact scalar facts and explicit negative constraints.",
+        'Interpret "removed from future draws", "no longer appear after selection", and "永久移除出抽取池" as same-feature eligibility mutation unless the user explicitly asks for persistence, save/storage, cross-match, or external ownership.',
         "Use uncertainties only when you need to preserve missing or ambiguous semantic information that would materially change interpretation.",
         "Do not invent UI, persistence, cross-feature coupling, inventory, or extra semantics that the user explicitly forbids.",
         "Do not infer or name implementation families, pattern ids, profiles, source models, gap-fill boundaries, or workspace artifacts.",
@@ -260,6 +382,7 @@ export function buildWizardUpdatePromptPackage(input: UpdateWizardPackageInput):
         "Prefer preserve semantics over rebuild semantics.",
         "Do not restate or rebuild the whole existing feature unless the user explicitly asks for a rewrite.",
         "Keep the requestedChange semantic-only and return compact delta notes.",
+        'Do not reinterpret "confirm exactly one candidate" or single-confirm invariants as a request to change selection.choiceCount.',
         "Do not output readiness, blocked/weak labels, or implementation verdicts.",
         "Represent unknown or change-sensitive gaps with uncertainties in the requestedChange schema instead of pretending the update is blocked.",
         renderPromptConstraints(promptConstraints),

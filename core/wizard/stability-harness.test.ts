@@ -4,7 +4,9 @@ import type { IntentSchema, ValidationIssue, WizardClarificationPlan } from "../
 import {
   buildWizardStabilityArtifact,
   DEFAULT_WIZARD_STABILITY_CORPUS,
+  extractIntentSchemaGovernanceCore,
   parseWizardStabilityCorpus,
+  stableIntentSchemaGovernanceFingerprint,
 } from "./stability-harness";
 
 function makeSchema(overrides: Partial<IntentSchema>): IntentSchema {
@@ -62,13 +64,14 @@ function testParseWizardStabilityCorpusSupportsStringsAndObjects() {
   const corpus = parseWizardStabilityCorpus(
     JSON.stringify([
       "Create a dash skill.",
-      { id: "selection-modal", prompt: "Open a three-choice modal." },
+      { id: "selection-modal", prompt: "Open a three-choice modal.", groupId: "selection-family" },
     ]),
   );
 
   assert.equal(corpus.length, 2);
   assert.equal(corpus[0]?.id, "prompt_1");
   assert.equal(corpus[1]?.id, "selection-modal");
+  assert.equal(corpus[1]?.groupId, "selection-family");
 }
 
 function testDefaultWizardStabilityCorpusExpandedCoverage() {
@@ -210,11 +213,143 @@ function testBuildWizardStabilityArtifactTracksNegativeConstraintMetrics() {
   assert.equal(artifact.promptSummaries[0]?.semanticCoverage.spuriousCrossFeatureRate, 0.5);
 }
 
+function testGovernanceFingerprintIgnoresDisplayProseOrder() {
+  const left = makeSchema({
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    interaction: { activations: [{ kind: "key", input: "F4", phase: "press" }] },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      cardinality: "single",
+      choiceCount: 3,
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+    stateModel: {
+      states: [{ id: "candidate_pool_state", summary: "left", owner: "feature", lifetime: "session", kind: "collection", mutationMode: "update" }],
+    },
+    outcomes: { operations: ["apply-effect", "update-state"] },
+    parameters: { choiceCount: 3, triggerKey: "F4" },
+  });
+  const right = makeSchema({
+    classification: { intentKind: "standalone-system", confidence: "low" },
+    interaction: { activations: [{ kind: "key", input: "F4", phase: "press" }] },
+    selection: {
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      mode: "weighted",
+      commitment: "immediate",
+      cardinality: "single",
+      duplicatePolicy: "forbid",
+      repeatability: "repeatable",
+      choiceCount: 3,
+    },
+    uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+    stateModel: {
+      states: [{ id: "candidate_pool_state", summary: "right", owner: "feature", lifetime: "session", kind: "collection", mutationMode: "update" }],
+    },
+    outcomes: { operations: ["apply-effect", "update-state"] },
+    parameters: { triggerKey: "F4", choiceCount: 3 },
+  });
+
+  assert.deepEqual(extractIntentSchemaGovernanceCore(left), extractIntentSchemaGovernanceCore(right));
+  assert.equal(stableIntentSchemaGovernanceFingerprint(left), stableIntentSchemaGovernanceFingerprint(right));
+}
+
+function testBuildWizardStabilityArtifactTracksGovernanceGroups() {
+  const promptA = {
+    id: "talent-draw-a",
+    prompt: "Press F4 to draw 3 weighted talents, pick 1, remove the selected one from future draws, and return the rest to the pool.",
+    groupId: "talent_draw_local_selection",
+  };
+  const promptB = {
+    id: "talent-draw-b",
+    prompt: "Build an F4 three-choice weighted talent draft, apply the chosen one immediately, remove it from later draws, and return unchosen ones to the pool.",
+    groupId: "talent_draw_local_selection",
+  };
+  const stableSchema = makeSchema({
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    interaction: { activations: [{ kind: "key", input: "F4", phase: "press" }] },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      cardinality: "single",
+      choiceCount: 3,
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+    stateModel: {
+      states: [{ id: "candidate_pool_state", summary: "stable", owner: "feature", lifetime: "session", kind: "collection", mutationMode: "update" }],
+    },
+    outcomes: { operations: ["apply-effect", "update-state"] },
+  });
+  const driftedSchema = makeSchema({
+    classification: { intentKind: "cross-system-composition", confidence: "high" },
+    interaction: { activations: [{ kind: "key", input: "F4", phase: "press" }] },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      cardinality: "single",
+      choiceCount: 3,
+      repeatability: "persistent",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+    stateModel: {
+      states: [{ id: "persistent_unlock_state", summary: "drifted", owner: "external", lifetime: "persistent", kind: "generic", mutationMode: "update" }],
+    },
+    composition: { dependencies: [{ kind: "external-system", relation: "writes", required: true }] },
+    timing: { duration: { kind: "persistent" } },
+    outcomes: { operations: ["grant-feature", "update-state"] },
+  });
+
+  const artifact = buildWizardStabilityArtifact({
+    model: "gpt-5.4",
+    temperature: 0.2,
+    runCount: 2,
+    corpus: [promptA, promptB],
+    promptResults: [
+      {
+        entry: promptA,
+        runs: [
+          { run: 1, valid: true, issues: [], schema: stableSchema },
+          { run: 2, valid: true, issues: [], schema: stableSchema },
+        ],
+      },
+      {
+        entry: promptB,
+        runs: [
+          { run: 1, valid: true, issues: [], schema: stableSchema },
+          { run: 2, valid: false, issues: [makeIssue("PERSISTENCE_DRIFT", "error")], schema: driftedSchema },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(artifact.promptSummaries[0]?.governanceCoreVariantCount, 1);
+  assert.equal(artifact.promptSummaries[1]?.governanceCoreVariantCount, 2);
+  assert.equal(artifact.promptSummaries[1]?.semanticCoverage.governanceConsistencyRate, 0.5);
+  assert.equal(artifact.groupSummaries.length, 1);
+  assert.equal(artifact.groupSummaries[0]?.groupId, "talent_draw_local_selection");
+  assert.equal(artifact.groupSummaries[0]?.governanceCoreVariantCount, 2);
+  assert.equal(artifact.groupSummaries[0]?.blockedLikeVariantCount, 2);
+}
+
 function runTests() {
   testParseWizardStabilityCorpusSupportsStringsAndObjects();
   testDefaultWizardStabilityCorpusExpandedCoverage();
   testBuildWizardStabilityArtifactSummarizesClarificationAndCoverage();
   testBuildWizardStabilityArtifactTracksNegativeConstraintMetrics();
+  testGovernanceFingerprintIgnoresDisplayProseOrder();
+  testBuildWizardStabilityArtifactTracksGovernanceGroups();
   console.log("stability-harness.test.ts: PASS");
 }
 

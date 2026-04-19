@@ -350,7 +350,7 @@ function printWizardStabilityOutput(result: WizardStabilityCLIResult, options: W
   logInfo(`Uncertainty 数分布: ${formatDistribution(artifact.summary.uncertaintyCountDistribution)}`);
   logInfo(`Clarification 触发率: ${formatRate(artifact.summary.clarificationPlanRate)}`);
   logInfo(`Clarification 问题数分布: ${formatDistribution(artifact.summary.clarificationQuestionCountDistribution)}`);
-  logInfo(`Coverage(key/count/distance/duration/relation): ${formatCoverageSummary(artifact.summary.semanticCoverage)}`);
+  logInfo(`Coverage(key/count/distance/duration/relation/gov): ${formatCoverageSummary(artifact.summary.semanticCoverage)}`);
   if (Object.keys(artifact.summary.issueCodeDistribution).length > 0) {
     logInfo(`Issue 分布: ${formatDistribution(artifact.summary.issueCodeDistribution)}`);
   }
@@ -362,12 +362,21 @@ function printWizardStabilityOutput(result: WizardStabilityCLIResult, options: W
     logInfo(`  intentKind: ${formatDistribution(summary.intentKindDistribution)}`);
     logInfo(`  mechanics drift variants: ${summary.normalizedMechanicsVariantCount}`);
     logInfo(`  core facet drift variants: ${summary.coreFacetVariantCount}`);
+    logInfo(`  governance-core variants: ${summary.governanceCoreVariantCount}`);
     logInfo(`  uncertainty counts: ${formatDistribution(summary.uncertaintyCountDistribution)}`);
     logInfo(`  clarification rate: ${formatRate(summary.clarificationPlanRate)}`);
     logInfo(`  clarification counts: ${formatDistribution(summary.clarificationQuestionCountDistribution)}`);
     logInfo(`  coverage: ${formatCoverageSummary(summary.semanticCoverage)}`);
     if (Object.keys(summary.issueCodeDistribution).length > 0) {
       logInfo(`  issues: ${formatDistribution(summary.issueCodeDistribution)}`);
+    }
+  }
+
+  if (artifact.groupSummaries.length > 0) {
+    logInfo("");
+    logInfo("Paraphrase groups:");
+    for (const group of artifact.groupSummaries) {
+      logInfo(`  ${group.groupId}: prompts=${group.promptIds.join(", ")} govVariants=${group.governanceCoreVariantCount} intentKinds=${group.intentKindVariantCount} blockedLike=${group.blockedLikeVariantCount}`);
     }
   }
 
@@ -459,6 +468,7 @@ function formatCoverageSummary(summary: WizardStabilityArtifact["summary"]["sema
     `distance=${formatRate(summary.distancePreservationRate)}`,
     `duration=${formatRate(summary.durationPreservationRate)}`,
     `relation=${formatRate(summary.relationPreservationRate)}`,
+    `gov=${formatRate(summary.governanceConsistencyRate)}`,
     `badQ=${formatRate(summary.inappropriateClarificationRate)}`,
   ].join(", ");
 }

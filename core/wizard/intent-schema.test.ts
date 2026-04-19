@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import type { IntentSchema } from "../schema/types.js";
+import { stableIntentSchemaGovernanceFingerprint } from "./stability-harness.js";
 import {
   buildWizardMessages,
   createFallbackIntentSchema,
@@ -72,6 +73,7 @@ function testBuildWizardMessagesExplicitlyBanImplementationAuthority() {
   assert.match(systemMessage, /Do not judge implementation readiness/i);
   assert.match(systemMessage, /Do not output readiness, blocked, weak/i);
   assert.match(systemMessage, /Do not infer or name implementation families/i);
+  assert.match(systemMessage, /same-feature eligibility mutation unless the user explicitly asks for persistence/i);
 }
 
 function testCreateFallbackIntentSchemaPreservesDashFacts() {
@@ -179,6 +181,185 @@ function testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSem
   assert.equal(schema.selection, undefined);
 }
 
+function testNormalizeIntentSchemaCanonicalizesCandidateDrawGovernanceCore() {
+  const prompt =
+    "Press F4 to open a talent selection UI, draw 3 rarity-weighted talents from a pool, let the player choose 1, apply it immediately, permanently remove the selected talent from future draws, and return unchosen talents to the pool.";
+  const stable = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      classification: { intentKind: "standalone-system", confidence: "high" },
+      requirements: {
+        functional: ["Run a local weighted talent draw."],
+      },
+      interaction: {
+        activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+      },
+      selection: {
+        mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "user-chosen",
+        choiceCount: 3,
+        cardinality: "single",
+        commitment: "immediate",
+      },
+      uiRequirements: { needed: true, surfaces: ["selection_modal", "rarity_cards"] },
+      stateModel: {
+        states: [{ id: "candidate_pool", summary: "Track pool state.", owner: "feature", lifetime: "session", kind: "collection", mutationMode: "update" }],
+      },
+      outcomes: { operations: ["apply-effect", "update-state"] },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  const drifted = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      classification: { intentKind: "standalone-system", confidence: "high" },
+      requirements: {
+        functional: ["Persist the unlocked result forever after selection."],
+        typed: [{ id: "persist", kind: "state", summary: "Persist unlock state externally." }],
+      },
+      interaction: {
+        activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+      },
+      selection: {
+        mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "user-chosen",
+        choiceCount: 3,
+        cardinality: "single",
+        repeatability: "persistent",
+        duplicatePolicy: "forbid",
+        commitment: "immediate",
+      },
+      uiRequirements: { needed: true, surfaces: ["cards", "modal"] },
+      stateModel: {
+        states: [{ id: "persistent_unlock", summary: "Persist unlock state.", owner: "external", lifetime: "persistent", kind: "generic", mutationMode: "update" }],
+      },
+      timing: {
+        duration: { kind: "persistent" },
+      },
+      effects: {
+        operations: ["apply"],
+        durationSemantics: "persistent",
+      },
+      outcomes: { operations: ["grant-feature", "update-state"] },
+      composition: {
+        dependencies: [{ kind: "external-system", relation: "writes", required: true }],
+      },
+      uncertainties: [
+        {
+          id: "unc_persist",
+          summary: "Persistence owner is unclear.",
+          affects: ["intent", "blueprint"],
+          severity: "high",
+        },
+      ],
+      resolvedAssumptions: ["Persist the unlocked result."],
+    },
+    prompt,
+    host,
+  );
+
+  assert.equal(stableIntentSchemaGovernanceFingerprint(stable), stableIntentSchemaGovernanceFingerprint(drifted));
+  assert.equal(drifted.selection?.source, "weighted-pool");
+  assert.equal(drifted.selection?.choiceCount, 3);
+  assert.equal(drifted.selection?.duplicatePolicy, "forbid");
+  assert.equal(drifted.uiRequirements?.needed, true);
+  assert.equal(drifted.timing?.duration?.kind, undefined);
+  assert.equal(drifted.effects?.durationSemantics, undefined);
+  assert.equal(drifted.composition, undefined);
+  assert.equal(Boolean(drifted.stateModel?.states.some((state) => state.lifetime === "persistent" || state.owner === "external")), false);
+}
+
+function testNormalizeIntentSchemaKeepsExplicitPersistenceWhenRequested() {
+  const prompt =
+    "Press F4 to draw 3 rarity-weighted talents, let the player choose 1, apply it immediately, remove it from future draws, and save the unlocked result across matches in external profile storage.";
+  const schema = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      classification: { intentKind: "cross-system-composition", confidence: "high" },
+      requirements: {
+        functional: ["Persist unlocked talents across matches."],
+      },
+      interaction: {
+        activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+      },
+      selection: {
+        mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "user-chosen",
+        choiceCount: 3,
+        cardinality: "single",
+      },
+      timing: {
+        duration: { kind: "persistent" },
+      },
+      stateModel: {
+        states: [{ id: "persistent_unlock", summary: "Persist unlock state.", owner: "external", lifetime: "persistent", kind: "generic", mutationMode: "update" }],
+      },
+      composition: {
+        dependencies: [{ kind: "external-system", relation: "writes", required: true }],
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  assert.equal(schema.timing?.duration?.kind, "persistent");
+  assert.equal(Boolean(schema.stateModel?.states.some((state) => state.lifetime === "persistent")), true);
+  assert.equal(Boolean(schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system")), true);
+}
+
+function testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency() {
+  const prompts = [
+    "Press F4 to open a talent selection UI, draw 3 rarity-weighted talents from a pool, let the player choose 1, apply it immediately, permanently remove the selected talent from future draws, and return unchosen talents to the pool.",
+    "Press F4 to draw 3 rarity-weighted candidates on cards, let the player pick 1 for immediate effect, remove the selected candidate from future eligibility, and put unchosen ones back into the pool.",
+    "Build an F4 three-choice talent draft from a rarity-weighted pool; selecting one applies it now, removes it from later draws, and returns the others to the pool.",
+  ];
+
+  const fingerprints = prompts.map((prompt, index) =>
+    stableIntentSchemaGovernanceFingerprint(
+      normalizeIntentSchema(
+        {
+          request: { goal: prompt },
+          classification: { intentKind: index === 0 ? "standalone-system" : "micro-feature", confidence: "high" },
+          requirements: { functional: ["Resolve the requested weighted candidate draw."] },
+          interaction: {
+            activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+          },
+          selection: {
+            mode: index === 2 ? "user-chosen" : "weighted",
+            source: "weighted-pool",
+            choiceMode: "user-chosen",
+            choiceCount: 3,
+            cardinality: "single",
+            commitment: "immediate",
+          },
+          uiRequirements: { needed: true, surfaces: index === 1 ? ["cards"] : ["selection_modal"] },
+          stateModel: index === 1
+            ? {
+                states: [{ id: "candidate_pool", summary: "Track pool state.", owner: "external", lifetime: "persistent", kind: "generic", mutationMode: "update" }],
+              }
+            : undefined,
+          outcomes: { operations: ["apply-effect"] },
+          composition: index === 1
+            ? { dependencies: [{ kind: "external-system", relation: "writes", required: true }] }
+            : undefined,
+          resolvedAssumptions: [],
+        },
+        prompt,
+        host,
+      ),
+    ),
+  );
+
+  assert.equal(new Set(fingerprints).size, 1);
+}
+
 async function testRunWizardToIntentSchemaFallsBackOnProviderFailure() {
   const result = await runWizardToIntentSchema({
     client: {
@@ -249,6 +430,9 @@ async function runTests() {
   testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints();
   testNormalizeIntentSchemaDoesNotInventInventoryDetails();
   testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSemantics();
+  testNormalizeIntentSchemaCanonicalizesCandidateDrawGovernanceCore();
+  testNormalizeIntentSchemaKeepsExplicitPersistenceWhenRequested();
+  testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency();
   await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
   await testRunWizardToIntentSchemaProducesClarificationSidecar();
   console.log("core/wizard/intent-schema.test.ts passed");
