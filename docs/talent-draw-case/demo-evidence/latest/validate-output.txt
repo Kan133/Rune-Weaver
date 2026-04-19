@@ -19,9 +19,9 @@ Host Root: D:\test3
 Result: PASS
 
 --- Passed Checks ---
-[PASS] npc_abilities_structure: npc_abilities_custom.txt structure valid (3 abilities)
+[PASS] npc_abilities_structure: npc_abilities_custom.txt structure valid (5 abilities)
 [PASS] lua_scriptfile_paths: All ScriptFile paths resolve correctly
-[PASS] workspace_generated_files_exist: All 18 generated files exist on disk
+[PASS] workspace_generated_files_exist: All 22 generated files exist on disk
 [PASS] server_index_references: All server index imports resolve correctly
 [PASS] ui_index_mounts: All UI index imports resolve correctly
 [PASS] less_imports: All 2 generated LESS files are properly imported

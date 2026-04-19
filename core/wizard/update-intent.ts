@@ -21,10 +21,23 @@ import { validateIntentSchema } from "../validation";
 import type { UpdateWizardOptions, UpdateWizardResult } from "./types";
 import { buildWizardClarificationPlan } from "./clarification-plan";
 import { createFallbackIntentSchema, INTENT_SCHEMA_REFERENCE, normalizeIntentSchema } from "./intent-schema";
+import { collectDeterministicUpdateDelta } from "./update-delta.js";
 
 const DEFAULT_HOST: HostDescriptor = {
   kind: DOTA2_X_TEMPLATE_HOST_KIND,
 };
+
+const SELECTION_POOL_INVARIANT_ROLES = [
+  "input_trigger",
+  "weighted_pool",
+  "selection_flow",
+  "selection_modal",
+  "effect_application",
+] as const;
+const EXPLICIT_PERSISTENCE_REQUEST_PATTERN =
+  /persist|persistence|across matches|cross-match|cross session|cross-session|持久|持久化|跨局|跨会话|永久保存/iu;
+const NEGATED_PERSISTENCE_REQUEST_PATTERN =
+  /(?:不要|不需要|无需|without|no|do not)\s*(?:persist|persistence|persistent|持久|持久化|跨局|跨会话)/iu;
 
 const UPDATE_WIZARD_REFERENCE = {
   requestedChange: INTENT_SCHEMA_REFERENCE,
@@ -84,11 +97,37 @@ function dedupeStrings(values: Array<string | undefined>): string[] {
   return result;
 }
 
+function deepCloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function getPreservedModuleBackbone(currentFeatureContext: CurrentFeatureContext): string[] {
+  if ((currentFeatureContext.sourceBackedInvariantRoles || []).length > 0) {
+    return dedupeStrings(currentFeatureContext.sourceBackedInvariantRoles || []);
+  }
   if ((currentFeatureContext.preservedModuleBackbone || []).length > 0) {
     return dedupeStrings(currentFeatureContext.preservedModuleBackbone);
   }
   return dedupeStrings(currentFeatureContext.admittedSkeleton || []);
+}
+
+function getAuthoritativeModuleRoles(currentFeatureContext: CurrentFeatureContext): string[] {
+  if ((currentFeatureContext.sourceBackedInvariantRoles || []).length > 0) {
+    return dedupeStrings(currentFeatureContext.sourceBackedInvariantRoles || []);
+  }
+  const roles = [
+    ...(currentFeatureContext.moduleRecords || []).map((moduleRecord) => moduleRecord.role),
+    ...(currentFeatureContext.sourceBackedInvariantRoles || []),
+  ];
+  return dedupeStrings(roles);
+}
+
+function getPreserveBackboneRoles(currentFeatureContext: CurrentFeatureContext): string[] {
+  const authoritativeRoles = getAuthoritativeModuleRoles(currentFeatureContext);
+  if (authoritativeRoles.length > 0) {
+    return authoritativeRoles;
+  }
+  return getPreservedModuleBackbone(currentFeatureContext);
 }
 
 function normalizeDeltaKind(value: unknown, fallbackPath: string): UpdateDeltaKind {
@@ -252,46 +291,19 @@ function extractPreservedInvariants(existingFeature: RuneWeaverFeatureRecord): s
   );
 }
 
-function readRequestedTriggerKey(requestedChange: IntentSchema): string | undefined {
-  const fromParameters = requestedChange.parameters?.triggerKey;
-  if (typeof fromParameters === "string" && fromParameters.trim()) {
-    return fromParameters.trim().toUpperCase();
+function extractSourceBackedInvariantRoles(
+  existingFeature: RuneWeaverFeatureRecord,
+): string[] {
+  const profile = existingFeature.featureAuthoring?.profile;
+  const adapter = existingFeature.sourceModel?.adapter;
+  if (profile === "selection_pool" || adapter === "selection_pool") {
+    return [...SELECTION_POOL_INVARIANT_ROLES];
   }
-
-  const activation = (requestedChange.interaction?.activations || []).find((item) => item.kind === "key");
-  return typeof activation?.input === "string" && activation.input.trim()
-    ? activation.input.trim().toUpperCase()
-    : undefined;
-}
-
-function readRequestedChoiceCount(requestedChange: IntentSchema): number | undefined {
-  const fromSelection = requestedChange.selection?.choiceCount;
-  if (typeof fromSelection === "number" && Number.isFinite(fromSelection) && fromSelection > 0) {
-    return Math.floor(fromSelection);
-  }
-
-  const fromParameters = requestedChange.parameters?.choiceCount;
-  if (typeof fromParameters === "number" && Number.isFinite(fromParameters) && fromParameters > 0) {
-    return Math.floor(fromParameters);
-  }
-
-  return undefined;
-}
-
-function readRequestedObjectCount(prompt: string): number | undefined {
-  const match =
-    prompt.match(/从\s*\d+\s*(?:个|项|张)?(?:[\p{Script=Han}A-Za-z_]+)?\s*(?:扩充|扩展|增加|提升|改成|改为|调整到|变成|变为)\s*(?:到|成|为)?\s*(\d+)\s*(?:个|项|张)?/iu)
-    || prompt.match(/(?:扩充|扩展|增加|提升|改成|改为|调整到|变成|变为)(?:到|成|为)?\s*(\d+)\s*(?:个|项|张)?(?:对象|候选|条目|项目|cards?|objects?|items?)?/i)
-    || prompt.match(/(\d+)\s*(?:个|项|张)?(?:对象|候选|条目|项目|cards?|objects?|items?).*(?:扩充|扩展|增加|提升)/i);
-  if (!match) {
-    return undefined;
-  }
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+  return [];
 }
 
 function createPreserveDelta(currentFeatureContext: CurrentFeatureContext): UpdateDeltaItem[] {
-  const backbone = getPreservedModuleBackbone(currentFeatureContext).map((item) => ({
+  const backbone = getPreserveBackboneRoles(currentFeatureContext).map((item) => ({
     path: `backbone.${item}`,
     kind: "composition" as const,
     summary: `Preserve module backbone ${item}.`,
@@ -304,94 +316,6 @@ function createPreserveDelta(currentFeatureContext: CurrentFeatureContext): Upda
   return dedupeDeltaItems([...backbone, ...invariants]);
 }
 
-function collectDeterministicDelta(
-  currentFeatureContext: CurrentFeatureContext,
-  requestedChange: IntentSchema,
-): Pick<UpdateIntent["delta"], "add" | "modify" | "remove"> {
-  const add: UpdateDeltaItem[] = [];
-  const modify: UpdateDeltaItem[] = [];
-  const remove: UpdateDeltaItem[] = [];
-  const rawPrompt = requestedChange.request.rawPrompt;
-  const boundedFields = currentFeatureContext.boundedFields;
-
-  if (requestedChange.selection?.inventory?.enabled === true) {
-    const currentInventoryEnabled = boundedFields.inventoryEnabled === true;
-    const requestedInventory = requestedChange.selection.inventory;
-    const summary = currentInventoryEnabled
-      ? "Refresh the existing session inventory contract on the current feature."
-      : "Add the existing session inventory contract to the current feature.";
-    (currentInventoryEnabled ? modify : add).push({
-      path: "selection.inventory",
-      kind: "ui",
-      summary,
-    });
-
-    if (
-      typeof requestedInventory.capacity === "number" &&
-      requestedInventory.capacity !== boundedFields.inventoryCapacity
-    ) {
-      modify.push({
-        path: "selection.inventory.capacity",
-        kind: "ui",
-        summary: `Change inventory capacity to ${Math.floor(requestedInventory.capacity)} within the existing bounded field.`,
-      });
-    }
-
-    if (
-      typeof requestedInventory.fullMessage === "string" &&
-      requestedInventory.fullMessage.trim() &&
-      requestedInventory.fullMessage !== boundedFields.inventoryFullMessage
-    ) {
-      modify.push({
-        path: "selection.inventory.fullMessage",
-        kind: "ui",
-        summary: "Refresh the inventory-full message within the current inventory panel contract.",
-      });
-    }
-  }
-
-  const triggerKey = readRequestedTriggerKey(requestedChange);
-  if (triggerKey && triggerKey !== boundedFields.triggerKey) {
-    modify.push({
-      path: "input.triggerKey",
-      kind: "trigger",
-      summary: `Rebind the current trigger key to ${triggerKey}.`,
-    });
-  }
-
-  const choiceCount = readRequestedChoiceCount(requestedChange);
-  if (typeof choiceCount === "number" && choiceCount !== boundedFields.choiceCount) {
-    modify.push({
-      path: "selection.choiceCount",
-      kind: "selection",
-      summary: `Change the current selection choiceCount to ${choiceCount}.`,
-    });
-  }
-
-  const currentObjectCount =
-    typeof boundedFields.objectCount === "number" && Number.isFinite(boundedFields.objectCount)
-      ? Math.floor(boundedFields.objectCount)
-      : undefined;
-  const requestedObjectCount = readRequestedObjectCount(rawPrompt);
-  if (
-    typeof currentObjectCount === "number" &&
-    typeof requestedObjectCount === "number" &&
-    requestedObjectCount > currentObjectCount
-  ) {
-    modify.push({
-      path: "content.collection.objectCount",
-      kind: "content",
-      summary: `Expand the same-feature owned object collection from ${currentObjectCount} to ${requestedObjectCount}.`,
-    });
-  }
-
-  return {
-    add: dedupeDeltaItems(add),
-    modify: dedupeDeltaItems(modify),
-    remove: dedupeDeltaItems(remove),
-  };
-}
-
 function normalizeUpdateIntent(
   candidate: PartialUpdateWizardPayload | undefined,
   currentFeatureContext: CurrentFeatureContext,
@@ -399,7 +323,10 @@ function normalizeUpdateIntent(
 ): UpdateIntent {
   const preserve = createPreserveDelta(currentFeatureContext);
   const modelDelta = candidate?.delta || {};
-  const deterministicDelta = collectDeterministicDelta(currentFeatureContext, requestedChange);
+  const deterministicDelta = collectDeterministicUpdateDelta({
+    currentFeatureContext,
+    requestedChange,
+  });
   const delta: UpdateIntent["delta"] = {
     preserve: dedupeDeltaItems([
       ...preserve,
@@ -464,10 +391,14 @@ export function buildCurrentFeatureContext(
     }
   }
 
+  const hasModuleRecords = Boolean(existingFeature.modules && existingFeature.modules.length > 0);
+  const sourceBackedInvariantRoles = extractSourceBackedInvariantRoles(existingFeature);
   const preservedModuleBackbone = dedupeStrings(
-    (existingFeature.modules && existingFeature.modules.length > 0)
-      ? existingFeature.modules.map((module) => module.role)
-      : existingFeature.selectedPatterns,
+    sourceBackedInvariantRoles.length > 0
+      ? sourceBackedInvariantRoles
+      : hasModuleRecords
+        ? existingFeature.modules!.map((module) => module.role)
+        : existingFeature.selectedPatterns,
   );
 
   return {
@@ -496,11 +427,86 @@ export function buildCurrentFeatureContext(
         }
       : {}),
     ...(existingFeature.featureAuthoring ? { featureAuthoring: existingFeature.featureAuthoring } : {}),
+    ...(sourceBackedInvariantRoles.length > 0 ? { sourceBackedInvariantRoles } : {}),
     preservedModuleBackbone,
-    admittedSkeleton: preservedModuleBackbone,
+    ...(hasModuleRecords ? {} : { admittedSkeleton: preservedModuleBackbone }),
     preservedInvariants: extractPreservedInvariants(existingFeature),
     boundedFields: extractGenericBoundedFields(existingFeature, sourceArtifact),
   };
+}
+
+function promptRequestsExplicitPersistence(rawText: string): boolean {
+  return EXPLICIT_PERSISTENCE_REQUEST_PATTERN.test(rawText)
+    && !NEGATED_PERSISTENCE_REQUEST_PATTERN.test(rawText);
+}
+
+function currentContextDisallowsPersistence(currentFeatureContext: CurrentFeatureContext): boolean {
+  return currentFeatureContext.preservedInvariants.some((item) => /no persistence/i.test(item))
+    || currentFeatureContext.featureAuthoring?.profile === "selection_pool"
+    || currentFeatureContext.sourceModel?.ref?.adapter === "selection_pool";
+}
+
+function normalizeInferredPersistenceForSourceBackedUpdate(
+  requestedChange: IntentSchema,
+  currentFeatureContext: CurrentFeatureContext,
+  rawText: string,
+): IntentSchema {
+  if (!currentFeatureContext.sourceBacked || !currentContextDisallowsPersistence(currentFeatureContext)) {
+    return requestedChange;
+  }
+  if (promptRequestsExplicitPersistence(rawText)) {
+    return requestedChange;
+  }
+
+  let changed = false;
+  const normalized = deepCloneJson(requestedChange);
+
+  if (normalized.timing?.duration?.kind === "persistent") {
+    delete normalized.timing.duration;
+    if (Object.keys(normalized.timing).length === 0) {
+      delete normalized.timing;
+    }
+    changed = true;
+  }
+
+  if (normalized.effects?.durationSemantics === "persistent") {
+    delete normalized.effects.durationSemantics;
+    if (
+      (!Array.isArray(normalized.effects.operations) || normalized.effects.operations.length === 0) &&
+      (!Array.isArray(normalized.effects.targets) || normalized.effects.targets.length === 0)
+    ) {
+      delete normalized.effects;
+    }
+    changed = true;
+  }
+
+  if (normalized.selection?.repeatability === "persistent") {
+    normalized.selection.repeatability = "repeatable";
+    changed = true;
+  }
+
+  if (normalized.stateModel?.states?.some((state) => state.lifetime === "persistent")) {
+    normalized.stateModel.states = normalized.stateModel.states.map((state) =>
+      state.lifetime === "persistent"
+        ? {
+            ...state,
+            lifetime: "session",
+          }
+        : state,
+    );
+    changed = true;
+  }
+
+  if (!changed) {
+    return requestedChange;
+  }
+
+  normalized.resolvedAssumptions = dedupeStrings([
+    ...(normalized.resolvedAssumptions || []),
+    "Preserved the existing no-persistence invariant; persistent UI presentation does not imply persistent timing or storage semantics.",
+  ]);
+
+  return normalized;
 }
 
 export async function runWizardToUpdateIntent(
@@ -542,6 +548,11 @@ export async function runWizardToUpdateIntent(
       result.object.requestedChange || {},
       options.input.rawText,
       host,
+    );
+    requestedChange = normalizeInferredPersistenceForSourceBackedUpdate(
+      requestedChange,
+      options.input.currentFeatureContext,
+      options.input.rawText,
     );
     updateIntent = normalizeUpdateIntent(
       result.object,

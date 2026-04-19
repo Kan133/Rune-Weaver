@@ -2,22 +2,157 @@
   "workspace": {
     "version": "0.1.0",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:\\test3",
-    "addonName": "test3",
-    "initializedAt": "2026-04-14T12:32:20.038Z",
+    "hostRoot": "D:\\rw-demo-run-05",
+    "addonName": "rw_demo_run_05",
+    "initializedAt": "2026-04-19T16:45:35.616Z",
     "features": [
       {
-        "featureId": "micro_feature_m056",
-        "intentKind": "micro-feature",
+        "featureId": "talent_draw_demo",
+        "intentKind": "standalone-system",
         "status": "active",
-        "revision": 1,
-        "blueprintId": "micro_feature_m056",
+        "revision": 2,
+        "blueprintId": "micro_feature_4jmg",
         "modules": [
           {
-            "moduleId": "mod_func_1",
+            "moduleId": "selection_input",
+            "role": "gameplay-core",
+            "category": "trigger",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "input.key_binding",
+            "selectedPatternIds": [
+              "input.key_binding"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'input_trigger' resolved to reusable pattern 'input.key_binding'",
+            "requiredOutputs": [
+              "selection_open_request"
+            ],
+            "integrationHints": [
+              "input.binding",
+              "event.dispatch"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 4
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_pool",
+            "role": "shared-support",
+            "category": "data",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "data.weighted_pool",
+            "selectedPatternIds": [
+              "data.weighted_pool"
+            ],
+            "artifactTargets": [
+              "server",
+              "shared"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [
+              "weighted_pool.selection_policy"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server",
+              "shared"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'weighted_pool' resolved to reusable pattern 'data.weighted_pool'",
+            "requiredOutputs": [
+              "candidate_options"
+            ],
+            "integrationHints": [
+              "selection.candidate_source"
+            ],
+            "stateExpectations": [
+              "selection.pool_state"
+            ],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 6
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_flow",
+            "role": "gameplay-core",
+            "category": "rule",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "rule.selection_flow",
+            "selectedPatternIds": [
+              "rule.selection_flow"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [
+              "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts"
+            ],
+            "fillContractIds": [
+              "selection_flow.effect_mapping"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [
+              "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
+            "requiredOutputs": [
+              "ui.surface",
+              "selection_commit"
+            ],
+            "integrationHints": [
+              "selection.ui_surface",
+              "selection.candidate_source"
+            ],
+            "stateExpectations": [
+              "selection.commit_state"
+            ],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 8
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_modal",
             "role": "ui-surface",
             "category": "ui",
-            "sourceKind": "pattern",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
             "patternId": "ui.selection_modal",
             "selectedPatternIds": [
               "ui.selection_modal"
@@ -25,195 +160,257 @@
             "artifactTargets": [
               "ui"
             ],
-            "ownedPaths": [],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
+            "ownedPaths": [
+              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less"
+            ],
+            "fillContractIds": [
+              "ui.selection_modal.payload_adapter"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
             "outputKinds": [
               "ui"
             ],
-            "artifactPaths": [],
-            "resolvedFrom": "pattern",
-            "summary": "Resolved reusable implementation for module 'selection_modal'",
+            "artifactPaths": [
+              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
             "requiredOutputs": [
-              "ui.surface"
+              "selection_confirm"
             ],
             "integrationHints": [
-              "ui.surface"
+              "selection.ui_surface"
             ],
             "stateExpectations": [],
             "synthesizedArtifactIds": [],
-            "requiresReview": true,
+            "requiresReview": false,
             "metadata": {
               "resolutionSource": "need",
-              "score": 6
+              "score": 2
             },
-            "reviewReasons": [
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
-          },
-          {
-            "moduleId": "mod_typed_cast_trigger",
-            "role": "gameplay-core",
-            "category": "trigger",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [
-              "input.key_binding"
-            ],
-            "artifactTargets": [
-              "server"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_m056_mod_typed_cast_trigger.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_m056_mod_typed_cast_trigger.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "guided_native",
-            "summary": "Synthesized implementation for unresolved module 'input_trigger'",
-            "requiredOutputs": [
-              "sound playback",
-              "in-place blink/flash",
-              "server.runtime"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [
-              "micro_feature_m056_mod_typed_cast_trigger_lua",
-              "micro_feature_m056_mod_typed_cast_trigger_kv"
-            ],
-            "requiresReview": true,
-            "reviewReasons": [
-              "Module 'mod_typed_cast_trigger' was synthesized because no reusable family/pattern implementation fully matched it.",
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
-          },
-          {
-            "moduleId": "mod_typed_sound_effect",
-            "role": "gameplay-core",
-            "category": "effect",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [],
-            "artifactTargets": [
-              "server",
-              "config"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_m056_mod_typed_sound_effect.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_m056_mod_typed_sound_effect.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "guided_native",
-            "summary": "Synthesized implementation for unresolved module 'effect_application'",
-            "requiredOutputs": [
-              "audio feedback",
-              "server.runtime",
-              "host.config.kv",
-              "Audio feedback on cast",
-              "Visual blink/flash at the caster position",
-              "visual blink/flash"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [
-              "micro_feature_m056_mod_typed_sound_effect_lua",
-              "micro_feature_m056_mod_typed_sound_effect_kv"
-            ],
-            "requiresReview": true,
-            "reviewReasons": [
-              "Module 'mod_typed_sound_effect' was synthesized because no reusable family/pattern implementation fully matched it.",
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
+            "reviewReasons": []
           }
         ],
         "selectedPatterns": [
+          "rule.selection_flow",
+          "data.weighted_pool",
+          "input.key_binding",
           "ui.selection_modal"
         ],
         "generatedFiles": [
-          "content/panorama/src/rune_weaver/generated/ui/micro_feature_m056_selection_modal_ui_selection_modal.tsx",
-          "content/panorama/src/rune_weaver/generated/ui/micro_feature_m056_selection_modal_ui_selection_modal.less",
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_m056_mod_typed_cast_trigger.lua",
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_m056_mod_typed_sound_effect.lua",
-          "game/scripts/npc/npc_abilities_custom.txt"
+          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
+          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
         ],
         "entryBindings": [
-          {
-            "target": "ui",
-            "file": "content/panorama/src/hud/script.tsx",
-            "kind": "mount"
-          },
           {
             "target": "server",
             "file": "game/scripts/src/modules/index.ts",
             "kind": "import"
+          },
+          {
+            "target": "ui",
+            "file": "content/panorama/src/hud/script.tsx",
+            "kind": "mount"
           }
         ],
-        "integrationPoints": [],
+        "sourceModel": {
+          "adapter": "selection_pool",
+          "version": 1,
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+        },
+        "featureAuthoring": {
+          "mode": "source-backed",
+          "profile": "selection_pool",
+          "objectKind": "talent",
+          "parameters": {
+            "triggerKey": "F4",
+            "choiceCount": 3,
+            "objects": [
+              {
+                "id": "R001",
+                "label": "Strength Boost",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "R002",
+                "label": "Fortitude",
+                "description": "+10 Strength",
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "id": "SR001",
+                "label": "Agility Boost",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SR002",
+                "label": "Swift Reflexes",
+                "description": "+10 Agility",
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "id": "SSR001",
+                "label": "Intelligence Boost",
+                "description": "+10 Intelligence",
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "id": "UR001",
+                "label": "Ultimate Growth",
+                "description": "+10 All Attributes",
+                "weight": 10,
+                "tier": "UR"
+              }
+            ],
+            "drawMode": "multiple_without_replacement",
+            "duplicatePolicy": "forbid",
+            "poolStateTracking": "session",
+            "selectionPolicy": "single",
+            "applyMode": "immediate",
+            "postSelectionPoolBehavior": "remove_selected_from_remaining",
+            "trackSelectedItems": true,
+            "inventory": {
+              "enabled": true,
+              "capacity": 16,
+              "storeSelectedItems": true,
+              "blockDrawWhenFull": true,
+              "fullMessage": "Talent inventory full",
+              "presentation": "persistent_panel"
+            },
+            "display": {
+              "title": "Choose Your Talent",
+              "description": "Select one of the following talents",
+              "inventoryTitle": "Talent Inventory",
+              "payloadShape": "card_with_rarity",
+              "minDisplayCount": 3
+            },
+            "placeholderConfig": {
+              "id": "empty_talent_slot",
+              "name": "Empty Slot",
+              "description": "No talent available",
+              "disabled": true
+            },
+            "effectProfile": {
+              "kind": "tier_attribute_bonus_placeholder",
+              "rarityAttributeBonusMap": {
+                "R": {
+                  "attribute": "strength",
+                  "value": 10
+                },
+                "SR": {
+                  "attribute": "agility",
+                  "value": 10
+                },
+                "SSR": {
+                  "attribute": "intelligence",
+                  "value": 10
+                },
+                "UR": {
+                  "attribute": "all",
+                  "value": 10
+                }
+              }
+            },
+            "objectKind": "talent"
+          },
+          "parameterSurface": {
+            "triggerKey": {
+              "kind": "single_hotkey",
+              "allowList": [
+                "Q",
+                "W",
+                "E",
+                "R",
+                "D",
+                "F",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "F9",
+                "F10",
+                "F11",
+                "F12"
+              ]
+            },
+            "choiceCount": {
+              "minimum": 1,
+              "maximum": 5
+            },
+            "objects": {
+              "minItems": 1,
+              "seededWhenMissing": true
+            },
+            "inventory": {
+              "supported": true,
+              "capacityRange": {
+                "minimum": 1,
+                "maximum": 30
+              },
+              "fixedPresentation": "persistent_panel"
+            },
+            "invariants": [
+              "single trigger entry only",
+              "weighted pool candidate source",
+              "confirm exactly one candidate",
+              "same-feature owned object collection only",
+              "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
+              "no persistence",
+              "no cross-feature grants",
+              "no arbitrary custom effect family"
+            ]
+          },
+          "sourceArtifactRef": {
+            "adapter": "selection_pool",
+            "version": 1,
+            "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+          },
+          "notes": [
+            "selection_pool proposal seeded from example catalog for example replay.",
+            "selection_pool update merge was normalized from workspace-backed current feature context and UpdateIntent authority."
+          ]
+        },
+        "integrationPoints": [
+          "input.key_binding:F4"
+        ],
         "gapFillBoundaries": [
+          "selection_flow.effect_mapping",
+          "weighted_pool.selection_policy",
           "ui.selection_modal.payload_adapter"
         ],
-        "maturity": "exploratory",
-        "implementationStrategy": "guided_native",
+        "maturity": "templated",
+        "implementationStrategy": "family",
         "featureContract": {
-          "exports": [
-            {
-              "id": "skill_cast_hook",
-              "kind": "integration",
-              "summary": "Entry point for the active skill cast event."
-            },
-            {
-              "id": "sound_binding",
-              "kind": "integration",
-              "summary": "Binding for the cast sound effect."
-            },
-            {
-              "id": "flash_effect_binding",
-              "kind": "integration",
-              "summary": "Binding for the in-place blink/flash effect."
-            }
-          ],
-          "consumes": [
-            {
-              "id": "cast_trigger",
-              "kind": "capability",
-              "summary": "Consumes dependency via triggers"
-            },
-            {
-              "id": "sound_effect",
-              "kind": "capability",
-              "summary": "Play a sound effect when the skill is cast."
-            },
-            {
-              "id": "in_place_flash",
-              "kind": "capability",
-              "summary": "Perform a blink/flash effect at the caster's current position without displacement."
-            }
-          ],
-          "integrationSurfaces": [
-            "skill_cast_hook",
-            "sound_binding",
-            "flash_effect_binding"
-          ],
+          "exports": [],
+          "consumes": [],
+          "integrationSurfaces": [],
           "stateScopes": []
         },
         "validationStatus": {
@@ -222,7 +419,7 @@
             "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees"
           ],
           "blockers": [],
-          "lastValidatedAt": "2026-04-18T15:23:52.158Z",
+          "lastValidatedAt": "2026-04-19T16:49:56.364Z",
           "blueprint": {
             "status": "needs_review",
             "warnings": [
@@ -231,1918 +428,66 @@
             "blockers": [],
             "summary": "Blueprint planning-stage validation"
           },
+          "synthesis": {
+            "status": "unvalidated",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Artifact synthesis",
+            "checkedAt": "2026-04-19T16:49:56.364Z"
+          },
           "repair": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-18T15:23:52.158Z"
+            "checkedAt": "2026-04-19T16:49:56.364Z"
           },
           "dependency": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-18T15:23:52.158Z"
+            "checkedAt": "2026-04-19T16:49:56.364Z"
           },
           "host": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Host validation",
-            "checkedAt": "2026-04-18T15:23:52.158Z"
+            "checkedAt": "2026-04-19T16:49:56.364Z"
           },
           "runtime": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Runtime validation",
-            "checkedAt": "2026-04-18T15:23:52.158Z"
+            "checkedAt": "2026-04-19T16:49:56.364Z"
           }
         },
-        "dependencyEdges": [
-          {
-            "relation": "triggers",
-            "targetSurfaceId": "cast_trigger",
-            "required": true,
-            "summary": "same-feature:triggers:cast_trigger"
-          }
-        ],
+        "dependencyEdges": [],
         "commitDecision": {
           "outcome": "exploratory",
           "canAssemble": true,
           "canWriteHost": true,
           "requiresReview": true,
           "reasons": [
-            "[module:mod_func_1] Module includes synthesized host-native implementation and should remain reviewable.",
-            "[module:mod_typed_cast_trigger] Module 'mod_typed_cast_trigger' was synthesized because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_typed_cast_trigger] Module includes synthesized host-native implementation and should remain reviewable.",
-            "[module:mod_typed_sound_effect] Module 'mod_typed_sound_effect' was synthesized because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_typed_sound_effect] Module includes synthesized host-native implementation and should remain reviewable.",
             "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees"
           ],
           "stage": "final",
           "impactedFeatures": [],
           "dependencyBlockers": [],
           "downgradedFeatures": [],
-          "reviewModules": [
-            "mod_func_1",
-            "mod_typed_cast_trigger",
-            "mod_typed_sound_effect"
-          ]
+          "reviewModules": []
         },
-        "createdAt": "2026-04-18T15:23:52.160Z",
-        "updatedAt": "2026-04-18T15:23:52.160Z"
-      },
-      {
-        "featureId": "micro_feature_sewp",
-        "intentKind": "micro-feature",
-        "status": "active",
-        "revision": 1,
-        "blueprintId": "micro_feature_sewp",
-        "modules": [
-          {
-            "moduleId": "mod_typed_trigger_q_activate",
-            "role": "gameplay-core",
-            "category": "trigger",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [
-              "input.key_binding"
-            ],
-            "artifactTargets": [
-              "server"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_trigger_q_activate.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_trigger_q_activate.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "guided_native",
-            "summary": "Synthesized implementation for unresolved module 'input_trigger'",
-            "requiredOutputs": [
-              "skill activation",
-              "server.runtime"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [
-              "micro_feature_sewp_mod_typed_trigger_q_activate_lua",
-              "micro_feature_sewp_mod_typed_trigger_q_activate_kv"
-            ],
-            "requiresReview": true,
-            "metadata": {
-              "promptPackageId": "synthesis.module",
-              "evidenceRefs": [
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Dota2 Capability Awareness",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The policy may assume the following high-level host facts:\n\n- Dota2 has server/shared/UI output surfaces\n- Dota2 supports host-native KV configuration for many ability properties\n- Dota2 also requires script logic for more complex runtime behavior\n- UI is realized through Panoram",
-                  "score": 0.22950819672131148,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Dota2 Capability Awareness"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Decision Order v1",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "For each realization unit, Dota2 Host Realization v1 should apply roughly this order:\n\n1. Is the unit clearly a UI surface?\n- if yes, route to `ui`\n\n2. Is the unit clearly expressible as host-native static configuration only?\n- if yes, bias to `kv`\n\n3. Does the unit require custo",
-                  "score": 0.2459016393442623,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Decision Order v1"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21"
-                  }
-                },
-                {
-                  "id": "docs::HOST-REALIZATION-CONTRACT.md::10",
-                  "sourceKind": "governance",
-                  "title": "Host Realization Contract > Decision Rules",
-                  "path": "D:\\Rune Weaver\\docs\\HOST-REALIZATION-CONTRACT.md",
-                  "snippet": "Host Realization must prefer rules over freeform model behavior.\n\nFor the current project stage, Host Realization v1 should be implemented as:\n\n- host-specific\n- rule-first\n- deterministic\n- reviewable\n\nIt should not initially depend on a separate realization LLM.\n\nThis does not ",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Host Realization Contract",
-                      "Decision Rules"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::HOST-REALIZATION-CONTRACT.md::10"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > KV + TS Hybrid Cases",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The following categories should generally bias toward `kv+ts`:\n\n- Dota2 ability shell defined statically, but behavior implemented dynamically\n- modifier registration via host-native naming/config with runtime logic in TS\n- features where the host expects ability or modifier meta",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "KV + TS Hybrid Cases"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::events::README.md::8",
-                  "sourceKind": "curated_host",
-                  "title": "Dota2 Events Knowledge > 5. 事件分类速查 > 按用途分类",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\events\\README.md",
-                  "snippet": "```\nlifecycle          -> 游戏生命周期（开始、结束、状态切换）\nplayer             -> 玩家相关（连接、断开、操作）\ncombat             -> 战斗相关（击杀、伤害、治疗）\nability            -> 技能相关（施法、冷却、效果）\nui                 -> 界面相关（点击、悬停、动画）\n```",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Events Knowledge",
-                      "5. 事件分类速查",
-                      "按用途分类"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::api::events::README.md::8"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7",
-                  "sourceKind": "curated_host",
-                  "title": "State Sync 与 Tables > 3. 核心要点 > 3.5 UI 端订阅模式",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\state-sync-and-tables.md",
-                  "snippet": "```typescript\nclass ResourceBarUI {\n  playerID: PlayerID;\n  resources: Map<string, { current: number; max: number }> = new Map();\n  \n  constructor(playerID: PlayerID) {\n    this.playerID = playerID;\n    \n    // 获取初始值\n    const initialData = CustomNetTables.GetTableValue(\n      \"r",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "State Sync 与 Tables",
-                      "3. 核心要点",
-                      "3.5 UI 端订阅模式"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4",
-                  "sourceKind": "curated_host",
-                  "title": "Custom Events 与网络通信 > 3. 核心要点 > 3.2 Server → UI 事件",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\custom-events-and-networking.md",
-                  "snippet": "```typescript\n// 发送给指定玩家\nfunction sendToPlayer(playerID: PlayerID, eventName: string, data: object): void {\n  const player = PlayerResource.GetPlayer(playerID);\n  if (player) {\n    CustomGameEventManager.Send_ServerToPlayer(\n      player,\n      eventName,\n      data\n    );\n  }\n}\n",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Custom Events 与网络通信",
-                      "3. 核心要点",
-                      "3.2 Server → UI 事件"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities 与 Casting 实现 > 3. 核心要点 > 3.3 常用技能方法",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-typescript\\abilities-and-casting.md",
-                  "snippet": "**施法相关**:\n| 方法 | 用途 |\n|------|------|\n| `OnSpellStart()` | 施法开始时调用 |\n| `GetCaster()` | 获取施法者 |\n| `GetCursorTarget()` | 获取目标单位 |\n| `GetCursorPosition()` | 获取目标位置 |\n| `GetSpecialValueFor(name)` | 获取 KV 中定义的数值 |\n\n**冷却/消耗**:\n| 方法 | 用途 |\n|------|------|\n| `GetCooldown(level)` | 获取冷却时间",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities 与 Casting 实现",
-                      "3. 核心要点",
-                      "3.3 常用技能方法"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_ability_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Ability_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Ability_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_item_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Item_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Item_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_buff.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Buff.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | nil | Get the owner of the ability responsible for the modifier.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Buff",
-                    "signature": "() => CDOTA_BaseNPC | nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdotabaseability.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTABaseAbility.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | Get the owner of this ability.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTABaseAbility",
-                    "signature": "() => CDOTA_BaseNPC"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.getabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.GetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => Vector",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "() => Vector"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::addfowviewer",
-                  "sourceKind": "raw_reference",
-                  "title": "AddFOWViewer",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID | Add temporary vision for a given team.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundon",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOn",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, entity: CBaseEntity) => nil | Play named sound on Entity.",
-                  "score": 135,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, entity: CBaseEntity) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundonclient",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOnClient",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, arg2: handle) => nil | Play named sound only on the client for the passed in player.",
-                  "score": 93,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, arg2: handle) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.setabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.SetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: (origin: Vector) => nil",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "(origin: Vector) => nil"
-                  }
-                },
-                {
-                  "id": "workspace::evidence::1",
-                  "sourceKind": "workspace_evidence",
-                  "title": "Owned artifact target",
-                  "snippet": "game/scripts/npc/npc_abilities_custom.txt"
-                },
-                {
-                  "id": "vscripts/api.json::api-function::anglediff",
-                  "sourceKind": "raw_reference",
-                  "title": "AngleDiff",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (arg1: float, arg2: float) => float | Returns the number of degrees difference between two yaw angles.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(arg1: float, arg2: float) => float"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: NO_TARGET",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "NO_TARGET"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum-member | sig: 4",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "4"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "panorama"
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "vscripts/enums.json",
-                  "snippet": "[vscripts] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "vscripts"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum::abilitybehavior",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "engine"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_affected_by_mute",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_AFFECTED_BY_MUTE",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: AFFECTED_BY_MUTE",
-                  "score": 102,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "AFFECTED_BY_MUTE"
-                  }
-                }
-              ],
-              "assumptions": [
-                "Q activation is satisfied by placing this active ability in the unit's Q slot through existing game data or bindings outside this artifact.",
-                "The fire orb can be represented host-natively by a particle attached to the caster rather than a separate controllable unit.",
-                "Nearby enemy damage is centered on the caster's current position because the orb follows the caster continuously.",
-                "If ability special values are not defined in KV, safe fallback values are used: duration 2.0, radius 250, damage 40, interval 0.5, height 120.",
-                "No UI, inventory, or persistence behavior is implemented, per feature constraints.",
-                "The ability will be bound to Q by normal ability-slot placement outside this KV artifact.",
-                "Orb follow behavior, periodic ticking, enemy queries, and expiration are implemented in the referenced Lua ScriptFile.",
-                "A basic 4-level scaling is acceptable because the blueprint did not specify level count or damage values.",
-                "Including DOTA_ABILITY_BEHAVIOR_AFFECTED_BY_MUTE is acceptable for an active castable ability unless gameplay design later requires otherwise."
-              ]
-            },
-            "reviewReasons": [
-              "Module 'mod_typed_trigger_q_activate' was synthesized because no reusable family/pattern implementation fully matched it.",
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
-          },
-          {
-            "moduleId": "mod_typed_spawn_fire_orb",
-            "role": "gameplay-core",
-            "category": "effect",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [],
-            "artifactTargets": [
-              "server",
-              "config"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_spawn_fire_orb.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_spawn_fire_orb.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "guided_native",
-            "summary": "Synthesized implementation for unresolved module 'spawn_emitter'",
-            "requiredOutputs": [
-              "fire orb instance",
-              "server.runtime",
-              "host.config.kv",
-              "Spawned temporary fire orb",
-              "Repeated enemy damage events"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [
-              "state:fire_orb_active",
-              "owner:feature",
-              "lifetime:ephemeral",
-              "mutation:create",
-              "state:fire_orb_expire",
-              "mutation:expire"
-            ],
-            "synthesizedArtifactIds": [
-              "micro_feature_sewp_mod_typed_spawn_fire_orb_lua",
-              "micro_feature_sewp_mod_typed_spawn_fire_orb_kv"
-            ],
-            "requiresReview": true,
-            "metadata": {
-              "promptPackageId": "synthesis.module",
-              "evidenceRefs": [
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Dota2 Capability Awareness",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The policy may assume the following high-level host facts:\n\n- Dota2 has server/shared/UI output surfaces\n- Dota2 supports host-native KV configuration for many ability properties\n- Dota2 also requires script logic for more complex runtime behavior\n- UI is realized through Panoram",
-                  "score": 0.22950819672131148,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Dota2 Capability Awareness"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Decision Order v1",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "For each realization unit, Dota2 Host Realization v1 should apply roughly this order:\n\n1. Is the unit clearly a UI surface?\n- if yes, route to `ui`\n\n2. Is the unit clearly expressible as host-native static configuration only?\n- if yes, bias to `kv`\n\n3. Does the unit require custo",
-                  "score": 0.2459016393442623,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Decision Order v1"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21"
-                  }
-                },
-                {
-                  "id": "docs::HOST-REALIZATION-CONTRACT.md::10",
-                  "sourceKind": "governance",
-                  "title": "Host Realization Contract > Decision Rules",
-                  "path": "D:\\Rune Weaver\\docs\\HOST-REALIZATION-CONTRACT.md",
-                  "snippet": "Host Realization must prefer rules over freeform model behavior.\n\nFor the current project stage, Host Realization v1 should be implemented as:\n\n- host-specific\n- rule-first\n- deterministic\n- reviewable\n\nIt should not initially depend on a separate realization LLM.\n\nThis does not ",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Host Realization Contract",
-                      "Decision Rules"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::HOST-REALIZATION-CONTRACT.md::10"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > KV + TS Hybrid Cases",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The following categories should generally bias toward `kv+ts`:\n\n- Dota2 ability shell defined statically, but behavior implemented dynamically\n- modifier registration via host-native naming/config with runtime logic in TS\n- features where the host expects ability or modifier meta",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "KV + TS Hybrid Cases"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::events::README.md::8",
-                  "sourceKind": "curated_host",
-                  "title": "Dota2 Events Knowledge > 5. 事件分类速查 > 按用途分类",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\events\\README.md",
-                  "snippet": "```\nlifecycle          -> 游戏生命周期（开始、结束、状态切换）\nplayer             -> 玩家相关（连接、断开、操作）\ncombat             -> 战斗相关（击杀、伤害、治疗）\nability            -> 技能相关（施法、冷却、效果）\nui                 -> 界面相关（点击、悬停、动画）\n```",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Events Knowledge",
-                      "5. 事件分类速查",
-                      "按用途分类"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::api::events::README.md::8"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7",
-                  "sourceKind": "curated_host",
-                  "title": "State Sync 与 Tables > 3. 核心要点 > 3.5 UI 端订阅模式",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\state-sync-and-tables.md",
-                  "snippet": "```typescript\nclass ResourceBarUI {\n  playerID: PlayerID;\n  resources: Map<string, { current: number; max: number }> = new Map();\n  \n  constructor(playerID: PlayerID) {\n    this.playerID = playerID;\n    \n    // 获取初始值\n    const initialData = CustomNetTables.GetTableValue(\n      \"r",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "State Sync 与 Tables",
-                      "3. 核心要点",
-                      "3.5 UI 端订阅模式"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4",
-                  "sourceKind": "curated_host",
-                  "title": "Custom Events 与网络通信 > 3. 核心要点 > 3.2 Server → UI 事件",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\custom-events-and-networking.md",
-                  "snippet": "```typescript\n// 发送给指定玩家\nfunction sendToPlayer(playerID: PlayerID, eventName: string, data: object): void {\n  const player = PlayerResource.GetPlayer(playerID);\n  if (player) {\n    CustomGameEventManager.Send_ServerToPlayer(\n      player,\n      eventName,\n      data\n    );\n  }\n}\n",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Custom Events 与网络通信",
-                      "3. 核心要点",
-                      "3.2 Server → UI 事件"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities 与 Casting 实现 > 3. 核心要点 > 3.3 常用技能方法",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-typescript\\abilities-and-casting.md",
-                  "snippet": "**施法相关**:\n| 方法 | 用途 |\n|------|------|\n| `OnSpellStart()` | 施法开始时调用 |\n| `GetCaster()` | 获取施法者 |\n| `GetCursorTarget()` | 获取目标单位 |\n| `GetCursorPosition()` | 获取目标位置 |\n| `GetSpecialValueFor(name)` | 获取 KV 中定义的数值 |\n\n**冷却/消耗**:\n| 方法 | 用途 |\n|------|------|\n| `GetCooldown(level)` | 获取冷却时间",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities 与 Casting 实现",
-                      "3. 核心要点",
-                      "3.3 常用技能方法"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_ability_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Ability_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Ability_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_item_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Item_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Item_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_buff.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Buff.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | nil | Get the owner of the ability responsible for the modifier.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Buff",
-                    "signature": "() => CDOTA_BaseNPC | nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdotabaseability.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTABaseAbility.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | Get the owner of this ability.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTABaseAbility",
-                    "signature": "() => CDOTA_BaseNPC"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.getabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.GetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => Vector",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "() => Vector"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::addfowviewer",
-                  "sourceKind": "raw_reference",
-                  "title": "AddFOWViewer",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID | Add temporary vision for a given team.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundon",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOn",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, entity: CBaseEntity) => nil | Play named sound on Entity.",
-                  "score": 135,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, entity: CBaseEntity) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundonclient",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOnClient",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, arg2: handle) => nil | Play named sound only on the client for the passed in player.",
-                  "score": 93,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, arg2: handle) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.setabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.SetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: (origin: Vector) => nil",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "(origin: Vector) => nil"
-                  }
-                },
-                {
-                  "id": "workspace::evidence::1",
-                  "sourceKind": "workspace_evidence",
-                  "title": "Owned artifact target",
-                  "snippet": "game/scripts/npc/npc_abilities_custom.txt"
-                },
-                {
-                  "id": "vscripts/api.json::api-function::anglediff",
-                  "sourceKind": "raw_reference",
-                  "title": "AngleDiff",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (arg1: float, arg2: float) => float | Returns the number of degrees difference between two yaw angles.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(arg1: float, arg2: float) => float"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: NO_TARGET",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "NO_TARGET"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum-member | sig: 4",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "4"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "panorama"
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "vscripts/enums.json",
-                  "snippet": "[vscripts] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "vscripts"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum::abilitybehavior",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "engine"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_affected_by_mute",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_AFFECTED_BY_MUTE",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: AFFECTED_BY_MUTE",
-                  "score": 102,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "AFFECTED_BY_MUTE"
-                  }
-                }
-              ],
-              "assumptions": [
-                "Q-triggered activation is represented by this standard active Lua ability's OnSpellStart entry point.",
-                "The fire orb instance is realized as a temporary feature-owned runtime state via a hidden modifier plus a particle emitter, rather than a persistent spawned world entity.",
-                "Because no KV file artifact was requested here, gameplay values use ability special values when present and otherwise fall back to code defaults: duration 2.0, damage 30, radius 250, damage interval 0.5, follow distance 110, follow height 96, vision radius 300.",
-                "Nearby enemy damage is centered on the orb's computed follow position in front of and above the caster, updating continuously while active.",
-                "Recasting while active refreshes the same orb state on the caster instead of creating multiple simultaneous orbs.",
-                "The declared ability name is rw_micro_feature_sewp_mod_typed_spawn_fire_orb, matching the provided deterministic fallback.",
-                "The server-side Lua script at rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_spawn_fire_orb will implement orb spawning, follow behavior, timed expiration, and periodic enemy damage.",
-                "Duration, tick interval, radius, and damage are exposed in AbilitySpecial for host-native runtime configuration.",
-                "Using DOTA_ABILITY_BEHAVIOR_NO_TARGET is appropriate for a Q-triggered active skill with no target selection.",
-                "Including DOTA_ABILITY_BEHAVIOR_AFFECTED_BY_MUTE is acceptable because retrieved evidence referenced this behavior flag and it does not add UI surface."
-              ]
-            },
-            "reviewReasons": [
-              "Module 'mod_typed_spawn_fire_orb' was synthesized because no reusable family/pattern implementation fully matched it.",
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
-          },
-          {
-            "moduleId": "mod_typed_orb_periodic_damage",
-            "role": "gameplay-core",
-            "category": "rule",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [],
-            "artifactTargets": [
-              "server"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_orb_periodic_damage.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_orb_periodic_damage.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "guided_native",
-            "summary": "Synthesized implementation for unresolved module 'timed_rule'",
-            "requiredOutputs": [
-              "periodic damage applications",
-              "server.runtime"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [
-              "state:fire_orb_active",
-              "owner:feature",
-              "lifetime:ephemeral",
-              "mutation:create",
-              "state:fire_orb_expire",
-              "mutation:expire"
-            ],
-            "synthesizedArtifactIds": [
-              "micro_feature_sewp_mod_typed_orb_periodic_damage_lua",
-              "micro_feature_sewp_mod_typed_orb_periodic_damage_kv"
-            ],
-            "requiresReview": true,
-            "metadata": {
-              "promptPackageId": "synthesis.module",
-              "evidenceRefs": [
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Dota2 Capability Awareness",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The policy may assume the following high-level host facts:\n\n- Dota2 has server/shared/UI output surfaces\n- Dota2 supports host-native KV configuration for many ability properties\n- Dota2 also requires script logic for more complex runtime behavior\n- UI is realized through Panoram",
-                  "score": 0.22950819672131148,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Dota2 Capability Awareness"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Decision Order v1",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "For each realization unit, Dota2 Host Realization v1 should apply roughly this order:\n\n1. Is the unit clearly a UI surface?\n- if yes, route to `ui`\n\n2. Is the unit clearly expressible as host-native static configuration only?\n- if yes, bias to `kv`\n\n3. Does the unit require custo",
-                  "score": 0.2459016393442623,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Decision Order v1"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21"
-                  }
-                },
-                {
-                  "id": "docs::HOST-REALIZATION-CONTRACT.md::10",
-                  "sourceKind": "governance",
-                  "title": "Host Realization Contract > Decision Rules",
-                  "path": "D:\\Rune Weaver\\docs\\HOST-REALIZATION-CONTRACT.md",
-                  "snippet": "Host Realization must prefer rules over freeform model behavior.\n\nFor the current project stage, Host Realization v1 should be implemented as:\n\n- host-specific\n- rule-first\n- deterministic\n- reviewable\n\nIt should not initially depend on a separate realization LLM.\n\nThis does not ",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Host Realization Contract",
-                      "Decision Rules"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::HOST-REALIZATION-CONTRACT.md::10"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > KV + TS Hybrid Cases",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The following categories should generally bias toward `kv+ts`:\n\n- Dota2 ability shell defined statically, but behavior implemented dynamically\n- modifier registration via host-native naming/config with runtime logic in TS\n- features where the host expects ability or modifier meta",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "KV + TS Hybrid Cases"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::events::README.md::8",
-                  "sourceKind": "curated_host",
-                  "title": "Dota2 Events Knowledge > 5. 事件分类速查 > 按用途分类",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\events\\README.md",
-                  "snippet": "```\nlifecycle          -> 游戏生命周期（开始、结束、状态切换）\nplayer             -> 玩家相关（连接、断开、操作）\ncombat             -> 战斗相关（击杀、伤害、治疗）\nability            -> 技能相关（施法、冷却、效果）\nui                 -> 界面相关（点击、悬停、动画）\n```",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Events Knowledge",
-                      "5. 事件分类速查",
-                      "按用途分类"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::api::events::README.md::8"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7",
-                  "sourceKind": "curated_host",
-                  "title": "State Sync 与 Tables > 3. 核心要点 > 3.5 UI 端订阅模式",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\state-sync-and-tables.md",
-                  "snippet": "```typescript\nclass ResourceBarUI {\n  playerID: PlayerID;\n  resources: Map<string, { current: number; max: number }> = new Map();\n  \n  constructor(playerID: PlayerID) {\n    this.playerID = playerID;\n    \n    // 获取初始值\n    const initialData = CustomNetTables.GetTableValue(\n      \"r",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "State Sync 与 Tables",
-                      "3. 核心要点",
-                      "3.5 UI 端订阅模式"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4",
-                  "sourceKind": "curated_host",
-                  "title": "Custom Events 与网络通信 > 3. 核心要点 > 3.2 Server → UI 事件",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\custom-events-and-networking.md",
-                  "snippet": "```typescript\n// 发送给指定玩家\nfunction sendToPlayer(playerID: PlayerID, eventName: string, data: object): void {\n  const player = PlayerResource.GetPlayer(playerID);\n  if (player) {\n    CustomGameEventManager.Send_ServerToPlayer(\n      player,\n      eventName,\n      data\n    );\n  }\n}\n",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Custom Events 与网络通信",
-                      "3. 核心要点",
-                      "3.2 Server → UI 事件"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities 与 Casting 实现 > 3. 核心要点 > 3.3 常用技能方法",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-typescript\\abilities-and-casting.md",
-                  "snippet": "**施法相关**:\n| 方法 | 用途 |\n|------|------|\n| `OnSpellStart()` | 施法开始时调用 |\n| `GetCaster()` | 获取施法者 |\n| `GetCursorTarget()` | 获取目标单位 |\n| `GetCursorPosition()` | 获取目标位置 |\n| `GetSpecialValueFor(name)` | 获取 KV 中定义的数值 |\n\n**冷却/消耗**:\n| 方法 | 用途 |\n|------|------|\n| `GetCooldown(level)` | 获取冷却时间",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities 与 Casting 实现",
-                      "3. 核心要点",
-                      "3.3 常用技能方法"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_ability_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Ability_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Ability_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_item_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Item_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Item_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_buff.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Buff.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | nil | Get the owner of the ability responsible for the modifier.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Buff",
-                    "signature": "() => CDOTA_BaseNPC | nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdotabaseability.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTABaseAbility.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | Get the owner of this ability.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTABaseAbility",
-                    "signature": "() => CDOTA_BaseNPC"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.getabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.GetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => Vector",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "() => Vector"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::addfowviewer",
-                  "sourceKind": "raw_reference",
-                  "title": "AddFOWViewer",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID | Add temporary vision for a given team.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundon",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOn",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, entity: CBaseEntity) => nil | Play named sound on Entity.",
-                  "score": 135,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, entity: CBaseEntity) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundonclient",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOnClient",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, arg2: handle) => nil | Play named sound only on the client for the passed in player.",
-                  "score": 93,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, arg2: handle) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.setabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.SetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: (origin: Vector) => nil",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "(origin: Vector) => nil"
-                  }
-                },
-                {
-                  "id": "workspace::evidence::1",
-                  "sourceKind": "workspace_evidence",
-                  "title": "Owned artifact target",
-                  "snippet": "game/scripts/npc/npc_abilities_custom.txt"
-                },
-                {
-                  "id": "vscripts/api.json::api-function::anglediff",
-                  "sourceKind": "raw_reference",
-                  "title": "AngleDiff",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (arg1: float, arg2: float) => float | Returns the number of degrees difference between two yaw angles.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(arg1: float, arg2: float) => float"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: NO_TARGET",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "NO_TARGET"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum-member | sig: 4",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "4"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "panorama"
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "vscripts/enums.json",
-                  "snippet": "[vscripts] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "vscripts"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum::abilitybehavior",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "engine"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_affected_by_mute",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_AFFECTED_BY_MUTE",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: AFFECTED_BY_MUTE",
-                  "score": 102,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "AFFECTED_BY_MUTE"
-                  }
-                }
-              ],
-              "assumptions": [
-                "The Q-triggered activation is satisfied by wiring this ability into the appropriate ability slot/key binding outside this artifact.",
-                "The orb-following behavior is represented as ephemeral server-side state on the caster via a modifier rather than a separate spawned controllable unit.",
-                "Ability special values may be provided in KV using orb_duration, interval_seconds, damage_radius, damage_per_tick, orb_offset_distance, and fow_radius; safe defaults are used when absent.",
-                "Nearby enemy lookup uses standard server-side radius queries centered on the computed orb position.",
-                "Periodic damage is applied on the server using ApplyDamage with the ability's configured damage type and target filters.",
-                "The Q key binding is handled by normal Dota 2 ability slot assignment outside this KV artifact.",
-                "The orb-following behavior and periodic damage logic are implemented in the referenced Lua ScriptFile.",
-                "A no-target active ability is the correct host-native activation surface for this feature.",
-                "Special values duration, interval_seconds, radius, and damage are sufficient for the paired server runtime implementation."
-              ]
-            },
-            "reviewReasons": [
-              "Module 'mod_typed_orb_periodic_damage' was synthesized because no reusable family/pattern implementation fully matched it.",
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
-          },
-          {
-            "moduleId": "mod_func_0",
-            "role": "gameplay-core",
-            "category": "effect",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [],
-            "artifactTargets": [
-              "server",
-              "config"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_func_0.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "guided_native",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_func_0.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "guided_native",
-            "summary": "Synthesized implementation for unresolved module 'effect_application'",
-            "requiredOutputs": [
-              "server.runtime",
-              "host.config.kv",
-              "Spawned temporary fire orb",
-              "Repeated enemy damage events",
-              "fire orb instance"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [
-              "state:fire_orb_active",
-              "owner:feature",
-              "lifetime:ephemeral",
-              "mutation:create",
-              "state:fire_orb_expire",
-              "mutation:expire"
-            ],
-            "synthesizedArtifactIds": [
-              "micro_feature_sewp_mod_func_0_lua",
-              "micro_feature_sewp_mod_func_0_kv"
-            ],
-            "requiresReview": true,
-            "metadata": {
-              "promptPackageId": "synthesis.module",
-              "evidenceRefs": [
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Dota2 Capability Awareness",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The policy may assume the following high-level host facts:\n\n- Dota2 has server/shared/UI output surfaces\n- Dota2 supports host-native KV configuration for many ability properties\n- Dota2 also requires script logic for more complex runtime behavior\n- UI is realized through Panoram",
-                  "score": 0.22950819672131148,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Dota2 Capability Awareness"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::16"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Decision Order v1",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "For each realization unit, Dota2 Host Realization v1 should apply roughly this order:\n\n1. Is the unit clearly a UI surface?\n- if yes, route to `ui`\n\n2. Is the unit clearly expressible as host-native static configuration only?\n- if yes, bias to `kv`\n\n3. Does the unit require custo",
-                  "score": 0.2459016393442623,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Decision Order v1"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21"
-                  }
-                },
-                {
-                  "id": "docs::HOST-REALIZATION-CONTRACT.md::10",
-                  "sourceKind": "governance",
-                  "title": "Host Realization Contract > Decision Rules",
-                  "path": "D:\\Rune Weaver\\docs\\HOST-REALIZATION-CONTRACT.md",
-                  "snippet": "Host Realization must prefer rules over freeform model behavior.\n\nFor the current project stage, Host Realization v1 should be implemented as:\n\n- host-specific\n- rule-first\n- deterministic\n- reviewable\n\nIt should not initially depend on a separate realization LLM.\n\nThis does not ",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Host Realization Contract",
-                      "Decision Rules"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::HOST-REALIZATION-CONTRACT.md::10"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > KV + TS Hybrid Cases",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The following categories should generally bias toward `kv+ts`:\n\n- Dota2 ability shell defined statically, but behavior implemented dynamically\n- modifier registration via host-native naming/config with runtime logic in TS\n- features where the host expects ability or modifier meta",
-                  "score": 0.21311475409836064,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "KV + TS Hybrid Cases"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::events::README.md::8",
-                  "sourceKind": "curated_host",
-                  "title": "Dota2 Events Knowledge > 5. 事件分类速查 > 按用途分类",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\events\\README.md",
-                  "snippet": "```\nlifecycle          -> 游戏生命周期（开始、结束、状态切换）\nplayer             -> 玩家相关（连接、断开、操作）\ncombat             -> 战斗相关（击杀、伤害、治疗）\nability            -> 技能相关（施法、冷却、效果）\nui                 -> 界面相关（点击、悬停、动画）\n```",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Events Knowledge",
-                      "5. 事件分类速查",
-                      "按用途分类"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::api::events::README.md::8"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7",
-                  "sourceKind": "curated_host",
-                  "title": "State Sync 与 Tables > 3. 核心要点 > 3.5 UI 端订阅模式",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\state-sync-and-tables.md",
-                  "snippet": "```typescript\nclass ResourceBarUI {\n  playerID: PlayerID;\n  resources: Map<string, { current: number; max: number }> = new Map();\n  \n  constructor(playerID: PlayerID) {\n    this.playerID = playerID;\n    \n    // 获取初始值\n    const initialData = CustomNetTables.GetTableValue(\n      \"r",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "State Sync 与 Tables",
-                      "3. 核心要点",
-                      "3.5 UI 端订阅模式"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::state-sync-and-tables.md::7"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4",
-                  "sourceKind": "curated_host",
-                  "title": "Custom Events 与网络通信 > 3. 核心要点 > 3.2 Server → UI 事件",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\custom-events-and-networking.md",
-                  "snippet": "```typescript\n// 发送给指定玩家\nfunction sendToPlayer(playerID: PlayerID, eventName: string, data: object): void {\n  const player = PlayerResource.GetPlayer(playerID);\n  if (player) {\n    CustomGameEventManager.Send_ServerToPlayer(\n      player,\n      eventName,\n      data\n    );\n  }\n}\n",
-                  "score": 0.06557377049180328,
-                  "metadata": {
-                    "headingPath": [
-                      "Custom Events 与网络通信",
-                      "3. 核心要点",
-                      "3.2 Server → UI 事件"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-systems::custom-events-and-networking.md::4"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities 与 Casting 实现 > 3. 核心要点 > 3.3 常用技能方法",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-typescript\\abilities-and-casting.md",
-                  "snippet": "**施法相关**:\n| 方法 | 用途 |\n|------|------|\n| `OnSpellStart()` | 施法开始时调用 |\n| `GetCaster()` | 获取施法者 |\n| `GetCursorTarget()` | 获取目标单位 |\n| `GetCursorPosition()` | 获取目标位置 |\n| `GetSpecialValueFor(name)` | 获取 KV 中定义的数值 |\n\n**冷却/消耗**:\n| 方法 | 用途 |\n|------|------|\n| `GetCooldown(level)` | 获取冷却时间",
-                  "score": 0.08196721311475409,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities 与 Casting 实现",
-                      "3. 核心要点",
-                      "3.3 常用技能方法"
-                    ],
-                    "headingLevel": 3,
-                    "sourceChunkId": "knowledge::dota2-host::slices::scripting-typescript::abilities-and-casting.md::6"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_ability_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Ability_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Ability_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_item_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Item_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => nil | Cast time finished, spell effects begin.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Item_Lua",
-                    "signature": "() => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_buff.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Buff.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | nil | Get the owner of the ability responsible for the modifier.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Buff",
-                    "signature": "() => CDOTA_BaseNPC | nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdotabaseability.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTABaseAbility.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => CDOTA_BaseNPC | Get the owner of this ability.",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTABaseAbility",
-                    "signature": "() => CDOTA_BaseNPC"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.getabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.GetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: () => Vector",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "() => Vector"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::addfowviewer",
-                  "sourceKind": "raw_reference",
-                  "title": "AddFOWViewer",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID | Add temporary vision for a given team.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundon",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOn",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, entity: CBaseEntity) => nil | Play named sound on Entity.",
-                  "score": 135,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, entity: CBaseEntity) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundonclient",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOnClient",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (soundName: string, arg2: handle) => nil | Play named sound only on the client for the passed in player.",
-                  "score": 93,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, arg2: handle) => nil"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.setabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.SetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-member | sig: (origin: Vector) => nil",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "(origin: Vector) => nil"
-                  }
-                },
-                {
-                  "id": "workspace::evidence::1",
-                  "sourceKind": "workspace_evidence",
-                  "title": "Owned artifact target",
-                  "snippet": "game/scripts/npc/npc_abilities_custom.txt"
-                },
-                {
-                  "id": "vscripts/api.json::api-function::anglediff",
-                  "sourceKind": "raw_reference",
-                  "title": "AngleDiff",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (arg1: float, arg2: float) => float | Returns the number of degrees difference between two yaw angles.",
-                  "score": 3,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(arg1: float, arg2: float) => float"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: NO_TARGET",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "NO_TARGET"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_no_target",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum-member | sig: 4",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "4"
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "panorama/enums.json",
-                  "snippet": "[panorama] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "panorama"
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "vscripts/enums.json",
-                  "snippet": "[vscripts] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "vscripts"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum::abilitybehavior",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum",
-                  "score": 132,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "engine"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_affected_by_mute",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_AFFECTED_BY_MUTE",
-                  "path": "engine-enums.json",
-                  "snippet": "[engine] enum-member | sig: AFFECTED_BY_MUTE",
-                  "score": 102,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "AFFECTED_BY_MUTE"
-                  }
-                }
-              ],
-              "assumptions": [
-                "This artifact is the server-side Lua ability file only; ability KV wiring, hotkey/Q binding, and ScriptFile linkage are defined elsewhere in the owned config scope.",
-                "The orb instance is represented host-natively as a timed modifier plus attached particle/sound on the caster, which satisfies the temporary follow behavior without creating a separate persistent entity.",
-                "If SpecialValues are absent in KV, the implementation falls back to duration=2.0, tick_interval=0.5, radius=300, and damage_per_tick=30.",
-                "Nearby enemy damage is evaluated around the caster's current position because the orb follows the caster continuously.",
-                "Refreshing/recasting while active reapplies or refreshes the same modifier rather than spawning multiple concurrent orb instances.",
-                "The skill is implemented as a standard active no-target ability, which can be bound to Q through normal Dota ability slot assignment rather than explicit KV key-binding data.",
-                "A Lua script at rune_weaver/abilities/rw_micro_feature_sewp_mod_func_0 will handle orb spawning, following behavior, timed expiration, and periodic enemy damage.",
-                "AFFECTED_BY_MUTE is included so the active skill respects mute state.",
-                "Single-level tuning is sufficient for this micro feature.",
-                "Damage radius was set to 250 as a reasonable host-native default for 'nearby enemies'.",
-                "Damage per tick was set to 30 as a reasonable host-native default because the blueprint did not specify damage numbers."
-              ]
-            },
-            "reviewReasons": [
-              "Module 'mod_func_0' was synthesized because no reusable family/pattern implementation fully matched it.",
-              "Module includes synthesized host-native implementation and should remain reviewable."
-            ]
-          }
-        ],
-        "selectedPatterns": [],
-        "generatedFiles": [
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_trigger_q_activate.lua",
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_spawn_fire_orb.lua",
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_typed_orb_periodic_damage.lua",
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_sewp_mod_func_0.lua",
-          "game/scripts/npc/npc_abilities_custom.txt"
-        ],
-        "entryBindings": [
-          {
-            "target": "server",
-            "file": "game/scripts/src/modules/index.ts",
-            "kind": "import"
-          }
-        ],
-        "integrationPoints": [],
-        "gapFillBoundaries": [],
-        "maturity": "exploratory",
-        "implementationStrategy": "exploratory",
-        "featureContract": {
-          "exports": [
-            {
-              "id": "fire_orb_active",
-              "kind": "state",
-              "summary": "Temporary active fire orb following the caster."
-            },
-            {
-              "id": "fire_orb_expire",
-              "kind": "state",
-              "summary": "Orb expiration after its timed duration."
-            },
-            {
-              "id": "skill_activation_entry",
-              "kind": "integration",
-              "summary": "Entry point for Q-triggered skill activation."
-            },
-            {
-              "id": "nearby_enemy_query",
-              "kind": "integration",
-              "summary": "Host-side lookup for enemies near the orb or caster-following orb position."
-            }
-          ],
-          "consumes": [
-            {
-              "id": "trigger_q_activate",
-              "kind": "event",
-              "summary": "Activate the skill when Q is pressed."
-            },
-            {
-              "id": "spawn_fire_orb",
-              "kind": "capability",
-              "summary": "Spawn a fire orb that follows the caster."
-            },
-            {
-              "id": "orb_periodic_damage",
-              "kind": "event",
-              "summary": "The fire orb periodically damages nearby enemies."
-            }
-          ],
-          "integrationSurfaces": [
-            "skill_activation_entry",
-            "nearby_enemy_query"
-          ],
-          "stateScopes": [
-            {
-              "stateId": "fire_orb_active",
-              "scope": "local",
-              "owner": "feature",
-              "summary": "Temporary active fire orb following the caster."
-            },
-            {
-              "stateId": "fire_orb_expire",
-              "scope": "local",
-              "owner": "feature",
-              "summary": "Orb expiration after its timed duration."
-            }
-          ]
-        },
-        "validationStatus": {
-          "status": "needs_review",
-          "warnings": [
-            "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees",
-            "Scheduler/timer semantics need synthesis (delay/periodic/cooldown orchestration is synthesis-safe on this seam).",
-            "Spawn/emission semantics require synthesis but remain seam-safe via feature-owned spawn emitter composition.",
-            "Standalone entity/session state semantics require synthesis via feature-owned session state."
-          ],
-          "blockers": [],
-          "lastValidatedAt": "2026-04-19T05:32:28.103Z",
-          "blueprint": {
-            "status": "needs_review",
-            "warnings": [
-              "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees",
-              "Scheduler/timer semantics need synthesis (delay/periodic/cooldown orchestration is synthesis-safe on this seam).",
-              "Spawn/emission semantics require synthesis but remain seam-safe via feature-owned spawn emitter composition.",
-              "Standalone entity/session state semantics require synthesis via feature-owned session state."
-            ],
-            "blockers": [],
-            "summary": "Blueprint planning-stage validation"
-          },
-          "repair": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-19T05:32:28.103Z"
-          },
-          "dependency": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-19T05:32:28.103Z"
-          },
-          "host": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Host validation",
-            "checkedAt": "2026-04-19T05:32:28.103Z"
-          },
-          "runtime": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Runtime validation",
-            "checkedAt": "2026-04-19T05:32:28.103Z"
-          }
-        },
-        "commitDecision": {
-          "outcome": "exploratory",
-          "canAssemble": true,
-          "canWriteHost": true,
-          "requiresReview": true,
-          "reasons": [
-            "[module:mod_typed_trigger_q_activate] Module 'mod_typed_trigger_q_activate' was synthesized because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_typed_trigger_q_activate] Module includes synthesized host-native implementation and should remain reviewable.",
-            "[module:mod_typed_spawn_fire_orb] Module 'mod_typed_spawn_fire_orb' was synthesized because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_typed_spawn_fire_orb] Module includes synthesized host-native implementation and should remain reviewable.",
-            "[module:mod_typed_orb_periodic_damage] Module 'mod_typed_orb_periodic_damage' was synthesized because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_typed_orb_periodic_damage] Module includes synthesized host-native implementation and should remain reviewable.",
-            "[module:mod_func_0] Module 'mod_func_0' was synthesized because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_func_0] Module includes synthesized host-native implementation and should remain reviewable.",
-            "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees",
-            "Scheduler/timer semantics need synthesis (delay/periodic/cooldown orchestration is synthesis-safe on this seam).",
-            "Spawn/emission semantics require synthesis but remain seam-safe via feature-owned spawn emitter composition.",
-            "Standalone entity/session state semantics require synthesis via feature-owned session state."
-          ],
-          "stage": "final",
-          "impactedFeatures": [],
-          "dependencyBlockers": [],
-          "downgradedFeatures": [],
-          "reviewModules": [
-            "mod_typed_trigger_q_activate",
-            "mod_typed_spawn_fire_orb",
-            "mod_typed_orb_periodic_damage",
-            "mod_func_0"
-          ]
-        },
-        "createdAt": "2026-04-19T05:32:28.104Z",
-        "updatedAt": "2026-04-19T05:32:28.104Z"
+        "createdAt": "2026-04-19T16:48:43.644Z",
+        "updatedAt": "2026-04-19T16:49:56.364Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-19T06:51:15.574Z",
+    "exportedAt": "2026-04-19T16:49:56.366Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\test3",
+    "sourceHostRoot": "D:\\rw-demo-run-05",
     "version": "0.1"
   }
 }

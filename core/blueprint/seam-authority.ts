@@ -3,6 +3,7 @@ import {
   BlueprintProposal,
   IntentRequirement,
   IntentSchema,
+  ModuleFacetSpec,
   ModuleNeed,
 } from "../schema/types";
 import { collectIntentStrings, collectTypedParameterKeys, readPositiveNumber } from "./semantic-lexical";
@@ -45,13 +46,21 @@ export function assessSemanticCompleteness(
   schema: IntentSchema,
   modules: BlueprintModule[],
   moduleNeeds: ModuleNeed[],
-  proposal: BlueprintProposal
+  proposal: BlueprintProposal,
+  moduleFacets: ModuleFacetSpec[] = [],
 ): SemanticAssessment {
   const findings: SemanticRiskFinding[] = [];
   const blockers = new Set<string>();
   const warnings = new Set<string>();
   const notes = new Set<string>();
   const typedRequirements = schema.requirements.typed || [];
+  const facetsByBackbone = new Map<string, ModuleFacetSpec[]>();
+
+  for (const facet of moduleFacets) {
+    const existing = facetsByBackbone.get(facet.backboneModuleId) || [];
+    existing.push(facet);
+    facetsByBackbone.set(facet.backboneModuleId, existing);
+  }
 
   if (proposal.blockedBy && proposal.blockedBy.length > 0) {
     for (const blocker of proposal.blockedBy) {
@@ -68,7 +77,12 @@ export function assessSemanticCompleteness(
     }
   }
 
-  if (typedRequirements.length === 0 && schema.requirements.functional.length === 0) {
+  const hasSemanticInputs =
+    typedRequirements.length > 0
+    || schema.requirements.functional.length > 0
+    || Object.values(schema.normalizedMechanics || {}).some((value) => value === true);
+
+  if (!hasSemanticInputs) {
     warnings.add("IntentSchema does not provide any functional or typed requirements for FinalBlueprint normalization.");
   }
 
@@ -80,7 +94,17 @@ export function assessSemanticCompleteness(
     const category = resolveRequirementCategoryForAssessment(requirement, schema);
     const matchingNeed = moduleNeeds.find((need) => {
       const module = modules.find((item) => item.id === need.moduleId);
-      return module?.category === category;
+      if (!module) {
+        return false;
+      }
+      if (module.category === category) {
+        return true;
+      }
+      if (module.planningKind !== "backbone") {
+        return false;
+      }
+      const facets = facetsByBackbone.get(module.id) || [];
+      return facets.some((facet) => facet.category === category);
     });
 
     if (!matchingNeed) {

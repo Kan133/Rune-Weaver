@@ -8,6 +8,60 @@ import {
   saveUpdateSemanticArtifacts,
 } from "./semantic-artifacts.js";
 
+const sampleBlueprint = {
+  id: "bp_draft",
+  version: "1.0",
+  summary: "draft",
+  sourceIntent: {
+    intentKind: "standalone-system",
+    goal: "draft",
+    normalizedMechanics: {},
+  },
+  modules: [],
+  connections: [],
+  patternHints: [],
+  assumptions: [],
+  validations: [],
+  readyForAssembly: true,
+} as any;
+
+const sampleFinalBlueprint = {
+  ...sampleBlueprint,
+  id: "bp_final",
+  status: "ready",
+  moduleNeeds: [],
+  designDraft: {
+    modulePlan: [],
+    retrievedFamilyCandidates: [],
+    retrievedPatternCandidates: [],
+    reuseConfidence: "low",
+    chosenImplementationStrategy: "exploratory",
+    artifactTargets: ["server"],
+    notes: [],
+  },
+  maturity: "exploratory",
+  implementationStrategy: "exploratory",
+  featureContract: {
+    exports: [],
+    consumes: [],
+    integrationSurfaces: [],
+    stateScopes: [],
+  },
+  validationStatus: {
+    status: "unvalidated",
+    warnings: [],
+    blockers: [],
+  },
+  dependencyEdges: [],
+  commitDecision: {
+    outcome: "exploratory",
+    canAssemble: true,
+    canWriteHost: true,
+    requiresReview: true,
+    reasons: [],
+  },
+} as any;
+
 const tempRoot = mkdtempSync(join(tmpdir(), "rw-semantic-artifacts-"));
 
 function cleanup(): void {
@@ -23,6 +77,8 @@ function testCreateWriteExportsFeatureLocalIntentSchema(): void {
     reviewOutputDir: join(tempRoot, "review"),
     commandKind: "create",
     generatedAt: "2026-04-18T00:00:00.000Z",
+    blueprint: sampleBlueprint,
+    finalBlueprint: sampleFinalBlueprint,
     intentSchema: {
       version: "1.0",
       host: { kind: "dota2-x-template" },
@@ -60,6 +116,30 @@ function testCreateWriteExportsFeatureLocalIntentSchema(): void {
 
   assert.equal(result.intentSchemaPath, expectedPath);
   assert.equal(existsSync(expectedPath), true);
+  assert.equal(existsSync(join(
+    hostRoot,
+    "game",
+    "scripts",
+    "src",
+    "rune_weaver",
+    "features",
+    "talent_draw_demo",
+    "artifacts",
+    "semantic",
+    "blueprint.create.json",
+  )), true);
+  assert.equal(existsSync(join(
+    hostRoot,
+    "game",
+    "scripts",
+    "src",
+    "rune_weaver",
+    "features",
+    "talent_draw_demo",
+    "artifacts",
+    "semantic",
+    "final-blueprint.create.json",
+  )), true);
 
   const payload = JSON.parse(readFileSync(expectedPath, "utf-8"));
   assert.equal(payload.featureId, "talent_draw_demo");
@@ -75,6 +155,8 @@ function testUpdateDryRunExportsReviewMirrorArtifacts(): void {
     reviewOutputDir,
     commandKind: "update",
     generatedAt: "2026-04-18T00:00:00.000Z",
+    blueprint: sampleBlueprint,
+    finalBlueprint: sampleFinalBlueprint,
     requestedChangeIntentSchema: {
       version: "1.0",
       host: { kind: "dota2-x-template" },
@@ -149,6 +231,8 @@ function testUpdateDryRunExportsReviewMirrorArtifacts(): void {
   assert.equal(result.rootDir, expectedRoot);
   assert.equal(existsSync(join(expectedRoot, "intent-schema.update.json")), true);
   assert.equal(existsSync(join(expectedRoot, "update-intent.json")), true);
+  assert.equal(existsSync(join(expectedRoot, "blueprint.update.json")), true);
+  assert.equal(existsSync(join(expectedRoot, "final-blueprint.update.json")), true);
 
   const updateIntentPayload = JSON.parse(readFileSync(join(expectedRoot, "update-intent.json"), "utf-8"));
   assert.equal(updateIntentPayload.featureId, "talent_draw_demo");

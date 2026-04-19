@@ -20,6 +20,7 @@ export interface InitResult {
   hostPath: string;
   addonName: string;
   initialized: boolean;
+  predevPrepared: boolean;
   workspaceFile: string;
   createdDirectories: string[];
   errors: string[];
@@ -33,6 +34,25 @@ export interface InitOptions {
   hostPath: string;
   addonName?: string; // 如果提供，直接使用；否则交互式询问
   skipInstall?: boolean;
+}
+
+function runPredevBootstrap(projectPath: string): { success: boolean; warning?: string } {
+  try {
+    console.log("\n🧱 正在执行 yarn predev...");
+    execSync("yarn predev", {
+      cwd: projectPath,
+      stdio: "inherit",
+    });
+    console.log("✅ yarn predev 完成");
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      warning: `yarn predev 执行失败，请手动运行以生成宿主预构建产物: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
 }
 
 /**
@@ -230,6 +250,7 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
     hostPath: resolve(options.hostPath),
     addonName: "",
     initialized: false,
+    predevPrepared: false,
     workspaceFile: "",
     createdDirectories: [],
     errors: [],
@@ -345,11 +366,19 @@ export async function initDota2Host(options: InitOptions): Promise<InitResult> {
         stdio: "inherit",
       });
       console.log("✅ yarn install 完成");
+
+      const predevResult = runPredevBootstrap(options.hostPath);
+      result.predevPrepared = predevResult.success;
+      if (!predevResult.success && predevResult.warning) {
+        result.warnings.push(predevResult.warning);
+      }
     } catch (error) {
       result.warnings.push("yarn install 执行失败，请手动运行");
+      result.warnings.push("由于依赖未完成安装，未执行 yarn predev");
     }
   } else {
     result.warnings.push("已跳过 yarn install，可稍后单独执行");
+    result.warnings.push("已跳过 yarn predev，可在 yarn install 后手动执行以生成宿主预构建产物");
   }
 
   return result;
@@ -467,6 +496,10 @@ export function printInitResult(result: InitResult): void {
     console.log("下一步:");
     if (result.warnings.includes("已跳过 yarn install，可稍后单独执行")) {
       console.log("  1. 运行 `yarn install` 安装并链接宿主依赖");
+      console.log("  2. 运行 `yarn predev` 生成宿主预构建产物");
+      console.log("  3. 运行 `yarn launch` 启动 Dota2 Tools");
+    } else if (!result.predevPrepared) {
+      console.log("  1. 运行 `yarn predev` 生成宿主预构建产物");
       console.log("  2. 运行 `yarn launch` 启动 Dota2 Tools");
     } else {
       console.log("  1. 运行 `yarn launch` 启动 Dota2 Tools");

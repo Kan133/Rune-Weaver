@@ -97,7 +97,12 @@ export async function runRegenerateCommand(
   console.log(`   IntentSchema Semantic Posture: ${getIntentSemanticPosture(schema)}`);
   console.log(`   IntentSchema Uncertainties: ${schema.uncertainties?.length || 0}`);
 
-  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount } = deps.buildBlueprint(
+  const {
+    finalBlueprint,
+    issues: blueprintIssues,
+    status: blueprintStatus,
+    moduleNeedsCount,
+  } = deps.buildBlueprint(
     schema,
     {
       prompt: options.prompt,
@@ -108,7 +113,9 @@ export async function runRegenerateCommand(
       proposalSource: usedFallback ? "fallback" : "llm",
     },
   );
-  if (!blueprint) {
+  const blueprint = finalBlueprint;
+  const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
+  if (!blueprint || !canContinueBlueprint) {
     console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
     return false;
   }

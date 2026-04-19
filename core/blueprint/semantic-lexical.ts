@@ -1,11 +1,12 @@
 import { IntentSchema } from "../schema/types";
 
 const NEGATIVE_CONSTRAINT_PATTERNS = [
-  /\bwith\s+no\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)(?:\s*(?:,|and|or)\s*(?:no\s+)?(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?))*\b/giu,
-  /\bwithout\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
+  /\bwith\s+no\s+(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)(?:\s*(?:,|and|or)\s*(?:no\s+)?(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?))*\b/giu,
+  /\bwithout\s+(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
   /\b(?:do not|don't|must not|mustn't|should not)\s+add\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
-  /\bno\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
-  /(?:不要|不需要|无需|别)\s*(?:ui|界面|inventory|背包|库存|persistence|持久化|跨\s*feature|跨feature|跨功能|跨特性)/giu,
+  /\b(?:do not|don't|must not|mustn't|should not)\s+(?:use|include|introduce|require|depend on|couple to)\s+(?:any\s+)?(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
+  /\bno\s+(?:ui|inventory|inventory\s+mechanics|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
+  /\b(?:is|are|be|remain|stays?)\s+not\s+(?:persistent|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
 ];
 
 export function stripNegativeConstraintFragments(value: string): string {

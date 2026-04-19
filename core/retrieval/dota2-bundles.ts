@@ -277,6 +277,9 @@ function getPreservedModuleBackbone(input: BuildDota2RetrievalBundleInput): stri
   if (!currentFeatureContext) {
     return [];
   }
+  if ((currentFeatureContext.sourceBackedInvariantRoles || []).length > 0) {
+    return currentFeatureContext.sourceBackedInvariantRoles || [];
+  }
   if ((currentFeatureContext.preservedModuleBackbone || []).length > 0) {
     return currentFeatureContext.preservedModuleBackbone;
   }

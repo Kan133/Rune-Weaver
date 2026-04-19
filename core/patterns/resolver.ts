@@ -67,6 +67,9 @@ export interface ResolutionIssue {
 interface RuntimeModuleNeed {
   moduleId: string;
   semanticRole: string;
+  backboneKind?: UnresolvedModuleNeed["backboneKind"];
+  facetIds?: string[];
+  coLocatePreferred?: boolean;
   requiredCapabilities: string[];
   optionalCapabilities: string[];
   requiredOutputs: string[];
@@ -283,6 +286,9 @@ function buildResolvedModuleRecord(
     role: need.semanticRole,
     category: existingRecord?.category || need.sourceModule?.category,
     sourceKind,
+    planningKind: existingRecord?.planningKind || need.sourceModule?.planningKind,
+    backboneKind: existingRecord?.backboneKind || need.sourceModule?.backboneKind,
+    facetIds: existingRecord?.facetIds || need.sourceModule?.facetIds,
     familyId: existingRecord?.familyId,
     patternId: resolved.patternId,
     selectedPatternIds,
@@ -330,6 +336,9 @@ function buildUnresolvedModuleNeed(
     semanticRole: need.semanticRole,
     category: existingRecord?.category || need.sourceModule?.category,
     reason: unresolved.reason,
+    backboneKind: existingRecord?.backboneKind || need.backboneKind || need.sourceModule?.backboneKind,
+    facetIds: existingRecord?.facetIds || need.facetIds || need.sourceModule?.facetIds,
+    coLocatePreferred: need.coLocatePreferred || need.sourceModule?.planningKind === "backbone",
     requiredCapabilities: [...need.requiredCapabilities],
     optionalCapabilities: [...need.optionalCapabilities],
     requiredOutputs: [...need.requiredOutputs],
@@ -454,6 +463,10 @@ function extractExplicitModuleNeeds(
       const normalized: RuntimeModuleNeed = {
         moduleId: readString(runtimeNeed.moduleId) || `module_need_${index}`,
         semanticRole: readString(runtimeNeed.semanticRole) || `module_need_${index}`,
+        backboneKind:
+          readString(runtimeNeed.backboneKind) as UnresolvedModuleNeed["backboneKind"] | undefined,
+        facetIds: normalizeStringArray(runtimeNeed.facetIds),
+        coLocatePreferred: runtimeNeed.coLocatePreferred === true,
         requiredCapabilities: normalizeStringArray(runtimeNeed.requiredCapabilities),
         optionalCapabilities: normalizeStringArray(runtimeNeed.optionalCapabilities),
         requiredOutputs: normalizeStringArray(runtimeNeed.requiredOutputs),
@@ -500,6 +513,9 @@ function deriveNeedFromBlueprintModule(
   return {
     moduleId: module.id,
     semanticRole: module.role,
+    backboneKind: module.backboneKind,
+    facetIds: module.facetIds,
+    coLocatePreferred: module.planningKind === "backbone",
     requiredCapabilities,
     optionalCapabilities: deriveOptionalCapabilities(module, blueprint.sourceIntent.normalizedMechanics, context),
     requiredOutputs,

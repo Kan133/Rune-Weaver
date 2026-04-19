@@ -253,6 +253,9 @@ function buildReadiness(
 }
 
 function classifyBundleKind(need: UnresolvedModuleNeed): SynthesisBundleKind {
+  if (need.backboneKind) {
+    return need.backboneKind;
+  }
   const targets = new Set(need.artifactTargets || []);
   const isUiOnly =
     need.category === "ui"
@@ -321,7 +324,7 @@ function buildSynthesisBundles(
     const ownedScopeRoot = inferBundleOwnedScopeRoot(need, kind);
     const lifecycleBoundary = inferBundleLifecycleBoundary(need, kind);
     const bundleKey =
-      kind === "gameplay_ability"
+      kind === "gameplay_ability" && need.coLocatePreferred !== false
         ? [entrySurface, kind, ownedScopeRoot, lifecycleBoundary].join("::")
         : [entrySurface, kind, ownedScopeRoot, lifecycleBoundary, need.moduleId].join("::");
 
@@ -747,6 +750,8 @@ function mergeModuleNeedsForPrompt(
 ): UnresolvedModuleNeed {
   return {
     ...primaryNeed,
+    facetIds: uniqueStrings(moduleNeeds.flatMap((need) => need.facetIds || [])),
+    coLocatePreferred: moduleNeeds.some((need) => need.coLocatePreferred),
     semanticRole: uniqueStrings(moduleNeeds.map((need) => need.semanticRole)).join(" | "),
     reason:
       bundleId && moduleNeeds.length > 1
@@ -964,6 +969,9 @@ function buildFallbackUnresolvedModuleNeeds(blueprint: Blueprint): UnresolvedMod
     semanticRole: module.role,
     category: module.category,
     reason: `No reusable implementation was admitted for module '${module.role}'.`,
+    backboneKind: module.backboneKind,
+    facetIds: module.facetIds,
+    coLocatePreferred: module.planningKind === "backbone",
     requiredCapabilities: [],
     requiredOutputs:
       module.category === "ui"
@@ -1119,6 +1127,9 @@ function synthesizeBundle(
       role: need.semanticRole,
       category: need.category,
       sourceKind: "synthesized",
+      planningKind: need.backboneKind ? "backbone" : undefined,
+      backboneKind: need.backboneKind,
+      facetIds: need.facetIds,
       selectedPatternIds: [],
       artifactTargets: bundleArtifactTargets,
       ownedPaths: bundleArtifactPaths,

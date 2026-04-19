@@ -221,6 +221,86 @@ withSyntheticPatterns(() => {
 }
 
 {
+  const result = buildBlueprint({
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Create one active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies every second. No UI, no inventory, no persistence.",
+      goal: "Create one active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies every second. No UI, no inventory, no persistence.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Create one active skill.",
+        "Summon a fireball near the hero.",
+        "Follow the hero for 5 seconds.",
+        "Burn nearby enemies every second.",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Cast one active skill.",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Track the temporary fireball instance for 5 seconds.",
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Run the 5 second burn cadence with 1 second ticks.",
+          parameters: { durationSeconds: 5, intervalSeconds: 1 },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Spawn the fireball near the hero and burn nearby enemies.",
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    stateModel: {
+      states: [{ id: "fireball_runtime", summary: "Runtime fireball instance", owner: "feature", lifetime: "round" }],
+    },
+    timing: {
+      duration: { kind: "timed", seconds: 5 },
+      intervalSeconds: 1,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  });
+  assert.ok(result.finalBlueprint);
+  const resolution = resolvePatterns(result.finalBlueprint!);
+
+  assert.equal(result.finalBlueprint?.moduleNeeds.length, 1);
+  assert.equal(resolution.unresolvedModuleNeeds.length, 1);
+  assert.equal(resolution.unresolvedModuleNeeds[0]?.backboneKind, "gameplay_ability");
+  assert.equal(resolution.unresolvedModuleNeeds[0]?.coLocatePreferred, true);
+  assert.ok((resolution.unresolvedModuleNeeds[0]?.facetIds || []).length >= 4);
+}
+
+{
   const rewardSchema: IntentSchema = {
     version: "1.0",
     host: { kind: "dota2-x-template" },

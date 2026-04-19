@@ -2,6 +2,7 @@ import {
   BlueprintModule,
   IntentRequirement,
   IntentSchema,
+  ModuleFacetSpec,
   ModuleNeed,
 } from "../schema/types";
 import { CORE_PATTERN_IDS } from "../patterns/canonical-patterns";
@@ -142,7 +143,8 @@ export function describeMechanicResponsibility(
 
 export function inferRoleFromCategory(
   category: BlueprintModule["category"],
-  contextSignals: string[] = []
+  contextSignals: string[] = [],
+  allowSelectionFlow = false,
 ): string {
   const sanitizedSignals = contextSignals
     .map((signal) => stripNegativeConstraintFragments(signal))
@@ -153,7 +155,7 @@ export function inferRoleFromCategory(
   }
 
   if (category === "rule") {
-    return inferRuleSemanticRole(sanitizedSignals, true);
+    return inferRuleSemanticRole(sanitizedSignals, allowSelectionFlow);
   }
 
   const roleMap: Record<BlueprintModule["category"], string> = {
@@ -205,7 +207,14 @@ export function inferCategoryFromRequirement(
   if (reqLower.includes("效果") || reqLower.includes("技能") || reqLower.includes("冲刺")) {
     return "effect";
   }
-  if (reqLower.includes("ui") || reqLower.includes("界面") || reqLower.includes("显示")) {
+  if (
+    /\bui\b/i.test(reqLower) ||
+    /\bpanel\b/i.test(reqLower) ||
+    /\bmodal\b/i.test(reqLower) ||
+    /\bhud\b/i.test(reqLower) ||
+    reqLower.includes("界面") ||
+    reqLower.includes("显示")
+  ) {
     return "ui";
   }
   if (reqLower.includes("资源") || reqLower.includes("消耗")) {
@@ -250,21 +259,59 @@ export function getCanonicalPatternIds(
 
 export function buildModuleNeeds(
   schema: IntentSchema,
-  modules: BlueprintModule[]
+  modules: BlueprintModule[],
+  moduleFacets: ModuleFacetSpec[] = [],
 ): ModuleNeed[] {
-  return modules.map((module) => ({
-    moduleId: module.id,
-    semanticRole: module.role,
-    requiredCapabilities: inferRequiredCapabilities(module, schema),
-    optionalCapabilities: inferOptionalCapabilities(module, schema),
-    requiredOutputs: inferRequiredOutputs(module, schema),
-    stateExpectations: inferStateExpectations(module, schema),
-    integrationHints: inferIntegrationHints(module, schema),
-    invariants: inferInvariants(module, schema),
-    boundedVariability: inferBoundedVariability(module),
-    explicitPatternHints: inferExplicitPatternHints(module, schema),
-    prohibitedTraits: undefined,
-  }));
+  const facetsByBackbone = new Map<string, ModuleFacetSpec[]>();
+  for (const facet of moduleFacets) {
+    const existing = facetsByBackbone.get(facet.backboneModuleId) || [];
+    existing.push(facet);
+    facetsByBackbone.set(facet.backboneModuleId, existing);
+  }
+
+  return modules.map((module) => {
+    const facets = facetsByBackbone.get(module.id) || [];
+    if (module.planningKind === "backbone" && facets.length > 0) {
+      return {
+        moduleId: module.id,
+        semanticRole: module.role,
+        backboneKind: module.backboneKind,
+        facetIds: facets.map((facet) => facet.facetId),
+        coLocatePreferred: true,
+        requiredCapabilities: uniqueStrings(facets.flatMap((facet) => facet.requiredCapabilities || [])) || [],
+        optionalCapabilities: uniqueStrings(facets.flatMap((facet) => facet.optionalCapabilities || [])),
+        requiredOutputs: uniqueStrings(facets.flatMap((facet) => facet.requiredOutputs || [])),
+        stateExpectations: uniqueStrings(facets.flatMap((facet) => facet.stateExpectations || [])),
+        integrationHints: uniqueStrings(facets.flatMap((facet) => facet.integrationHints || [])),
+        invariants: uniqueStrings(facets.flatMap((facet) => facet.invariants || [])),
+        boundedVariability: inferBoundedVariability(module),
+        explicitPatternHints: inferExplicitPatternHints(module, schema),
+        prohibitedTraits: undefined,
+      };
+    }
+
+    return {
+      moduleId: module.id,
+      semanticRole: module.role,
+      backboneKind: module.backboneKind,
+      facetIds: module.facetIds,
+      coLocatePreferred: module.planningKind === "backbone",
+      requiredCapabilities: inferRequiredCapabilities(module, schema),
+      optionalCapabilities: inferOptionalCapabilities(module, schema),
+      requiredOutputs: inferRequiredOutputs(module, schema),
+      stateExpectations: inferStateExpectations(module, schema),
+      integrationHints: inferIntegrationHints(module, schema),
+      invariants: inferInvariants(module, schema),
+      boundedVariability: inferBoundedVariability(module),
+      explicitPatternHints: inferExplicitPatternHints(module, schema),
+      prohibitedTraits: undefined,
+    };
+  });
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] | undefined {
+  const deduped = Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0)));
+  return deduped.length > 0 ? deduped : undefined;
 }
 
 function mapRequirementKindToCategory(
@@ -495,7 +542,7 @@ function extractEffectParams(params: Record<string, unknown>): Record<string, un
   return result;
 }
 
-function inferExplicitPatternHints(
+export function inferExplicitPatternHints(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
@@ -542,7 +589,7 @@ function patternMatchesModuleCategory(
   }
 }
 
-function inferRequiredCapabilities(
+export function inferRequiredCapabilities(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] {
@@ -631,7 +678,7 @@ function inferRequiredCapabilities(
   return [...capabilities];
 }
 
-function inferOptionalCapabilities(
+export function inferOptionalCapabilities(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
@@ -676,7 +723,7 @@ function inferOptionalCapabilities(
   return optional.size > 0 ? [...optional] : undefined;
 }
 
-function inferRequiredOutputs(
+export function inferRequiredOutputs(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
@@ -733,7 +780,7 @@ function inferRequiredOutputs(
   return outputs.size > 0 ? [...outputs] : undefined;
 }
 
-function inferStateExpectations(
+export function inferStateExpectations(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
@@ -780,7 +827,7 @@ function inferStateExpectations(
   return [...expectations];
 }
 
-function inferIntegrationHints(
+export function inferIntegrationHints(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
@@ -854,7 +901,7 @@ function hasCooldownTimingSignal(
     || typeof module.parameters?.abilityCooldown === "number";
 }
 
-function inferInvariants(
+export function inferInvariants(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {

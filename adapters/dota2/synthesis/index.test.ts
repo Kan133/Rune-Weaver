@@ -132,6 +132,117 @@ function makeBundledExploratoryBlueprint(): Blueprint {
   } as Blueprint;
 }
 
+function makeBackboneExploratoryBlueprint(): Blueprint {
+  return {
+    id: "rw_fireball_follow",
+    version: "1.0",
+    summary: "An exploratory fireball-follow ability.",
+    sourceIntent: {
+      intentKind: "micro-feature",
+      goal: "Create one active skill that summons a fireball near the hero, follows the hero, and burns nearby enemies.",
+      normalizedMechanics: {
+        trigger: true,
+        outcomeApplication: true,
+      },
+    },
+    modules: [
+      {
+        id: "mod_gameplay_backbone_0",
+        role: "gameplay_ability",
+        category: "effect",
+        planningKind: "backbone",
+        backboneKind: "gameplay_ability",
+        facetIds: [
+          "facet_trigger",
+          "facet_timing",
+          "facet_state",
+          "facet_spawn",
+          "facet_motion",
+        ],
+        responsibilities: ["Create one active fireball ability."],
+      },
+    ],
+    moduleFacets: [
+      {
+        facetId: "facet_trigger",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "trigger",
+        role: "input_trigger",
+        category: "trigger",
+        requiredCapabilities: ["input.trigger.capture"],
+      },
+      {
+        facetId: "facet_timing",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "timing",
+        role: "timed_rule",
+        category: "rule",
+        requiredCapabilities: ["timing.interval.local"],
+      },
+      {
+        facetId: "facet_state",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "state",
+        role: "session_state",
+        category: "data",
+        requiredCapabilities: ["state.session.feature_owned"],
+      },
+      {
+        facetId: "facet_spawn",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "spawn",
+        role: "spawn_emitter",
+        category: "effect",
+        requiredCapabilities: ["emission.spawn.feature_owned"],
+      },
+      {
+        facetId: "facet_motion",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "motion",
+        role: "follow_owner_motion",
+        category: "effect",
+        requiredCapabilities: [],
+        optionalCapabilities: ["entity.motion.follow_owner"],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: false,
+    implementationStrategy: "exploratory",
+    unresolvedModuleNeeds: [
+      {
+        moduleId: "mod_gameplay_backbone_0",
+        semanticRole: "gameplay_ability",
+        category: "effect",
+        reason: "No reusable implementation matched the gameplay backbone.",
+        backboneKind: "gameplay_ability",
+        facetIds: [
+          "facet_trigger",
+          "facet_timing",
+          "facet_state",
+          "facet_spawn",
+          "facet_motion",
+        ],
+        coLocatePreferred: true,
+        requiredCapabilities: [
+          "input.trigger.capture",
+          "timing.interval.local",
+          "state.session.feature_owned",
+          "emission.spawn.feature_owned",
+        ],
+        optionalCapabilities: ["entity.motion.follow_owner"],
+        requiredOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+        artifactTargets: ["server", "config", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+    ],
+  } as Blueprint;
+}
+
 async function withDisabledLLM<T>(run: () => Promise<T>): Promise<T> {
   const keys = [
     "RW_LLM_PROCESS_ENV_OVERRIDES",
@@ -232,8 +343,23 @@ function testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility
   );
 }
 
+function testBuildSynthesizedAssemblyPlanPreservesBackboneTruth(): void {
+  const blueprint = makeBackboneExploratoryBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+
+  assert.equal(result.synthesis.bundles?.length, 1);
+  assert.equal(result.synthesis.moduleRecords?.length, 1);
+  assert.equal(result.synthesis.moduleRecords?.[0]?.planningKind, "backbone");
+  assert.equal(result.synthesis.moduleRecords?.[0]?.backboneKind, "gameplay_ability");
+  assert.deepEqual(
+    result.synthesis.moduleRecords?.[0]?.facetIds,
+    blueprint.modules[0]?.facetIds,
+  );
+}
+
 async function runTests() {
   testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility();
+  testBuildSynthesizedAssemblyPlanPreservesBackboneTruth();
   await testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPlan();
   await testGroundingIgnoresLocallyDefinedLuaHelpers();
   console.log("adapters/dota2/synthesis/index.test.ts passed");

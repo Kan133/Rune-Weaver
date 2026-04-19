@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-04-19T06:49:54.604Z",
+  "generatedAt": "2026-04-19T12:40:35.536Z",
   "commandKind": "maintenance",
   "applicableStages": [
     "intentSchema",
@@ -34,7 +34,7 @@
   },
   "intentSchema": {
     "usedFallback": false,
-    "intentKind": "standalone-system",
+    "intentKind": "micro-feature",
     "uiNeeded": true,
     "mechanics": [
       "trigger",
@@ -56,7 +56,7 @@
         "no persistence",
         "no cross-feature grants",
         "no arbitrary custom effect family",
-        "Keep the preserved module backbone stable unless the user explicitly asks for a rewrite: gameplay-core, shared-support, ui-surface"
+        "Keep the preserved module backbone stable unless the user explicitly asks for a rewrite: input_trigger, weighted_pool, selection_flow, selection_modal, effect_application"
       ],
       "mustNotAdd": [
         "Do not add persistence or cross-match storage unless explicitly required.",
@@ -83,13 +83,13 @@
   "stages": {
     "intentSchema": {
       "success": true,
-      "summary": "UpdateIntent created (LLM, uncertainties: 1)",
+      "summary": "UpdateIntent created (LLM, uncertainties: 0)",
       "issues": [],
       "usedFallback": false
     },
     "blueprint": {
       "success": true,
-      "summary": "FinalBlueprint weak (moduleNeeds: 5)",
+      "summary": "FinalBlueprint ready (moduleNeeds: 5)",
       "moduleCount": 5,
       "patternHints": [
         "input.key_binding",
@@ -98,11 +98,7 @@
         "rule.selection_flow",
         "ui.selection_modal"
       ],
-      "issues": [
-        "FINAL_BLUEPRINT_WEAK: FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees",
-        "PATTERN_HINTS_TIE_BREAK_ONLY: explicitPatternHints 仅作为 tie-break 输入，不代表最终 pattern authority",
-        "FINAL_BLUEPRINT_SEMANTIC_WARNING: Standalone entity/session state semantics require synthesis via feature-owned session state."
-      ]
+      "issues": []
     },
     "patternResolution": {
       "success": true,
@@ -113,234 +109,17 @@
         "input.key_binding",
         "rule.selection_flow"
       ],
-      "unresolvedPatterns": [
-        "<module:mod_typed_trigger.rebind>"
-      ],
+      "unresolvedPatterns": [],
       "issues": [],
-      "complete": false
+      "complete": true
     },
     "artifactSynthesis": {
       "success": true,
-      "triggered": true,
-      "strategy": "family",
-      "sourceKind": "synthesized",
-      "promptPackageId": "synthesis.module",
-      "artifacts": [
-        {
-          "id": "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_lua",
-          "moduleId": "mod_typed_trigger.rebind",
-          "outputKind": "lua",
-          "targetPath": "game/scripts/vscripts/rune_weaver/abilities/rw_talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1.lua",
-          "summary": "Server-side Lua ability artifact that preserves the existing talent draw activation behavior and updates the exported/configured trigger key from F4 to F5 via host-native constants/getters."
-        },
-        {
-          "id": "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_kv",
-          "moduleId": "mod_typed_trigger.rebind",
-          "outputKind": "kv",
-          "targetPath": "game/scripts/npc/npc_abilities_custom.txt",
-          "summary": "No ability_kv-side trigger-key field is defined in the provided scope; content is preserved unchanged so no other behavior is altered."
-        }
-      ],
-      "bundles": [
-        {
-          "bundleId": "gameplay_ability_mod_typed_trigger_rebind_1",
-          "kind": "gameplay_ability",
-          "primaryModuleId": "mod_typed_trigger.rebind",
-          "moduleIds": [
-            "mod_typed_trigger.rebind"
-          ],
-          "artifactIds": [
-            "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_lua",
-            "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_kv"
-          ]
-        }
-      ],
-      "moduleBundleMap": [
-        {
-          "moduleId": "mod_typed_trigger.rebind",
-          "bundleId": "gameplay_ability_mod_typed_trigger_rebind_1"
-        }
-      ],
-      "bundleArtifacts": [
-        {
-          "bundleId": "gameplay_ability_mod_typed_trigger_rebind_1",
-          "artifactIds": [
-            "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_lua",
-            "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_kv"
-          ],
-          "targetPaths": [
-            "game/scripts/vscripts/rune_weaver/abilities/rw_talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1.lua",
-            "game/scripts/npc/npc_abilities_custom.txt"
-          ]
-        }
-      ],
-      "warnings": [
-        "Exploratory/guided-native synthesis remains review-required until the implementation graduates."
-      ],
+      "triggered": false,
+      "artifacts": [],
+      "warnings": [],
       "blockers": [],
-      "retrievalSummary": "27 refs across tiers 0, 1, 2, 3",
-      "evidenceRefs": [
-        {
-          "title": "Dota2 Host Realization Policy > UI Cases",
-          "sourceKind": "governance",
-          "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md"
-        },
-        {
-          "title": "Dota2 Host Realization Policy > What This Policy Assumes",
-          "sourceKind": "governance",
-          "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md"
-        },
-        {
-          "title": "Dota2 Host Realization Policy > Implementation Model For v1",
-          "sourceKind": "governance",
-          "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md"
-        },
-        {
-          "title": "Dota2 Host Realization Policy > Mapping Table v1",
-          "sourceKind": "governance",
-          "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md"
-        },
-        {
-          "title": "Abilities API > 当前缺口",
-          "sourceKind": "curated_host",
-          "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\abilities\\README.md"
-        },
-        {
-          "title": "State Sync 与 Tables > 3. 核心要点 > 3.5 UI 端订阅模式",
-          "sourceKind": "curated_host",
-          "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\slices\\scripting-systems\\state-sync-and-tables.md"
-        },
-        {
-          "title": "Dota2 Host API Knowledge > 当前判断",
-          "sourceKind": "curated_host",
-          "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\README.md"
-        },
-        {
-          "title": "Dota2 Host API Knowledge > K001-K004 完成状态",
-          "sourceKind": "curated_host",
-          "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\README.md"
-        },
-        {
-          "title": "CDOTA_Buff.GetCaster",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "CDOTABaseAbility.GetCaster",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "CBaseEntity.GetAbsOrigin",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "CBaseEntity.SetAbsOrigin",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "EmitSoundOn",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "CDOTA_Ability_Lua.OnSpellStart",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "CDOTA_Item_Lua.OnSpellStart",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "CDOTABaseAbility.OnSpellStart",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "Synthesized bundle context",
-          "sourceKind": "workspace_evidence"
-        },
-        {
-          "title": "Owned artifact target",
-          "sourceKind": "workspace_evidence"
-        },
-        {
-          "title": "Dota2 Host Realization Policy > Decision Order v1",
-          "sourceKind": "governance",
-          "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md"
-        },
-        {
-          "title": "AddFOWViewer",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "AngleDiff",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/api.json"
-        },
-        {
-          "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-          "sourceKind": "raw_reference",
-          "path": "engine-enums.json"
-        },
-        {
-          "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-          "sourceKind": "raw_reference",
-          "path": "panorama/enums.json"
-        },
-        {
-          "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_NO_TARGET",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/enums.json"
-        },
-        {
-          "title": "DOTA_ABILITY_BEHAVIOR",
-          "sourceKind": "raw_reference",
-          "path": "panorama/enums.json"
-        },
-        {
-          "title": "DOTA_ABILITY_BEHAVIOR",
-          "sourceKind": "raw_reference",
-          "path": "vscripts/enums.json"
-        },
-        {
-          "title": "AbilityBehavior",
-          "sourceKind": "raw_reference",
-          "path": "engine-enums.json"
-        }
-      ],
-      "mustNotAddViolations": [],
-      "grounding": [
-        {
-          "artifactId": "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_lua",
-          "verifiedSymbols": [],
-          "allowlistedSymbols": [
-            "GetCaster",
-            "GetAbsOrigin",
-            "SetAbsOrigin",
-            "EmitSoundOn"
-          ],
-          "weakSymbols": [],
-          "unknownSymbols": [],
-          "warnings": []
-        },
-        {
-          "artifactId": "talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1_kv",
-          "verifiedSymbols": [],
-          "allowlistedSymbols": [
-            "DOTA_ABILITY_TYPE_BASIC",
-            "DOTA_ABILITY_BEHAVIOR_NO_TARGET"
-          ],
-          "weakSymbols": [],
-          "unknownSymbols": [],
-          "warnings": []
-        }
-      ]
+      "skipped": true
     },
     "assemblyPlan": {
       "success": true,
@@ -352,12 +131,10 @@
         "rule.selection_flow"
       ],
       "writeTargets": [
-        "server/standalone_system_q07n.ts",
-        "shared/standalone_system_q07n.ts",
-        "ui/standalone_system_q07n.tsx",
-        "config/standalone_system_q07n.txt",
-        "game/scripts/vscripts/rune_weaver/abilities/rw_talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1.lua",
-        "game/scripts/npc/npc_abilities_custom.txt"
+        "server/micro_feature_968a.ts",
+        "shared/micro_feature_968a.ts",
+        "ui/micro_feature_968a.tsx",
+        "config/micro_feature_968a.txt"
       ],
       "readyForHostWrite": true,
       "blockers": []
@@ -376,10 +153,8 @@
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-        "game/scripts/vscripts/rune_weaver/abilities/rw_talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1.lua",
         "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
-        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
-        "game/scripts/npc/npc_abilities_custom.txt"
+        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
       ],
       "issues": [],
       "deferredWarnings": [
@@ -409,26 +184,19 @@
     },
     "finalCommitDecision": {
       "success": true,
-      "outcome": "exploratory",
-      "requiresReview": true,
-      "reasons": [
-        "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees",
-        "explicitPatternHints 仅作为 tie-break 输入，不代表最终 pattern authority",
-        "Standalone entity/session state semantics require synthesis via feature-owned session state."
-      ],
+      "outcome": "committable",
+      "requiresReview": false,
+      "reasons": [],
       "impactedFeatures": [],
       "dependencyBlockers": [],
       "downgradedFeatures": []
     },
     "writeExecutor": {
       "success": true,
-      "executedActions": 10,
+      "executedActions": 8,
       "skippedActions": 0,
       "failedActions": 0,
-      "createdFiles": [
-        "game/scripts/vscripts/rune_weaver/abilities/rw_talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1.lua",
-        "game/scripts/npc/npc_abilities_custom.txt"
-      ],
+      "createdFiles": [],
       "modifiedFiles": [
         "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
         "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
@@ -446,7 +214,6 @@
         "✅ Server namespace exists",
         "✅ UI namespace exists",
         "✅ Refreshed 8 files",
-        "✅ Created 2 files",
         "✅ Bridge indexes refreshed"
       ],
       "issues": [],
@@ -463,13 +230,13 @@
     "workspaceState": {
       "success": true,
       "featureId": "talent_draw_demo",
-      "totalFeatures": 3
+      "totalFeatures": 5
     },
     "updateDiff": {
       "totalFiles": 8,
       "unchanged": 0,
       "refreshed": 8,
-      "created": 2,
+      "created": 0,
       "deleted": 0,
       "unchangedFiles": [],
       "refreshedFiles": [
@@ -482,10 +249,7 @@
         "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
         "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
       ],
-      "createdFiles": [
-        "game/scripts/vscripts/rune_weaver/abilities/rw_talent_draw_demo_gameplay_ability_mod_typed_trigger_rebind_1.lua",
-        "game/scripts/npc/npc_abilities_custom.txt"
-      ],
+      "createdFiles": [],
       "deletedFiles": [],
       "requiresRegenerate": false,
       "regenerateReasons": [],
@@ -497,7 +261,7 @@
     "completionKind": "default-safe",
     "weakestStage": "",
     "sufficientForDemo": true,
-    "hasUnresolvedPatterns": true,
+    "hasUnresolvedPatterns": false,
     "wasForceOverride": false,
     "remainingRisks": [],
     "nextSteps": [
@@ -507,7 +271,7 @@
   "updateContext": {
     "currentFeatureContext": {
       "featureId": "talent_draw_demo",
-      "revision": 21,
+      "revision": 3,
       "intentKind": "standalone-system",
       "selectedPatterns": [
         "effect.modifier_applier",
@@ -518,7 +282,7 @@
       ],
       "moduleRecords": [
         {
-          "moduleId": "mod_func_0",
+          "moduleId": "mod_trigger_0",
           "role": "gameplay-core",
           "category": "trigger",
           "sourceKind": "family",
@@ -555,7 +319,7 @@
           "reviewReasons": []
         },
         {
-          "moduleId": "mod_func_1",
+          "moduleId": "mod_data_1",
           "role": "shared-support",
           "category": "data",
           "sourceKind": "family",
@@ -596,7 +360,7 @@
           "reviewReasons": []
         },
         {
-          "moduleId": "mod_func_2",
+          "moduleId": "mod_rule_2",
           "role": "gameplay-core",
           "category": "rule",
           "sourceKind": "family",
@@ -635,7 +399,48 @@
           "reviewReasons": []
         },
         {
-          "moduleId": "mod_func_3",
+          "moduleId": "mod_ui_3",
+          "role": "ui-surface",
+          "category": "ui",
+          "sourceKind": "family",
+          "familyId": "selection_pool",
+          "patternId": "ui.selection_modal",
+          "selectedPatternIds": [
+            "ui.selection_modal"
+          ],
+          "artifactTargets": [
+            "ui"
+          ],
+          "ownedPaths": [],
+          "fillContractIds": [
+            "ui.selection_modal.payload_adapter"
+          ],
+          "reviewRequired": false,
+          "implementationStrategy": "family",
+          "maturity": "templated",
+          "outputKinds": [
+            "ui"
+          ],
+          "artifactPaths": [],
+          "resolvedFrom": "family",
+          "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
+          "requiredOutputs": [
+            "ui.surface"
+          ],
+          "integrationHints": [
+            "ui.surface"
+          ],
+          "stateExpectations": [],
+          "synthesizedArtifactIds": [],
+          "requiresReview": false,
+          "metadata": {
+            "resolutionSource": "need",
+            "score": 6
+          },
+          "reviewReasons": []
+        },
+        {
+          "moduleId": "mod_effect_4",
           "role": "gameplay-core",
           "category": "effect",
           "sourceKind": "family",
@@ -673,47 +478,6 @@
           "metadata": {
             "resolutionSource": "need",
             "score": 8
-          },
-          "reviewReasons": []
-        },
-        {
-          "moduleId": "mod_ui_4",
-          "role": "ui-surface",
-          "category": "ui",
-          "sourceKind": "family",
-          "familyId": "selection_pool",
-          "patternId": "ui.selection_modal",
-          "selectedPatternIds": [
-            "ui.selection_modal"
-          ],
-          "artifactTargets": [
-            "ui"
-          ],
-          "ownedPaths": [],
-          "fillContractIds": [
-            "ui.selection_modal.payload_adapter"
-          ],
-          "reviewRequired": false,
-          "implementationStrategy": "family",
-          "maturity": "templated",
-          "outputKinds": [
-            "ui"
-          ],
-          "artifactPaths": [],
-          "resolvedFrom": "family",
-          "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
-          "requiredOutputs": [
-            "ui.surface"
-          ],
-          "integrationHints": [
-            "ui.surface"
-          ],
-          "stateExpectations": [],
-          "synthesizedArtifactIds": [],
-          "requiresReview": false,
-          "metadata": {
-            "resolutionSource": "need",
-            "score": 6
           },
           "reviewReasons": []
         }
@@ -979,15 +743,19 @@
           "selection_pool proposal seeded from example catalog for example replay."
         ]
       },
-      "preservedModuleBackbone": [
-        "gameplay-core",
-        "shared-support",
-        "ui-surface"
+      "sourceBackedInvariantRoles": [
+        "input_trigger",
+        "weighted_pool",
+        "selection_flow",
+        "selection_modal",
+        "effect_application"
       ],
-      "admittedSkeleton": [
-        "gameplay-core",
-        "shared-support",
-        "ui-surface"
+      "preservedModuleBackbone": [
+        "input_trigger",
+        "weighted_pool",
+        "selection_flow",
+        "selection_modal",
+        "effect_application"
       ],
       "preservedInvariants": [
         "single trigger entry only",
@@ -1006,21 +774,21 @@
       }
     },
     "requestedChangeIntentSchema": {
-      "version": "1.0",
+      "version": "1",
       "host": {
-        "kind": "workspace",
+        "kind": "workspace-feature-context",
         "capabilities": [
-          "source-backed-feature-update",
+          "source-backed-update",
           "selection-pool-profile"
         ]
       },
       "request": {
         "rawPrompt": "把天赋抽取的触发键从 F4 改成 F5",
-        "goal": "Change the talent draw trigger key from F4 to F5 while preserving all other existing behavior.",
-        "nameHint": "talent_draw_demo"
+        "goal": "Change the talent draw trigger key from F4 to F5 while preserving all existing behavior.",
+        "nameHint": "talent_draw_demo_trigger_key_rebind"
       },
       "classification": {
-        "intentKind": "standalone-system",
+        "intentKind": "micro-feature",
         "confidence": "high"
       },
       "actors": [
@@ -1032,14 +800,15 @@
       ],
       "requirements": {
         "functional": [
-          "Rebind the existing talent draw trigger from F4 to F5.",
-          "Keep all non-trigger talent draw logic unchanged."
+          "Rebind the existing talent draw activation key from F4 to F5.",
+          "Keep the existing weighted draw, modal selection, and effect application behavior unchanged.",
+          "Preserve the existing one-trigger-entry interaction model."
         ],
         "typed": [
           {
-            "id": "trigger.rebind",
+            "id": "req_trigger_rebind",
             "kind": "trigger",
-            "summary": "Update the single existing key-binding trigger from F4 to F5.",
+            "summary": "Replace the current hotkey binding F4 with F5 for the existing talent draw trigger.",
             "actors": [
               "player"
             ],
@@ -1050,39 +819,60 @@
               "Existing talent draw flow activation"
             ],
             "invariants": [
-              "Single trigger entry only.",
-              "No other selection, UI, pool, or effect behavior changes."
+              "Single trigger entry only",
+              "No other gameplay logic changes"
             ],
             "parameters": {
               "from": "F4",
               "to": "F5"
             },
             "priority": "must"
+          },
+          {
+            "id": "req_preserve_flow",
+            "kind": "rule",
+            "summary": "Preserve the current weighted-pool candidate generation, single confirmed choice, modal UI, and same-feature effect application.",
+            "actors": [
+              "player"
+            ],
+            "inputs": [
+              "Existing weighted pool contents"
+            ],
+            "outputs": [
+              "Unchanged selection and application flow"
+            ],
+            "invariants": [
+              "Weighted pool candidate source remains unchanged",
+              "Exactly one candidate is confirmed",
+              "Same selection skeleton remains in place",
+              "No persistence",
+              "No cross-feature grants",
+              "No arbitrary custom effect family"
+            ],
+            "priority": "must"
           }
         ],
         "interactions": [
-          "Player presses F5 to activate the existing talent draw flow."
+          "Player presses F5 to invoke the existing talent selection flow."
         ],
         "dataNeeds": [
-          "Existing triggerKey field in the source-backed selection_pool feature parameters."
+          "Existing source-backed triggerKey parameter",
+          "Existing weighted talent object pool"
         ],
         "outputs": [
-          "Trigger key value updated to F5."
+          "Updated trigger binding parameter set to F5"
         ]
       },
       "constraints": {
         "hostConstraints": [
-          "Preserve unspecified existing behavior for feature 'talent_draw_demo'.",
-          "Keep the preserved module backbone stable: gameplay-core, shared-support, ui-surface.",
-          "Single trigger entry only.",
-          "Weighted pool candidate source.",
-          "Confirm exactly one candidate.",
-          "Same-feature owned object collection only.",
-          "No persistence.",
-          "No cross-feature coupling unless explicitly required."
+          "Must preserve unspecified existing behavior for feature 'talent_draw_demo'.",
+          "Keep source-backed selection_pool profile semantics unchanged except triggerKey.",
+          "Use a single trigger entry only.",
+          "Keep weighted pool candidate source and single-confirm selection behavior."
         ],
         "nonFunctional": [
-          "Minimize scope to a parameter-level trigger key update only."
+          "Change should be configuration-level only.",
+          "Preserve existing runtime/UI behavior except for the activation key."
         ]
       },
       "interaction": {
@@ -1093,7 +883,7 @@
             "input": "F5",
             "phase": "press",
             "repeatability": "repeatable",
-            "confirmation": "none"
+            "confirmation": "implicit"
           }
         ]
       },
@@ -1107,31 +897,21 @@
           "kind": "instant"
         }
       },
-      "stateModel": {
-        "states": [
-          {
-            "id": "triggerKey",
-            "summary": "Configured hotkey for activating the talent draw flow.",
-            "owner": "feature",
-            "lifetime": "session",
-            "mutationMode": "update"
-          }
-        ]
-      },
       "flow": {
-        "triggerSummary": "Press F5 to start the existing talent draw selection flow.",
+        "triggerSummary": "Press F5 to start the unchanged talent draw and selection flow.",
         "sequence": [
-          "Replace configured trigger key F4 with F5.",
-          "Retain existing weighted pool draw behavior.",
-          "Retain existing modal selection and single confirmation flow.",
-          "Retain existing immediate application behavior after selection."
+          "Player presses F5",
+          "Existing weighted pool draw logic runs unchanged",
+          "Existing selection modal displays candidates unchanged",
+          "Player confirms exactly one talent",
+          "Existing effect application runs unchanged"
         ],
         "supportsCancel": false,
         "supportsRetry": false,
         "requiresConfirmation": false
       },
       "selection": {
-        "mode": "weighted",
+        "mode": "hybrid",
         "source": "weighted-pool",
         "choiceMode": "user-chosen",
         "cardinality": "single",
@@ -1145,19 +925,20 @@
           "apply"
         ],
         "targets": [
-          "selected talent effect on player"
+          "selected talent effect on self"
         ],
         "durationSemantics": "instant"
       },
       "outcomes": {
         "operations": [
+          "apply-effect",
           "update-state"
         ]
       },
       "contentModel": {
         "collections": [
           {
-            "id": "objects",
+            "id": "talent_objects",
             "role": "candidate-options",
             "ownership": "feature",
             "updateMode": "merge",
@@ -1166,13 +947,25 @@
                 "name": "id",
                 "type": "string",
                 "required": true,
-                "semanticRole": "object identifier"
+                "semanticRole": "object-id"
+              },
+              {
+                "name": "label",
+                "type": "string",
+                "required": true,
+                "semanticRole": "display-name"
               },
               {
                 "name": "weight",
                 "type": "number",
                 "required": true,
-                "semanticRole": "weighted pool value"
+                "semanticRole": "selection-weight"
+              },
+              {
+                "name": "tier",
+                "type": "enum",
+                "required": true,
+                "semanticRole": "rarity"
               }
             ]
           }
@@ -1183,25 +976,25 @@
           {
             "kind": "same-feature",
             "relation": "reads",
-            "target": "input.key_binding",
-            "required": true
-          },
-          {
-            "kind": "same-feature",
-            "relation": "reads",
-            "target": "data.weighted_pool",
+            "target": "weighted_pool",
             "required": true
           },
           {
             "kind": "same-feature",
             "relation": "triggers",
-            "target": "rule.selection_flow",
+            "target": "selection_flow",
             "required": true
           },
           {
             "kind": "same-feature",
             "relation": "syncs-with",
-            "target": "ui.selection_modal",
+            "target": "selection_modal",
+            "required": true
+          },
+          {
+            "kind": "same-feature",
+            "relation": "triggers",
+            "target": "effect_application",
             "required": true
           }
         ]
@@ -1209,9 +1002,15 @@
       "integrations": {
         "expectedBindings": [
           {
-            "id": "binding.triggerKey",
-            "kind": "data-source",
-            "summary": "Update the source-backed triggerKey parameter from F4 to F5.",
+            "id": "binding_trigger_key",
+            "kind": "entry-point",
+            "summary": "Existing key-binding entry point updates its configured hotkey from F4 to F5.",
+            "required": true
+          },
+          {
+            "id": "binding_selection_modal",
+            "kind": "ui-surface",
+            "summary": "Existing selection modal remains bound to the unchanged selection flow.",
             "required": true
           }
         ]
@@ -1219,10 +1018,10 @@
       "uiRequirements": {
         "needed": true,
         "surfaces": [
-          "ui.selection_modal"
+          "selection_modal"
         ],
         "feedbackNeeds": [
-          "Existing modal presentation remains unchanged."
+          "Existing modal opens from F5 instead of F4"
         ]
       },
       "normalizedMechanics": {
@@ -1236,39 +1035,30 @@
       },
       "acceptanceInvariants": [
         {
-          "id": "inv.trigger.single",
-          "summary": "The feature still has exactly one trigger entry, now bound to F5.",
+          "id": "inv_only_trigger_key_changes",
+          "summary": "The only behavioral change is the activation key changing from F4 to F5.",
           "severity": "error"
         },
         {
-          "id": "inv.selection.unchanged",
-          "summary": "Weighted pool, single confirmed choice, and same UI selection modal behavior remain unchanged.",
+          "id": "inv_backbone_preserved",
+          "summary": "The preserved module backbone remains input_trigger, weighted_pool, selection_flow, selection_modal, and effect_application.",
           "severity": "error"
         },
         {
-          "id": "inv.scope.minimal",
-          "summary": "No persistence, cross-feature grants, or other logic changes are introduced.",
+          "id": "inv_selection_semantics_preserved",
+          "summary": "Weighted pool sourcing, three displayed candidates, and exactly one confirmed selection remain unchanged.",
           "severity": "error"
-        }
-      ],
-      "uncertainties": [
-        {
-          "id": "unc.trigger.allowlist",
-          "summary": "F5 appears valid in the current parameter surface allow-list, so no format issue is expected.",
-          "affects": [
-            "realization"
-          ],
-          "severity": "low"
         }
       ],
       "resolvedAssumptions": [
-        "The request is a minimal update to the existing source-backed feature 'talent_draw_demo'.",
-        "Only the trigger key should change; all unspecified behavior must be preserved.",
-        "The preserved module backbone remains gameplay-core, shared-support, and ui-surface.",
-        "F5 is an allowed trigger key in the current parameter surface."
+        "F5 is an allowed triggerKey value in the current parameter surface.",
+        "The request intends a minimal update to the existing source-backed feature only.",
+        "All unspecified behavior remains preserved."
       ],
       "parameters": {
-        "triggerKey": "F5"
+        "triggerKey": "F5",
+        "previousTriggerKey": "F4",
+        "preserveAllOtherParameters": true
       }
     },
     "updateIntent": {
@@ -1276,13 +1066,13 @@
       "mode": "update",
       "target": {
         "featureId": "talent_draw_demo",
-        "revision": 21,
+        "revision": 3,
         "profile": "selection_pool",
         "sourceBacked": true
       },
       "currentFeatureContext": {
         "featureId": "talent_draw_demo",
-        "revision": 21,
+        "revision": 3,
         "intentKind": "standalone-system",
         "selectedPatterns": [
           "effect.modifier_applier",
@@ -1293,7 +1083,7 @@
         ],
         "moduleRecords": [
           {
-            "moduleId": "mod_func_0",
+            "moduleId": "mod_trigger_0",
             "role": "gameplay-core",
             "category": "trigger",
             "sourceKind": "family",
@@ -1330,7 +1120,7 @@
             "reviewReasons": []
           },
           {
-            "moduleId": "mod_func_1",
+            "moduleId": "mod_data_1",
             "role": "shared-support",
             "category": "data",
             "sourceKind": "family",
@@ -1371,7 +1161,7 @@
             "reviewReasons": []
           },
           {
-            "moduleId": "mod_func_2",
+            "moduleId": "mod_rule_2",
             "role": "gameplay-core",
             "category": "rule",
             "sourceKind": "family",
@@ -1410,7 +1200,48 @@
             "reviewReasons": []
           },
           {
-            "moduleId": "mod_func_3",
+            "moduleId": "mod_ui_3",
+            "role": "ui-surface",
+            "category": "ui",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "ui.selection_modal",
+            "selectedPatternIds": [
+              "ui.selection_modal"
+            ],
+            "artifactTargets": [
+              "ui"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [
+              "ui.selection_modal.payload_adapter"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "ui"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
+            "requiredOutputs": [
+              "ui.surface"
+            ],
+            "integrationHints": [
+              "ui.surface"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 6
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "mod_effect_4",
             "role": "gameplay-core",
             "category": "effect",
             "sourceKind": "family",
@@ -1448,47 +1279,6 @@
             "metadata": {
               "resolutionSource": "need",
               "score": 8
-            },
-            "reviewReasons": []
-          },
-          {
-            "moduleId": "mod_ui_4",
-            "role": "ui-surface",
-            "category": "ui",
-            "sourceKind": "family",
-            "familyId": "selection_pool",
-            "patternId": "ui.selection_modal",
-            "selectedPatternIds": [
-              "ui.selection_modal"
-            ],
-            "artifactTargets": [
-              "ui"
-            ],
-            "ownedPaths": [],
-            "fillContractIds": [
-              "ui.selection_modal.payload_adapter"
-            ],
-            "reviewRequired": false,
-            "implementationStrategy": "family",
-            "maturity": "templated",
-            "outputKinds": [
-              "ui"
-            ],
-            "artifactPaths": [],
-            "resolvedFrom": "family",
-            "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
-            "requiredOutputs": [
-              "ui.surface"
-            ],
-            "integrationHints": [
-              "ui.surface"
-            ],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [],
-            "requiresReview": false,
-            "metadata": {
-              "resolutionSource": "need",
-              "score": 6
             },
             "reviewReasons": []
           }
@@ -1754,15 +1544,19 @@
             "selection_pool proposal seeded from example catalog for example replay."
           ]
         },
-        "preservedModuleBackbone": [
-          "gameplay-core",
-          "shared-support",
-          "ui-surface"
+        "sourceBackedInvariantRoles": [
+          "input_trigger",
+          "weighted_pool",
+          "selection_flow",
+          "selection_modal",
+          "effect_application"
         ],
-        "admittedSkeleton": [
-          "gameplay-core",
-          "shared-support",
-          "ui-surface"
+        "preservedModuleBackbone": [
+          "input_trigger",
+          "weighted_pool",
+          "selection_flow",
+          "selection_modal",
+          "effect_application"
         ],
         "preservedInvariants": [
           "single trigger entry only",
@@ -1781,21 +1575,21 @@
         }
       },
       "requestedChange": {
-        "version": "1.0",
+        "version": "1",
         "host": {
-          "kind": "workspace",
+          "kind": "workspace-feature-context",
           "capabilities": [
-            "source-backed-feature-update",
+            "source-backed-update",
             "selection-pool-profile"
           ]
         },
         "request": {
           "rawPrompt": "把天赋抽取的触发键从 F4 改成 F5",
-          "goal": "Change the talent draw trigger key from F4 to F5 while preserving all other existing behavior.",
-          "nameHint": "talent_draw_demo"
+          "goal": "Change the talent draw trigger key from F4 to F5 while preserving all existing behavior.",
+          "nameHint": "talent_draw_demo_trigger_key_rebind"
         },
         "classification": {
-          "intentKind": "standalone-system",
+          "intentKind": "micro-feature",
           "confidence": "high"
         },
         "actors": [
@@ -1807,14 +1601,15 @@
         ],
         "requirements": {
           "functional": [
-            "Rebind the existing talent draw trigger from F4 to F5.",
-            "Keep all non-trigger talent draw logic unchanged."
+            "Rebind the existing talent draw activation key from F4 to F5.",
+            "Keep the existing weighted draw, modal selection, and effect application behavior unchanged.",
+            "Preserve the existing one-trigger-entry interaction model."
           ],
           "typed": [
             {
-              "id": "trigger.rebind",
+              "id": "req_trigger_rebind",
               "kind": "trigger",
-              "summary": "Update the single existing key-binding trigger from F4 to F5.",
+              "summary": "Replace the current hotkey binding F4 with F5 for the existing talent draw trigger.",
               "actors": [
                 "player"
               ],
@@ -1825,39 +1620,60 @@
                 "Existing talent draw flow activation"
               ],
               "invariants": [
-                "Single trigger entry only.",
-                "No other selection, UI, pool, or effect behavior changes."
+                "Single trigger entry only",
+                "No other gameplay logic changes"
               ],
               "parameters": {
                 "from": "F4",
                 "to": "F5"
               },
               "priority": "must"
+            },
+            {
+              "id": "req_preserve_flow",
+              "kind": "rule",
+              "summary": "Preserve the current weighted-pool candidate generation, single confirmed choice, modal UI, and same-feature effect application.",
+              "actors": [
+                "player"
+              ],
+              "inputs": [
+                "Existing weighted pool contents"
+              ],
+              "outputs": [
+                "Unchanged selection and application flow"
+              ],
+              "invariants": [
+                "Weighted pool candidate source remains unchanged",
+                "Exactly one candidate is confirmed",
+                "Same selection skeleton remains in place",
+                "No persistence",
+                "No cross-feature grants",
+                "No arbitrary custom effect family"
+              ],
+              "priority": "must"
             }
           ],
           "interactions": [
-            "Player presses F5 to activate the existing talent draw flow."
+            "Player presses F5 to invoke the existing talent selection flow."
           ],
           "dataNeeds": [
-            "Existing triggerKey field in the source-backed selection_pool feature parameters."
+            "Existing source-backed triggerKey parameter",
+            "Existing weighted talent object pool"
           ],
           "outputs": [
-            "Trigger key value updated to F5."
+            "Updated trigger binding parameter set to F5"
           ]
         },
         "constraints": {
           "hostConstraints": [
-            "Preserve unspecified existing behavior for feature 'talent_draw_demo'.",
-            "Keep the preserved module backbone stable: gameplay-core, shared-support, ui-surface.",
-            "Single trigger entry only.",
-            "Weighted pool candidate source.",
-            "Confirm exactly one candidate.",
-            "Same-feature owned object collection only.",
-            "No persistence.",
-            "No cross-feature coupling unless explicitly required."
+            "Must preserve unspecified existing behavior for feature 'talent_draw_demo'.",
+            "Keep source-backed selection_pool profile semantics unchanged except triggerKey.",
+            "Use a single trigger entry only.",
+            "Keep weighted pool candidate source and single-confirm selection behavior."
           ],
           "nonFunctional": [
-            "Minimize scope to a parameter-level trigger key update only."
+            "Change should be configuration-level only.",
+            "Preserve existing runtime/UI behavior except for the activation key."
           ]
         },
         "interaction": {
@@ -1868,7 +1684,7 @@
               "input": "F5",
               "phase": "press",
               "repeatability": "repeatable",
-              "confirmation": "none"
+              "confirmation": "implicit"
             }
           ]
         },
@@ -1882,31 +1698,21 @@
             "kind": "instant"
           }
         },
-        "stateModel": {
-          "states": [
-            {
-              "id": "triggerKey",
-              "summary": "Configured hotkey for activating the talent draw flow.",
-              "owner": "feature",
-              "lifetime": "session",
-              "mutationMode": "update"
-            }
-          ]
-        },
         "flow": {
-          "triggerSummary": "Press F5 to start the existing talent draw selection flow.",
+          "triggerSummary": "Press F5 to start the unchanged talent draw and selection flow.",
           "sequence": [
-            "Replace configured trigger key F4 with F5.",
-            "Retain existing weighted pool draw behavior.",
-            "Retain existing modal selection and single confirmation flow.",
-            "Retain existing immediate application behavior after selection."
+            "Player presses F5",
+            "Existing weighted pool draw logic runs unchanged",
+            "Existing selection modal displays candidates unchanged",
+            "Player confirms exactly one talent",
+            "Existing effect application runs unchanged"
           ],
           "supportsCancel": false,
           "supportsRetry": false,
           "requiresConfirmation": false
         },
         "selection": {
-          "mode": "weighted",
+          "mode": "hybrid",
           "source": "weighted-pool",
           "choiceMode": "user-chosen",
           "cardinality": "single",
@@ -1920,19 +1726,20 @@
             "apply"
           ],
           "targets": [
-            "selected talent effect on player"
+            "selected talent effect on self"
           ],
           "durationSemantics": "instant"
         },
         "outcomes": {
           "operations": [
+            "apply-effect",
             "update-state"
           ]
         },
         "contentModel": {
           "collections": [
             {
-              "id": "objects",
+              "id": "talent_objects",
               "role": "candidate-options",
               "ownership": "feature",
               "updateMode": "merge",
@@ -1941,13 +1748,25 @@
                   "name": "id",
                   "type": "string",
                   "required": true,
-                  "semanticRole": "object identifier"
+                  "semanticRole": "object-id"
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true,
+                  "semanticRole": "display-name"
                 },
                 {
                   "name": "weight",
                   "type": "number",
                   "required": true,
-                  "semanticRole": "weighted pool value"
+                  "semanticRole": "selection-weight"
+                },
+                {
+                  "name": "tier",
+                  "type": "enum",
+                  "required": true,
+                  "semanticRole": "rarity"
                 }
               ]
             }
@@ -1958,25 +1777,25 @@
             {
               "kind": "same-feature",
               "relation": "reads",
-              "target": "input.key_binding",
-              "required": true
-            },
-            {
-              "kind": "same-feature",
-              "relation": "reads",
-              "target": "data.weighted_pool",
+              "target": "weighted_pool",
               "required": true
             },
             {
               "kind": "same-feature",
               "relation": "triggers",
-              "target": "rule.selection_flow",
+              "target": "selection_flow",
               "required": true
             },
             {
               "kind": "same-feature",
               "relation": "syncs-with",
-              "target": "ui.selection_modal",
+              "target": "selection_modal",
+              "required": true
+            },
+            {
+              "kind": "same-feature",
+              "relation": "triggers",
+              "target": "effect_application",
               "required": true
             }
           ]
@@ -1984,9 +1803,15 @@
         "integrations": {
           "expectedBindings": [
             {
-              "id": "binding.triggerKey",
-              "kind": "data-source",
-              "summary": "Update the source-backed triggerKey parameter from F4 to F5.",
+              "id": "binding_trigger_key",
+              "kind": "entry-point",
+              "summary": "Existing key-binding entry point updates its configured hotkey from F4 to F5.",
+              "required": true
+            },
+            {
+              "id": "binding_selection_modal",
+              "kind": "ui-surface",
+              "summary": "Existing selection modal remains bound to the unchanged selection flow.",
               "required": true
             }
           ]
@@ -1994,10 +1819,10 @@
         "uiRequirements": {
           "needed": true,
           "surfaces": [
-            "ui.selection_modal"
+            "selection_modal"
           ],
           "feedbackNeeds": [
-            "Existing modal presentation remains unchanged."
+            "Existing modal opens from F5 instead of F4"
           ]
         },
         "normalizedMechanics": {
@@ -2011,57 +1836,58 @@
         },
         "acceptanceInvariants": [
           {
-            "id": "inv.trigger.single",
-            "summary": "The feature still has exactly one trigger entry, now bound to F5.",
+            "id": "inv_only_trigger_key_changes",
+            "summary": "The only behavioral change is the activation key changing from F4 to F5.",
             "severity": "error"
           },
           {
-            "id": "inv.selection.unchanged",
-            "summary": "Weighted pool, single confirmed choice, and same UI selection modal behavior remain unchanged.",
+            "id": "inv_backbone_preserved",
+            "summary": "The preserved module backbone remains input_trigger, weighted_pool, selection_flow, selection_modal, and effect_application.",
             "severity": "error"
           },
           {
-            "id": "inv.scope.minimal",
-            "summary": "No persistence, cross-feature grants, or other logic changes are introduced.",
+            "id": "inv_selection_semantics_preserved",
+            "summary": "Weighted pool sourcing, three displayed candidates, and exactly one confirmed selection remain unchanged.",
             "severity": "error"
-          }
-        ],
-        "uncertainties": [
-          {
-            "id": "unc.trigger.allowlist",
-            "summary": "F5 appears valid in the current parameter surface allow-list, so no format issue is expected.",
-            "affects": [
-              "realization"
-            ],
-            "severity": "low"
           }
         ],
         "resolvedAssumptions": [
-          "The request is a minimal update to the existing source-backed feature 'talent_draw_demo'.",
-          "Only the trigger key should change; all unspecified behavior must be preserved.",
-          "The preserved module backbone remains gameplay-core, shared-support, and ui-surface.",
-          "F5 is an allowed trigger key in the current parameter surface."
+          "F5 is an allowed triggerKey value in the current parameter surface.",
+          "The request intends a minimal update to the existing source-backed feature only.",
+          "All unspecified behavior remains preserved."
         ],
         "parameters": {
-          "triggerKey": "F5"
+          "triggerKey": "F5",
+          "previousTriggerKey": "F4",
+          "preserveAllOtherParameters": true
         }
       },
       "delta": {
         "preserve": [
           {
-            "path": "backbone.gameplay-core",
+            "path": "backbone.input_trigger",
             "kind": "composition",
-            "summary": "Preserve module backbone gameplay-core."
+            "summary": "Preserve module backbone input_trigger."
           },
           {
-            "path": "backbone.shared-support",
+            "path": "backbone.weighted_pool",
             "kind": "composition",
-            "summary": "Preserve module backbone shared-support."
+            "summary": "Preserve module backbone weighted_pool."
           },
           {
-            "path": "backbone.ui-surface",
+            "path": "backbone.selection_flow",
             "kind": "composition",
-            "summary": "Preserve module backbone ui-surface."
+            "summary": "Preserve module backbone selection_flow."
+          },
+          {
+            "path": "backbone.selection_modal",
+            "kind": "composition",
+            "summary": "Preserve module backbone selection_modal."
+          },
+          {
+            "path": "backbone.effect_application",
+            "kind": "composition",
+            "summary": "Preserve module backbone effect_application."
           },
           {
             "path": "invariant.1",
@@ -2106,60 +1932,50 @@
           {
             "path": "preservedModuleBackbone",
             "kind": "composition",
-            "summary": "Keep gameplay-core, shared-support, and ui-surface unchanged."
-          },
-          {
-            "path": "selectedPatterns",
-            "kind": "composition",
-            "summary": "Keep input.key_binding, data.weighted_pool, rule.selection_flow, ui.selection_modal, and existing effect pattern unchanged."
+            "summary": "Keep input_trigger, weighted_pool, selection_flow, selection_modal, and effect_application unchanged."
           },
           {
             "path": "featureAuthoring.parameters.choiceCount",
             "kind": "selection",
-            "summary": "Keep choiceCount at 3."
+            "summary": "Keep displayed candidate count at 3."
           },
           {
             "path": "featureAuthoring.parameters.objects",
             "kind": "content",
-            "summary": "Keep the same feature-owned weighted object collection unchanged."
+            "summary": "Keep the same-feature owned talent object collection unchanged."
           },
           {
             "path": "featureAuthoring.parameters.selectionPolicy",
             "kind": "selection",
-            "summary": "Keep single confirmed candidate selection behavior unchanged."
-          },
-          {
-            "path": "featureAuthoring.parameters.poolStateTracking",
-            "kind": "state",
-            "summary": "Keep current non-persistent/session-scoped pool tracking behavior unchanged."
-          },
-          {
-            "path": "featureAuthoring.parameters.display",
-            "kind": "ui",
-            "summary": "Keep existing selection modal UI content and presentation unchanged."
+            "summary": "Keep exactly one confirmed selection."
           },
           {
             "path": "featureAuthoring.parameters.effectProfile",
             "kind": "effect",
-            "summary": "Keep the existing same-feature effect profile unchanged."
+            "summary": "Keep the existing modifier application behavior unchanged."
+          },
+          {
+            "path": "selectedPatterns",
+            "kind": "composition",
+            "summary": "Keep the same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal."
           }
         ],
         "add": [],
         "modify": [
           {
-            "path": "sourceModel.artifact.triggerKey",
-            "kind": "trigger",
-            "summary": "Change triggerKey from F4 to F5 in the source-backed artifact."
-          },
-          {
             "path": "featureAuthoring.parameters.triggerKey",
             "kind": "trigger",
-            "summary": "Change configured trigger key from F4 to F5."
+            "summary": "Change triggerKey from F4 to F5."
+          },
+          {
+            "path": "sourceModel.artifact.triggerKey",
+            "kind": "trigger",
+            "summary": "Update the source-backed artifact trigger key from F4 to F5."
           },
           {
             "path": "boundedFields.triggerKey",
             "kind": "trigger",
-            "summary": "Update bounded triggerKey value from F4 to F5."
+            "summary": "Update bounded triggerKey value to F5."
           },
           {
             "path": "input.triggerKey",
@@ -2175,20 +1991,78 @@
         "remove": []
       },
       "resolvedAssumptions": [
-        "This is a parameter-only update request.",
-        "All existing behavior not explicitly mentioned should remain unchanged.",
-        "No rewrite of the feature or module structure is requested.",
-        "The request is a minimal update to the existing source-backed feature 'talent_draw_demo'.",
-        "Only the trigger key should change; all unspecified behavior must be preserved.",
-        "The preserved module backbone remains gameplay-core, shared-support, and ui-surface.",
-        "F5 is an allowed trigger key in the current parameter surface.",
+        "This is a preserve-first update of feature 'talent_draw_demo', not a rewrite.",
+        "Only the trigger key should change; all other logic and content remain intact.",
+        "F5 is valid within the host's allowed hotkey list.",
+        "F5 is an allowed triggerKey value in the current parameter surface.",
+        "The request intends a minimal update to the existing source-backed feature only.",
+        "All unspecified behavior remains preserved.",
         "Update preserves unspecified existing behavior from the current workspace feature context."
       ]
     }
   },
   "workspaceSemanticContext": {
-    "featureCount": 3,
+    "featureCount": 5,
     "features": [
+      {
+        "featureId": "micro_feature_m056",
+        "aliases": [
+          "micro_feature_m056",
+          "micro feature m056"
+        ],
+        "intentKind": "micro-feature",
+        "selectedPatterns": [
+          "ui.selection_modal"
+        ],
+        "sourceBacked": false,
+        "integrationPoints": [],
+        "semanticHints": [
+          "micro-feature",
+          "ui.selection_modal"
+        ]
+      },
+      {
+        "featureId": "micro_feature_sewp",
+        "aliases": [
+          "micro_feature_sewp",
+          "micro feature sewp"
+        ],
+        "intentKind": "micro-feature",
+        "selectedPatterns": [],
+        "sourceBacked": false,
+        "integrationPoints": [],
+        "semanticHints": [
+          "micro-feature"
+        ]
+      },
+      {
+        "featureId": "micro_feature_pzyb",
+        "aliases": [
+          "micro_feature_pzyb",
+          "micro feature pzyb"
+        ],
+        "intentKind": "micro-feature",
+        "selectedPatterns": [],
+        "sourceBacked": false,
+        "integrationPoints": [],
+        "semanticHints": [
+          "micro-feature"
+        ]
+      },
+      {
+        "featureId": "micro_feature_3kde",
+        "aliases": [
+          "micro_feature_3kde",
+          "micro feature 3kde"
+        ],
+        "intentKind": "micro-feature",
+        "selectedPatterns": [],
+        "sourceBacked": false,
+        "integrationPoints": [],
+        "semanticHints": [
+          "micro-feature"
+        ]
+      },
       {
         "featureId": "talent_draw_demo",
         "aliases": [
@@ -2220,37 +2094,6 @@
           "rule.selection_flow",
           "input.key_binding:F4",
           "selection_pool"
-        ]
-      },
-      {
-        "featureId": "micro_feature_m056",
-        "aliases": [
-          "micro_feature_m056",
-          "micro feature m056"
-        ],
-        "intentKind": "micro-feature",
-        "selectedPatterns": [
-          "ui.selection_modal"
-        ],
-        "sourceBacked": false,
-        "integrationPoints": [],
-        "semanticHints": [
-          "micro-feature",
-          "ui.selection_modal"
-        ]
-      },
-      {
-        "featureId": "micro_feature_sewp",
-        "aliases": [
-          "micro_feature_sewp",
-          "micro feature sewp"
-        ],
-        "intentKind": "micro-feature",
-        "selectedPatterns": [],
-        "sourceBacked": false,
-        "integrationPoints": [],
-        "semanticHints": [
-          "micro-feature"
         ]
       }
     ]

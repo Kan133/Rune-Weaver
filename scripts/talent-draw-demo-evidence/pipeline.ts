@@ -34,13 +34,7 @@ function createIntentSchemaWithFixture(fixture: TalentDrawFixture): IntentSchema
       confidence: "high",
     },
     requirements: {
-      functional: [
-        "按 F4 触发天赋抽取",
-        "从加权天赋池抽取 3 个候选天赋",
-        "显示卡牌选择 UI",
-        "玩家确认后立即应用效果",
-        "已选天赋不再出现",
-      ],
+      functional: [],
       interactions: ["F4 按键输入", "卡牌点击选择"],
       dataNeeds: ["加权天赋池", "会话状态追踪"],
       outputs: ["属性加成效果", "UI 状态更新"],
@@ -59,7 +53,7 @@ function createIntentSchemaWithFixture(fixture: TalentDrawFixture): IntentSchema
       weightedSelection: true,
       playerChoice: true,
       uiModal: true,
-      outcomeApplication: false,
+      outcomeApplication: true,
     },
     parameters: getTalentDrawParameters(),
     openQuestions: [],

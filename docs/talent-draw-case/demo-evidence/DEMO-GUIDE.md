@@ -1,6 +1,6 @@
 # Talent Draw Demo Guide
 
-**Generated:** 2026-04-19T06:51:17.371Z  
+**Generated:** 2026-04-19T12:41:40.584Z  
 **Status:** PASS  
 **Host:** D:\test3  
 **Mode:** write  
@@ -95,11 +95,11 @@ Wizard pollution check: PASS
 
 | Module ID | Category | Role | Has Params |
 | --- | --- | --- | --- |
-| mod_func_0 | trigger | input_trigger | yes |
-| mod_func_1 | data | weighted_pool | yes |
-| mod_func_2 | rule | selection_flow | yes |
-| mod_func_3 | effect | effect_application | yes |
-| mod_ui_4 | ui | selection_modal | yes |
+| mod_trigger_0 | trigger | input_trigger | yes |
+| mod_data_1 | data | weighted_pool | yes |
+| mod_rule_2 | rule | selection_flow | yes |
+| mod_ui_3 | ui | selection_modal | yes |
+| mod_effect_4 | effect | effect_application | yes |
 
 ## 7. Patterns
 

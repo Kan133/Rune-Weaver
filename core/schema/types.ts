@@ -352,6 +352,7 @@ export interface CurrentFeatureContext {
   sourceBacked: boolean;
   sourceModel?: CurrentFeatureContextSourceModel;
   featureAuthoring?: FeatureAuthoring;
+  sourceBackedInvariantRoles?: string[];
   preservedModuleBackbone: string[];
   admittedSkeleton?: string[];
   preservedInvariants: string[];
@@ -608,6 +609,9 @@ export interface ModuleImplementationRecord {
   role: string;
   category?: BlueprintModule["category"];
   sourceKind: ModuleSourceKind;
+  planningKind?: "templated_module" | "backbone";
+  backboneKind?: "gameplay_ability" | "ui_surface" | "supporting_surface";
+  facetIds?: string[];
   familyId?: string;
   patternId?: string;
   selectedPatternIds: string[];
@@ -635,6 +639,9 @@ export interface UnresolvedModuleNeed {
   semanticRole: string;
   category?: BlueprintModule["category"];
   reason: string;
+  backboneKind?: "gameplay_ability" | "ui_surface" | "supporting_surface";
+  facetIds?: string[];
+  coLocatePreferred?: boolean;
   requiredCapabilities: string[];
   optionalCapabilities?: string[];
   requiredOutputs?: string[];
@@ -717,6 +724,7 @@ export interface Blueprint {
   summary: string;
   sourceIntent: BlueprintSourceIntent;
   modules: BlueprintModule[];
+  moduleFacets?: ModuleFacetSpec[];
   connections: BlueprintConnection[];
   patternHints: PatternHint[];
   uiDesignSpec?: UIDesignSpec;
@@ -762,6 +770,9 @@ export interface BlueprintModule {
     | "ui"
     | "resource"
     | "integration";
+  planningKind?: "templated_module" | "backbone";
+  backboneKind?: "gameplay_ability" | "ui_surface" | "supporting_surface";
+  facetIds?: string[];
   /** T151: Explicit pattern grouping - if provided, Assembly will use this instead of category-based inference */
   patternIds?: string[];
   responsibilities: string[];
@@ -896,6 +907,69 @@ export interface SelectionPoolParameterSurface {
   invariants: string[];
 }
 
+export type SelectionPoolAdmissionVerdict =
+  | "not_applicable"
+  | "admitted_explicit"
+  | "admitted_compressed"
+  | "declined"
+  | "governance_blocked";
+
+export interface SelectionPoolAdmissionFinding {
+  code: string;
+  stage: "detection" | "proposal" | "contract" | "decision";
+  severity: "info" | "warning" | "error";
+  message: string;
+  atom?: string;
+  satisfied?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SelectionPoolContractAtomStatus {
+  atom: string;
+  satisfied: boolean;
+  detail: string;
+}
+
+export interface SelectionPoolContractAssessment {
+  skeletonMatch: boolean;
+  compressionEligible: boolean;
+  atoms: SelectionPoolContractAtomStatus[];
+  satisfiedAtoms: string[];
+  missingAtoms: string[];
+  blockerCodes: string[];
+}
+
+export interface SelectionPoolAdmissionDiagnostics {
+  familyId: "selection_pool";
+  verdict: SelectionPoolAdmissionVerdict;
+  detection: {
+    handled: boolean;
+    objectKindHint?: SelectionPoolObjectKind;
+    matchedBy: string[];
+    findings: SelectionPoolAdmissionFinding[];
+  };
+  proposal: {
+    proposalAvailable: boolean;
+    proposalSource?: "llm" | "fallback" | "existing-feature";
+    baseSource?: string;
+    promptMergeApplied: boolean;
+    promptMergeActions: string[];
+    objectKind?: string;
+    findings: SelectionPoolAdmissionFinding[];
+  };
+  contract: {
+    assessed: boolean;
+    skeletonMatch: boolean;
+    assessment?: SelectionPoolContractAssessment;
+    findings: SelectionPoolAdmissionFinding[];
+  };
+  decision: {
+    verdict: SelectionPoolAdmissionVerdict;
+    blockerCodes: string[];
+    findings: SelectionPoolAdmissionFinding[];
+  };
+}
+
 export interface FeatureAuthoringProposal<
   Parameters extends object = object,
   Surface extends object = SourceBackedParameterSurface,
@@ -964,6 +1038,9 @@ export interface BlueprintProposal {
 export interface ModuleNeed extends Record<string, unknown> {
   moduleId: string;
   semanticRole: string;
+  backboneKind?: "gameplay_ability" | "ui_surface" | "supporting_surface";
+  facetIds?: string[];
+  coLocatePreferred?: boolean;
   requiredCapabilities: string[];
   optionalCapabilities?: string[];
   requiredOutputs?: string[];
@@ -973,6 +1050,20 @@ export interface ModuleNeed extends Record<string, unknown> {
   boundedVariability?: string[];
   explicitPatternHints?: string[];
   prohibitedTraits?: string[];
+}
+
+export interface ModuleFacetSpec {
+  facetId: string;
+  backboneModuleId: string;
+  kind: "trigger" | "timing" | "state" | "spawn" | "motion" | "effect" | "resource";
+  role: string;
+  category: BlueprintModule["category"];
+  requiredCapabilities: string[];
+  optionalCapabilities?: string[];
+  requiredOutputs?: string[];
+  stateExpectations?: string[];
+  integrationHints?: string[];
+  invariants?: string[];
 }
 
 export type NormalizedBlueprintStatus = "ready" | "weak" | "blocked";
@@ -987,6 +1078,7 @@ export interface BlueprintNormalizationReport {
 export interface FinalBlueprint extends Blueprint {
   status: NormalizedBlueprintStatus;
   moduleNeeds: ModuleNeed[];
+  moduleFacets?: ModuleFacetSpec[];
   moduleRecords?: ModuleImplementationRecord[];
   unresolvedModuleNeeds?: UnresolvedModuleNeed[];
   fillContracts?: FillContract[];

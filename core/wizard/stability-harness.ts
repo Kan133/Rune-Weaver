@@ -5,6 +5,11 @@ import type {
   WizardClarificationPlan,
 } from "../schema/types";
 import { hasAmbiguousRelationCandidates } from "./relation-resolver";
+import {
+  extractIntentSchemaGovernanceCore,
+  extractIntentSchemaGovernanceDecisions,
+  stableIntentGovernanceDecisionFingerprint,
+} from "./intent-schema.js";
 
 export interface WizardStabilityCorpusEntry {
   id: string;
@@ -221,7 +226,7 @@ export function summarizePromptResult(result: WizardStabilityPromptResult): Wiza
     result.runs.map((run) => stableStringify(collectCoreFacetSummary(run.schema))),
   );
   const governanceCoreVariantCount = countVariants(
-    result.runs.map((run) => stableIntentSchemaGovernanceFingerprint(run.schema)),
+    result.runs.map((run) => stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(run.schema))),
   );
   const uncertaintyCountDistribution = countBy(
     result.runs.map((run) => String(run.schema.uncertainties?.length ?? 0)),
@@ -309,97 +314,6 @@ export function collectCoreFacetSummary(schema: IntentSchema): Record<string, un
   };
 }
 
-export function extractIntentSchemaGovernanceCore(schema: IntentSchema): Record<string, unknown> {
-  return {
-    classification: {
-      intentKind: schema.classification.intentKind,
-    },
-    normalizedMechanics: schema.normalizedMechanics,
-    interaction: (schema.interaction?.activations || []).length > 0
-      ? {
-          activations: (schema.interaction?.activations || []).map((activation) => ({
-            actor: activation.actor,
-            kind: activation.kind,
-            input: activation.input,
-            phase: activation.phase,
-            repeatability: activation.repeatability,
-            confirmation: activation.confirmation,
-          })),
-        }
-      : undefined,
-    selection: schema.selection
-      ? {
-          mode: schema.selection.mode,
-          source: schema.selection.source,
-          choiceMode: schema.selection.choiceMode,
-          cardinality: schema.selection.cardinality,
-          choiceCount: schema.selection.choiceCount,
-          repeatability: schema.selection.repeatability,
-          duplicatePolicy: schema.selection.duplicatePolicy,
-          commitment: schema.selection.commitment,
-          inventory: schema.selection.inventory,
-        }
-      : undefined,
-    uiRequirements: schema.uiRequirements
-      ? {
-          needed: schema.uiRequirements.needed,
-          surfaces: schema.uiRequirements.surfaces,
-          feedbackNeeds: schema.uiRequirements.feedbackNeeds,
-        }
-      : undefined,
-    timing: schema.timing,
-    effects: schema.effects
-      ? {
-          operations: schema.effects.operations,
-          targets: schema.effects.targets && schema.effects.targets.length > 0 ? schema.effects.targets : undefined,
-          durationSemantics: schema.effects.durationSemantics,
-        }
-      : undefined,
-    outcomes: schema.outcomes,
-    stateModel: (schema.stateModel?.states || []).length > 0
-      ? {
-          states: (schema.stateModel?.states || []).map((state) => ({
-            id: state.id,
-            owner: state.owner,
-            lifetime: state.lifetime,
-            kind: state.kind,
-            mutationMode: state.mutationMode,
-          })),
-        }
-      : undefined,
-    contentModel: (schema.contentModel?.collections || []).length > 0
-      ? {
-          collections: (schema.contentModel?.collections || []).map((collection) => ({
-            role: collection.role,
-            ownership: collection.ownership,
-            updateMode: collection.updateMode,
-            itemSchema: (collection.itemSchema || []).map((item) => ({
-              name: item.name,
-              type: item.type,
-              semanticRole: item.semanticRole,
-              required: item.required,
-            })),
-          })),
-        }
-      : undefined,
-    composition: (schema.composition?.dependencies || []).length > 0
-      ? {
-          dependencies: (schema.composition?.dependencies || []).map((dependency) => ({
-            kind: dependency.kind,
-            relation: dependency.relation,
-            target: dependency.target,
-            required: dependency.required,
-          })),
-        }
-      : undefined,
-    parameters: schema.parameters,
-  };
-}
-
-export function stableIntentSchemaGovernanceFingerprint(schema: IntentSchema): string {
-  return stableStringify(extractIntentSchemaGovernanceCore(schema));
-}
-
 function summarizeGroups(results: WizardStabilityPromptResult[]): WizardStabilityGroupSummary[] {
   const grouped = new Map<string, WizardStabilityPromptResult[]>();
 
@@ -421,7 +335,8 @@ function summarizeGroups(results: WizardStabilityPromptResult[]): WizardStabilit
         groupId,
         promptIds: groupResults.map((result) => result.entry.id),
         governanceCoreVariantCount: countVariants(
-          runs.map((run) => stableIntentSchemaGovernanceFingerprint(run.schema)),
+          runs.map((run) =>
+            stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(run.schema))),
         ),
         intentKindVariantCount: countVariants(
           runs.map((run) => run.schema.classification.intentKind || "unknown"),
@@ -474,7 +389,8 @@ function summarizeAggregateSemanticCoverage(results: WizardStabilityPromptResult
 function accumulateSemanticCoverage(result: WizardStabilityPromptResult): SemanticCoverageAccumulator {
   const expectations = extractPromptExpectations(result.entry.prompt);
   const accumulator = createEmptyCoverageAccumulator();
-  const governanceFingerprints = result.runs.map((run) => stableIntentSchemaGovernanceFingerprint(run.schema));
+  const governanceFingerprints = result.runs.map((run) =>
+    stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(run.schema)));
   const majorityGovernanceFingerprint = selectMajorityVariant(governanceFingerprints);
 
   result.runs.forEach((run, index) => {

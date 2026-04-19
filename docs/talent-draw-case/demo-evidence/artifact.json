@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-04-19T06:51:17.371Z",
+    "generatedAt": "2026-04-19T12:41:40.584Z",
     "fixtureVersion": "1.0",
     "pipelineVersion": "3.0",
     "hostRoot": "D:\\test3",
@@ -110,7 +110,7 @@
       "weightedSelection": true,
       "playerChoice": true,
       "uiModal": true,
-      "outcomeApplication": false
+      "outcomeApplication": true
     },
     "parameters": {
       "triggerKey": "F4",
@@ -198,11 +198,11 @@
     }
   },
   "blueprint": {
-    "id": "standalone_system_qp5v",
+    "id": "standalone_system_9aru",
     "moduleCount": 5,
     "modules": [
       {
-        "id": "mod_func_0",
+        "id": "mod_trigger_0",
         "category": "trigger",
         "role": "input_trigger",
         "patternIds": [
@@ -211,7 +211,7 @@
         "hasParameters": true
       },
       {
-        "id": "mod_func_1",
+        "id": "mod_data_1",
         "category": "data",
         "role": "weighted_pool",
         "patternIds": [
@@ -220,7 +220,7 @@
         "hasParameters": true
       },
       {
-        "id": "mod_func_2",
+        "id": "mod_rule_2",
         "category": "rule",
         "role": "selection_flow",
         "patternIds": [
@@ -229,51 +229,51 @@
         "hasParameters": true
       },
       {
-        "id": "mod_func_3",
-        "category": "effect",
-        "role": "effect_application",
-        "patternIds": [],
-        "hasParameters": true
-      },
-      {
-        "id": "mod_ui_4",
+        "id": "mod_ui_3",
         "category": "ui",
         "role": "selection_modal",
         "patternIds": [
           "ui.selection_modal"
         ],
         "hasParameters": true
+      },
+      {
+        "id": "mod_effect_4",
+        "category": "effect",
+        "role": "effect_application",
+        "patternIds": [],
+        "hasParameters": true
       }
     ],
     "connections": [
       {
-        "from": "mod_func_0",
-        "to": "mod_func_2",
+        "from": "mod_trigger_0",
+        "to": "mod_rule_2",
         "purpose": "触发规则执行"
       },
       {
-        "from": "mod_func_0",
-        "to": "mod_func_3",
+        "from": "mod_trigger_0",
+        "to": "mod_effect_4",
         "purpose": "触发效果应用"
       },
       {
-        "from": "mod_func_1",
-        "to": "mod_func_2",
+        "from": "mod_data_1",
+        "to": "mod_rule_2",
         "purpose": "提供数据输入"
       },
       {
-        "from": "mod_func_1",
-        "to": "mod_func_3",
+        "from": "mod_data_1",
+        "to": "mod_effect_4",
         "purpose": "提供效果参数"
       },
       {
-        "from": "mod_func_2",
-        "to": "mod_func_3",
+        "from": "mod_rule_2",
+        "to": "mod_effect_4",
         "purpose": "规则决策驱动效果"
       },
       {
-        "from": "mod_func_3",
-        "to": "mod_ui_4",
+        "from": "mod_effect_4",
+        "to": "mod_ui_3",
         "purpose": "效果状态驱动 UI 更新"
       }
     ],
@@ -312,6 +312,11 @@
           "ui.selection_modal"
         ],
         "rationale": "需要模态 UI 界面"
+      },
+      {
+        "category": "effect",
+        "suggestedPatterns": [],
+        "rationale": "需要结果应用机制（多态模块，由 resolver/assembly 根据上下文解析具体 pattern）"
       }
     ]
   },
@@ -352,7 +357,7 @@
     "complete": true
   },
   "assemblyPlan": {
-    "blueprintId": "standalone_system_qp5v",
+    "blueprintId": "standalone_system_9aru",
     "selectedPatterns": [
       "effect.modifier_applier",
       "ui.selection_modal",
@@ -363,23 +368,23 @@
     "writeTargets": [
       {
         "target": "server",
-        "path": "server/standalone_system_qp5v.ts",
-        "summary": "[CANDIDATE] Server module for standalone_system_qp5v"
+        "path": "server/standalone_system_9aru.ts",
+        "summary": "[CANDIDATE] Server module for standalone_system_9aru"
       },
       {
         "target": "shared",
-        "path": "shared/standalone_system_qp5v.ts",
-        "summary": "[CANDIDATE] Shared definitions for standalone_system_qp5v"
+        "path": "shared/standalone_system_9aru.ts",
+        "summary": "[CANDIDATE] Shared definitions for standalone_system_9aru"
       },
       {
         "target": "ui",
-        "path": "ui/standalone_system_qp5v.tsx",
-        "summary": "[CANDIDATE] UI component for standalone_system_qp5v"
+        "path": "ui/standalone_system_9aru.tsx",
+        "summary": "[CANDIDATE] UI component for standalone_system_9aru"
       },
       {
         "target": "config",
-        "path": "config/standalone_system_qp5v.txt",
-        "summary": "[CANDIDATE] Configuration for standalone_system_qp5v"
+        "path": "config/standalone_system_9aru.txt",
+        "summary": "[CANDIDATE] Configuration for standalone_system_9aru"
       }
     ],
     "bridgeUpdates": [
@@ -419,10 +424,10 @@
   "hostRealization": {
     "version": "1.0",
     "host": "dota2",
-    "sourceBlueprintId": "standalone_system_qp5v",
+    "sourceBlueprintId": "standalone_system_9aru",
     "units": [
       {
-        "id": "mod_func_0",
+        "id": "mod_trigger_0",
         "realizationType": "ts",
         "hostTargets": [
           "server_ts"
@@ -433,7 +438,7 @@
         ]
       },
       {
-        "id": "mod_func_1",
+        "id": "mod_data_1",
         "realizationType": "shared-ts",
         "hostTargets": [
           "shared_ts"
@@ -444,7 +449,7 @@
         ]
       },
       {
-        "id": "mod_func_2",
+        "id": "mod_rule_2",
         "realizationType": "ts",
         "hostTargets": [
           "server_ts"
@@ -455,19 +460,7 @@
         ]
       },
       {
-        "id": "mod_func_3",
-        "realizationType": "kv+lua",
-        "hostTargets": [
-          "lua_ability",
-          "ability_kv"
-        ],
-        "confidence": "medium",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "mod_ui_4",
+        "id": "mod_ui_3",
         "realizationType": "ui",
         "hostTargets": [
           "panorama_tsx",
@@ -477,6 +470,18 @@
         "sourcePatternIds": [
           "ui.selection_modal"
         ]
+      },
+      {
+        "id": "mod_effect_4",
+        "realizationType": "kv+lua",
+        "hostTargets": [
+          "lua_ability",
+          "ability_kv"
+        ],
+        "confidence": "medium",
+        "sourcePatternIds": [
+          "effect.modifier_applier"
+        ]
       }
     ],
     "blockers": []
@@ -484,10 +489,10 @@
   "generatorRouting": {
     "version": "1.0",
     "host": "dota2",
-    "sourceBlueprintId": "standalone_system_qp5v",
+    "sourceBlueprintId": "standalone_system_9aru",
     "routes": [
       {
-        "id": "route_mod_func_0_ts_0",
+        "id": "route_mod_trigger_0_ts_0",
         "generatorFamily": "dota2-ts",
         "routeKind": "ts",
         "hostTarget": "server_ts",
@@ -496,7 +501,7 @@
         ]
       },
       {
-        "id": "route_mod_func_1_ts_0",
+        "id": "route_mod_data_1_ts_0",
         "generatorFamily": "dota2-ts",
         "routeKind": "ts",
         "hostTarget": "shared_ts",
@@ -505,7 +510,7 @@
         ]
       },
       {
-        "id": "route_mod_func_2_ts_0",
+        "id": "route_mod_rule_2_ts_0",
         "generatorFamily": "dota2-ts",
         "routeKind": "ts",
         "hostTarget": "server_ts",
@@ -514,25 +519,7 @@
         ]
       },
       {
-        "id": "route_mod_func_3_lua_0",
-        "generatorFamily": "dota2-lua",
-        "routeKind": "lua",
-        "hostTarget": "lua_ability",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "route_mod_func_3_kv_1",
-        "generatorFamily": "dota2-kv",
-        "routeKind": "kv",
-        "hostTarget": "ability_kv",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "route_mod_ui_4_ui_0",
+        "id": "route_mod_ui_3_ui_0",
         "generatorFamily": "dota2-ui",
         "routeKind": "ui",
         "hostTarget": "panorama_tsx",
@@ -541,12 +528,30 @@
         ]
       },
       {
-        "id": "route_mod_ui_4_ui_1",
+        "id": "route_mod_ui_3_ui_1",
         "generatorFamily": "dota2-ui",
         "routeKind": "ui",
         "hostTarget": "panorama_less",
         "sourcePatternIds": [
           "ui.selection_modal"
+        ]
+      },
+      {
+        "id": "route_mod_effect_4_lua_0",
+        "generatorFamily": "dota2-lua",
+        "routeKind": "lua",
+        "hostTarget": "lua_ability",
+        "sourcePatternIds": [
+          "effect.modifier_applier"
+        ]
+      },
+      {
+        "id": "route_mod_effect_4_kv_1",
+        "generatorFamily": "dota2-kv",
+        "routeKind": "kv",
+        "hostTarget": "ability_kv",
+        "sourcePatternIds": [
+          "effect.modifier_applier"
         ]
       }
     ],
@@ -554,7 +559,7 @@
     "blockers": []
   },
   "writePlan": {
-    "id": "writeplan_standalone_system_qp5v_1776581477357",
+    "id": "writeplan_standalone_system_9aru_1776602500565",
     "targetProject": "D:\\test3",
     "entryCount": 10,
     "stats": {
@@ -906,7 +911,7 @@
       "skippedItems": [],
       "blockers": [],
       "readyToExecute": true,
-      "generatedAt": "2026-04-19T06:51:17.360Z"
+      "generatedAt": "2026-04-19T12:41:40.568Z"
     },
     "evidence": {
       "filesCreated": [
@@ -994,7 +999,7 @@
       {
         "name": "Blueprint has trigger/data/rule/ui modules",
         "passed": true,
-        "message": "Found: trigger, data, rule, effect, ui"
+        "message": "Found: trigger, data, rule, ui, effect"
       },
       {
         "name": "Blueprint modules have parameters",

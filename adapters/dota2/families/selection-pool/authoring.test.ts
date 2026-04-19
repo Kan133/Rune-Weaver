@@ -9,10 +9,17 @@ import {
 import {
   deriveSelectionPoolCurrentContextHints,
   mergeSelectionPoolFeatureAuthoringForUpdate,
+  normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "./index.js";
 import { createUpdateIntentFromRequestedChange } from "../../../../core/wizard/index.js";
 import type { IntentSchema } from "../../../../core/schema/types.js";
+
+const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
+  "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
+
+const NO_UI_FIREBALL_PROMPT =
+  "做一个主动技能，不要UI，不要inventory，不要persistence。按Q生成一个跟随玩家2秒的火焰球，每0.5秒对附近敌人造成一次伤害。";
 
 function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
   const resolution = resolveSelectionPoolFamily({
@@ -30,6 +37,11 @@ function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
   assert.equal(resolution.proposal?.parameters.triggerKey, "F4");
   assert.equal(resolution.proposal?.parameters.choiceCount, 3);
   assert.equal(resolution.proposal?.parameters.objects.length, 6);
+  assert.ok(resolution.admissionDiagnostics);
+  assert.deepEqual(
+    resolution.admissionDiagnostics?.detection.matchedBy.includes("object_kind:talent"),
+    true,
+  );
 }
 
 function testCanonicalUpdateExpandsPoolToTwenty(): void {
@@ -137,6 +149,164 @@ function testSiblingEquipmentPromptUsesSameFamily(): void {
   assert.ok(resolution.proposal?.parameters.objects.every((item) => item.id.startsWith("EQ_")));
 }
 
+function testOriginalTalentDrawPromptCompressesIntoSelectionPool(): void {
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: ORIGINAL_TALENT_DRAW_CREATE_PROMPT,
+      goal: ORIGINAL_TALENT_DRAW_CREATE_PROMPT,
+    },
+    classification: {
+      intentKind: "standalone-system",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Open a talent selection UI on F4.",
+        "Draw 3 weighted talents and let the player choose 1.",
+        "Apply the chosen talent and keep the unchosen entries in the pool.",
+      ],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "talent_pool",
+          role: "candidate-options",
+          ownership: "feature",
+          updateMode: "replace",
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+    effects: {
+      operations: ["apply"],
+      durationSemantics: "instant",
+    },
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt: ORIGINAL_TALENT_DRAW_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    schema,
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+  );
+
+  assert.equal(resolution.handled, true);
+  assert.equal(normalized.featureAuthoring?.profile, "selection_pool");
+  assert.equal(normalized.admissionDiagnostics?.verdict, "admitted_compressed");
+  assert.equal(
+    normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.length,
+    0,
+  );
+}
+
+function testNoUiFireballPromptStaysNotApplicable(): void {
+  const resolution = resolveSelectionPoolFamily({
+    prompt: NO_UI_FIREBALL_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "fireball_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.equal(resolution.handled, false);
+  assert.equal(resolution.admissionDiagnostics?.verdict, "not_applicable");
+}
+
+function testSelectionPoolCompressionDeclinesWithoutUiSurface(): void {
+  const prompt = "按 F4 从加权天赋池抽取 3 个候选天赋，玩家选择 1 个后立即应用效果，并且已选择的天赋后续不再出现。";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    readiness: "ready",
+    requirements: { functional: [prompt] },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "talent_pool",
+          role: "candidate-options",
+          ownership: "feature",
+          updateMode: "replace",
+        },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    schema,
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+  );
+
+  assert.equal(normalized.featureAuthoring, undefined);
+  assert.equal(normalized.admissionDiagnostics?.verdict, "declined");
+  assert.ok(
+    normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("current_feature_ui_surface"),
+  );
+}
+
 function testSelectionPoolCurrentContextHintsExposeBoundedFields(): void {
   const resolution = resolveSelectionPoolFamily({
     prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
@@ -241,6 +411,12 @@ function testUpdateMergeUsesUpdateIntentAuthority(): void {
     },
     requestedChange,
   );
+  updateIntent.delta.modify.push({
+    path: "input.triggerKey",
+    oldValue: "F4",
+    newValue: "F5",
+    reason: "Explicit trigger-key update for the bounded source-backed feature.",
+  });
 
   const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
@@ -318,6 +494,12 @@ function testUpdateMergePrefersRequestedTargetTriggerKey(): void {
     },
     requestedChange,
   );
+  updateIntent.delta.modify.push({
+    path: "input.triggerKey",
+    oldValue: "F4",
+    newValue: "F5",
+    reason: "Explicit trigger-key update for the bounded source-backed feature.",
+  });
 
   const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
@@ -343,12 +525,16 @@ function testUnsupportedContractEscapeHonestBlocks(): void {
     resolution.reasons.some((reason) => reason.includes("one trigger owner")) ||
       resolution.reasons.some((reason) => reason.includes("cross-feature grants")),
   );
+  assert.equal(resolution.admissionDiagnostics?.verdict, "governance_blocked");
 }
 
 testCanonicalCreateSeedsSelectionPoolAuthoring();
 testCanonicalUpdateExpandsPoolToTwenty();
 testCanonicalInventoryUpdateKeepsExampleInventoryCopy();
 testSiblingEquipmentPromptUsesSameFamily();
+testOriginalTalentDrawPromptCompressesIntoSelectionPool();
+testNoUiFireballPromptStaysNotApplicable();
+testSelectionPoolCompressionDeclinesWithoutUiSurface();
 testSelectionPoolCurrentContextHintsExposeBoundedFields();
 testUpdateMergeUsesUpdateIntentAuthority();
 testUpdateMergePrefersRequestedTargetTriggerKey();

@@ -12,6 +12,9 @@ import {
   resolveSelectionPoolFamily,
 } from "../../../adapters/dota2/families/selection-pool/index.js";
 
+const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
+  "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
+
 function testCreateWritePlanUsesStableFeatureIdForCreate(): void {
   const assemblyPlan = {
     blueprintId: "standalone_system_abcd",
@@ -328,8 +331,10 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
   });
 
   assert.ok(result.blueprint);
+  assert.ok(result.finalBlueprint);
   assert.equal(result.status, "ready");
   assert.equal(result.blueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
   assert.deepEqual(
     result.blueprint?.fillContracts?.map((contract) => contract.boundaryId),
     [
@@ -346,6 +351,92 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
   assert.equal(
     result.blueprint?.modules.find((module) => module.role === "selection_modal")?.parameters?.title,
     "Choose Your Talent",
+  );
+  assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
+  assert.equal(result.admissionDiagnostics?.verdict, "admitted_explicit");
+  assert.equal(result.admissionDiagnostics?.proposal.baseSource, "example_seed");
+}
+
+function testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton(): void {
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: ORIGINAL_TALENT_DRAW_CREATE_PROMPT,
+      goal: ORIGINAL_TALENT_DRAW_CREATE_PROMPT,
+    },
+    classification: {
+      intentKind: "standalone-system" as const,
+      confidence: "high" as const,
+    },
+    readiness: "ready" as const,
+    requirements: {
+      functional: [
+        "Open the talent selection UI on F4.",
+        "Draw 3 weighted talents and let the player choose 1.",
+        "Apply the chosen result and keep the remaining pool consistent.",
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: {
+      mode: "weighted" as const,
+      source: "weighted-pool" as const,
+      choiceMode: "user-chosen" as const,
+      choiceCount: 3,
+      cardinality: "single" as const,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      commitment: "immediate" as const,
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "talent_pool",
+          role: "candidate-options" as const,
+          ownership: "feature" as const,
+          updateMode: "replace" as const,
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "instant" as const,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  } as any;
+
+  const result = buildBlueprint(schema, {
+    prompt: ORIGINAL_TALENT_DRAW_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.blueprint);
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.blueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.admissionDiagnostics?.verdict, "admitted_compressed");
+  assert.equal(
+    result.admissionDiagnostics?.contract.assessment?.missingAtoms.length,
+    0,
   );
 }
 
@@ -550,7 +641,7 @@ function testSelectionPoolUpdateExpansionUsesGenericDeltaContract(): void {
 
   const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
   assert.ok(updateIntent.delta.modify.some((item) => item.path === "content.collection.objectCount"));
-  assert.ok(updateIntent.delta.preserve.some((item) => item.path === "backbone.input.key_binding"));
+  assert.ok(updateIntent.delta.preserve.some((item) => item.path === "backbone.input_trigger"));
 }
 
 function testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge(): void {
@@ -632,13 +723,17 @@ function testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge(): void 
   const result = buildUpdateBlueprint(updateIntent);
 
   assert.ok(result.blueprint);
+  assert.ok(result.finalBlueprint);
   assert.equal(result.blueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
   assert.equal(result.blueprint?.featureAuthoring?.parameters.inventory?.capacity, 15);
+  assert.equal(result.finalBlueprint?.featureAuthoring?.parameters.inventory?.capacity, 15);
   assert.ok(
     result.blueprint?.fillContracts?.some(
       (contract) => contract.boundaryId === "ui.selection_modal.payload_adapter",
     ),
   );
+  assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
 }
 
 function resolutionParameterSurface() {
@@ -661,6 +756,7 @@ function runTests(): void {
   testCreateWritePlanAppendsSelectionPoolSourceArtifact();
   testCreateWritePlanKeepsSynthesizedBundleArtifactsCollapsed();
   testBuildBlueprintAppliesSelectionPoolCreateEnrichment();
+  testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton();
   testSelectionPoolContractDoesNotInjectStandaloneInventoryState();
   testSelectionPoolUpdateExpansionUsesGenericDeltaContract();
   testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge();

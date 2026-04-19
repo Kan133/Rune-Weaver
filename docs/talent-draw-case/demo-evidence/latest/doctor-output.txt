@@ -26,10 +26,10 @@ Check Results
    Found 3/3 key scripts
 
 [PASS] Rune Weaver Workspace
-   Workspace exists (3 features)
+   Workspace exists (5 features)
       - workspace.hostRoot: D:\test3
       - workspace.addonName: test3
-      - active features: 3
+      - active features: 5
       - gap-fill ready features: 2
 
 [PASS] Post-Generation Validation

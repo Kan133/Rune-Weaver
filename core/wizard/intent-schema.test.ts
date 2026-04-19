@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 
 import type { IntentSchema } from "../schema/types.js";
-import { stableIntentSchemaGovernanceFingerprint } from "./stability-harness.js";
 import {
   buildWizardMessages,
   createFallbackIntentSchema,
+  extractIntentSchemaGovernanceDecisions,
+  stableIntentGovernanceDecisionFingerprint,
+  stableIntentSchemaGovernanceFingerprint,
   normalizeIntentSchema,
   runWizardToIntentSchema,
 } from "./intent-schema.js";
@@ -314,6 +316,63 @@ function testNormalizeIntentSchemaKeepsExplicitPersistenceWhenRequested() {
   assert.equal(Boolean(schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system")), true);
 }
 
+function testGovernanceDecisionFingerprintIgnoresNonGovernanceActivationNoise() {
+  const prompt = "Press F4 to draw 3 weighted candidates and pick 1.";
+  const left = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      requirements: { functional: ["Run a local weighted draw."] },
+      constraints: {},
+      interaction: {
+        activations: [{ actor: "player", kind: "key", input: "F4", phase: "press", repeatability: "repeatable", confirmation: "implicit" }],
+      },
+      selection: {
+        mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "user-chosen",
+        choiceCount: 3,
+        cardinality: "single",
+        commitment: "immediate",
+      },
+      uiRequirements: { needed: true, surfaces: ["selection_modal"] },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+  const right = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      requirements: { functional: ["Run a local weighted draw."] },
+      constraints: {},
+      interaction: {
+        activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+      },
+      selection: {
+        mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "user-chosen",
+        choiceCount: 3,
+        cardinality: "single",
+        commitment: "immediate",
+      },
+      uiRequirements: { needed: true, surfaces: ["selection_modal"] },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  assert.deepEqual(
+    extractIntentSchemaGovernanceDecisions(left).activationContract.value,
+    extractIntentSchemaGovernanceDecisions(right).activationContract.value,
+  );
+  assert.equal(
+    stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(left)),
+    stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(right)),
+  );
+}
+
 function testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency() {
   const prompts = [
     "Press F4 to open a talent selection UI, draw 3 rarity-weighted talents from a pool, let the player choose 1, apply it immediately, permanently remove the selected talent from future draws, and return unchosen talents to the pool.",
@@ -432,6 +491,7 @@ async function runTests() {
   testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSemantics();
   testNormalizeIntentSchemaCanonicalizesCandidateDrawGovernanceCore();
   testNormalizeIntentSchemaKeepsExplicitPersistenceWhenRequested();
+  testGovernanceDecisionFingerprintIgnoresNonGovernanceActivationNoise();
   testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency();
   await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
   await testRunWizardToIntentSchemaProducesClarificationSidecar();

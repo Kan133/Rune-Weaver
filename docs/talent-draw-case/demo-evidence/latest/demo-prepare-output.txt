@@ -37,7 +37,7 @@ Talent Draw Demo Preparation Runbook
 
 [STEP 5] Run Rune Weaver init/write
   Status: OK
-  Action: Workspace exists (3 features)
+  Action: Workspace exists (5 features)
 
 [STEP 6] Write or refresh Talent Draw feature
   Status: READY

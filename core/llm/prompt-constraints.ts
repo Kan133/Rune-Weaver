@@ -5,6 +5,9 @@ import type {
 import type { WizardClarificationAnswer } from "../wizard/types.js";
 
 function getPreservedModuleBackbone(currentFeatureContext: CurrentFeatureContext): string[] {
+  if ((currentFeatureContext.sourceBackedInvariantRoles || []).length > 0) {
+    return currentFeatureContext.sourceBackedInvariantRoles || [];
+  }
   if ((currentFeatureContext.preservedModuleBackbone || []).length > 0) {
     return currentFeatureContext.preservedModuleBackbone;
   }

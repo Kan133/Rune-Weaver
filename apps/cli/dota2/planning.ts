@@ -1,6 +1,7 @@
 import {
   IntentSchema,
   Blueprint,
+  FinalBlueprint,
   AssemblyPlan,
   HostRealizationPlan,
   GeneratorRoutingPlan,
@@ -9,6 +10,7 @@ import {
   RelationCandidate,
   PromptConstraintBundle,
   RetrievalBundle,
+  SelectionPoolAdmissionDiagnostics,
   UpdateIntent,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
@@ -117,9 +119,11 @@ function inferFallbackInventoryContract(prompt: string): {
 
 export interface Dota2BlueprintBuildResult {
   blueprint: Blueprint | null;
+  finalBlueprint: FinalBlueprint | null;
   status: IntentReadiness | "error";
   issues: string[];
   moduleNeedsCount: number;
+  admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
 }
 
 export interface Dota2BlueprintBuildContext {
@@ -822,10 +826,11 @@ export function buildBlueprint(
 
   const builder = new BlueprintBuilder();
   const result = builder.build(schema);
-  const baseBlueprint = result.finalBlueprint || result.blueprint || null;
-  const baseStatus = result.finalBlueprint?.status || getIntentSemanticPosture(schema);
+  const baseBlueprint = result.draftBlueprint || result.blueprint || null;
+  const baseFinalBlueprint = result.finalBlueprint || null;
+  const baseStatus = baseFinalBlueprint?.status || getIntentSemanticPosture(schema);
   const baseIssues = result.issues.map((issue) => `${issue.code}: ${issue.message}`);
-  const enriched = baseBlueprint
+  const enrichedBlueprint = baseBlueprint
     ? enrichDota2CreateBlueprint(baseBlueprint, {
         schema,
         prompt: context.prompt,
@@ -836,40 +841,60 @@ export function buildBlueprint(
         proposalSource: context.proposalSource,
       })
     : { blueprint: null, status: baseStatus, issues: [] };
-  const blueprint = enriched.blueprint;
-  const status = enriched.blueprint ? enriched.status : enriched.status;
-  const issues = [...baseIssues, ...enriched.issues];
-  const moduleNeedsCount = countModuleNeeds(blueprint);
-  const canContinue = blueprint?.commitDecision?.canAssemble ?? result.success;
+  const enrichedFinalBlueprint = baseFinalBlueprint
+    ? enrichDota2CreateBlueprint(baseFinalBlueprint, {
+        schema,
+        prompt: context.prompt,
+        hostRoot: context.hostRoot,
+        mode: context.mode,
+        featureId: context.featureId,
+        existingFeature: context.existingFeature,
+        proposalSource: context.proposalSource,
+      })
+    : { blueprint: null, status: baseStatus, issues: [] };
+  const blueprint = enrichedBlueprint.blueprint;
+  const finalBlueprint = enrichedFinalBlueprint.blueprint;
+  const admissionDiagnostics = enrichedFinalBlueprint.admissionDiagnostics || enrichedBlueprint.admissionDiagnostics;
+  const status = finalBlueprint?.status || enrichedFinalBlueprint.status || baseStatus;
+  const issues = [...new Set([...baseIssues, ...enrichedBlueprint.issues, ...enrichedFinalBlueprint.issues])];
+  const moduleNeedsCount = countModuleNeeds(finalBlueprint || blueprint);
+  const canContinue = finalBlueprint?.commitDecision?.canAssemble ?? result.success;
 
-  if (!blueprint) {
+  if (!finalBlueprint) {
     console.log("  ❌ Blueprint build failed");
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    for (const issue of enriched.issues) {
+    for (const issue of issues) {
       console.log(`     - ${issue}`);
     }
-    return { blueprint: null, status: baseBlueprint ? enriched.status : "error", issues, moduleNeedsCount };
+    return {
+      blueprint,
+      finalBlueprint: null,
+      status: baseBlueprint ? status : "error",
+      issues,
+      moduleNeedsCount,
+      admissionDiagnostics,
+    };
   }
 
   if (!canContinue) {
     console.log(`  ⚠️  FinalBlueprint ${describeBlueprintStatus(status)}`);
-    console.log(`     ID: ${blueprint.id}`);
+    console.log(`     ID: ${finalBlueprint.id}`);
     console.log(`     Status: ${status}`);
-    console.log(`     Modules: ${blueprint.modules.length}`);
+    console.log(`     Modules: ${finalBlueprint.modules.length}`);
     console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    return { blueprint: null, status, issues, moduleNeedsCount };
+    return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics };
   }
 
   if (!result.success) {
     console.log(`  ⚠️  Continuing with reviewable FinalBlueprint (${describeBlueprintStatus(status)})`);
-    console.log(`     ID: ${blueprint.id}`);
+    console.log(`     ID: ${finalBlueprint.id}`);
     console.log(`     Status: ${status}`);
-    console.log(`     Modules: ${blueprint.modules.length}`);
+    console.log(`     Modules: ${finalBlueprint.modules.length}`);
     console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
@@ -877,11 +902,22 @@ export function buildBlueprint(
   }
 
   console.log("  ✅ FinalBlueprint created");
-  console.log(`     ID: ${blueprint.id}`);
+  console.log(`     ID: ${finalBlueprint.id}`);
   console.log(`     Status: ${status}`);
-  console.log(`     Modules: ${blueprint.modules.length}`);
+  console.log(`     Modules: ${finalBlueprint.modules.length}`);
   console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
-  console.log(`     Pattern Hints: ${blueprint.patternHints.length}`);
+  if (admissionDiagnostics && admissionDiagnostics.verdict !== "not_applicable") {
+    console.log(`     Selection Pool Admission: ${admissionDiagnostics.verdict}`);
+  }
+  const backboneModules = finalBlueprint.modules.filter((module) => module.planningKind === "backbone");
+  if (backboneModules.length > 0) {
+    console.log(`     Gameplay Backbones: ${backboneModules.length}`);
+    for (const module of backboneModules) {
+      const facetCount = (finalBlueprint.moduleFacets || []).filter((facet) => facet.backboneModuleId === module.id).length;
+      console.log(`       - ${module.id}: ${module.role} | facets=${facetCount}`);
+    }
+  }
+  console.log(`     Pattern Hints: ${finalBlueprint.patternHints.length}`);
 
   if (issues.length > 0) {
     console.log("  ℹ️  Blueprint notes:");
@@ -890,7 +926,7 @@ export function buildBlueprint(
     }
   }
 
-  return { blueprint, status, issues, moduleNeedsCount };
+  return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics };
 }
 
 export function buildUpdateBlueprint(
@@ -902,47 +938,62 @@ export function buildUpdateBlueprint(
 
   const builder = new BlueprintBuilder();
   const result = builder.buildUpdate(updateIntent);
-  const baseBlueprint = result.finalBlueprint || result.blueprint || null;
-  const enriched = baseBlueprint
+  const baseBlueprint = result.draftBlueprint || result.blueprint || null;
+  const baseFinalBlueprint = result.finalBlueprint || null;
+  const baseStatus = baseFinalBlueprint?.status || getIntentSemanticPosture(updateIntent.requestedChange);
+  const enrichedBlueprint = baseBlueprint
     ? enrichDota2UpdateBlueprint(baseBlueprint, updateIntent)
-    : { blueprint: null, status: result.finalBlueprint?.status || getIntentSemanticPosture(updateIntent.requestedChange), issues: [] };
-  const blueprint = enriched.blueprint;
-  const status = enriched.status || result.finalBlueprint?.status || getIntentSemanticPosture(updateIntent.requestedChange);
+    : { blueprint: null, status: baseStatus, issues: [] };
+  const enrichedFinalBlueprint = baseFinalBlueprint
+    ? enrichDota2UpdateBlueprint(baseFinalBlueprint, updateIntent)
+    : { blueprint: null, status: baseStatus, issues: [] };
+  const blueprint = enrichedBlueprint.blueprint;
+  const finalBlueprint = enrichedFinalBlueprint.blueprint;
+  const status = finalBlueprint?.status || enrichedFinalBlueprint.status || baseStatus;
   const issues = [
-    ...result.issues.map((issue) => `${issue.code}: ${issue.message}`),
-    ...enriched.issues,
+    ...new Set([
+      ...result.issues.map((issue) => `${issue.code}: ${issue.message}`),
+      ...enrichedBlueprint.issues,
+      ...enrichedFinalBlueprint.issues,
+    ]),
   ];
-  const moduleNeedsCount = countModuleNeeds(blueprint);
-  const canContinue = blueprint?.commitDecision?.canAssemble ?? result.success;
+  const moduleNeedsCount = countModuleNeeds(finalBlueprint || blueprint);
+  const canContinue = finalBlueprint?.commitDecision?.canAssemble ?? result.success;
 
-  if (!blueprint) {
+  if (!finalBlueprint) {
     console.log("  ❌ Update Blueprint build failed");
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    for (const issue of enriched.issues) {
+    for (const issue of issues) {
       console.log(`     - ${issue}`);
     }
-    return { blueprint: null, status: baseBlueprint ? enriched.status : "error", issues, moduleNeedsCount };
+    return {
+      blueprint,
+      finalBlueprint: null,
+      status: baseBlueprint ? status : "error",
+      issues,
+      moduleNeedsCount,
+    };
   }
 
   if (!canContinue) {
     console.log(`  ⚠️  FinalBlueprint ${describeBlueprintStatus(status)}`);
-    console.log(`     ID: ${blueprint.id}`);
+    console.log(`     ID: ${finalBlueprint.id}`);
     console.log(`     Status: ${status}`);
-    console.log(`     Modules: ${blueprint.modules.length}`);
+    console.log(`     Modules: ${finalBlueprint.modules.length}`);
     console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    return { blueprint: null, status, issues, moduleNeedsCount };
+    return { blueprint, finalBlueprint, status, issues, moduleNeedsCount };
   }
 
   if (!result.success) {
     console.log(`  ⚠️  Continuing with reviewable FinalBlueprint (${describeBlueprintStatus(status)})`);
-    console.log(`     ID: ${blueprint.id}`);
+    console.log(`     ID: ${finalBlueprint.id}`);
     console.log(`     Status: ${status}`);
-    console.log(`     Modules: ${blueprint.modules.length}`);
+    console.log(`     Modules: ${finalBlueprint.modules.length}`);
     console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
@@ -950,11 +1001,19 @@ export function buildUpdateBlueprint(
   }
 
   console.log("  ✅ FinalBlueprint created");
-  console.log(`     ID: ${blueprint.id}`);
+  console.log(`     ID: ${finalBlueprint.id}`);
   console.log(`     Status: ${status}`);
-  console.log(`     Modules: ${blueprint.modules.length}`);
+  console.log(`     Modules: ${finalBlueprint.modules.length}`);
   console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
-  console.log(`     Pattern Hints: ${blueprint.patternHints.length}`);
+  const backboneModules = finalBlueprint.modules.filter((module) => module.planningKind === "backbone");
+  if (backboneModules.length > 0) {
+    console.log(`     Gameplay Backbones: ${backboneModules.length}`);
+    for (const module of backboneModules) {
+      const facetCount = (finalBlueprint.moduleFacets || []).filter((facet) => facet.backboneModuleId === module.id).length;
+      console.log(`       - ${module.id}: ${module.role} | facets=${facetCount}`);
+    }
+  }
+  console.log(`     Pattern Hints: ${finalBlueprint.patternHints.length}`);
 
   if (issues.length > 0) {
     console.log("  ℹ️  Blueprint notes:");
@@ -963,7 +1022,7 @@ export function buildUpdateBlueprint(
     }
   }
 
-  return { blueprint, status, issues, moduleNeedsCount };
+  return { blueprint, finalBlueprint, status, issues, moduleNeedsCount };
 }
 
 export function resolvePatternsFromBlueprint(blueprint: Blueprint): PatternResolutionResult {

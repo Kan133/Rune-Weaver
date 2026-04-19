@@ -1,13 +1,20 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
-import type { IntentSchema, UpdateIntent } from "../../../core/schema/types.js";
+import type {
+  Blueprint,
+  FinalBlueprint,
+  IntentSchema,
+  UpdateIntent,
+} from "../../../core/schema/types.js";
 
 export interface SemanticArtifactSummary {
   rootDir: string;
   intentSchemaPath?: string;
   requestedChangeIntentSchemaPath?: string;
   updateIntentPath?: string;
+  blueprintPath?: string;
+  finalBlueprintPath?: string;
 }
 
 interface SemanticArtifactWriteContext {
@@ -46,9 +53,53 @@ function writeSemanticArtifact(
   writeFileSync(outputPath, JSON.stringify(payload, null, 2), "utf-8");
 }
 
+function writeBlueprintArtifacts(
+  rootDir: string,
+  context: {
+    commandKind: "create" | "update";
+    featureId: string;
+    generatedAt?: string;
+    revision?: number;
+    blueprint?: Blueprint;
+    finalBlueprint?: FinalBlueprint;
+  },
+): Pick<SemanticArtifactSummary, "blueprintPath" | "finalBlueprintPath"> {
+  const summary: Pick<SemanticArtifactSummary, "blueprintPath" | "finalBlueprintPath"> = {};
+
+  if (context.blueprint) {
+    const blueprintPath = join(rootDir, `blueprint.${context.commandKind}.json`);
+    writeSemanticArtifact(blueprintPath, {
+      version: "1.0",
+      generatedAt: context.generatedAt || new Date().toISOString(),
+      commandKind: context.commandKind,
+      featureId: context.featureId,
+      ...(typeof context.revision === "number" ? { revision: context.revision } : {}),
+      blueprint: context.blueprint,
+    });
+    summary.blueprintPath = blueprintPath;
+  }
+
+  if (context.finalBlueprint) {
+    const finalBlueprintPath = join(rootDir, `final-blueprint.${context.commandKind}.json`);
+    writeSemanticArtifact(finalBlueprintPath, {
+      version: "1.0",
+      generatedAt: context.generatedAt || new Date().toISOString(),
+      commandKind: context.commandKind,
+      featureId: context.featureId,
+      ...(typeof context.revision === "number" ? { revision: context.revision } : {}),
+      finalBlueprint: context.finalBlueprint,
+    });
+    summary.finalBlueprintPath = finalBlueprintPath;
+  }
+
+  return summary;
+}
+
 export function saveCreateSemanticArtifacts(
   context: SemanticArtifactWriteContext & {
     intentSchema: IntentSchema;
+    blueprint?: Blueprint;
+    finalBlueprint?: FinalBlueprint;
     commandKind: "create";
     generatedAt?: string;
   },
@@ -68,6 +119,7 @@ export function saveCreateSemanticArtifacts(
   return {
     rootDir,
     intentSchemaPath,
+    ...writeBlueprintArtifacts(rootDir, context),
   };
 }
 
@@ -75,6 +127,8 @@ export function saveUpdateSemanticArtifacts(
   context: SemanticArtifactWriteContext & {
     requestedChangeIntentSchema: IntentSchema;
     updateIntent: UpdateIntent;
+    blueprint?: Blueprint;
+    finalBlueprint?: FinalBlueprint;
     commandKind: "update";
     generatedAt?: string;
   },
@@ -106,5 +160,9 @@ export function saveUpdateSemanticArtifacts(
     rootDir,
     requestedChangeIntentSchemaPath,
     updateIntentPath,
+    ...writeBlueprintArtifacts(rootDir, {
+      ...context,
+      revision: context.updateIntent.target.revision,
+    }),
   };
 }

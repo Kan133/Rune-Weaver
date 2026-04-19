@@ -8,7 +8,11 @@ import type {
   FillContract,
   FillIntentCandidate,
   IntentSchema,
+  SelectionPoolAdmissionDiagnostics,
+  SelectionPoolAdmissionFinding,
+  SelectionPoolAdmissionVerdict,
   SelectionPoolAuthoredObject,
+  SelectionPoolContractAssessment,
   SelectionPoolFeatureAuthoringParameters,
   SelectionPoolObjectKind,
   SelectionPoolObjectTier,
@@ -76,6 +80,7 @@ export interface ResolveSelectionPoolFamilyInput {
   prompt: string;
   hostRoot: string;
   mode: SelectionPoolFamilyMode;
+  schema?: IntentSchema;
   featureId?: string;
   existingFeature?: RuneWeaverFeatureRecord | null;
   proposalSource: "llm" | "fallback" | "existing-feature";
@@ -89,6 +94,7 @@ export interface ResolveSelectionPoolFamilyResult {
   fillIntentCandidates?: FillIntentCandidate[];
   scalarParameters?: Record<string, unknown>;
   notes?: string[];
+  admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
 }
 
 export interface FeatureAuthoringNormalizationResult {
@@ -96,6 +102,7 @@ export interface FeatureAuthoringNormalizationResult {
   blockers: string[];
   warnings: string[];
   notes: string[];
+  admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
 }
 
 export interface SelectionPoolCompiledModuleParameters {
@@ -117,8 +124,32 @@ export interface SelectionPoolCurrentContextHints {
   boundedFields: Record<string, unknown>;
 }
 
+interface SelectionPoolPromptMergeResult {
+  proposal: FeatureAuthoringProposal;
+  mergeActions: string[];
+}
+
+interface SelectionPoolProposalBuildResult {
+  proposal: FeatureAuthoringProposal;
+  baseSource:
+    | "example_seed"
+    | "generic_seed"
+    | "existing_feature"
+    | "existing_source_artifact"
+    | "legacy_source_artifact";
+  seedNotes: string[];
+}
+
+interface SelectionPoolDetectionResult {
+  handled: boolean;
+  objectKindHint?: SelectionPoolObjectKind;
+  matchedBy: string[];
+  findings: SelectionPoolAdmissionFinding[];
+}
+
 const SELECTION_POOL_SOURCE_ADAPTER: SelectionPoolSourceAdapter = "selection_pool";
 const SELECTION_POOL_SOURCE_VERSION = 1;
+const SELECTION_POOL_FAMILY_ID = "selection_pool";
 const SELECTION_POOL_ALLOWED_HOTKEYS = [
   "Q", "W", "E", "R", "D", "F",
   "1", "2", "3", "4", "5", "6",
@@ -165,24 +196,29 @@ const GENERIC_SELECTION_POOL_SEED_OBJECTS: SelectionPoolAuthoredObject[] = [
   { id: "SEL_SSR001", label: "Selection Insight 01", description: "+10 Intelligence", weight: 20, tier: "SSR" },
   { id: "SEL_UR001", label: "Selection Apex 01", description: "+10 All Attributes", weight: 10, tier: "UR" },
 ];
-const FAMILY_BLOCK_PATTERNS: Array<{ test: RegExp; reason: string }> = [
+const FAMILY_BLOCK_PATTERNS: Array<{ code: string; test: RegExp; reason: string }> = [
   {
+    code: "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED",
     test: /(?:second trigger|第二个按键|第二个触发键|第二触发|双触发|multi-trigger|toggle key)/i,
     reason: "selection_pool currently admits only one trigger owner under input.key_binding.",
   },
   {
+    code: "SELECTION_POOL_MULTI_CONFIRM_NOT_SUPPORTED",
     test: /(?:多次确认|multi-confirm|二次确认|confirm twice)/i,
     reason: "selection_pool currently admits exactly one confirm flow.",
   },
   {
+    code: "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED",
     test: /(?:persist|save file|cross match|跨局|存档|持久化)/i,
     reason: "selection_pool remains session-only and does not admit persistence in the current family contract.",
   },
   {
+    code: "SELECTION_POOL_CROSS_FEATURE_NOT_SUPPORTED",
     test: /(?:grant skill|grant another feature|cross-feature|授予技能|授予另一个(?:技能)?\s*feature|feature 耦合)/i,
     reason: "selection_pool does not yet admit cross-feature grants or feature coupling.",
   },
   {
+    code: "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED",
     test: /(?:custom effect|new effect family|新的效果族|自定义效果族|dash|projectile|summon|spawn helper)/i,
     reason: "selection_pool keeps effect behavior inside the current bounded placeholder effect profile and does not admit arbitrary new effect families.",
   },
@@ -231,6 +267,28 @@ function normalizePrompt(prompt: string): string {
 
 function dedupeStrings(values: Array<string | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0)));
+}
+
+function createAdmissionFinding(
+  stage: SelectionPoolAdmissionFinding["stage"],
+  code: string,
+  severity: SelectionPoolAdmissionFinding["severity"],
+  message: string,
+  options: {
+    atom?: string;
+    satisfied?: boolean;
+    metadata?: Record<string, unknown>;
+  } = {},
+): SelectionPoolAdmissionFinding {
+  return {
+    stage,
+    code,
+    severity,
+    message,
+    ...(options.atom ? { atom: options.atom } : {}),
+    ...(options.satisfied !== undefined ? { satisfied: options.satisfied } : {}),
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+  };
 }
 
 function resolveSelectionPoolObjectKind(value: unknown): SelectionPoolObjectKind | undefined {
@@ -469,25 +527,106 @@ function requestsSupportedInventory(prompt: string): boolean {
   );
 }
 
-function shouldHandleSelectionPoolFeature(input: ResolveSelectionPoolFamilyInput): boolean {
+function promptHasSelectionUiSurface(prompt: string): boolean {
+  return /modal|ui|dialog|cards?|界面|卡牌|窗口|弹窗|面板/i.test(prompt);
+}
+
+function promptHasSingleSelectionCommit(prompt: string): boolean {
+  return /(?:三选一|[1-5]\s*选\s*1|choose\s+1|choose one|pick one|select one|选择(?:\s*1|一个))/i.test(prompt);
+}
+
+function promptHasPostSelectionPoolBehavior(prompt: string): boolean {
+  return /(?:已选.*不再出现|不会再出现|后续不再出现|永久移除|移出池|remove from future draws|do not appear again|not appear again|未选.*返回池|未选中的返回池中|unchosen.*return|unselected.*return|return.*pool)/i.test(
+    prompt,
+  );
+}
+
+function hasFeatureOwnedCollections(schema: IntentSchema): boolean {
+  return Boolean(
+    schema.contentModel?.collections?.some((collection) =>
+      collection.role === "candidate-options" && (collection.ownership === undefined || collection.ownership === "feature")
+    ),
+  );
+}
+
+function hasExternalOrSharedOwnership(schema: IntentSchema): boolean {
+  return Boolean(
+    schema.stateModel?.states?.some((state) => state.owner === "external") ||
+      schema.contentModel?.collections?.some((collection) => collection.ownership === "external" || collection.ownership === "shared"),
+  );
+}
+
+function hasPersistentStateRequest(schema: IntentSchema): boolean {
+  return Boolean(
+    schema.stateModel?.states?.some((state) => state.lifetime === "persistent") ||
+      schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system" && dependency.relation === "writes"),
+  );
+}
+
+function hasCrossFeatureRequest(schema: IntentSchema): boolean {
+  return Boolean(
+    schema.classification.intentKind === "cross-system-composition" ||
+      schema.composition?.dependencies?.some((dependency) => dependency.kind === "cross-feature") ||
+      schema.outcomes?.operations?.includes("grant-feature"),
+  );
+}
+
+function hasCustomEffectFamilyRequest(schema: IntentSchema): boolean {
+  return Boolean(
+    schema.spatial?.emission?.kind === "projectile" ||
+      schema.outcomes?.operations?.includes("spawn") ||
+      schema.outcomes?.operations?.includes("move"),
+  );
+}
+
+function hasMultipleTriggerOwners(schema: IntentSchema): boolean {
+  const keyInputs = new Set(
+    (schema.interaction?.activations || [])
+      .filter((activation) => activation.kind === "key" && typeof activation.input === "string")
+      .map((activation) => activation.input!.trim().toUpperCase())
+      .filter((value) => value.length > 0),
+  );
+  return keyInputs.size > 1;
+}
+
+function evaluateSelectionPoolDetection(input: ResolveSelectionPoolFamilyInput): SelectionPoolDetectionResult {
   const promptKind = inferObjectKind(input.prompt, input.existingFeature);
   const normalized = normalizePrompt(input.prompt);
+  const promptShape = looksLikeSelectionPoolPrompt(input.prompt);
   const updateFamilyCue =
     input.mode !== "create" &&
     Boolean(input.featureId?.trim()) &&
     /(?:selection pool|draw system|draft system|抽取系统|抽卡系统|候选池)/.test(normalized);
-  return Boolean(
-    promptKind ||
-      looksLikeSelectionPoolPrompt(input.prompt) ||
-      updateFamilyCue ||
-      input.existingFeature?.featureAuthoring?.profile === "selection_pool" ||
-      isSelectionPoolSourceModelRef(input.existingFeature?.sourceModel) ||
-      isLegacyTalentDrawSourceModelRef(input.existingFeature?.sourceModel),
+  const matchedBy = dedupeStrings([
+    promptKind ? `object_kind:${promptKind}` : undefined,
+    promptShape ? "prompt_shape" : undefined,
+    updateFamilyCue ? "update_family_cue" : undefined,
+    input.existingFeature?.featureAuthoring?.profile === "selection_pool" ? "existing_feature_authoring" : undefined,
+    isSelectionPoolSourceModelRef(input.existingFeature?.sourceModel) ? "existing_source_model" : undefined,
+    isLegacyTalentDrawSourceModelRef(input.existingFeature?.sourceModel) ? "legacy_source_model" : undefined,
+  ]);
+  const findings = matchedBy.map((match) =>
+    createAdmissionFinding(
+      "detection",
+      "SELECTION_POOL_DETECTION_MATCH",
+      "info",
+      `selection_pool detection matched via ${match}.`,
+      { metadata: { match } },
+    ),
   );
+
+  return {
+    handled: matchedBy.length > 0,
+    objectKindHint: promptKind,
+    matchedBy,
+    findings,
+  };
 }
 
-function collectFamilyBlockReasons(prompt: string): string[] {
-  return FAMILY_BLOCK_PATTERNS.filter((pattern) => pattern.test.test(prompt)).map((pattern) => pattern.reason);
+function collectFamilyBlockFindings(prompt: string): Array<{ code: string; reason: string }> {
+  return FAMILY_BLOCK_PATTERNS
+    .filter((pattern) => pattern.test.test(prompt))
+    .map((pattern) => ({ code: pattern.code, reason: pattern.reason }));
 }
 
 function createSourceModelRef(featureId: string): FeatureSourceModelRef {
@@ -817,81 +956,106 @@ function buildProposalFromExistingFeature(
   input: ResolveSelectionPoolFamilyInput,
   featureId: string,
   objectKindHint: SelectionPoolObjectKind | undefined,
-): FeatureAuthoringProposal {
+): SelectionPoolProposalBuildResult {
   const existingAuthoring =
     isSelectionPoolFeatureAuthoring(input.existingFeature?.featureAuthoring)
       ? input.existingFeature.featureAuthoring
       : undefined;
   if (existingAuthoring) {
-    return createFeatureAuthoringProposal(
-      normalizeFeatureAuthoringParameters(
-        existingAuthoring.parameters,
-        resolveSelectionPoolObjectKind(existingAuthoring.parameters.objectKind)
-          || resolveSelectionPoolObjectKind(existingAuthoring.objectKind)
-          || objectKindHint,
+    return {
+      proposal: createFeatureAuthoringProposal(
+        normalizeFeatureAuthoringParameters(
+          existingAuthoring.parameters,
+          resolveSelectionPoolObjectKind(existingAuthoring.parameters.objectKind)
+            || resolveSelectionPoolObjectKind(existingAuthoring.objectKind)
+            || objectKindHint,
+        ),
+        input.proposalSource,
+        ["selection_pool proposal migrated from existing workspace featureAuthoring."],
       ),
-      input.proposalSource,
-      ["selection_pool proposal migrated from existing workspace featureAuthoring."],
-    );
+      baseSource: "existing_feature",
+      seedNotes: ["selection_pool proposal migrated from existing workspace featureAuthoring."],
+    };
   }
   const existingArtifact = loadExistingSourceArtifact(input, featureId);
   if (existingArtifact) {
-    return createFeatureAuthoringProposal(
-      normalizeFeatureAuthoringParameters({
-        triggerKey: existingArtifact.triggerKey,
-        choiceCount: existingArtifact.choiceCount,
-        objectKind: existingArtifact.objectKind,
-        objects: existingArtifact.objects,
-        drawMode: existingArtifact.drawMode,
-        duplicatePolicy: existingArtifact.duplicatePolicy,
-        poolStateTracking: existingArtifact.poolStateTracking,
-        selectionPolicy: existingArtifact.selectionPolicy,
-        applyMode: existingArtifact.applyMode,
-        postSelectionPoolBehavior: existingArtifact.postSelectionPoolBehavior,
-        trackSelectedItems: existingArtifact.trackSelectedItems,
-        inventory: existingArtifact.inventory,
-        display: existingArtifact.display,
-        placeholderConfig: existingArtifact.placeholderConfig,
-        effectProfile: existingArtifact.effectProfile,
-      }, resolveSelectionPoolObjectKind(existingArtifact.objectKind) || objectKindHint),
-      input.proposalSource,
-      ["selection_pool proposal loaded from existing source artifact."],
-    );
+    const baseSource = isLegacyTalentDrawSourceModelRef(input.existingFeature?.sourceModel)
+      ? "legacy_source_artifact"
+      : "existing_source_artifact";
+    const seedNote = baseSource === "legacy_source_artifact"
+      ? "selection_pool proposal loaded from legacy talent-draw source artifact."
+      : "selection_pool proposal loaded from existing source artifact.";
+    return {
+      proposal: createFeatureAuthoringProposal(
+        normalizeFeatureAuthoringParameters({
+          triggerKey: existingArtifact.triggerKey,
+          choiceCount: existingArtifact.choiceCount,
+          objectKind: existingArtifact.objectKind,
+          objects: existingArtifact.objects,
+          drawMode: existingArtifact.drawMode,
+          duplicatePolicy: existingArtifact.duplicatePolicy,
+          poolStateTracking: existingArtifact.poolStateTracking,
+          selectionPolicy: existingArtifact.selectionPolicy,
+          applyMode: existingArtifact.applyMode,
+          postSelectionPoolBehavior: existingArtifact.postSelectionPoolBehavior,
+          trackSelectedItems: existingArtifact.trackSelectedItems,
+          inventory: existingArtifact.inventory,
+          display: existingArtifact.display,
+          placeholderConfig: existingArtifact.placeholderConfig,
+          effectProfile: existingArtifact.effectProfile,
+        }, resolveSelectionPoolObjectKind(existingArtifact.objectKind) || objectKindHint),
+        input.proposalSource,
+        [seedNote],
+      ),
+      baseSource,
+      seedNotes: [seedNote],
+    };
   }
 
   const exampleSeed = buildExampleSeedParameters(featureId);
   if (exampleSeed) {
-    return createFeatureAuthoringProposal(
-      exampleSeed,
-      input.proposalSource,
-      ["selection_pool proposal seeded from example catalog for example replay."],
-    );
+    return {
+      proposal: createFeatureAuthoringProposal(
+        exampleSeed,
+        input.proposalSource,
+        ["selection_pool proposal seeded from example catalog for example replay."],
+      ),
+      baseSource: "example_seed",
+      seedNotes: ["selection_pool proposal seeded from example catalog for example replay."],
+    };
   }
 
-  return createFeatureAuthoringProposal(
-    buildGenericSeedParameters(),
-    input.proposalSource,
-    ["selection_pool proposal seeded from generic family defaults."],
-  );
+  return {
+    proposal: createFeatureAuthoringProposal(
+      buildGenericSeedParameters(),
+      input.proposalSource,
+      ["selection_pool proposal seeded from generic family defaults."],
+    ),
+    baseSource: "generic_seed",
+    seedNotes: ["selection_pool proposal seeded from generic family defaults."],
+  };
 }
 
 function applyPromptMerge(
   input: ResolveSelectionPoolFamilyInput,
   featureId: string,
   proposal: FeatureAuthoringProposal,
-): FeatureAuthoringProposal {
+): SelectionPoolPromptMergeResult {
   const metadataObjectKind =
     resolveSelectionPoolObjectKind(proposal.parameters.objectKind)
     || resolveSelectionPoolObjectKind(proposal.objectKind)
     || inferObjectKind(input.prompt, input.existingFeature);
-  const exampleInventoryDefaults = requestsSupportedInventory(input.prompt)
+  const requestedTriggerKey = parseTriggerKey(input.prompt);
+  const requestedChoiceCount = parseChoiceCount(input.prompt);
+  const inventoryRequested = requestsSupportedInventory(input.prompt);
+  const exampleInventoryDefaults = inventoryRequested
     ? getSelectionPoolExampleInventoryDefaults(featureId)
     : undefined;
   const merged = normalizeFeatureAuthoringParameters({
     ...proposal.parameters,
-    triggerKey: parseTriggerKey(input.prompt) || proposal.parameters.triggerKey,
-    choiceCount: parseChoiceCount(input.prompt) || proposal.parameters.choiceCount,
-    inventory: requestsSupportedInventory(input.prompt)
+    triggerKey: requestedTriggerKey || proposal.parameters.triggerKey,
+    choiceCount: requestedChoiceCount || proposal.parameters.choiceCount,
+    inventory: inventoryRequested
       ? deepClone(exampleInventoryDefaults || getInventoryDefaults())
       : proposal.parameters.inventory,
   }, metadataObjectKind);
@@ -908,21 +1072,35 @@ function applyPromptMerge(
       ? mergeObjectExpansionPreset(merged, expansionTarget, exampleExpansionObjects)
       : mergeObjectExpansion(merged, expansionTarget)
     : merged;
-  return createFeatureAuthoringProposal(
-    finalParameters,
-    input.proposalSource,
-    dedupeStrings([
-      ...(proposal.notes || []),
-      requestsSupportedInventory(input.prompt)
-        ? "selection_pool merged the admitted session-only inventory contract."
-        : undefined,
-      expansionTarget
-        ? exampleExpansionObjects
-          ? "selection_pool merged an object-pool expansion and replayed the example preset for the same feature."
-          : "selection_pool merged an object-pool expansion inside the admitted single-skeleton family."
-        : undefined,
-    ]),
-  );
+  const mergeActions = dedupeStrings([
+    requestedTriggerKey && requestedTriggerKey !== proposal.parameters.triggerKey
+      ? `triggerKey:${requestedTriggerKey}`
+      : undefined,
+    typeof requestedChoiceCount === "number" && requestedChoiceCount !== proposal.parameters.choiceCount
+      ? `choiceCount:${requestedChoiceCount}`
+      : undefined,
+    inventoryRequested ? "inventory_contract" : undefined,
+    expansionTarget ? "object_pool_expansion" : undefined,
+    metadataObjectKind && metadataObjectKind !== proposal.objectKind ? `objectKind:${metadataObjectKind}` : undefined,
+  ]);
+  return {
+    proposal: createFeatureAuthoringProposal(
+      finalParameters,
+      input.proposalSource,
+      dedupeStrings([
+        ...(proposal.notes || []),
+        inventoryRequested
+          ? "selection_pool merged the admitted session-only inventory contract."
+          : undefined,
+        expansionTarget
+          ? exampleExpansionObjects
+            ? "selection_pool merged an object-pool expansion and replayed the example preset for the same feature."
+            : "selection_pool merged an object-pool expansion inside the admitted single-skeleton family."
+          : undefined,
+      ]),
+    ),
+    mergeActions,
+  };
 }
 
 function createScalarParameters(proposal: FeatureAuthoringProposal): Record<string, unknown> {
@@ -1050,7 +1228,15 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
     metadataObjectKind,
   );
 
-  const requestedTriggerKey = parseTriggerKey(requestedChange.request.rawPrompt);
+  const hasExplicitDeltaPath = (path: string): boolean =>
+    [
+      ...(updateIntent.delta.add || []),
+      ...(updateIntent.delta.modify || []),
+    ].some((item) => item.path === path);
+
+  const requestedTriggerKey = hasExplicitDeltaPath("input.triggerKey")
+    ? parseTriggerKey(requestedChange.request.rawPrompt)
+    : undefined;
   if (requestedTriggerKey) {
     merged = normalizeFeatureAuthoringParameters(
       {
@@ -1061,11 +1247,14 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
     );
   }
 
-  const requestedChoiceCount =
-    (typeof requestedChange.selection?.choiceCount === "number" && requestedChange.selection.choiceCount > 0
-      ? Math.floor(requestedChange.selection.choiceCount)
-      : undefined)
-    || parseChoiceCount(requestedChange.request.rawPrompt);
+  const requestedChoiceCount = hasExplicitDeltaPath("selection.choiceCount")
+    ? (
+      (typeof requestedChange.selection?.choiceCount === "number" && requestedChange.selection.choiceCount > 0
+        ? Math.floor(requestedChange.selection.choiceCount)
+        : undefined)
+      || parseChoiceCount(requestedChange.request.rawPrompt)
+    )
+    : undefined;
   if (typeof requestedChoiceCount === "number") {
     merged = normalizeFeatureAuthoringParameters(
       {
@@ -1121,35 +1310,124 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
 export function resolveSelectionPoolFamily(
   input: ResolveSelectionPoolFamilyInput,
 ): ResolveSelectionPoolFamilyResult {
-  if (!shouldHandleSelectionPoolFeature(input)) {
+  const detection = evaluateSelectionPoolDetection(input);
+  if (!detection.handled) {
+    const admissionDiagnostics: SelectionPoolAdmissionDiagnostics = {
+      familyId: SELECTION_POOL_FAMILY_ID,
+      verdict: "not_applicable",
+      detection: {
+        handled: false,
+        objectKindHint: detection.objectKindHint,
+        matchedBy: [],
+        findings: [
+          createAdmissionFinding(
+            "detection",
+            "SELECTION_POOL_NOT_APPLICABLE",
+            "info",
+            "selection_pool detection did not find enough create/update family cues.",
+          ),
+        ],
+      },
+      proposal: {
+        proposalAvailable: false,
+        promptMergeApplied: false,
+        promptMergeActions: [],
+        findings: [],
+      },
+      contract: {
+        assessed: false,
+        skeletonMatch: false,
+        findings: [],
+      },
+      decision: {
+        verdict: "not_applicable",
+        blockerCodes: [],
+        findings: [
+          createAdmissionFinding(
+            "decision",
+            "SELECTION_POOL_NOT_APPLICABLE",
+            "info",
+            "selection_pool family was not applicable for this prompt.",
+          ),
+        ],
+      },
+    };
     return {
       handled: false,
       blocked: false,
       reasons: [],
+      admissionDiagnostics,
     };
   }
-  const objectKindHint = inferObjectKind(input.prompt, input.existingFeature);
+  const objectKindHint = detection.objectKindHint;
   const featureId = input.featureId?.trim() || input.existingFeature?.featureId || "";
-  const blockReasons = collectFamilyBlockReasons(input.prompt);
-  if (blockReasons.length > 0) {
+  const blockFindings = collectFamilyBlockFindings(input.prompt);
+  if (blockFindings.length > 0) {
+    const admissionDiagnostics: SelectionPoolAdmissionDiagnostics = {
+      familyId: SELECTION_POOL_FAMILY_ID,
+      verdict: "governance_blocked",
+      detection: {
+        handled: true,
+        objectKindHint,
+        matchedBy: detection.matchedBy,
+        findings: detection.findings,
+      },
+      proposal: {
+        proposalAvailable: false,
+        promptMergeApplied: false,
+        promptMergeActions: [],
+        findings: [],
+      },
+      contract: {
+        assessed: false,
+        skeletonMatch: false,
+        findings: [],
+      },
+      decision: {
+        verdict: "governance_blocked",
+        blockerCodes: blockFindings.map((finding) => finding.code),
+        findings: blockFindings.map((finding) =>
+          createAdmissionFinding("decision", finding.code, "error", finding.reason),
+        ),
+      },
+    };
     return {
       handled: true,
       blocked: true,
-      reasons: blockReasons,
+      reasons: blockFindings.map((finding) => finding.reason),
+      admissionDiagnostics,
     };
   }
-  const exampleSeed = buildExampleSeedParameters(featureId);
-  const baseProposal =
+  const baseProposalResult =
     input.mode === "create"
-      ? createFeatureAuthoringProposal(
-          exampleSeed || buildGenericSeedParameters(),
-          input.proposalSource,
-          exampleSeed
-            ? ["selection_pool proposal seeded from example catalog for example replay."]
-            : ["selection_pool proposal seeded from generic family defaults."],
-        )
+      ? (() => {
+          const exampleSeed = buildExampleSeedParameters(featureId);
+          return {
+            proposal: createFeatureAuthoringProposal(
+              exampleSeed || buildGenericSeedParameters(),
+              input.proposalSource,
+              exampleSeed
+                ? ["selection_pool proposal seeded from example catalog for example replay."]
+                : ["selection_pool proposal seeded from generic family defaults."],
+            ),
+            baseSource: exampleSeed ? "example_seed" : "generic_seed",
+            seedNotes: exampleSeed
+              ? ["selection_pool proposal seeded from example catalog for example replay."]
+              : ["selection_pool proposal seeded from generic family defaults."],
+          } satisfies SelectionPoolProposalBuildResult;
+        })()
       : buildProposalFromExistingFeature(input, featureId, objectKindHint);
-  const proposal = applyPromptMerge(input, featureId, baseProposal);
+  const promptMerge = applyPromptMerge(input, featureId, baseProposalResult.proposal);
+  const proposal = promptMerge.proposal;
+  const admissionDiagnostics = buildSelectionPoolAdmissionDiagnostics({
+    schema: input.schema,
+    prompt: input.prompt,
+    detection,
+    proposal,
+    proposalBaseSource: baseProposalResult.baseSource,
+    promptMergeActions: promptMerge.mergeActions,
+    initialBlockers: [],
+  });
   return {
     handled: true,
     blocked: false,
@@ -1160,68 +1438,455 @@ export function resolveSelectionPoolFamily(
     ),
     scalarParameters: createScalarParameters(proposal),
     notes: proposal.notes,
+    admissionDiagnostics,
   };
 }
 
+function getSelectionPoolSkeletonSignals(schema: IntentSchema): string[] {
+  return dedupeStrings([
+    schema.normalizedMechanics.trigger ? "trigger" : undefined,
+    schema.normalizedMechanics.candidatePool ? "candidate_pool" : undefined,
+    schema.normalizedMechanics.weightedSelection ? "weighted_selection" : undefined,
+    schema.normalizedMechanics.playerChoice ? "player_choice" : undefined,
+    schema.normalizedMechanics.uiModal ? "ui_modal" : undefined,
+  ]);
+}
+
 function schemaHasSelectionPoolSkeleton(schema: IntentSchema): boolean {
-  return Boolean(
-    schema.normalizedMechanics.trigger &&
-      schema.normalizedMechanics.candidatePool &&
-      schema.normalizedMechanics.weightedSelection &&
-      schema.normalizedMechanics.playerChoice &&
-      schema.normalizedMechanics.uiModal,
+  return getSelectionPoolSkeletonSignals(schema).length === 5;
+}
+
+function assessSelectionPoolContract(
+  schema: IntentSchema,
+  prompt: string,
+  proposal: FeatureAuthoringProposal,
+): SelectionPoolContractAssessment {
+  const normalized = normalizeFeatureAuthoringParameters(
+    proposal.parameters,
+    resolveSelectionPoolObjectKind(proposal.parameters.objectKind) || resolveSelectionPoolObjectKind(proposal.objectKind),
   );
+  const candidateCount = schema.selection?.choiceCount || parseChoiceCount(prompt);
+  const positiveAtoms = new Set([
+    "single_local_trigger",
+    "feature_owned_candidate_pool",
+    "weighted_or_rarity_backed_draw",
+    "present_multiple_candidates",
+    "choose_exactly_one",
+    "current_feature_ui_surface",
+    "commit_and_session_tracking",
+    "selected_removed_or_unchosen_retained",
+  ]);
+  const triggerKeyCount = new Set(
+    (schema.interaction?.activations || [])
+      .filter((activation) => activation.kind === "key" && typeof activation.input === "string")
+      .map((activation) => activation.input!.trim().toUpperCase())
+      .filter((value) => value.length > 0),
+  ).size;
+  const singleLocalTrigger = Boolean(
+    schema.normalizedMechanics.trigger || parseTriggerKey(prompt) || triggerKeyCount === 1,
+  ) && !hasMultipleTriggerOwners(schema);
+  const featureOwnedCandidatePool = Boolean(
+    schema.normalizedMechanics.candidatePool ||
+      schema.selection?.source === "candidate-collection" ||
+      schema.selection?.source === "weighted-pool" ||
+      hasFeatureOwnedCollections(schema),
+  ) && !hasExternalOrSharedOwnership(schema);
+  const weightedOrRarityBackedDraw = Boolean(
+    schema.normalizedMechanics.weightedSelection ||
+      schema.selection?.mode === "weighted" ||
+      /weight|weighted|rarity|tier|权重|加权|稀有度|稀有/i.test(prompt),
+  );
+  const presentMultipleCandidates = (candidateCount ?? 0) > 1;
+  const chooseExactlyOne = Boolean(
+    schema.selection?.cardinality === "single" ||
+      promptHasSingleSelectionCommit(prompt),
+  );
+  const currentFeatureUiSurface = Boolean(
+    schema.normalizedMechanics.uiModal ||
+      schema.uiRequirements?.needed === true ||
+      schema.integrations?.expectedBindings?.some((binding) => binding.kind === "ui-surface") ||
+      promptHasSelectionUiSurface(prompt),
+  );
+  const commitAndSessionTracking = Boolean(
+    schema.stateModel?.states?.some((state) => state.owner === "feature" || state.lifetime === "session") ||
+      normalized.inventory?.enabled === true ||
+      promptHasPostSelectionPoolBehavior(prompt) ||
+      /(?:进入库存|加入库存|store|stored|inventory|session|会话)/i.test(prompt),
+  );
+  const selectedRemovedOrUnchosenRetained = Boolean(
+    promptHasPostSelectionPoolBehavior(prompt) ||
+      schema.selection?.duplicatePolicy === "forbid",
+  );
+  const noPersistence = !hasPersistentStateRequest(schema) &&
+    !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED");
+  const noCrossFeature = !hasCrossFeatureRequest(schema) &&
+    !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_CROSS_FEATURE_NOT_SUPPORTED");
+  const noExternalOwnership = !hasExternalOrSharedOwnership(schema);
+  const noSecondTrigger = triggerKeyCount <= 1 &&
+    !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED");
+  const noMultiConfirm = (schema.selection?.cardinality ?? "single") === "single" &&
+    !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_CONFIRM_NOT_SUPPORTED");
+  const noArbitraryCustomEffectFamily = !hasCustomEffectFamilyRequest(schema) &&
+    !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED");
+
+  const atoms = [
+    {
+      atom: "single_local_trigger",
+      satisfied: singleLocalTrigger,
+      detail: singleLocalTrigger
+        ? "Prompt/schema keep selection_pool on a single local trigger owner."
+        : "selection_pool compression requires one local trigger owner.",
+    },
+    {
+      atom: "feature_owned_candidate_pool",
+      satisfied: featureOwnedCandidatePool,
+      detail: featureOwnedCandidatePool
+        ? "Candidate pool remains feature-owned inside the current feature boundary."
+        : "selection_pool compression requires a feature-owned candidate pool.",
+    },
+    {
+      atom: "weighted_or_rarity_backed_draw",
+      satisfied: weightedOrRarityBackedDraw,
+      detail: weightedOrRarityBackedDraw
+        ? "Prompt/schema provide weighted or rarity-backed draw semantics."
+        : "selection_pool compression requires weighted or rarity-backed draw semantics.",
+    },
+    {
+      atom: "present_multiple_candidates",
+      satisfied: presentMultipleCandidates,
+      detail: presentMultipleCandidates
+        ? `Prompt/schema present ${candidateCount ?? normalized.choiceCount} candidates for selection.`
+        : "selection_pool compression requires presenting multiple candidates.",
+    },
+    {
+      atom: "choose_exactly_one",
+      satisfied: chooseExactlyOne,
+      detail: chooseExactlyOne
+        ? "Prompt/schema confirm exactly one candidate."
+        : "selection_pool compression requires confirming exactly one candidate.",
+    },
+    {
+      atom: "current_feature_ui_surface",
+      satisfied: currentFeatureUiSurface,
+      detail: currentFeatureUiSurface
+        ? "Prompt/schema include a current-feature UI selection surface."
+        : "selection_pool compression requires a current-feature UI selection surface.",
+    },
+    {
+      atom: "commit_and_session_tracking",
+      satisfied: commitAndSessionTracking,
+      detail: commitAndSessionTracking
+        ? "Prompt/schema keep selected-result commit and same-feature/session tracking local."
+        : "selection_pool compression requires same-feature/session tracking for committed selections.",
+    },
+    {
+      atom: "selected_removed_or_unchosen_retained",
+      satisfied: selectedRemovedOrUnchosenRetained,
+      detail: selectedRemovedOrUnchosenRetained
+        ? "Prompt/schema specify post-selection pool behavior."
+        : "selection_pool compression requires explicit post-selection pool behavior.",
+    },
+    {
+      atom: "no_persistence",
+      satisfied: noPersistence,
+      detail: noPersistence
+        ? "Prompt/schema stay session-local and avoid persistence."
+        : "selection_pool does not admit persistence in the bounded family contract.",
+    },
+    {
+      atom: "no_cross_feature",
+      satisfied: noCrossFeature,
+      detail: noCrossFeature
+        ? "Prompt/schema stay inside same-feature ownership."
+        : "selection_pool does not admit cross-feature grants or coupling.",
+    },
+    {
+      atom: "no_external_ownership",
+      satisfied: noExternalOwnership,
+      detail: noExternalOwnership
+        ? "Prompt/schema avoid external/shared ownership."
+        : "selection_pool requires feature-owned/session-local state and collections.",
+    },
+    {
+      atom: "no_second_trigger",
+      satisfied: noSecondTrigger,
+      detail: noSecondTrigger
+        ? "Prompt/schema do not introduce a second trigger owner."
+        : "selection_pool currently admits only one trigger owner.",
+    },
+    {
+      atom: "no_multi_confirm",
+      satisfied: noMultiConfirm,
+      detail: noMultiConfirm
+        ? "Prompt/schema keep a single confirm flow."
+        : "selection_pool currently admits exactly one confirm flow.",
+    },
+    {
+      atom: "no_arbitrary_custom_effect_family",
+      satisfied: noArbitraryCustomEffectFamily,
+      detail: noArbitraryCustomEffectFamily
+        ? "Prompt/schema stay inside the bounded placeholder effect profile."
+        : "selection_pool does not admit arbitrary custom effect families.",
+    },
+  ];
+  const blockerCodes = dedupeStrings([
+    !noPersistence ? "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED" : undefined,
+    !noCrossFeature ? "SELECTION_POOL_CROSS_FEATURE_NOT_SUPPORTED" : undefined,
+    !noExternalOwnership ? "SELECTION_POOL_EXTERNAL_OWNERSHIP_NOT_SUPPORTED" : undefined,
+    !noSecondTrigger ? "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED" : undefined,
+    !noMultiConfirm ? "SELECTION_POOL_MULTI_CONFIRM_NOT_SUPPORTED" : undefined,
+    !noArbitraryCustomEffectFamily ? "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED" : undefined,
+  ]);
+  const missingAtoms = atoms
+    .filter((atom) => positiveAtoms.has(atom.atom) && !atom.satisfied)
+    .map((atom) => atom.atom);
+  return {
+    skeletonMatch: schemaHasSelectionPoolSkeleton(schema),
+    compressionEligible: !schemaHasSelectionPoolSkeleton(schema) && blockerCodes.length === 0 && missingAtoms.length === 0,
+    atoms,
+    satisfiedAtoms: atoms.filter((atom) => atom.satisfied).map((atom) => atom.atom),
+    missingAtoms,
+    blockerCodes,
+  };
+}
+
+function deriveSelectionPoolAdmissionVerdict(input: {
+  handled: boolean;
+  proposalAvailable: boolean;
+  assessment?: SelectionPoolContractAssessment;
+  blockerCodes?: string[];
+}): SelectionPoolAdmissionVerdict {
+  if (!input.handled) {
+    return "not_applicable";
+  }
+  if ((input.blockerCodes || []).length > 0 || (input.assessment?.blockerCodes.length || 0) > 0) {
+    return "governance_blocked";
+  }
+  if (!input.proposalAvailable) {
+    return "declined";
+  }
+  if (input.assessment?.skeletonMatch) {
+    return "admitted_explicit";
+  }
+  if (input.assessment?.compressionEligible) {
+    return "admitted_compressed";
+  }
+  return "declined";
+}
+
+function buildSelectionPoolAdmissionDiagnostics(input: {
+  prompt: string;
+  schema?: IntentSchema;
+  detection: SelectionPoolDetectionResult;
+  proposal?: FeatureAuthoringProposal;
+  proposalBaseSource?: SelectionPoolProposalBuildResult["baseSource"];
+  promptMergeActions?: string[];
+  initialBlockers?: string[];
+}): SelectionPoolAdmissionDiagnostics {
+  const assessment =
+    input.schema && input.proposal
+      ? assessSelectionPoolContract(input.schema, input.prompt, input.proposal)
+      : undefined;
+  const blockerCodes = dedupeStrings([
+    ...(input.initialBlockers || []),
+    ...(assessment?.blockerCodes || []),
+  ]);
+  const verdict = deriveSelectionPoolAdmissionVerdict({
+    handled: input.detection.handled,
+    proposalAvailable: Boolean(input.proposal),
+    assessment,
+    blockerCodes,
+  });
+  const contractFindings = assessment
+    ? assessment.atoms.map((atom) =>
+        createAdmissionFinding(
+          "contract",
+          `SELECTION_POOL_CONTRACT_${atom.atom.toUpperCase()}`,
+          atom.satisfied ? "info" : "warning",
+          atom.detail,
+          { atom: atom.atom, satisfied: atom.satisfied },
+        ),
+      )
+    : [];
+  const skeletonSignals = input.schema ? getSelectionPoolSkeletonSignals(input.schema) : [];
+  if (input.schema) {
+    contractFindings.unshift(
+      createAdmissionFinding(
+        "contract",
+        "SELECTION_POOL_SKELETON_SIGNALS",
+        assessment?.skeletonMatch ? "info" : "warning",
+        assessment?.skeletonMatch
+          ? "Blueprint schema already exposes the full selection_pool skeleton."
+          : `Blueprint schema exposes only ${skeletonSignals.join(", ") || "no"} selection_pool skeleton signals.`,
+        { metadata: { skeletonSignals } },
+      ),
+    );
+  }
+  const proposalFindings = input.proposal
+    ? [
+        createAdmissionFinding(
+          "proposal",
+          "SELECTION_POOL_PROPOSAL_AVAILABLE",
+          "info",
+          "selection_pool produced a bounded source-backed proposal candidate.",
+          {
+            metadata: {
+              proposalSource: input.proposal.proposalSource,
+              baseSource: input.proposalBaseSource,
+              objectKind: input.proposal.objectKind,
+            },
+          },
+        ),
+        ...(input.promptMergeActions || []).map((action) =>
+          createAdmissionFinding(
+            "proposal",
+            "SELECTION_POOL_PROMPT_MERGE",
+            "info",
+            `selection_pool prompt merge applied ${action}.`,
+            { metadata: { action } },
+          ),
+        ),
+      ]
+    : [];
+  const decisionFindings: SelectionPoolAdmissionFinding[] = [
+    createAdmissionFinding(
+      "decision",
+      `SELECTION_POOL_${verdict.toUpperCase()}`,
+      verdict === "governance_blocked" ? "error" : verdict === "declined" ? "warning" : "info",
+      verdict === "admitted_explicit"
+        ? "selection_pool admitted through the full explicit skeleton."
+        : verdict === "admitted_compressed"
+          ? "selection_pool admitted through contract-based compression."
+          : verdict === "governance_blocked"
+            ? "selection_pool contract detected governance-incompatible semantics."
+            : verdict === "declined"
+              ? "selection_pool matched as a family candidate but did not satisfy the bounded contract."
+              : "selection_pool was not applicable for this prompt.",
+    ),
+    ...blockerCodes.map((code) =>
+      createAdmissionFinding("decision", code, "error", `${code} prevented bounded selection_pool admission.`),
+    ),
+  ];
+  return {
+    familyId: SELECTION_POOL_FAMILY_ID,
+    verdict,
+    detection: {
+      handled: input.detection.handled,
+      objectKindHint: input.detection.objectKindHint,
+      matchedBy: input.detection.matchedBy,
+      findings: input.detection.findings,
+    },
+    proposal: {
+      proposalAvailable: Boolean(input.proposal),
+      proposalSource: input.proposal?.proposalSource,
+      baseSource: input.proposalBaseSource,
+      promptMergeApplied: (input.promptMergeActions?.length || 0) > 0,
+      promptMergeActions: input.promptMergeActions || [],
+      objectKind: input.proposal?.objectKind,
+      findings: proposalFindings,
+    },
+    contract: {
+      assessed: Boolean(assessment),
+      skeletonMatch: assessment?.skeletonMatch || false,
+      ...(assessment ? { assessment } : {}),
+      findings: contractFindings,
+    },
+    decision: {
+      verdict,
+      blockerCodes,
+      findings: decisionFindings,
+    },
+  };
 }
 
 export function normalizeSelectionPoolFeatureAuthoringProposal(
   schema: IntentSchema,
   proposal: FeatureAuthoringProposal | undefined,
+  diagnosticsSeed?: SelectionPoolAdmissionDiagnostics,
 ): FeatureAuthoringNormalizationResult {
-  if (!proposal) {
-    return { blockers: [], warnings: [], notes: [] };
-  }
-  const blockers: string[] = [];
   const warnings: string[] = [];
   const notes: string[] = [];
+  if (!proposal) {
+    return {
+      blockers: [],
+      warnings,
+      notes,
+      admissionDiagnostics: diagnosticsSeed,
+    };
+  }
+  const blockers: string[] = [];
   if (proposal.mode !== "source-backed" || proposal.profile !== "selection_pool") {
     blockers.push("Only the bounded selection_pool source-backed profile is admitted in the current Blueprint stage.");
-    return { blockers, warnings, notes };
-  }
-  if (!schemaHasSelectionPoolSkeleton(schema)) {
-    blockers.push("Blueprint-authorized selection_pool admission requires trigger + weighted_pool + player_choice + ui_modal skeleton signals.");
-  }
-  if (schema.classification.intentKind === "cross-system-composition") {
-    blockers.push("selection_pool remains same-feature owned and does not admit cross-system composition.");
+    return {
+      blockers,
+      warnings,
+      notes,
+      admissionDiagnostics: buildSelectionPoolAdmissionDiagnostics({
+        prompt: schema.request.rawPrompt,
+        schema,
+        detection: evaluateSelectionPoolDetection({
+          prompt: schema.request.rawPrompt,
+          hostRoot: "",
+          mode: "create",
+          schema,
+          proposalSource: proposal.proposalSource || "fallback",
+        }),
+        proposal,
+        promptMergeActions: diagnosticsSeed?.proposal.promptMergeActions || [],
+        proposalBaseSource: diagnosticsSeed?.proposal.baseSource as SelectionPoolProposalBuildResult["baseSource"] | undefined,
+        initialBlockers: blockers,
+      }),
+    };
   }
   const metadataObjectKind =
     resolveSelectionPoolObjectKind(proposal.parameters.objectKind)
     || resolveSelectionPoolObjectKind(proposal.objectKind);
   const normalized = normalizeFeatureAuthoringParameters(proposal.parameters, metadataObjectKind);
+  const diagnostics = buildSelectionPoolAdmissionDiagnostics({
+    prompt: schema.request.rawPrompt,
+    schema,
+    detection: diagnosticsSeed
+      ? {
+          handled: diagnosticsSeed.detection.handled,
+          objectKindHint: diagnosticsSeed.detection.objectKindHint,
+          matchedBy: diagnosticsSeed.detection.matchedBy,
+          findings: diagnosticsSeed.detection.findings,
+        }
+      : evaluateSelectionPoolDetection({
+          prompt: schema.request.rawPrompt,
+          hostRoot: "",
+          mode: "create",
+          schema,
+          proposalSource: proposal.proposalSource || "fallback",
+        }),
+    proposal,
+    promptMergeActions: diagnosticsSeed?.proposal.promptMergeActions || [],
+    proposalBaseSource: diagnosticsSeed?.proposal.baseSource as SelectionPoolProposalBuildResult["baseSource"] | undefined,
+    initialBlockers: blockers,
+  });
+  if (diagnostics.verdict === "declined" || diagnostics.verdict === "governance_blocked") {
+    notes.push(`selection_pool admission verdict: ${diagnostics.verdict}`);
+    return { blockers: [], warnings, notes, admissionDiagnostics: diagnostics };
+  }
   if (!SELECTION_POOL_PARAMETER_SURFACE.triggerKey.allowList.includes(normalized.triggerKey)) {
-    blockers.push(`selection_pool only supports one admitted hotkey from ${SELECTION_POOL_PARAMETER_SURFACE.triggerKey.allowList.join(", ")}.`);
+    warnings.push(`selection_pool proposal normalized triggerKey '${normalized.triggerKey}' into the admitted hotkey set only at review time.`);
   }
   if (normalized.choiceCount < 1 || normalized.choiceCount > 5) {
-    blockers.push("selection_pool choiceCount must stay inside the admitted 1..5 bounded field.");
+    warnings.push("selection_pool choiceCount normalized outside the admitted 1..5 bounded field and cannot be trusted for bounded reuse.");
   }
   if (!Array.isArray(normalized.objects) || normalized.objects.length < 1) {
-    blockers.push("selection_pool requires at least one authored object in the feature-owned collection.");
+    warnings.push("selection_pool proposal requires at least one authored object in the feature-owned collection.");
   }
   if (normalized.inventory?.enabled === true) {
     if (normalized.inventory.presentation !== "persistent_panel") {
-      blockers.push('selection_pool inventory currently only supports presentation "persistent_panel".');
+      warnings.push('selection_pool inventory currently only supports presentation "persistent_panel".');
     }
     if (normalized.inventory.capacity < 1 || normalized.inventory.capacity > 30) {
-      blockers.push("selection_pool inventory capacity must stay inside the admitted 1..30 bounded field.");
+      warnings.push("selection_pool inventory capacity must stay inside the admitted 1..30 bounded field.");
     }
   }
-  if (schema.selection?.cardinality && schema.selection.cardinality !== "single") {
-    blockers.push("selection_pool currently requires confirming exactly one candidate.");
-  }
   if (proposal.parameters.effectProfile?.kind && proposal.parameters.effectProfile.kind !== "tier_attribute_bonus_placeholder") {
-    blockers.push("selection_pool currently admits only the bounded placeholder tier effect profile.");
-  }
-  if (blockers.length > 0) {
-    return { blockers, warnings, notes };
+    warnings.push("selection_pool currently admits only the bounded placeholder tier effect profile.");
   }
   const featureAuthoring: FeatureAuthoring = {
     mode: "source-backed",
@@ -1238,7 +1903,8 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
   if (proposal.proposalSource) {
     notes.push(`featureAuthoringProposal source: ${proposal.proposalSource}`);
   }
-  return { featureAuthoring, blockers, warnings, notes };
+  notes.push(`selection_pool admission verdict: ${diagnostics.verdict}`);
+  return { featureAuthoring, blockers, warnings, notes, admissionDiagnostics: diagnostics };
 }
 
 function compileEffectApplication(

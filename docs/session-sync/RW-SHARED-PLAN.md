@@ -22,7 +22,7 @@ Use these status markers:
 Current step:
 
 - Step 6. Validation / evidence / case generalization
-- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, and bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster. The active slice is to refresh dependency-driven revalidation evidence, harden exploratory grounding quality, and decide which successful exploratory outputs are ready for stabilization or graduation.
+- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, and the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams. The active slice remains to refresh dependency-driven revalidation evidence, harden exploratory grounding quality, and decide which successful exploratory outputs are ready for stabilization or graduation.
 
 Primary blocker:
 
@@ -49,6 +49,7 @@ Plan items:
 - `[done]` Tighten source-backed family update purity for bounded `selection_pool` updates.
 - `[done]` Re-prove the exact `talent_draw` demo prompt pair on a fresh host, including semantic artifact export, runtime validation, and the bounded 16-slot inventory update without `choiceCount` drift.
 - `[done]` Stabilize create-side `IntentSchema` governance semantics for the bounded local weighted-selection / `talent_draw` cluster, including a 3-prompt x 5-run wizard stability proof with `governance-core variants = 1`.
+- `[done]` Refactor `IntentSchema` internals into first-class `raw facts / governance decisions / open semantic residue` layers while keeping the public contract stable.
 - `[doing]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases on top of the cleaner planning/update surface.
 - `[doing]` Reduce synthesis grounding warnings further on exploratory asks.
 - `[todo]` Decide which repeated exploratory outputs are ready to graduate into reusable assets.
@@ -110,7 +111,7 @@ Plan items:
 
 Latest Dota2 session-sync:
 
-- [dota2-mainline-20260420-0052.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260420-0052.md)
+- [dota2-mainline-20260420-0412.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260420-0412.md)
 
 Latest War3 session-sync:
 

@@ -21,6 +21,7 @@ import {
   BlueprintProposal,
   FinalBlueprint,
   ModuleNeed,
+  ModuleFacetSpec,
   ProposalConnection,
   ProposalModule,
   NormalizedBlueprintStatus,
@@ -56,11 +57,28 @@ import {
 } from "./blueprint-status-policy";
 import {
   assessSemanticCompleteness,
+  classifySpawnEmissionRisk,
   classifySchedulerTimerRisk,
+  detectFollowOwnerMotionSignals,
   detectSelectionFlowAsk,
 } from "./seam-authority";
 import type { SemanticAssessment } from "./seam-authority";
 import { stripNegativeConstraintFragments } from "./semantic-lexical";
+import { buildModulePlanning } from "./module-planning.js";
+import {
+  applyUpdateRemovalDirectives,
+  buildPreservedUpdateMechanics,
+  buildPreservedUpdateSelection,
+  collectUpdateInvariantConflictIssues,
+  collectUpdateRemovalDirectives,
+  filterUpdateFunctionalRequirements,
+  filterUpdateTypedRequirements,
+  mergeUpdateUISurfaces,
+  resolveAuthoritativeUpdateChoiceCount,
+  resolveAuthoritativeUpdateTriggerKey,
+  resolveUpdatePreservationAuthority,
+  shouldUseAuthoritativeSourceBackedUpdateProjection,
+} from "./update-preservation.js";
 
 function isPatternAvailable(patternId: string): boolean {
   return isCanonicalPatternAvailable(patternId);
@@ -92,8 +110,9 @@ export class BlueprintBuilder {
     schema: IntentSchema,
   ): BlueprintBuildResult {
     try {
-      const proposal = this.buildProposal(schema);
-      const normalization = this.normalizeProposal(schema, proposal);
+      const draftBlueprint = this.doBuild(schema);
+      const proposal = this.buildProposal(schema, draftBlueprint);
+      const normalization = this.normalizeProposal(schema, proposal, draftBlueprint);
       const finalBlueprint = normalization.finalBlueprint;
       const issues = [...normalization.report.issues];
       const canContinue = finalBlueprint.commitDecision?.canAssemble ?? finalBlueprint.status === "ready";
@@ -101,6 +120,7 @@ export class BlueprintBuilder {
       if (!canContinue) {
         return {
           success: false,
+          draftBlueprint,
           blueprint: finalBlueprint,
           finalBlueprint,
           blueprintProposal: proposal,
@@ -111,6 +131,7 @@ export class BlueprintBuilder {
 
       return {
         success: true,
+        draftBlueprint,
         blueprint: finalBlueprint,
         finalBlueprint,
         blueprintProposal: proposal,
@@ -134,7 +155,8 @@ export class BlueprintBuilder {
    * 执行构建
    */
   private doBuild(schema: IntentSchema): Blueprint {
-    const modules = this.buildModules(schema);
+    const planning = this.buildModules(schema);
+    const modules = planning.modules;
     const connections = this.config.autoConnect
       ? this.buildConnections(modules)
       : [];
@@ -153,6 +175,7 @@ export class BlueprintBuilder {
         normalizedMechanics: schema.normalizedMechanics,
       },
       modules,
+      ...(planning.moduleFacets.length > 0 ? { moduleFacets: planning.moduleFacets } : {}),
       connections,
       patternHints,
       ...(uiDesignSpec && { uiDesignSpec }),
@@ -166,8 +189,8 @@ export class BlueprintBuilder {
 
   private buildProposal(
     schema: IntentSchema,
+    candidate: Blueprint,
   ): BlueprintProposal {
-    const candidate = this.doBuild(schema);
     const readiness = getSchemaReadiness(schema);
     const issues = collectProposalIssues(schema);
     const blockedBy = [...collectProposalBlockers(schema)];
@@ -215,29 +238,36 @@ export class BlueprintBuilder {
   ): BlueprintBuildResult {
     try {
       const effectiveSchema = this.buildEffectiveUpdateSchema(updateIntent);
-      const proposal = this.buildProposal(effectiveSchema);
-      const normalization = this.normalizeProposal(effectiveSchema, proposal);
-      const finalBlueprint = normalization.finalBlueprint;
-      const issues = [...normalization.report.issues];
+      const draftBlueprint = this.doBuild(effectiveSchema);
+      const proposal = this.buildProposal(effectiveSchema, draftBlueprint);
+      const normalization = this.normalizeProposal(effectiveSchema, proposal, draftBlueprint);
+      const invariantConflictIssues = collectUpdateInvariantConflictIssues(updateIntent);
+      const adjustedNormalization = invariantConflictIssues.length > 0
+        ? this.applyBlockingIssues(normalization, invariantConflictIssues)
+        : normalization;
+      const finalBlueprint = adjustedNormalization.finalBlueprint;
+      const issues = [...adjustedNormalization.report.issues];
       const canContinue = finalBlueprint.commitDecision?.canAssemble ?? finalBlueprint.status === "ready";
 
       if (!canContinue) {
         return {
           success: false,
+          draftBlueprint,
           blueprint: finalBlueprint,
           finalBlueprint,
           blueprintProposal: proposal,
-          normalizationReport: normalization.report,
+          normalizationReport: adjustedNormalization.report,
           issues,
         };
       }
 
       return {
         success: true,
+        draftBlueprint,
         blueprint: finalBlueprint,
         finalBlueprint,
         blueprintProposal: proposal,
-        normalizationReport: normalization.report,
+        normalizationReport: adjustedNormalization.report,
         issues,
       };
     } catch (error) {
@@ -256,12 +286,13 @@ export class BlueprintBuilder {
   private normalizeProposal(
     schema: IntentSchema,
     proposal: BlueprintProposal,
+    candidate: Blueprint,
   ): { finalBlueprint: FinalBlueprint; report: BlueprintNormalizationReport } {
-    const candidate = this.doBuild(schema);
     const modules = this.canonicalizeModules(candidate.modules);
     const connections = this.canonicalizeConnections(candidate.connections, modules);
-    const moduleNeeds = buildModuleNeeds(schema, modules);
-    const assessment = assessSemanticCompleteness(schema, modules, moduleNeeds, proposal);
+    const moduleFacets = candidate.moduleFacets || [];
+    const moduleNeeds = buildModuleNeeds(schema, modules, moduleFacets);
+    const assessment = assessSemanticCompleteness(schema, modules, moduleNeeds, proposal, moduleFacets);
     const preliminaryStatus = getNormalizedStatus(schema, proposal, modules, assessment);
     const status: NormalizedBlueprintStatus = preliminaryStatus;
     const issues = this.collectNormalizationIssues(
@@ -291,6 +322,7 @@ export class BlueprintBuilder {
     const finalBlueprint: FinalBlueprint = {
       ...candidate,
       modules,
+      ...(moduleFacets.length > 0 ? { moduleFacets } : {}),
       connections,
       parameters: candidate.parameters,
       status,
@@ -584,37 +616,46 @@ export class BlueprintBuilder {
   ): IntentSchema {
     const requestedChange = updateIntent.requestedChange;
     const currentFeatureContext = updateIntent.currentFeatureContext;
-    const preservedPatternIds = this.resolvePreservedPatternIds(currentFeatureContext);
-    const preservedModuleRoles = this.resolvePreservedModuleRoles(currentFeatureContext);
-    const choiceCount =
-      requestedChange.selection?.choiceCount
-      || (typeof currentFeatureContext.boundedFields.choiceCount === "number"
-        ? currentFeatureContext.boundedFields.choiceCount
-        : undefined);
-    const triggerKey =
-      (typeof requestedChange.parameters?.triggerKey === "string"
-        ? requestedChange.parameters.triggerKey
-        : undefined)
-      || (typeof currentFeatureContext.boundedFields.triggerKey === "string"
-        ? currentFeatureContext.boundedFields.triggerKey
-        : undefined);
-    const mergedRequiredPatterns = Array.from(
-      new Set([
-        ...(requestedChange.constraints?.requiredPatterns || []),
-        ...preservedPatternIds,
-      ]),
+    const preservationAuthority = resolveUpdatePreservationAuthority(currentFeatureContext);
+    const removalDirectives = collectUpdateRemovalDirectives(updateIntent);
+    const preservedModuleRoles = applyUpdateRemovalDirectives(
+      preservationAuthority.preservedRoles,
+      preservationAuthority.sourceBackedInvariantRoles,
+      removalDirectives,
     );
+    const choiceCount = resolveAuthoritativeUpdateChoiceCount(updateIntent);
+    const triggerKey = resolveAuthoritativeUpdateTriggerKey(updateIntent);
     const collapsePatternOwnedState = this.shouldCollapsePatternOwnedState(
       requestedChange,
       preservedModuleRoles,
     );
-    const mergedFunctional = Array.from(
-      new Set([
-        ...(requestedChange.requirements.functional || []),
-        "Preserve the current feature skeleton while applying the requested same-feature delta.",
-      ]),
+    const useAuthoritativeSourceBackedProjection = shouldUseAuthoritativeSourceBackedUpdateProjection(
+      updateIntent,
+      preservationAuthority,
+      removalDirectives,
     );
-    const mergedSurfaces = this.mergeUpdateUISurfaces(requestedChange, preservedPatternIds);
+    const mergedFunctional = useAuthoritativeSourceBackedProjection
+      ? []
+      : Array.from(
+          new Set(
+            filterUpdateFunctionalRequirements(
+              requestedChange.requirements.functional || [],
+              currentFeatureContext,
+            ),
+          ),
+        );
+    const mergedTypedRequirements = useAuthoritativeSourceBackedProjection
+      ? []
+      : filterUpdateTypedRequirements(
+          requestedChange.requirements.typed || [],
+          currentFeatureContext,
+        );
+    const mergedSurfaces = mergeUpdateUISurfaces(
+      requestedChange,
+      preservedModuleRoles,
+      preservationAuthority.sourceBackedInvariantRoles,
+      removalDirectives,
+    );
 
     return {
       ...requestedChange,
@@ -633,23 +674,49 @@ export class BlueprintBuilder {
         ...requestedChange.requirements,
         functional: mergedFunctional,
         typed: collapsePatternOwnedState
-          ? (requestedChange.requirements.typed || []).filter((requirement) => requirement.kind !== "state")
-          : requestedChange.requirements.typed,
+          ? mergedTypedRequirements.filter((requirement) => requirement.kind !== "state")
+          : mergedTypedRequirements,
       },
       constraints: {
         ...(requestedChange.constraints || {}),
-        ...(mergedRequiredPatterns.length > 0 ? { requiredPatterns: mergedRequiredPatterns } : {}),
       },
-      selection: this.buildPreservedUpdateSelection(requestedChange, preservedModuleRoles, choiceCount),
+      selection: buildPreservedUpdateSelection(
+        requestedChange,
+        preservedModuleRoles,
+        preservationAuthority.sourceBackedInvariantRoles,
+        choiceCount,
+        removalDirectives,
+      ),
       uiRequirements: mergedSurfaces.length > 0
         ? {
             ...(requestedChange.uiRequirements || {}),
             needed: true,
             surfaces: mergedSurfaces,
           }
-        : requestedChange.uiRequirements,
-      stateModel: collapsePatternOwnedState ? undefined : requestedChange.stateModel,
-      normalizedMechanics: this.buildPreservedUpdateMechanics(requestedChange, preservedModuleRoles),
+        : removalDirectives.removeUi && !preservationAuthority.sourceBackedInvariantRoles.includes("selection_modal")
+          ? {
+              ...(requestedChange.uiRequirements || {}),
+              needed: false,
+              surfaces: [],
+            }
+          : requestedChange.uiRequirements,
+      stateModel: useAuthoritativeSourceBackedProjection
+        ? undefined
+        : collapsePatternOwnedState
+          ? undefined
+          : requestedChange.stateModel,
+      composition: useAuthoritativeSourceBackedProjection
+        ? undefined
+        : requestedChange.composition,
+      integrations: useAuthoritativeSourceBackedProjection
+        ? undefined
+        : requestedChange.integrations,
+      normalizedMechanics: buildPreservedUpdateMechanics(
+        requestedChange,
+        preservedModuleRoles,
+        preservationAuthority.sourceBackedInvariantRoles,
+        removalDirectives,
+      ),
       parameters: {
         ...(requestedChange.parameters || {}),
         ...(triggerKey ? { triggerKey } : {}),
@@ -659,6 +726,11 @@ export class BlueprintBuilder {
         new Set([
           ...(requestedChange.resolvedAssumptions || []),
           ...updateIntent.resolvedAssumptions,
+          ...(useAuthoritativeSourceBackedProjection
+            ? [
+                "Authoritative source-backed bounded update projection is active; preserved structure comes from current feature truth rather than re-derived update prose.",
+              ]
+            : []),
         ]),
       ),
     };
@@ -676,164 +748,62 @@ export class BlueprintBuilder {
       || preservedModuleRoles.includes("selection_flow");
   }
 
-  private buildPreservedUpdateMechanics(
-    requestedChange: IntentSchema,
-    preservedModuleRoles: string[],
-  ): IntentSchema["normalizedMechanics"] {
-    const mechanics = {
-      ...(requestedChange.normalizedMechanics || {}),
-    };
-    const preserved = new Set(preservedModuleRoles);
-
-    if (preserved.has("input_trigger")) {
-      mechanics.trigger = true;
-    }
-    if (preserved.has("weighted_pool")) {
-      mechanics.candidatePool = true;
-      mechanics.weightedSelection = true;
-    }
-    if (preserved.has("selection_flow")) {
-      mechanics.playerChoice = true;
-    }
-    if (preserved.has("selection_modal")) {
-      mechanics.uiModal = true;
-    }
-    if (preserved.has("effect_application") || preserved.has("spawn_emitter")) {
-      mechanics.outcomeApplication = true;
-    }
-    if (preserved.has("resource_pool")) {
-      mechanics.resourceConsumption = true;
+  private applyBlockingIssues(
+    normalization: { finalBlueprint: FinalBlueprint; report: BlueprintNormalizationReport },
+    additionalIssues: ValidationIssue[],
+  ): { finalBlueprint: FinalBlueprint; report: BlueprintNormalizationReport } {
+    if (additionalIssues.length === 0) {
+      return normalization;
     }
 
-    return mechanics;
-  }
-
-  private mergeUpdateUISurfaces(
-    requestedChange: IntentSchema,
-    preservedPatternIds: string[],
-  ): string[] {
-    const surfaces = new Set<string>(requestedChange.uiRequirements?.surfaces || []);
-    const preserved = new Set(preservedPatternIds);
-    if (preserved.has("selection_modal") || preserved.has("ui.selection_modal")) {
-      surfaces.add("selection_modal");
-    }
-    return Array.from(surfaces);
-  }
-
-  private buildPreservedUpdateSelection(
-    requestedChange: IntentSchema,
-    preservedModuleRoles: string[],
-    choiceCount: number | undefined,
-  ): IntentSchema["selection"] {
-    const preserved = new Set(preservedModuleRoles);
-    const hasSelectionSkeleton =
-      requestedChange.selection !== undefined
-      || preserved.has("weighted_pool")
-      || preserved.has("selection_flow")
-      || preserved.has("selection_modal");
-
-    if (!hasSelectionSkeleton) {
-      return requestedChange.selection;
-    }
-
-    return {
-      mode: requestedChange.selection?.mode || "user-chosen",
-      ...(preserved.has("weighted_pool") || requestedChange.selection?.source
-        ? {
-            source: requestedChange.selection?.source || "weighted-pool",
-          }
-        : {}),
-      choiceMode: requestedChange.selection?.choiceMode || "user-chosen",
-      cardinality: requestedChange.selection?.cardinality || "single",
-      ...(typeof choiceCount === "number" ? { choiceCount } : {}),
-      repeatability: requestedChange.selection?.repeatability || "repeatable",
-      duplicatePolicy: requestedChange.selection?.duplicatePolicy || "forbid",
-      commitment: requestedChange.selection?.commitment || "confirm",
-      ...(requestedChange.selection?.inventory
-        ? { inventory: requestedChange.selection.inventory }
-        : {}),
-    };
-  }
-
-  private resolvePreservedPatternIds(
-    currentFeatureContext: UpdateIntent["currentFeatureContext"],
-  ): string[] {
-    const modulePatternIds = (currentFeatureContext.moduleRecords || [])
-      .flatMap((moduleRecord) => moduleRecord.selectedPatternIds || []);
-    const legacyBackbonePatternIds = [
-      ...(currentFeatureContext.preservedModuleBackbone || []),
-      ...(currentFeatureContext.admittedSkeleton || []),
-    ].filter((item) => item.includes("."));
-
-    return Array.from(
+    const issues = [...normalization.report.issues, ...additionalIssues];
+    const blockers = Array.from(
       new Set([
-        ...currentFeatureContext.selectedPatterns,
-        ...modulePatternIds,
-        ...legacyBackbonePatternIds,
+        ...normalization.report.blockers,
+        ...additionalIssues
+          .filter((issue) => issue.severity === "error")
+          .map((issue) => issue.message),
       ]),
     );
-  }
 
-  private resolvePreservedModuleRoles(
-    currentFeatureContext: UpdateIntent["currentFeatureContext"],
-  ): string[] {
-    const roles = (currentFeatureContext.moduleRecords || [])
-      .map((moduleRecord) => moduleRecord.role);
-
-    const backboneItems = [
-      ...(currentFeatureContext.preservedModuleBackbone || []),
-      ...(currentFeatureContext.admittedSkeleton || []),
-    ];
-
-    for (const item of backboneItems) {
-      const mapped = item.includes(".")
-        ? this.mapPatternIdToModuleRole(item)
-        : item;
-      if (mapped) {
-        roles.push(mapped);
-      }
-    }
-
-    if (roles.length === 0) {
-      for (const patternId of currentFeatureContext.selectedPatterns) {
-        const mapped = this.mapPatternIdToModuleRole(patternId);
-        if (mapped) {
-          roles.push(mapped);
-        }
-      }
-    }
-
-    return Array.from(new Set(roles));
-  }
-
-  private mapPatternIdToModuleRole(patternId: string): string | undefined {
-    switch (patternId) {
-      case CORE_PATTERN_IDS.INPUT_KEY_BINDING:
-        return "input_trigger";
-      case CORE_PATTERN_IDS.DATA_WEIGHTED_POOL:
-        return "weighted_pool";
-      case CORE_PATTERN_IDS.RULE_SELECTION_FLOW:
-        return "selection_flow";
-      case CORE_PATTERN_IDS.UI_SELECTION_MODAL:
-        return "selection_modal";
-      case CORE_PATTERN_IDS.UI_RESOURCE_BAR:
-        return "resource_bar";
-      case CORE_PATTERN_IDS.UI_KEY_HINT:
-        return "key_hint";
-      case "effect.modifier_applier":
-      case "dota2.short_time_buff":
-      case "dota2.linear_projectile_emit":
-      case "effect.dash":
-        return "effect_application";
-      default:
-        return undefined;
-    }
+    return {
+      finalBlueprint: {
+        ...normalization.finalBlueprint,
+        status: "blocked",
+        readyForAssembly: false,
+        validationStatus: this.buildValidationStatus("blocked", issues),
+        commitDecision: {
+          outcome: "blocked",
+          canAssemble: false,
+          canWriteHost: false,
+          requiresReview: true,
+          reasons: blockers,
+          stage: "blueprint",
+        },
+      },
+      report: {
+        ...normalization.report,
+        status: "blocked",
+        issues,
+        blockers,
+      },
+    };
   }
 
   /**
    * 根据需求构建模块
    */
-  private buildModules(schema: IntentSchema): BlueprintModule[] {
+  private buildModules(
+    schema: IntentSchema,
+  ): { modules: BlueprintModule[]; moduleFacets: ModuleFacetSpec[] } {
+    return buildModulePlanning(
+      schema,
+      this.buildFlatModules(schema),
+      this.config.modulePrefix,
+    );
+  }
+
+  private buildFlatModules(schema: IntentSchema): BlueprintModule[] {
     const modules: BlueprintModule[] = [];
     const prefix = this.config.modulePrefix;
     const schemaParams = this.getSchemaParameters(schema);
@@ -964,7 +934,11 @@ export class BlueprintBuilder {
     const categories = inferCategoriesFromMechanics(schema);
 
     for (const category of categories) {
-      const role = inferRoleFromCategory(category, this.collectMechanicContextSignals(schema, category));
+      const role = inferRoleFromCategory(
+        category,
+        this.collectMechanicContextSignals(schema, category),
+        detectSelectionFlowAsk(schema),
+      );
       const parameters = this.collectMechanicModuleParameters(schema, category, role, schemaParams);
       const newModule: BlueprintModule = {
         id: `${prefix}${category}_${modules.length}`,

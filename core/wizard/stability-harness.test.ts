@@ -4,10 +4,14 @@ import type { IntentSchema, ValidationIssue, WizardClarificationPlan } from "../
 import {
   buildWizardStabilityArtifact,
   DEFAULT_WIZARD_STABILITY_CORPUS,
-  extractIntentSchemaGovernanceCore,
   parseWizardStabilityCorpus,
-  stableIntentSchemaGovernanceFingerprint,
 } from "./stability-harness";
+import {
+  extractIntentSchemaGovernanceCore,
+  extractIntentSchemaGovernanceDecisions,
+  stableIntentGovernanceDecisionFingerprint,
+  stableIntentSchemaGovernanceFingerprint,
+} from "./intent-schema";
 
 function makeSchema(overrides: Partial<IntentSchema>): IntentSchema {
   return {
@@ -257,6 +261,10 @@ function testGovernanceFingerprintIgnoresDisplayProseOrder() {
 
   assert.deepEqual(extractIntentSchemaGovernanceCore(left), extractIntentSchemaGovernanceCore(right));
   assert.equal(stableIntentSchemaGovernanceFingerprint(left), stableIntentSchemaGovernanceFingerprint(right));
+  assert.equal(
+    stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(left)),
+    stableIntentGovernanceDecisionFingerprint(extractIntentSchemaGovernanceDecisions(right)),
+  );
 }
 
 function testBuildWizardStabilityArtifactTracksGovernanceGroups() {

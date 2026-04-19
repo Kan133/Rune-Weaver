@@ -49,6 +49,7 @@ export interface BlueprintBuilderConfig {
  */
 export interface BlueprintBuildResult {
   success: boolean;
+  draftBlueprint?: Blueprint;
   blueprint?: Blueprint;
   finalBlueprint?: FinalBlueprint;
   blueprintProposal?: BlueprintProposal;

@@ -458,16 +458,23 @@ export async function runUpdateCommand(
   console.log("Stage 2: Blueprint");
   console.log("=".repeat(70));
 
-  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount } = deps.buildUpdateBlueprint(
-    updateIntent,
-  );
-  if (!blueprint) {
+  const {
+    blueprint: blueprintDraft,
+    finalBlueprint,
+    issues: blueprintIssues,
+    status: blueprintStatus,
+    moduleNeedsCount,
+  } = deps.buildUpdateBlueprint(updateIntent);
+  const blueprint = finalBlueprint;
+  const blueprintView = finalBlueprint || blueprintDraft;
+  const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
+  if (!blueprint || !canContinueBlueprint) {
     console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
     artifact.stages.blueprint = {
       success: false,
       summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
-      moduleCount: 0,
-      patternHints: [],
+      moduleCount: blueprintView?.modules.length || 0,
+      patternHints: blueprintView?.patternHints.flatMap((hint) => hint.suggestedPatterns) || [],
       issues: blueprintIssues,
     };
     artifact.finalVerdict.weakestStage = "blueprint";
@@ -479,12 +486,29 @@ export async function runUpdateCommand(
   }
 
   artifact.stages.blueprint = {
-    success: true,
+    success: canContinueBlueprint,
     summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
-    moduleCount: blueprint.modules.length,
-    patternHints: blueprint.patternHints.flatMap((hint) => hint.suggestedPatterns),
+    moduleCount: blueprintView?.modules.length || 0,
+    patternHints: blueprintView?.patternHints.flatMap((hint) => hint.suggestedPatterns) || [],
     issues: blueprintIssues,
   };
+  try {
+    artifact.semanticArtifacts = saveUpdateSemanticArtifacts({
+      hostRoot: options.hostRoot,
+      featureId: currentFeatureContext.featureId,
+      dryRun: options.dryRun || !options.write,
+      reviewOutputDir: reviewArtifactOutputDir,
+      requestedChangeIntentSchema: requestedChange,
+      updateIntent,
+      blueprint: blueprintDraft || undefined,
+      finalBlueprint: blueprint,
+      commandKind: "update",
+      generatedAt: artifact.generatedAt,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    artifact.finalVerdict.remainingRisks.push(`Failed to export update blueprint semantic artifacts: ${message}`);
+  }
   console.log("  ✅ FinalBlueprint created");
   console.log(`     ID: ${blueprint.id}`);
   console.log(`     Status: ${blueprintStatus}`);

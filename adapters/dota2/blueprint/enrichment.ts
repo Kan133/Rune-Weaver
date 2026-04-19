@@ -2,7 +2,9 @@ import type {
   Blueprint,
   FeatureAuthoring as CoreFeatureAuthoring,
   ModuleImplementationRecord,
+  PatternHint,
   SelectionPoolFeatureAuthoringParameters,
+  SelectionPoolAdmissionDiagnostics,
   SelectionPoolParameterSurface,
   NormalizedBlueprintStatus,
   IntentSchema,
@@ -24,44 +26,27 @@ type SelectionPoolFeatureAuthoring = CoreFeatureAuthoring<
 >;
 
 const SELECTION_POOL_FAMILY_ID = "selection_pool";
+const SELECTION_POOL_PATTERN_IDS = {
+  input_trigger: "input.key_binding",
+  weighted_pool: "data.weighted_pool",
+  selection_flow: "rule.selection_flow",
+  selection_modal: "ui.selection_modal",
+} as const;
 
 export interface Dota2BlueprintEnrichmentResult<TBlueprint extends Blueprint = Blueprint> {
   blueprint: TBlueprint | null;
   status: NormalizedBlueprintStatus;
   issues: string[];
-}
-
-function weakenUnlessBlocked(status: NormalizedBlueprintStatus | undefined): NormalizedBlueprintStatus {
-  return status === "blocked" ? "blocked" : "weak";
+  admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
 }
 
 function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
   blueprint: TBlueprint,
   featureAuthoring: SelectionPoolFeatureAuthoring,
 ): TBlueprint {
-  const compiled = compileSelectionPoolModuleParameters(featureAuthoring);
-  const modules = blueprint.modules.map((module) => {
-    const override =
-      module.role === "input_trigger"
-        ? compiled.input_trigger
-        : module.role === "weighted_pool"
-          ? compiled.weighted_pool
-          : module.role === "selection_flow"
-            ? compiled.selection_flow
-            : module.role === "selection_modal"
-              ? compiled.selection_modal
-              : undefined;
-
-    return override
-      ? {
-          ...module,
-          parameters: {
-            ...(module.parameters || {}),
-            ...override,
-          },
-        }
-      : module;
-  });
+  const modules = buildSelectionPoolFamilyModules(featureAuthoring);
+  const connections = buildSelectionPoolFamilyConnections();
+  const patternHints = buildSelectionPoolFamilyPatternHints();
   const fillContracts = buildSelectionPoolFillContracts(modules);
   const fillContractIdsByModule = new Map<string, string[]>();
   for (const fillContract of fillContracts) {
@@ -69,7 +54,169 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
     existing.push(fillContract.boundaryId);
     fillContractIdsByModule.set(fillContract.targetModuleId, existing);
   }
-  const moduleRecords: ModuleImplementationRecord[] = modules.map((module) => ({
+  const moduleRecords = buildSelectionPoolModuleRecords(modules, fillContractIdsByModule);
+  const existingFamilies = new Set(blueprint.designDraft?.retrievedFamilyCandidates || []);
+  existingFamilies.add(SELECTION_POOL_FAMILY_ID);
+  const existingPatterns = new Set(blueprint.designDraft?.retrievedPatternCandidates || []);
+  for (const hint of patternHints) {
+    for (const patternId of hint.suggestedPatterns) {
+      existingPatterns.add(patternId);
+    }
+  }
+
+  return {
+    ...blueprint,
+    modules,
+    moduleFacets: [],
+    moduleNeeds: [],
+    unresolvedModuleNeeds: [],
+    connections,
+    patternHints,
+    featureAuthoring,
+    moduleRecords,
+    readyForAssembly: true,
+    status: blueprint.status === "blocked" ? "blocked" : "ready",
+    designDraft: blueprint.designDraft
+      ? {
+          ...blueprint.designDraft,
+          retrievedFamilyCandidates: [...existingFamilies],
+          retrievedPatternCandidates: [...existingPatterns],
+          chosenImplementationStrategy: "family",
+          reuseConfidence: "high",
+          artifactTargets: ["server", "shared", "ui"],
+          notes: [
+            ...(blueprint.designDraft.notes || []),
+            "Selection pool family matched and authored as the bounded source-backed skeleton.",
+          ],
+        }
+      : blueprint.designDraft,
+    implementationStrategy: "family",
+    maturity: "templated",
+    ...(blueprint.commitDecision
+      ? {
+          commitDecision: {
+            ...blueprint.commitDecision,
+            canAssemble: true,
+          },
+        }
+      : {}),
+    ...(fillContracts.length > 0 ? { fillContracts } : {}),
+  };
+}
+
+function buildSelectionPoolFamilyModules(
+  featureAuthoring: SelectionPoolFeatureAuthoring,
+): Blueprint["modules"] {
+  const compiled = compileSelectionPoolModuleParameters(featureAuthoring);
+  return [
+    {
+      id: "selection_input",
+      role: "input_trigger",
+      category: "trigger",
+      patternIds: [SELECTION_POOL_PATTERN_IDS.input_trigger],
+      responsibilities: [
+        "Listen for the admitted selection_pool trigger key.",
+        "Emit the family-local selection trigger event.",
+      ],
+      outputs: ["selection_open_request"],
+      parameters: compiled.input_trigger,
+    },
+    {
+      id: "selection_pool",
+      role: "weighted_pool",
+      category: "data",
+      patternIds: [SELECTION_POOL_PATTERN_IDS.weighted_pool],
+      responsibilities: [
+        "Keep the feature-owned weighted candidate pool inside the current feature boundary.",
+        "Expose bounded draw inputs for the selection flow.",
+      ],
+      outputs: ["candidate_options"],
+      parameters: compiled.weighted_pool,
+    },
+    {
+      id: "selection_flow",
+      role: "selection_flow",
+      category: "rule",
+      patternIds: [SELECTION_POOL_PATTERN_IDS.selection_flow],
+      responsibilities: [
+        "Draw weighted candidates and enforce single-choice confirmation.",
+        "Apply post-selection pool behavior inside the bounded family contract.",
+      ],
+      inputs: ["selection_open_request", "candidate_options", "selection_confirm"],
+      outputs: ["selection_ui_payload", "selection_commit"],
+      parameters: compiled.selection_flow,
+    },
+    {
+      id: "selection_modal",
+      role: "selection_modal",
+      category: "ui",
+      patternIds: [SELECTION_POOL_PATTERN_IDS.selection_modal],
+      responsibilities: [
+        "Render the current-feature selection UI surface.",
+        "Collect the player's confirmed choice for the selection flow.",
+      ],
+      inputs: ["selection_ui_payload"],
+      outputs: ["selection_confirm"],
+      parameters: compiled.selection_modal,
+    },
+  ];
+}
+
+function buildSelectionPoolFamilyConnections(): Blueprint["connections"] {
+  return [
+    {
+      from: "selection_input",
+      to: "selection_flow",
+      purpose: "Start the bounded selection flow from the admitted trigger.",
+    },
+    {
+      from: "selection_pool",
+      to: "selection_flow",
+      purpose: "Provide weighted candidate data and pool-state inputs.",
+    },
+    {
+      from: "selection_flow",
+      to: "selection_modal",
+      purpose: "Project draw results into the current-feature selection UI.",
+    },
+    {
+      from: "selection_modal",
+      to: "selection_flow",
+      purpose: "Return the player's confirmed choice to the selection flow.",
+    },
+  ];
+}
+
+function buildSelectionPoolFamilyPatternHints(): PatternHint[] {
+  return [
+    {
+      category: "trigger",
+      suggestedPatterns: [SELECTION_POOL_PATTERN_IDS.input_trigger],
+      rationale: "selection_pool uses one local input trigger surface.",
+    },
+    {
+      category: "data",
+      suggestedPatterns: [SELECTION_POOL_PATTERN_IDS.weighted_pool],
+      rationale: "selection_pool keeps a feature-owned weighted candidate pool.",
+    },
+    {
+      category: "rule",
+      suggestedPatterns: [SELECTION_POOL_PATTERN_IDS.selection_flow],
+      rationale: "selection_pool commits one confirmed candidate per draw.",
+    },
+    {
+      category: "ui",
+      suggestedPatterns: [SELECTION_POOL_PATTERN_IDS.selection_modal],
+      rationale: "selection_pool exposes a current-feature selection modal surface.",
+    },
+  ];
+}
+
+function buildSelectionPoolModuleRecords(
+  modules: Blueprint["modules"],
+  fillContractIdsByModule: Map<string, string[]>,
+): ModuleImplementationRecord[] {
+  const records: ModuleImplementationRecord[] = modules.map((module) => ({
     moduleId: module.id,
     role: module.role,
     category: module.category,
@@ -87,32 +234,30 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
     maturity: "templated",
     outputKinds: deriveModuleOutputKinds(module.category),
     resolvedFrom: "family",
-    summary: `Selection pool family skeleton for module '${module.role}'`,
+    summary: `Selection pool family module '${module.role}' projected from source-backed authoring truth.`,
   }));
-  const existingFamilies = new Set(blueprint.designDraft?.retrievedFamilyCandidates || []);
-  existingFamilies.add(SELECTION_POOL_FAMILY_ID);
 
-  return {
-    ...blueprint,
-    modules,
-    featureAuthoring,
-    moduleRecords,
-    designDraft: blueprint.designDraft
-      ? {
-          ...blueprint.designDraft,
-          retrievedFamilyCandidates: [...existingFamilies],
-          chosenImplementationStrategy: "family",
-          reuseConfidence: "high",
-          notes: [
-            ...(blueprint.designDraft.notes || []),
-            "Selection pool family matched and authored as the bounded source-backed skeleton.",
-          ],
-        }
-      : blueprint.designDraft,
+  records.push({
+    moduleId: "selection_effect",
+    role: "effect_application",
+    category: "effect",
+    sourceKind: "family",
+    familyId: SELECTION_POOL_FAMILY_ID,
+    selectedPatternIds: [],
+    artifactTargets: ["server"],
+    ownedPaths: [],
+    fillContractIds: [],
+    reviewRequired: false,
+    requiresReview: false,
+    reviewReasons: [],
     implementationStrategy: "family",
     maturity: "templated",
-    ...(fillContracts.length > 0 ? { fillContracts } : {}),
-  };
+    outputKinds: ["server"],
+    resolvedFrom: "family",
+    summary: "Selection pool keeps chosen-effect application inside the bounded family contract.",
+  });
+
+  return records;
 }
 
 function deriveModuleArtifactTargets(
@@ -147,6 +292,21 @@ function deriveModuleOutputKinds(
   }
 }
 
+function projectAdmissionIssues(
+  diagnostics: SelectionPoolAdmissionDiagnostics | undefined,
+  warnings: string[] = [],
+): string[] {
+  if (!diagnostics) {
+    return warnings;
+  }
+
+  if (diagnostics.verdict === "admitted_explicit" || diagnostics.verdict === "admitted_compressed") {
+    return warnings;
+  }
+
+  return [];
+}
+
 export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
   blueprint: TBlueprint,
   input: {
@@ -163,6 +323,7 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     prompt: input.prompt,
     hostRoot: input.hostRoot,
     mode: input.mode || "create",
+    schema: input.schema,
     featureId: input.featureId,
     existingFeature: input.existingFeature || null,
     proposalSource: input.proposalSource || "llm",
@@ -172,30 +333,31 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     return {
       blueprint,
       status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
-      issues: [],
+      issues: projectAdmissionIssues(resolution.admissionDiagnostics),
+      admissionDiagnostics: resolution.admissionDiagnostics,
     };
   }
 
   if (resolution.blocked) {
     return {
-      blueprint: {
-        ...blueprint,
-        status: weakenUnlessBlocked(blueprint.status as NormalizedBlueprintStatus | undefined),
-      },
-      status: weakenUnlessBlocked(blueprint.status as NormalizedBlueprintStatus | undefined),
-      issues: resolution.reasons,
+      blueprint,
+      status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
+      issues: projectAdmissionIssues(resolution.admissionDiagnostics),
+      admissionDiagnostics: resolution.admissionDiagnostics,
     };
   }
 
-  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(input.schema, resolution.proposal);
-  if (!normalized.featureAuthoring || normalized.blockers.length > 0) {
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    input.schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+  );
+  if (!normalized.featureAuthoring) {
     return {
-      blueprint: {
-        ...blueprint,
-        status: weakenUnlessBlocked(blueprint.status as NormalizedBlueprintStatus | undefined),
-      },
-      status: weakenUnlessBlocked(blueprint.status as NormalizedBlueprintStatus | undefined),
-      issues: [...normalized.blockers, ...normalized.warnings],
+      blueprint,
+      status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
+      issues: projectAdmissionIssues(normalized.admissionDiagnostics, normalized.warnings),
+      admissionDiagnostics: normalized.admissionDiagnostics,
     };
   }
 
@@ -211,7 +373,8 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
       status,
     },
     status,
-    issues: [...normalized.warnings],
+    issues: projectAdmissionIssues(normalized.admissionDiagnostics, normalized.warnings),
+    admissionDiagnostics: normalized.admissionDiagnostics,
   };
 }
 

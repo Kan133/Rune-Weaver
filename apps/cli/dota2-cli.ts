@@ -43,6 +43,7 @@ import type {
   IntentSchema as ReviewIntentSchema,
   RelationCandidate,
   UpdateIntent,
+  SelectionPoolAdmissionDiagnostics,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../core/schema/types.js";
@@ -171,7 +172,21 @@ export interface Dota2ReviewArtifact {
       moduleCount: number;
       patternHints: string[];
       issues: string[];
+      modulePlanning?: Array<{
+        moduleId: string;
+        role: string;
+        planningKind?: string;
+        backboneKind?: string;
+        facetIds?: string[];
+      }>;
+      moduleFacets?: Array<{
+        facetId: string;
+        backboneModuleId: string;
+        kind: string;
+        role: string;
+      }>;
       moduleSourceBreakdown?: { family: number; pattern: number; synthesized: number };
+      familyAdmission?: SelectionPoolAdmissionDiagnostics;
       skipped?: boolean;
     };
     patternResolution: {
@@ -181,7 +196,14 @@ export interface Dota2ReviewArtifact {
       issues: string[];
       complete: boolean;
       resolvedModules?: Array<{ moduleId: string; sourceKind: string; patternId?: string; familyId?: string }>;
-      unresolvedModuleNeeds?: Array<{ moduleId: string; reason: string; category: string; role: string }>;
+      unresolvedModuleNeeds?: Array<{
+        moduleId: string;
+        reason: string;
+        category: string;
+        role: string;
+        backboneKind?: string;
+        facetIds?: string[];
+      }>;
       skipped?: boolean;
     };
     artifactSynthesis?: {
@@ -743,7 +765,14 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 2: Blueprint
-  const { blueprint, issues: blueprintIssues, status: blueprintStatus, moduleNeedsCount }: Dota2BlueprintBuildResult = buildBlueprint(
+  const {
+    blueprint: blueprintDraft,
+    finalBlueprint,
+    issues: blueprintIssues,
+    status: blueprintStatus,
+    moduleNeedsCount,
+    admissionDiagnostics,
+  }: Dota2BlueprintBuildResult = buildBlueprint(
     schema,
     {
       prompt: options.prompt,
@@ -754,16 +783,33 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       proposalSource: usedFallback ? "fallback" : "llm",
     },
   );
+  const blueprint = finalBlueprint;
+  const blueprintView = finalBlueprint || blueprintDraft;
+  const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
   artifact.stages.blueprint = {
-    success: blueprint !== null,
+    success: blueprint !== null && canContinueBlueprint,
     summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
-    moduleCount: blueprint?.modules.length || 0,
-    patternHints: blueprint?.patternHints.flatMap((h) => h.suggestedPatterns) || [],
+    moduleCount: blueprintView?.modules.length || 0,
+    patternHints: blueprintView?.patternHints.flatMap((h) => h.suggestedPatterns) || [],
     issues: blueprintIssues,
-    moduleSourceBreakdown: summarizeModuleSources(blueprint?.moduleRecords),
+    modulePlanning: blueprintView?.modules.map((module) => ({
+      moduleId: module.id,
+      role: module.role,
+      planningKind: module.planningKind,
+      backboneKind: module.backboneKind,
+      facetIds: module.facetIds,
+    })),
+    moduleFacets: blueprintView?.moduleFacets?.map((facet) => ({
+      facetId: facet.facetId,
+      backboneModuleId: facet.backboneModuleId,
+      kind: facet.kind,
+      role: facet.role,
+    })),
+    moduleSourceBreakdown: summarizeModuleSources(blueprintView?.moduleRecords),
+    familyAdmission: admissionDiagnostics,
   };
 
-  if (!blueprint) {
+  if (!blueprint || !canContinueBlueprint) {
     artifact.finalVerdict.weakestStage = "blueprint";
     artifact.finalVerdict.remainingRisks = blueprintIssues.length > 0
       ? blueprintIssues
@@ -784,6 +830,8 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       dryRun: options.dryRun || !options.write,
       reviewOutputDir: reviewArtifactOutputDir,
       intentSchema: schema,
+      blueprint: blueprintDraft || undefined,
+      finalBlueprint: blueprint || undefined,
       commandKind: "create",
       generatedAt: artifact.generatedAt,
     });
@@ -812,7 +860,9 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       moduleId: need.moduleId,
       reason: need.reason,
       category: need.category,
-      role: need.role,
+      role: need.semanticRole,
+      backboneKind: need.backboneKind,
+      facetIds: need.facetIds,
     })),
   };
 
