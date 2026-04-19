@@ -12,7 +12,7 @@ import {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "./index.js";
-import { createUpdateIntentFromRequestedChange } from "../../../../core/wizard/index.js";
+import { createFallbackIntentSchema, createUpdateIntentFromRequestedChange } from "../../../../core/wizard/index.js";
 import type { IntentSchema } from "../../../../core/schema/types.js";
 
 const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
@@ -307,6 +307,109 @@ function testSelectionPoolCompressionDeclinesWithoutUiSurface(): void {
   );
 }
 
+function testSelectionPoolCompressionDeclinesWithoutUiOrPlayerChoice(): void {
+  const prompt =
+    "Press F4 to draw 1 weighted talent from the pool and apply it immediately without showing UI or letting the player choose.";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    readiness: "ready",
+    requirements: { functional: [prompt] },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "weighted",
+      choiceCount: 1,
+      cardinality: "single",
+      repeatability: "repeatable",
+      commitment: "immediate",
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "talent_pool",
+          role: "candidate-options",
+          ownership: "feature",
+          updateMode: "replace",
+        },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    schema,
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+  );
+
+  assert.equal(normalized.featureAuthoring, undefined);
+  assert.equal(normalized.admissionDiagnostics?.verdict, "declined");
+  assert.ok(
+    normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("current_feature_ui_surface"),
+  );
+  assert.ok(
+    normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("present_multiple_candidates"),
+  );
+}
+
+function testWordSwapClusterKeepsSelectionPoolAdmissionContract(): void {
+  const prompts = [
+    TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    TALENT_DRAW_EXAMPLE_CREATE_PROMPT.replaceAll("天赋", "祝福"),
+    TALENT_DRAW_EXAMPLE_CREATE_PROMPT.replaceAll("天赋", "奖励"),
+  ];
+  const results = prompts.map((prompt) => {
+    const schema = createFallbackIntentSchema(prompt, {
+      kind: "dota2-x-template",
+      projectRoot: "D:\\test3",
+    });
+    return resolveSelectionPoolFamily({
+      prompt,
+      hostRoot: "D:\\test3",
+      mode: "create",
+      schema,
+      featureId: "talent_draw_demo",
+      proposalSource: "fallback",
+    });
+  });
+
+  const verdicts = new Set(results.map((result) => result.admissionDiagnostics?.verdict));
+  const satisfiedAtomSets = new Set(
+    results.map((result) =>
+      JSON.stringify(result.admissionDiagnostics?.contract.assessment?.satisfiedAtoms || [])),
+  );
+  const missingAtomSets = new Set(
+    results.map((result) =>
+      JSON.stringify(result.admissionDiagnostics?.contract.assessment?.missingAtoms || [])),
+  );
+
+  assert.deepEqual([...verdicts], ["admitted_explicit"]);
+  assert.equal(satisfiedAtomSets.size, 1);
+  assert.equal(missingAtomSets.size, 1);
+}
+
 function testSelectionPoolCurrentContextHintsExposeBoundedFields(): void {
   const resolution = resolveSelectionPoolFamily({
     prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
@@ -510,6 +613,86 @@ function testUpdateMergePrefersRequestedTargetTriggerKey(): void {
   assert.equal(merged.parameters.triggerKey, "F5");
 }
 
+function testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit(): void {
+  const existingResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+  const currentFeatureAuthoring = {
+    mode: "source-backed" as const,
+    profile: "selection_pool" as const,
+    objectKind: existingResolution.proposal?.objectKind,
+    parameters: existingResolution.proposal!.parameters,
+    parameterSurface: existingResolution.proposal!.parameterSurface,
+  };
+  const requestedChange: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "将当前的奖励池子数量提升到20",
+      goal: "将当前的奖励池子数量提升到20",
+    },
+    classification: {
+      intentKind: "standalone-system",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: ["Increase the current same-feature reward pool size to 20 total objects."],
+    },
+    normalizedMechanics: {
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+    },
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+  const updateIntent = createUpdateIntentFromRequestedChange(
+    {
+      featureId: "talent_draw_demo",
+      revision: 1,
+      intentKind: "standalone-system",
+      selectedPatterns: [],
+      sourceBacked: true,
+      featureAuthoring: currentFeatureAuthoring,
+      admittedSkeleton: [
+        "input.key_binding",
+        "data.weighted_pool",
+        "rule.selection_flow",
+        "ui.selection_modal",
+      ],
+      preservedInvariants: [],
+      boundedFields: {
+        triggerKey: "F4",
+        choiceCount: 3,
+        objectCount: 6,
+      },
+    },
+    requestedChange,
+  );
+  updateIntent.delta.modify.push({
+    path: "boundedFields.objectCount",
+    oldValue: 6,
+    newValue: 20,
+    reason: "Authoritative update intent resolved the pool object count to 20.",
+  });
+
+  const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
+    currentFeatureAuthoring,
+    requestedChange,
+    updateIntent,
+  });
+
+  assert.equal(merged.parameters.objects.length, 20);
+}
+
 function testUnsupportedContractEscapeHonestBlocks(): void {
   const resolution = resolveSelectionPoolFamily({
     prompt: "给这个抽取系统再加第二个触发键，并且支持跨局保存与授予另一个技能 feature。",
@@ -534,10 +717,12 @@ testCanonicalInventoryUpdateKeepsExampleInventoryCopy();
 testSiblingEquipmentPromptUsesSameFamily();
 testOriginalTalentDrawPromptCompressesIntoSelectionPool();
 testNoUiFireballPromptStaysNotApplicable();
-testSelectionPoolCompressionDeclinesWithoutUiSurface();
+testSelectionPoolCompressionDeclinesWithoutUiOrPlayerChoice();
+testWordSwapClusterKeepsSelectionPoolAdmissionContract();
 testSelectionPoolCurrentContextHintsExposeBoundedFields();
 testUpdateMergeUsesUpdateIntentAuthority();
 testUpdateMergePrefersRequestedTargetTriggerKey();
+testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit();
 testUnsupportedContractEscapeHonestBlocks();
 
 console.log("adapters/dota2/families/selection-pool/authoring.test.ts passed");

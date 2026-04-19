@@ -344,8 +344,17 @@ withSyntheticPatterns(() => {
     },
     selection: {
       mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
       cardinality: "single",
       repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal"],
     },
     stateModel: {
       states: [
@@ -358,7 +367,7 @@ withSyntheticPatterns(() => {
       candidatePool: true,
       weightedSelection: true,
       playerChoice: true,
-      uiModal: false,
+      uiModal: true,
       outcomeApplication: false,
       resourceConsumption: false,
     },

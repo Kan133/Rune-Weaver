@@ -766,12 +766,13 @@ function NextActionSection({
 export function ProjectSetupPanel() {
   const [isExpanded, setIsExpanded] = useState(true);
   const hostScanner = useHostScanner();
+  const { scan, checkStatus, isScanning, isCheckingStatus } = hostScanner;
   const hostConfig = useFeatureStore((state) => state.hostConfig);
   const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
   const setHostScanResult = useFeatureStore((state) => state.setHostScanResult);
   const connectHostWorkspace = useFeatureStore((state) => state.connectHostWorkspace);
   const clearConnectedWorkspace = useFeatureStore((state) => state.clearConnectedWorkspace);
-  const isConnecting = hostScanner.isScanning || hostScanner.isCheckingStatus;
+  const isConnecting = isScanning || isCheckingStatus;
 
   const connectToHost = useCallback(async (targetHostRoot?: string) => {
     const nextHostRoot = (targetHostRoot || hostConfig.hostRoot).trim();
@@ -781,7 +782,7 @@ export function ProjectSetupPanel() {
       return;
     }
 
-    const scanResult = await hostScanner.scan(nextHostRoot);
+    const scanResult = await scan(nextHostRoot);
     if (!scanResult) {
       setHostScanResult(false, 'unknown', ['Scan failed']);
       clearConnectedWorkspace();
@@ -794,14 +795,14 @@ export function ProjectSetupPanel() {
       return;
     }
 
-    const statusResult = await hostScanner.checkStatus(nextHostRoot);
+    const statusResult = await checkStatus(nextHostRoot);
     if (!statusResult) {
       clearConnectedWorkspace();
       return;
     }
 
     connectHostWorkspace(statusResult);
-  }, [clearConnectedWorkspace, connectHostWorkspace, hostConfig.hostRoot, hostScanner, setHostScanResult]);
+  }, [checkStatus, clearConnectedWorkspace, connectHostWorkspace, hostConfig.hostRoot, scan, setHostScanResult]);
 
   const refreshConnection = useCallback(async () => {
     const targetHostRoot = connectedHostRoot || hostConfig.hostRoot;

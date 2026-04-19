@@ -302,14 +302,14 @@ function generateSelectionModalStyles(
 
 .modal-content {
   width: 100%;
-  flow-children: right;
+  flow-children: right-wrap;
   horizontal-align: center;
 }
 
 .selection-card {
   width: 240px;
   height: 180px;
-  margin: 0px 8px;
+  margin: 8px;
   padding: 14px;
   flow-children: down;
   background-color: #17242dcc;

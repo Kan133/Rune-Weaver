@@ -2,16 +2,16 @@
   "workspace": {
     "version": "0.1.0",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:\\rw-demo-run-05",
-    "addonName": "rw_demo_run_05",
-    "initializedAt": "2026-04-19T16:45:35.616Z",
+    "hostRoot": "D:\\rw-test1",
+    "addonName": "rw_test1",
+    "initializedAt": "2026-04-19T22:52:46.638Z",
     "features": [
       {
-        "featureId": "talent_draw_demo",
+        "featureId": "standalone_system_75dh",
         "intentKind": "standalone-system",
         "status": "active",
         "revision": 2,
-        "blueprintId": "micro_feature_4jmg",
+        "blueprintId": "standalone_system_h3n1",
         "modules": [
           {
             "moduleId": "selection_input",
@@ -112,7 +112,7 @@
               "server"
             ],
             "ownedPaths": [
-              "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts"
+              "game/scripts/src/rune_weaver/generated/server/standalone_system_75dh_selection_flow_rule_selection_flow.ts"
             ],
             "fillContractIds": [
               "selection_flow.effect_mapping"
@@ -124,7 +124,7 @@
               "server"
             ],
             "artifactPaths": [
-              "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts"
+              "game/scripts/src/rune_weaver/generated/server/standalone_system_75dh_selection_flow_rule_selection_flow.ts"
             ],
             "resolvedFrom": "family",
             "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
@@ -161,8 +161,8 @@
               "ui"
             ],
             "ownedPaths": [
-              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less"
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_selection_modal_ui_selection_modal.less"
             ],
             "fillContractIds": [
               "ui.selection_modal.payload_adapter"
@@ -174,8 +174,8 @@
               "ui"
             ],
             "artifactPaths": [
-              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-              "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less"
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_selection_modal_ui_selection_modal.less"
             ],
             "resolvedFrom": "family",
             "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
@@ -202,14 +202,14 @@
           "ui.selection_modal"
         ],
         "generatedFiles": [
-          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-          "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
-          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
-          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
-          "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_75dh_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/generated/shared/standalone_system_75dh_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_75dh_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_75dh_input_trigger_input_key_binding.ts",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_selection_modal_ui_selection_modal.less",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_75dh_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/standalone_system_75dh/selection-pool.source.json"
         ],
         "entryBindings": [
           {
@@ -226,54 +226,53 @@
         "sourceModel": {
           "adapter": "selection_pool",
           "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+          "path": "game/scripts/src/rune_weaver/features/standalone_system_75dh/selection-pool.source.json"
         },
         "featureAuthoring": {
           "mode": "source-backed",
           "profile": "selection_pool",
-          "objectKind": "talent",
           "parameters": {
             "triggerKey": "F4",
             "choiceCount": 3,
             "objects": [
               {
-                "id": "R001",
-                "label": "Strength Boost",
+                "id": "SEL_R001",
+                "label": "Selection Boost 01",
                 "description": "+10 Strength",
                 "weight": 40,
                 "tier": "R"
               },
               {
-                "id": "R002",
-                "label": "Fortitude",
+                "id": "SEL_R002",
+                "label": "Selection Boost 02",
                 "description": "+10 Strength",
                 "weight": 40,
                 "tier": "R"
               },
               {
-                "id": "SR001",
-                "label": "Agility Boost",
+                "id": "SEL_SR001",
+                "label": "Selection Edge 01",
                 "description": "+10 Agility",
                 "weight": 30,
                 "tier": "SR"
               },
               {
-                "id": "SR002",
-                "label": "Swift Reflexes",
+                "id": "SEL_SR002",
+                "label": "Selection Edge 02",
                 "description": "+10 Agility",
                 "weight": 30,
                 "tier": "SR"
               },
               {
-                "id": "SSR001",
-                "label": "Intelligence Boost",
+                "id": "SEL_SSR001",
+                "label": "Selection Insight 01",
                 "description": "+10 Intelligence",
                 "weight": 20,
                 "tier": "SSR"
               },
               {
-                "id": "UR001",
-                "label": "Ultimate Growth",
+                "id": "SEL_UR001",
+                "label": "Selection Apex 01",
                 "description": "+10 All Attributes",
                 "weight": 10,
                 "tier": "UR"
@@ -286,25 +285,17 @@
             "applyMode": "immediate",
             "postSelectionPoolBehavior": "remove_selected_from_remaining",
             "trackSelectedItems": true,
-            "inventory": {
-              "enabled": true,
-              "capacity": 16,
-              "storeSelectedItems": true,
-              "blockDrawWhenFull": true,
-              "fullMessage": "Talent inventory full",
-              "presentation": "persistent_panel"
-            },
             "display": {
-              "title": "Choose Your Talent",
-              "description": "Select one of the following talents",
-              "inventoryTitle": "Talent Inventory",
+              "title": "Choose Your Selection",
+              "description": "Select one of the following options",
+              "inventoryTitle": "Selection Inventory",
               "payloadShape": "card_with_rarity",
               "minDisplayCount": 3
             },
             "placeholderConfig": {
-              "id": "empty_talent_slot",
+              "id": "empty_selection_slot",
               "name": "Empty Slot",
-              "description": "No talent available",
+              "description": "No selection available",
               "disabled": true
             },
             "effectProfile": {
@@ -327,8 +318,7 @@
                   "value": 10
                 }
               }
-            },
-            "objectKind": "talent"
+            }
           },
           "parameterSurface": {
             "triggerKey": {
@@ -390,10 +380,10 @@
           "sourceArtifactRef": {
             "adapter": "selection_pool",
             "version": 1,
-            "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+            "path": "game/scripts/src/rune_weaver/features/standalone_system_75dh/selection-pool.source.json"
           },
           "notes": [
-            "selection_pool proposal seeded from example catalog for example replay.",
+            "selection_pool proposal seeded from generic family defaults.",
             "selection_pool update merge was normalized from workspace-backed current feature context and UpdateIntent authority."
           ]
         },
@@ -419,7 +409,7 @@
             "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees"
           ],
           "blockers": [],
-          "lastValidatedAt": "2026-04-19T16:49:56.364Z",
+          "lastValidatedAt": "2026-04-19T23:03:37.169Z",
           "blueprint": {
             "status": "needs_review",
             "warnings": [
@@ -433,35 +423,35 @@
             "warnings": [],
             "blockers": [],
             "summary": "Artifact synthesis",
-            "checkedAt": "2026-04-19T16:49:56.364Z"
+            "checkedAt": "2026-04-19T23:03:37.169Z"
           },
           "repair": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-19T16:49:56.364Z"
+            "checkedAt": "2026-04-19T23:03:37.169Z"
           },
           "dependency": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-19T16:49:56.364Z"
+            "checkedAt": "2026-04-19T23:03:37.169Z"
           },
           "host": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Host validation",
-            "checkedAt": "2026-04-19T16:49:56.364Z"
+            "checkedAt": "2026-04-19T23:03:37.169Z"
           },
           "runtime": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Runtime validation",
-            "checkedAt": "2026-04-19T16:49:56.364Z"
+            "checkedAt": "2026-04-19T23:03:37.169Z"
           }
         },
         "dependencyEdges": [],
@@ -479,15 +469,15 @@
           "downgradedFeatures": [],
           "reviewModules": []
         },
-        "createdAt": "2026-04-19T16:48:43.644Z",
-        "updatedAt": "2026-04-19T16:49:56.364Z"
+        "createdAt": "2026-04-19T22:55:52.851Z",
+        "updatedAt": "2026-04-19T23:03:37.169Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-19T16:49:56.366Z",
+    "exportedAt": "2026-04-19T23:03:37.171Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\rw-demo-run-05",
+    "sourceHostRoot": "D:\\rw-test1",
     "version": "0.1"
   }
 }

@@ -1,6 +1,7 @@
 import { IntentSchema } from "../schema/types";
 import { stateLooksLikePersistedChoiceState } from "./seam-authority";
 import { collectIntentStrings } from "./semantic-lexical";
+import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
 
 export function isResolvableExistingSeamIssue(value: string, schema: IntentSchema): boolean {
   if (isBoundedVariabilityClarification(value)) {
@@ -139,17 +140,23 @@ function isEffectLifecycleVariabilityClarification(question: string): boolean {
 }
 
 function hasSupportedModifierLifecycleContext(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   return (
-    schema.normalizedMechanics.outcomeApplication === true &&
-    (schema.normalizedMechanics.playerChoice === true || schema.selection?.mode === "user-chosen") &&
+    governance.mechanics.outcomeApplication === true &&
+    (
+      governance.mechanics.playerChoice === true ||
+      governance.selection.choiceMode === "user-chosen" ||
+      governance.selection.choiceMode === "hybrid"
+    ) &&
     hasRepeatableSelectionIntent(schema) &&
     hasChoiceStateCarryThroughIntent(schema) &&
-    (!!schema.effects?.durationSemantics || schema.normalizedMechanics.uiModal === true)
+    (!!governance.effect.durationSemantics || governance.mechanics.uiModal === true || governance.ui.needed === true)
   );
 }
 
 function hasRepeatableSelectionIntent(schema: IntentSchema): boolean {
-  if (schema.selection?.repeatability === "repeatable" || schema.selection?.repeatability === "persistent") {
+  const governance = getIntentGovernanceView(schema);
+  if (governance.selection.repeatability === "repeatable" || governance.selection.repeatability === "persistent") {
     return true;
   }
 
@@ -183,7 +190,15 @@ function hasRepeatableSelectionIntent(schema: IntentSchema): boolean {
 }
 
 function hasChoiceStateCarryThroughIntent(schema: IntentSchema): boolean {
-  const hasPersistedChoiceState = !!schema.stateModel?.states?.some((state) => stateLooksLikePersistedChoiceState(state));
+  const governance = getIntentGovernanceView(schema);
+  const hasPersistedChoiceState =
+    (
+      governance.selection.present &&
+      (governance.state.states || []).some(
+        (state) => state.lifetime === "session" || state.lifetime === "persistent",
+      )
+    ) ||
+    !!schema.stateModel?.states?.some((state) => stateLooksLikePersistedChoiceState(state));
   if (hasPersistedChoiceState) {
     return true;
   }
@@ -211,14 +226,15 @@ function hasChoiceStateCarryThroughIntent(schema: IntentSchema): boolean {
 }
 
 function isSupportedTriChoiceBuffFamilyContext(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const bindings = schema.integrations?.expectedBindings || [];
   return (
-    schema.normalizedMechanics.trigger === true &&
-    schema.normalizedMechanics.candidatePool === true &&
-    schema.normalizedMechanics.playerChoice === true &&
-    schema.normalizedMechanics.uiModal === true &&
-    schema.normalizedMechanics.outcomeApplication === true &&
-    (schema.selection?.mode === "user-chosen" || schema.normalizedMechanics.playerChoice === true) &&
+    governance.mechanics.trigger === true &&
+    governance.mechanics.candidatePool === true &&
+    governance.mechanics.playerChoice === true &&
+    governance.mechanics.uiModal === true &&
+    governance.mechanics.outcomeApplication === true &&
+    (governance.selection.choiceMode === "user-chosen" || governance.mechanics.playerChoice === true) &&
     hasRepeatableSelectionIntent(schema) &&
     bindings.some((binding) => binding.kind === "ui-surface") &&
     bindings.some((binding) => binding.kind === "bridge-point") &&

@@ -3,6 +3,7 @@ import type {
   IntentSchema,
   ModuleFacetSpec,
 } from "../schema/types.js";
+import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
 import {
   inferIntegrationHints,
   inferInvariants,
@@ -45,19 +46,20 @@ export function isGameplayAbilityBackboneEligible(
   schema: IntentSchema,
   flatModules: BlueprintModule[],
 ): boolean {
+  const governance = getIntentGovernanceView(schema);
   if (detectSelectionFlowAsk(schema)) {
     return false;
   }
   if ((schema.requirements.typed || []).some((requirement) => requirement.kind === "integration")) {
     return false;
   }
-  if ((schema.composition?.dependencies?.length || 0) > 0) {
+  if ((governance.composition.dependencies?.length || 0) > 0) {
     return false;
   }
   if ((schema.integrations?.expectedBindings || []).some((binding) => binding.kind === "data-source")) {
     return false;
   }
-  if ((schema.stateModel?.states || []).some((state) =>
+  if ((governance.state.states || []).some((state) =>
     state.owner === "external"
       || state.owner === "session"
       || state.lifetime === "persistent",
@@ -72,9 +74,9 @@ export function isGameplayAbilityBackboneEligible(
   const hasAbilityLifecycleSignal =
     typedKinds.has("trigger")
       || typedKinds.has("effect")
-      || schema.normalizedMechanics.trigger
-      || schema.normalizedMechanics.outcomeApplication
-      || (schema.interaction?.activations?.length || 0) > 0;
+      || governance.mechanics.trigger
+      || governance.mechanics.outcomeApplication
+      || governance.activation.interactive;
   const hasBackboneSignal =
     hasAbilityLifecycleSignal
       && (

@@ -166,18 +166,67 @@ function testFinalBlueprintCarriesCanonicalStateAndIntegrationSemantics() {
   const uiNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "selection_modal");
   const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
 
-  assert.ok(dataNeed?.stateExpectations?.includes("state:draft_choice"));
+  assert.ok(dataNeed?.stateExpectations?.includes("selection.pool_state"));
   assert.ok(dataNeed?.stateExpectations?.some((item) => item.includes("owner:feature")));
   assert.ok(dataNeed?.requiredOutputs?.includes("shared.runtime"));
   assert.ok(dataNeed?.requiredCapabilities.includes("selection.pool.weighted_candidates"));
-  assert.ok(uiNeed?.integrationHints?.includes("binding:ui-surface:ui_surface"));
+  assert.ok(uiNeed?.integrationHints?.includes("binding:ui-surface"));
   assert.ok(uiNeed?.integrationHints?.includes("ui.surface"));
   assert.ok(uiNeed?.integrationHints?.includes("selection.ui_surface"));
-  assert.ok(uiNeed?.integrationHints?.includes("required-binding:ui_surface"));
+  assert.ok(uiNeed?.integrationHints?.includes("required-binding:ui-surface"));
   assert.ok(uiNeed?.requiredCapabilities.includes("ui.selection.modal"));
   assert.ok(uiNeed?.requiredOutputs?.includes("ui.surface"));
   assert.ok(effectNeed?.requiredOutputs?.includes("host.config.kv"));
   assert.ok(effectNeed?.requiredOutputs?.includes("server.runtime"));
+}
+
+function testSurfaceDetailDriftDoesNotChangeBlueprintPlanning(): void {
+  const variantSchema: IntentSchema = {
+    ...readySchema,
+    stateModel: {
+      states: [
+        {
+          id: "selection_runtime_state",
+          summary: "Visible runtime selection state",
+          owner: "feature",
+          lifetime: "session",
+        },
+      ],
+    },
+    integrations: {
+      expectedBindings: [
+        {
+          id: "selection_surface_runtime",
+          kind: "ui-surface",
+          summary: "Runtime selection surface binding",
+          required: true,
+        },
+      ],
+    },
+    resolvedAssumptions: ["Alternative display copy"],
+  };
+
+  const baseResult = buildBlueprint(readySchema);
+  const variantResult = buildBlueprint(variantSchema);
+  const project = (result: ReturnType<typeof buildBlueprint>) => ({
+    status: result.finalBlueprint?.status,
+    modules: (result.finalBlueprint?.modules || []).map((module) => ({
+      role: module.role,
+      category: module.category,
+      planningKind: module.planningKind,
+      backboneKind: module.backboneKind,
+    })),
+    moduleNeeds: (result.finalBlueprint?.moduleNeeds || []).map((need) => ({
+      role: need.semanticRole,
+      requiredCapabilities: need.requiredCapabilities,
+      optionalCapabilities: need.optionalCapabilities,
+      requiredOutputs: need.requiredOutputs,
+      stateExpectations: need.stateExpectations,
+      integrationHints: need.integrationHints,
+    })),
+  });
+
+  assert.deepEqual(project(variantResult), project(baseResult));
 }
 
 function testBoundedDetailClarificationDoesNotBlockSupportedBlueprint() {
@@ -2182,6 +2231,7 @@ function runTests() {
   testWeakBuildHonorsHonestStatus();
   testMustRequirementWithoutSemanticSupportStaysWeak();
   testFinalBlueprintCarriesCanonicalStateAndIntegrationSemantics();
+  testSurfaceDetailDriftDoesNotChangeBlueprintPlanning();
   testBoundedDetailClarificationDoesNotBlockSupportedBlueprint();
   testBoundedDraftCatalogClarificationDoesNotBlockExistingSeamBlueprint();
   testSupportedCapabilitiesUseAdmittedVocabulary();

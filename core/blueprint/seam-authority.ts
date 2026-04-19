@@ -7,6 +7,12 @@ import {
   ModuleNeed,
 } from "../schema/types";
 import { collectIntentStrings, collectTypedParameterKeys, readPositiveNumber } from "./semantic-lexical";
+import {
+  getIntentGovernanceView,
+  hasGovernanceExternalOrSharedOwnership,
+  hasGovernancePersistentScope,
+  hasGovernanceSelectionFlowContract,
+} from "../wizard/intent-governance-view.js";
 
 export type SemanticRiskDisposition =
   | "reusable_fit"
@@ -49,6 +55,7 @@ export function assessSemanticCompleteness(
   proposal: BlueprintProposal,
   moduleFacets: ModuleFacetSpec[] = [],
 ): SemanticAssessment {
+  const governance = getIntentGovernanceView(schema);
   const findings: SemanticRiskFinding[] = [];
   const blockers = new Set<string>();
   const warnings = new Set<string>();
@@ -80,7 +87,7 @@ export function assessSemanticCompleteness(
   const hasSemanticInputs =
     typedRequirements.length > 0
     || schema.requirements.functional.length > 0
-    || Object.values(schema.normalizedMechanics || {}).some((value) => value === true);
+    || Object.values(governance.mechanics || {}).some((value) => value === true);
 
   if (!hasSemanticInputs) {
     warnings.add("IntentSchema does not provide any functional or typed requirements for FinalBlueprint normalization.");
@@ -116,13 +123,13 @@ export function assessSemanticCompleteness(
       warnings.add(`Must requirement '${requirement.id}' does not resolve requiredCapabilities.`);
     }
 
-    if (category === "effect" && (schema.effects?.operations || []).length === 0) {
+    if (category === "effect" && (governance.effect.operations || []).length === 0) {
       warnings.add(`Must effect requirement '${requirement.id}' is underspecified because no effect operations were provided.`);
     }
 
     const matchingModule = modules.find((item) => item.id === matchingNeed.moduleId);
-    if (category === "rule" && matchingModule?.role === "selection_flow" && !schema.selection?.mode) {
-      warnings.add(`Must rule requirement '${requirement.id}' is underspecified because selection.mode is missing.`);
+    if (category === "rule" && matchingModule?.role === "selection_flow" && !governance.selection.present) {
+      warnings.add(`Must rule requirement '${requirement.id}' is underspecified because selection governance is missing.`);
     }
 
     if (category === "ui" && !matchingNeed.requiredOutputs?.length) {
@@ -239,6 +246,7 @@ export function detectSelectionLocalProgressionStateRequirement(
 }
 
 export function detectSelectionLocalProgressionReusableFit(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   if (!hasAnyRewardProgressionSignals(schema)) {
     return false;
   }
@@ -252,14 +260,14 @@ export function detectSelectionLocalProgressionReusableFit(schema: IntentSchema)
   }
 
   if (
-    !schema.normalizedMechanics.candidatePool ||
-    !schema.normalizedMechanics.weightedSelection ||
-    !schema.normalizedMechanics.playerChoice
+    !governance.mechanics.candidatePool ||
+    !governance.mechanics.weightedSelection ||
+    !governance.mechanics.playerChoice
   ) {
     return false;
   }
 
-  if (schema.selection?.inventory) {
+  if (governance.selection.inventory) {
     return false;
   }
 
@@ -355,6 +363,7 @@ export function stateRequirementLooksLikeProgression(
 }
 
 export function detectForwardLinearProjectileReusableFit(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   if (!detectSpawnEmitterSignals(schema)) {
     return false;
   }
@@ -367,20 +376,20 @@ export function detectForwardLinearProjectileReusableFit(schema: IntentSchema): 
   }
 
   if (
-    schema.normalizedMechanics.candidatePool ||
-    schema.normalizedMechanics.weightedSelection ||
-    schema.normalizedMechanics.playerChoice ||
-    schema.normalizedMechanics.uiModal
+    governance.mechanics.candidatePool ||
+    governance.mechanics.weightedSelection ||
+    governance.mechanics.playerChoice ||
+    governance.mechanics.uiModal
   ) {
     return false;
   }
 
   if (
-    schema.selection?.mode !== undefined ||
-    schema.selection?.cardinality !== undefined ||
-    schema.selection?.repeatability !== undefined ||
-    schema.selection?.duplicatePolicy !== undefined ||
-    schema.selection?.inventory !== undefined
+    governance.selection.present ||
+    governance.selection.cardinality !== undefined ||
+    governance.selection.repeatability !== undefined ||
+    governance.selection.duplicatePolicy !== undefined ||
+    governance.selection.inventory !== undefined
   ) {
     return false;
   }
@@ -413,12 +422,14 @@ export function classifySpawnEmissionRisk(
 export function classifyStandaloneSessionStateRisk(
   schema: IntentSchema
 ): SemanticRiskDisposition | undefined {
+  const governance = getIntentGovernanceView(schema);
   const typedStateRequirements = (schema.requirements.typed || []).filter(
     (requirement) => requirement.kind === "state"
   );
-  const states = schema.stateModel?.states || [];
+  const states = governance.state.states || [];
+  const rawStates = schema.stateModel?.states || [];
 
-  if (typedStateRequirements.length === 0 && states.length === 0) {
+  if (typedStateRequirements.length === 0 && rawStates.length === 0) {
     return undefined;
   }
 
@@ -432,13 +443,13 @@ export function classifyStandaloneSessionStateRisk(
         return false;
       }
 
-      return !schema.normalizedMechanics.candidatePool;
+      return !governance.mechanics.candidatePool;
     })
   ) {
     return "synthesis_required";
   }
 
-  return states.some((state) => !isPatternOwnedStateReusableFit(state, schema))
+  return rawStates.some((state) => !isPatternOwnedStateReusableFit(state, schema))
     ? "synthesis_required"
     : "reusable_fit";
 }
@@ -646,8 +657,11 @@ function resolveRequirementCategoryForAssessment(
 }
 
 function hasAnySchedulerTimerSignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const parameterKeys = collectTypedParameterKeys(schema);
   if (
+    governance.timing.intervalSeconds !== undefined ||
+    governance.timing.cooldownSeconds !== undefined ||
     parameterKeys.has("initialDelaySeconds") ||
     parameterKeys.has("tickSeconds") ||
     parameterKeys.has("delaySeconds") ||
@@ -664,8 +678,10 @@ function hasAnySchedulerTimerSignals(schema: IntentSchema): boolean {
 }
 
 function hasLocalCooldownOnlySchedulerSignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const parameterKeys = collectTypedParameterKeys(schema);
   if (
+    governance.timing.intervalSeconds !== undefined ||
     parameterKeys.has("initialDelaySeconds") ||
     parameterKeys.has("tickSeconds") ||
     parameterKeys.has("delaySeconds") ||
@@ -682,8 +698,10 @@ function hasLocalCooldownOnlySchedulerSignals(schema: IntentSchema): boolean {
 }
 
 function hasLocalCooldownSignal(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const parameterKeys = collectTypedParameterKeys(schema);
   if (
+    governance.timing.cooldownSeconds !== undefined ||
     parameterKeys.has("cooldownSeconds") ||
     parameterKeys.has("cooldown") ||
     parameterKeys.has("abilityCooldown")
@@ -728,22 +746,7 @@ function hasDisallowedSchedulerOrchestrationText(schema: IntentSchema): boolean 
 }
 
 export function detectSelectionFlowAsk(schema: IntentSchema): boolean {
-  if (
-    schema.normalizedMechanics.candidatePool === true ||
-    schema.normalizedMechanics.weightedSelection === true ||
-    schema.normalizedMechanics.playerChoice === true ||
-    schema.normalizedMechanics.uiModal === true
-  ) {
-    return true;
-  }
-
-  if (
-    schema.selection?.mode !== undefined ||
-    schema.selection?.cardinality !== undefined ||
-    schema.selection?.repeatability !== undefined ||
-    schema.selection?.duplicatePolicy !== undefined ||
-    schema.selection?.inventory !== undefined
-  ) {
+  if (hasGovernanceSelectionFlowContract(schema)) {
     return true;
   }
 
@@ -783,12 +786,8 @@ function hasAnyRewardProgressionSignals(schema: IntentSchema): boolean {
 }
 
 function hasForbiddenRewardProgressionScope(schema: IntentSchema): boolean {
-  if (
-    schema.selection?.inventory ||
-    schema.stateModel?.states?.some(
-      (state) => state.lifetime === "persistent" || state.owner === "external"
-    )
-  ) {
+  const governance = getIntentGovernanceView(schema);
+  if (governance.selection.inventory || hasGovernancePersistentScope(schema) || hasGovernanceExternalOrSharedOwnership(schema)) {
     return true;
   }
 
@@ -834,7 +833,12 @@ function getSelectionLocalProgressionStateIds(schema: IntentSchema): {
 }
 
 export function detectSpawnEmitterSignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   if (getForwardLinearProjectileRequirement(schema)) {
+    return true;
+  }
+
+  if ((governance.outcome.operations || []).includes("spawn")) {
     return true;
   }
 
@@ -916,13 +920,14 @@ function isPatternOwnedStateReusableFit(
   state: StateModelState,
   schema: IntentSchema
 ): boolean {
-  if (stateLooksLikePoolState(state) && schema.normalizedMechanics.candidatePool) {
+  const governance = getIntentGovernanceView(schema);
+  if (stateLooksLikePoolState(state) && governance.mechanics.candidatePool) {
     return true;
   }
 
   if (
     stateLooksLikeCommittedSelection(state) &&
-    (schema.normalizedMechanics.weightedSelection || schema.normalizedMechanics.playerChoice || !!schema.selection?.mode)
+    (governance.mechanics.weightedSelection || governance.mechanics.playerChoice || governance.selection.present)
   ) {
     return true;
   }

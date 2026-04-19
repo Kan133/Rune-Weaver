@@ -65,6 +65,7 @@ import {
 import type { SemanticAssessment } from "./seam-authority";
 import { stripNegativeConstraintFragments } from "./semantic-lexical";
 import { buildModulePlanning } from "./module-planning.js";
+import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
 import {
   applyUpdateRemovalDirectives,
   buildPreservedUpdateMechanics,
@@ -155,6 +156,7 @@ export class BlueprintBuilder {
    * 执行构建
    */
   private doBuild(schema: IntentSchema): Blueprint {
+    const governance = getIntentGovernanceView(schema);
     const planning = this.buildModules(schema);
     const modules = planning.modules;
     const connections = this.config.autoConnect
@@ -170,9 +172,9 @@ export class BlueprintBuilder {
       version: "1.0",
       summary: schema.request.goal,
       sourceIntent: {
-        intentKind: schema.classification.intentKind,
+        intentKind: governance.intentKind,
         goal: schema.request.goal,
-        normalizedMechanics: schema.normalizedMechanics,
+        normalizedMechanics: governance.mechanics,
       },
       modules,
       ...(planning.moduleFacets.length > 0 ? { moduleFacets: planning.moduleFacets } : {}),
@@ -191,6 +193,7 @@ export class BlueprintBuilder {
     schema: IntentSchema,
     candidate: Blueprint,
   ): BlueprintProposal {
+    const governance = getIntentGovernanceView(schema);
     const readiness = getSchemaReadiness(schema);
     const issues = collectProposalIssues(schema);
     const blockedBy = [...collectProposalBlockers(schema)];
@@ -220,7 +223,7 @@ export class BlueprintBuilder {
       status: getProposalStatus(readiness, issues, blockedBy),
       sourceIntent: {
         goal: schema.request.goal,
-        intentKind: schema.classification.intentKind,
+        intentKind: governance.intentKind,
       },
       proposedModules,
       proposedConnections,
@@ -804,6 +807,7 @@ export class BlueprintBuilder {
   }
 
   private buildFlatModules(schema: IntentSchema): BlueprintModule[] {
+    const governance = getIntentGovernanceView(schema);
     const modules: BlueprintModule[] = [];
     const prefix = this.config.modulePrefix;
     const schemaParams = this.getSchemaParameters(schema);
@@ -839,9 +843,9 @@ export class BlueprintBuilder {
       }
     }
 
-    if (schema.uiRequirements?.needed && schema.uiRequirements.surfaces) {
-      for (let i = 0; i < schema.uiRequirements.surfaces.length; i++) {
-        const surface = schema.uiRequirements.surfaces[i];
+    if (governance.ui.needed && governance.ui.surfaces) {
+      for (let i = 0; i < governance.ui.surfaces.length; i++) {
+        const surface = governance.ui.surfaces[i];
         const uiModule = this.createUIModule(surface, i, prefix, schemaParams);
         if (uiModule) {
           this.upsertModule(modules, uiModule);
@@ -1185,9 +1189,10 @@ export class BlueprintBuilder {
    * 构建 Pattern 提示
    */
   private buildPatternHints(schema: IntentSchema): PatternHint[] {
+    const governance = getIntentGovernanceView(schema);
     const hints: PatternHint[] = [];
 
-    if (schema.normalizedMechanics.trigger) {
+    if (governance.mechanics.trigger) {
       const patterns = [CORE_PATTERN_IDS.INPUT_KEY_BINDING].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
@@ -1198,7 +1203,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (schema.normalizedMechanics.candidatePool) {
+    if (governance.mechanics.candidatePool) {
       const patterns = [CORE_PATTERN_IDS.DATA_WEIGHTED_POOL].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
@@ -1209,7 +1214,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (schema.normalizedMechanics.weightedSelection) {
+    if (governance.mechanics.weightedSelection) {
       const patterns = [CORE_PATTERN_IDS.RULE_SELECTION_FLOW].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
@@ -1220,7 +1225,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (schema.normalizedMechanics.playerChoice) {
+    if (governance.mechanics.playerChoice) {
       const patterns = [CORE_PATTERN_IDS.RULE_SELECTION_FLOW].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
@@ -1231,7 +1236,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (schema.normalizedMechanics.uiModal) {
+    if (governance.mechanics.uiModal) {
       const patterns = [CORE_PATTERN_IDS.UI_SELECTION_MODAL].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
@@ -1242,7 +1247,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (schema.normalizedMechanics.outcomeApplication) {
+    if (governance.mechanics.outcomeApplication) {
       hints.push({
         category: "effect",
         suggestedPatterns: [],
@@ -1250,7 +1255,7 @@ export class BlueprintBuilder {
       });
     }
 
-    if (schema.normalizedMechanics.resourceConsumption) {
+    if (governance.mechanics.resourceConsumption) {
       hints.push({
         category: "resource",
         suggestedPatterns: [],
@@ -1265,15 +1270,16 @@ export class BlueprintBuilder {
    * 构建 UI 设计规格
    */
   private buildUIDesignSpec(schema: IntentSchema): UIDesignSpec | undefined {
-    if (!this.config.enableUIBranch || !schema.uiRequirements?.needed) {
+    const governance = getIntentGovernanceView(schema);
+    if (!this.config.enableUIBranch || !governance.ui.needed) {
       return undefined;
     }
 
     const surfaces: UISurfaceSpec[] = [];
 
-    if (schema.uiRequirements.surfaces) {
-      for (let i = 0; i < schema.uiRequirements.surfaces.length; i++) {
-        const surface = schema.uiRequirements.surfaces[i];
+    if (governance.ui.surfaces) {
+      for (let i = 0; i < governance.ui.surfaces.length; i++) {
+        const surface = governance.ui.surfaces[i];
         surfaces.push({
           id: `surface_${i}`,
           type: this.inferSurfaceType(surface),
@@ -1523,7 +1529,7 @@ export class BlueprintBuilder {
    * 生成 Blueprint ID
    */
   private generateBlueprintId(schema: IntentSchema): string {
-    const prefix = schema.classification.intentKind.replace(/-/g, "_");
+    const prefix = getIntentGovernanceView(schema).intentKind.replace(/-/g, "_");
     const timestamp = Date.now().toString(36).slice(-4);
     return `${prefix}_${timestamp}`;
   }

@@ -21,11 +21,12 @@ import {
   stateLooksLikePoolState,
 } from "./seam-authority";
 import { stripNegativeConstraintFragments } from "./semantic-lexical";
+import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
 
 export function inferCategoriesFromMechanics(
   schema: IntentSchema
 ): BlueprintModule["category"][] {
-  const mechanics = schema.normalizedMechanics;
+  const mechanics = getIntentGovernanceView(schema).mechanics;
   const categories: BlueprintModule["category"][] = [];
 
   if (mechanics.trigger) {
@@ -71,12 +72,13 @@ export function resolveRequirementRole(
   schema: IntentSchema,
   contextSignals: string[]
 ): string {
+  const governance = getIntentGovernanceView(schema);
   if (req.kind === "state") {
     if (category === "rule" && detectSelectionLocalProgressionStateRequirement(req, schema)) {
       return "selection_flow";
     }
 
-    if (!schema.normalizedMechanics.candidatePool) {
+    if (!governance.mechanics.candidatePool) {
       return "session_state";
     }
   }
@@ -593,6 +595,7 @@ export function inferRequiredCapabilities(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] {
+  const governance = getIntentGovernanceView(schema);
   const capabilities = new Set<string>();
 
   switch (module.category) {
@@ -602,7 +605,7 @@ export function inferRequiredCapabilities(
     case "data":
       if (module.role === "session_state") {
         capabilities.add("state.session.feature_owned");
-      } else if (schema.normalizedMechanics.candidatePool) {
+      } else if (governance.mechanics.candidatePool) {
         capabilities.add("selection.pool.weighted_candidates");
       } else {
         capabilities.add("state.session.feature_owned");
@@ -610,15 +613,21 @@ export function inferRequiredCapabilities(
       break;
     case "rule":
       if (module.role === "selection_flow" && (
-        schema.normalizedMechanics.playerChoice ||
-        schema.selection?.mode === "user-chosen" ||
-        schema.normalizedMechanics.uiModal ||
-        schema.uiRequirements?.needed
+        governance.mechanics.playerChoice ||
+        governance.selection.choiceMode === "user-chosen" ||
+        governance.selection.choiceMode === "hybrid" ||
+        governance.ui.needed ||
+        governance.mechanics.uiModal
       )) {
         capabilities.add("selection.flow.player_confirmed");
       } else if (
         module.role === "selection_flow" &&
-        (schema.selection?.mode === "weighted" || schema.normalizedMechanics.weightedSelection)
+        (
+          governance.selection.source === "weighted-pool" ||
+          governance.selection.choiceMode === "weighted" ||
+          governance.selection.choiceMode === "hybrid" ||
+          governance.mechanics.weightedSelection
+        )
       ) {
         capabilities.add("selection.flow.weighted_resolve");
       } else if (module.role === "timed_rule") {
@@ -651,10 +660,10 @@ export function inferRequiredCapabilities(
         capabilities.add("ability.buff.short_duration");
         break;
       }
-      for (const operation of schema.effects?.operations || []) {
+      for (const operation of governance.effect.operations || []) {
         capabilities.add(mapEffectOperationToCapability(operation));
       }
-      if ((schema.effects?.operations || []).length === 0) {
+      if ((governance.effect.operations || []).length === 0) {
         capabilities.add("effect.modifier.apply");
       }
       break;
@@ -682,6 +691,7 @@ export function inferOptionalCapabilities(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
+  const governance = getIntentGovernanceView(schema);
   const optional = new Set<string>();
 
   if (
@@ -691,22 +701,27 @@ export function inferOptionalCapabilities(
   ) {
     optional.add("progression.selection.local_threshold");
   }
-  if (module.category === "rule" && schema.selection?.repeatability) {
-    optional.add(`selection-repeatability/${schema.selection.repeatability}`);
+  if (module.category === "rule" && governance.selection.repeatability) {
+    optional.add(`selection-repeatability/${governance.selection.repeatability}`);
   }
   if (
     module.category === "rule" &&
-    (schema.selection?.mode === "weighted" || schema.normalizedMechanics.weightedSelection)
+    (
+      governance.selection.source === "weighted-pool" ||
+      governance.selection.choiceMode === "weighted" ||
+      governance.selection.choiceMode === "hybrid" ||
+      governance.mechanics.weightedSelection
+    )
   ) {
     optional.add("selection.flow.weighted_resolve");
   }
-  if (module.category === "ui" && schema.uiRequirements?.feedbackNeeds) {
-    for (const need of schema.uiRequirements.feedbackNeeds) {
+  if (module.category === "ui" && governance.ui.feedbackNeeds) {
+    for (const need of governance.ui.feedbackNeeds) {
       optional.add(`ui-feedback/${need}`);
     }
   }
-  if (module.category === "effect" && schema.effects?.durationSemantics) {
-    optional.add(`effect-duration/${schema.effects.durationSemantics}`);
+  if (module.category === "effect" && governance.effect.durationSemantics) {
+    optional.add(`effect-duration/${governance.effect.durationSemantics}`);
   }
   if (module.category === "effect" && detectLocalCooldownSchedulerReusableFit(schema)) {
     optional.add("timing.cooldown.local");
@@ -727,6 +742,7 @@ export function inferRequiredOutputs(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
+  const governance = getIntentGovernanceView(schema);
   const outputs = new Set<string>();
 
   if (module.outputs) {
@@ -734,7 +750,7 @@ export function inferRequiredOutputs(
       outputs.add(output);
     }
   }
-  if (module.category === "ui" && schema.uiRequirements?.surfaces) {
+  if (module.category === "ui" && (governance.ui.needed || (governance.ui.surfaces || []).length > 0)) {
     outputs.add("ui.surface");
   }
   if (module.category === "trigger") {
@@ -743,7 +759,7 @@ export function inferRequiredOutputs(
   if (
     module.category === "data" &&
     module.role === "weighted_pool" &&
-    schema.normalizedMechanics.candidatePool
+    governance.mechanics.candidatePool
   ) {
     outputs.add("shared.runtime");
   }
@@ -784,7 +800,11 @@ export function inferStateExpectations(
   module: BlueprintModule,
   schema: IntentSchema
 ): string[] | undefined {
-  if (!schema.stateModel?.states || schema.stateModel.states.length === 0) {
+  const governance = getIntentGovernanceView(schema);
+  const rawStates = schema.stateModel?.states || [];
+  const governanceStates = governance.state.states || [];
+
+  if (rawStates.length === 0 && governanceStates.length === 0) {
     return undefined;
   }
 
@@ -794,11 +814,25 @@ export function inferStateExpectations(
 
   const expectations = new Set<string>();
 
-  if (module.category === "data" && schema.stateModel.states.some((state) => stateLooksLikePoolState(state))) {
+  const hasCandidatePoolState =
+    governance.mechanics.candidatePool ||
+    (governance.content.collections || []).some((collection) => collection.role === "candidate-options") ||
+    rawStates.some((state) => stateLooksLikePoolState(state));
+  if (module.category === "data" && hasCandidatePoolState) {
     expectations.add("selection.pool_state");
   }
 
-  if (["rule", "effect"].includes(module.category) && schema.stateModel.states.some((state) => stateLooksLikeCommittedSelection(state))) {
+  const hasCommittedSelectionState =
+    governance.selection.present &&
+    (
+      governance.mechanics.playerChoice ||
+      governance.mechanics.outcomeApplication ||
+      governance.selection.commitment !== undefined
+    );
+  if (
+    ["rule", "effect"].includes(module.category) &&
+    (hasCommittedSelectionState || rawStates.some((state) => stateLooksLikeCommittedSelection(state)))
+  ) {
     expectations.add("selection.commit_state");
   }
 
@@ -811,8 +845,7 @@ export function inferStateExpectations(
     expectations.add("progression.level_state");
   }
 
-  for (const state of schema.stateModel.states) {
-    expectations.add(`state:${state.id}`);
+  for (const state of governanceStates) {
     if (state.owner) {
       expectations.add(`owner:${state.owner}`);
     }
@@ -863,9 +896,9 @@ export function inferIntegrationHints(
       if (binding.kind === "bridge-point" || module.category === "integration") {
         hints.add("server.runtime");
       }
-      hints.add(`binding:${binding.kind}:${binding.id}`);
+      hints.add(`binding:${binding.kind}`);
       if (binding.required) {
-        hints.add(`required-binding:${binding.id}`);
+        hints.add(`required-binding:${binding.kind}`);
       }
     }
   }

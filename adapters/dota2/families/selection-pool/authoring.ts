@@ -23,6 +23,13 @@ import type {
   FeatureSourceModelRef,
   RuneWeaverFeatureRecord,
 } from "../../../../core/workspace/types.js";
+import {
+  getGovernanceKeyInputs,
+  getIntentGovernanceView,
+  hasGovernanceExternalOrSharedOwnership,
+  hasGovernanceFeatureOwnedCandidateCollection,
+  hasGovernancePersistentScope,
+} from "../../../../core/wizard/intent-governance-view.js";
 import { dota2GapFillBoundaryProvider } from "../../gap-fill/boundaries.js";
 import {
   getSelectionPoolExampleById,
@@ -513,8 +520,77 @@ function parseChoiceCount(prompt: string): number | undefined {
 
 function parseRequestedObjectCount(prompt: string): number | undefined {
   const normalized = normalizePrompt(prompt);
-  const match = normalized.match(/(?:to|到|扩充到|提升到)\s*(\d+)\s*(?:talents?|objects?|items?|个)/i);
-  return match ? Number(match[1]) : undefined;
+  const patterns = [
+    /(?:to|到|扩充到|提升到)\s*(\d+)\s*(?:talents?|objects?|items?|entries?|rewards?|个)/i,
+    /(?:pool|collection|object|item|entry|reward|talent)(?:[\s-]+\w+){0,4}\s+(?:count|size)\s+(?:to|from\s+\d+\s+to)\s*(\d+)/i,
+    /(?:with|to)\s*(\d+)\s+(?:total\s+)?(?:same-feature\s+)?(?:objects?|items?|entries?|rewards?|talents?)/i,
+    /(?:池(?:子)?数量|对象数量|池大小|总数)(?:提升到|扩充到|增加到|到)\s*(\d+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match) {
+      return Number(match[1]);
+    }
+  }
+
+  return undefined;
+}
+
+function coercePositiveInteger(value: unknown): number | undefined {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return undefined;
+  }
+  return Math.floor(numeric);
+}
+
+function extractRequestedObjectCountFromUpdateIntent(updateIntent: UpdateIntent): number | undefined {
+  const updateDeltaItems = [
+    ...(updateIntent.delta.add || []),
+    ...(updateIntent.delta.modify || []),
+  ].map((item) => item as unknown as Record<string, unknown>);
+
+  for (const item of updateDeltaItems) {
+    const path = typeof item.path === "string" ? item.path : "";
+    if (!path) {
+      continue;
+    }
+
+    if (/(^|\.)(objectCount)$/.test(path)) {
+      const resolvedCount = coercePositiveInteger(item.newValue);
+      if (typeof resolvedCount === "number") {
+        return resolvedCount;
+      }
+    }
+
+    if (/(^|\.)(objects)$/.test(path) && Array.isArray(item.newValue)) {
+      const objectCount = item.newValue.length;
+      if (objectCount > 0) {
+        return objectCount;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function resolveRequestedObjectCountForUpdate(
+  requestedChange: IntentSchema,
+  updateIntent: UpdateIntent,
+): number | undefined {
+  const structuredTexts = [
+    requestedChange.request.goal,
+    ...(requestedChange.requirements.outputs || []),
+    requestedChange.flow?.triggerSummary,
+    ...(requestedChange.uncertainties || []).map((item) => item.summary),
+    requestedChange.request.rawPrompt,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  return extractRequestedObjectCountFromUpdateIntent(updateIntent)
+    || structuredTexts
+      .map((text) => parseRequestedObjectCount(text))
+      .find((value): value is number => typeof value === "number");
 }
 
 function requestsSupportedInventory(prompt: string): boolean {
@@ -528,6 +604,9 @@ function requestsSupportedInventory(prompt: string): boolean {
 }
 
 function promptHasSelectionUiSurface(prompt: string): boolean {
+  if (/(?:without\s+(?:showing\s+)?ui|do\s+not\s+show\s+ui|don't\s+show\s+ui|no[\s-]?ui|不显示\s*ui|不要\s*ui|无\s*ui)/i.test(prompt)) {
+    return false;
+  }
   return /modal|ui|dialog|cards?|界面|卡牌|窗口|弹窗|面板/i.test(prompt);
 }
 
@@ -542,51 +621,37 @@ function promptHasPostSelectionPoolBehavior(prompt: string): boolean {
 }
 
 function hasFeatureOwnedCollections(schema: IntentSchema): boolean {
-  return Boolean(
-    schema.contentModel?.collections?.some((collection) =>
-      collection.role === "candidate-options" && (collection.ownership === undefined || collection.ownership === "feature")
-    ),
-  );
+  return hasGovernanceFeatureOwnedCandidateCollection(schema);
 }
 
 function hasExternalOrSharedOwnership(schema: IntentSchema): boolean {
-  return Boolean(
-    schema.stateModel?.states?.some((state) => state.owner === "external") ||
-      schema.contentModel?.collections?.some((collection) => collection.ownership === "external" || collection.ownership === "shared"),
-  );
+  return hasGovernanceExternalOrSharedOwnership(schema);
 }
 
 function hasPersistentStateRequest(schema: IntentSchema): boolean {
-  return Boolean(
-    schema.stateModel?.states?.some((state) => state.lifetime === "persistent") ||
-      schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system" && dependency.relation === "writes"),
-  );
+  return hasGovernancePersistentScope(schema);
 }
 
 function hasCrossFeatureRequest(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   return Boolean(
-    schema.classification.intentKind === "cross-system-composition" ||
-      schema.composition?.dependencies?.some((dependency) => dependency.kind === "cross-feature") ||
-      schema.outcomes?.operations?.includes("grant-feature"),
+    governance.intentKind === "cross-system-composition" ||
+      (governance.composition.dependencies || []).some((dependency) => dependency.kind === "cross-feature") ||
+      (governance.outcome.operations || []).includes("grant-feature"),
   );
 }
 
 function hasCustomEffectFamilyRequest(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   return Boolean(
     schema.spatial?.emission?.kind === "projectile" ||
-      schema.outcomes?.operations?.includes("spawn") ||
-      schema.outcomes?.operations?.includes("move"),
+      (governance.outcome.operations || []).includes("spawn") ||
+      (governance.outcome.operations || []).includes("move"),
   );
 }
 
 function hasMultipleTriggerOwners(schema: IntentSchema): boolean {
-  const keyInputs = new Set(
-    (schema.interaction?.activations || [])
-      .filter((activation) => activation.kind === "key" && typeof activation.input === "string")
-      .map((activation) => activation.input!.trim().toUpperCase())
-      .filter((value) => value.length > 0),
-  );
-  return keyInputs.size > 1;
+  return getGovernanceKeyInputs(schema).length > 1;
 }
 
 function evaluateSelectionPoolDetection(input: ResolveSelectionPoolFamilyInput): SelectionPoolDetectionResult {
@@ -1288,7 +1353,7 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
     );
   }
 
-  const requestedObjectCount = parseRequestedObjectCount(requestedChange.request.rawPrompt);
+  const requestedObjectCount = resolveRequestedObjectCountForUpdate(requestedChange, updateIntent);
   if (requestedObjectCount && requestedObjectCount > merged.objects.length) {
     const exampleExpansionObjects = getSelectionPoolExampleExpansionObjects(featureId, requestedObjectCount);
     merged = exampleExpansionObjects
@@ -1443,12 +1508,13 @@ export function resolveSelectionPoolFamily(
 }
 
 function getSelectionPoolSkeletonSignals(schema: IntentSchema): string[] {
+  const governance = getIntentGovernanceView(schema);
   return dedupeStrings([
-    schema.normalizedMechanics.trigger ? "trigger" : undefined,
-    schema.normalizedMechanics.candidatePool ? "candidate_pool" : undefined,
-    schema.normalizedMechanics.weightedSelection ? "weighted_selection" : undefined,
-    schema.normalizedMechanics.playerChoice ? "player_choice" : undefined,
-    schema.normalizedMechanics.uiModal ? "ui_modal" : undefined,
+    governance.mechanics.trigger ? "trigger" : undefined,
+    governance.mechanics.candidatePool ? "candidate_pool" : undefined,
+    governance.mechanics.weightedSelection ? "weighted_selection" : undefined,
+    governance.mechanics.playerChoice ? "player_choice" : undefined,
+    governance.mechanics.uiModal ? "ui_modal" : undefined,
   ]);
 }
 
@@ -1461,11 +1527,12 @@ function assessSelectionPoolContract(
   prompt: string,
   proposal: FeatureAuthoringProposal,
 ): SelectionPoolContractAssessment {
+  const governance = getIntentGovernanceView(schema);
   const normalized = normalizeFeatureAuthoringParameters(
     proposal.parameters,
     resolveSelectionPoolObjectKind(proposal.parameters.objectKind) || resolveSelectionPoolObjectKind(proposal.objectKind),
   );
-  const candidateCount = schema.selection?.choiceCount || parseChoiceCount(prompt);
+  const candidateCount = governance.selection.choiceCount || parseChoiceCount(prompt);
   const positiveAtoms = new Set([
     "single_local_trigger",
     "feature_owned_candidate_pool",
@@ -1476,46 +1543,44 @@ function assessSelectionPoolContract(
     "commit_and_session_tracking",
     "selected_removed_or_unchosen_retained",
   ]);
-  const triggerKeyCount = new Set(
-    (schema.interaction?.activations || [])
-      .filter((activation) => activation.kind === "key" && typeof activation.input === "string")
-      .map((activation) => activation.input!.trim().toUpperCase())
-      .filter((value) => value.length > 0),
-  ).size;
+  const triggerKeyCount = getGovernanceKeyInputs(schema).length;
   const singleLocalTrigger = Boolean(
-    schema.normalizedMechanics.trigger || parseTriggerKey(prompt) || triggerKeyCount === 1,
+    governance.mechanics.trigger || parseTriggerKey(prompt) || triggerKeyCount === 1,
   ) && !hasMultipleTriggerOwners(schema);
   const featureOwnedCandidatePool = Boolean(
-    schema.normalizedMechanics.candidatePool ||
-      schema.selection?.source === "candidate-collection" ||
-      schema.selection?.source === "weighted-pool" ||
+    governance.mechanics.candidatePool ||
+      governance.selection.source === "candidate-collection" ||
+      governance.selection.source === "weighted-pool" ||
       hasFeatureOwnedCollections(schema),
   ) && !hasExternalOrSharedOwnership(schema);
   const weightedOrRarityBackedDraw = Boolean(
-    schema.normalizedMechanics.weightedSelection ||
-      schema.selection?.mode === "weighted" ||
+    governance.mechanics.weightedSelection ||
+      governance.selection.source === "weighted-pool" ||
+      governance.selection.choiceMode === "weighted" ||
+      governance.selection.choiceMode === "hybrid" ||
       /weight|weighted|rarity|tier|权重|加权|稀有度|稀有/i.test(prompt),
   );
   const presentMultipleCandidates = (candidateCount ?? 0) > 1;
   const chooseExactlyOne = Boolean(
-    schema.selection?.cardinality === "single" ||
+    governance.selection.cardinality === "single" ||
       promptHasSingleSelectionCommit(prompt),
   );
   const currentFeatureUiSurface = Boolean(
-    schema.normalizedMechanics.uiModal ||
-      schema.uiRequirements?.needed === true ||
+    governance.mechanics.uiModal ||
+      governance.ui.needed === true ||
+      (governance.ui.surfaces || []).length > 0 ||
       schema.integrations?.expectedBindings?.some((binding) => binding.kind === "ui-surface") ||
       promptHasSelectionUiSurface(prompt),
   );
   const commitAndSessionTracking = Boolean(
-    schema.stateModel?.states?.some((state) => state.owner === "feature" || state.lifetime === "session") ||
+    (governance.state.states || []).some((state) => state.owner === "feature" || state.owner === "session" || state.lifetime === "session") ||
       normalized.inventory?.enabled === true ||
       promptHasPostSelectionPoolBehavior(prompt) ||
       /(?:进入库存|加入库存|store|stored|inventory|session|会话)/i.test(prompt),
   );
   const selectedRemovedOrUnchosenRetained = Boolean(
     promptHasPostSelectionPoolBehavior(prompt) ||
-      schema.selection?.duplicatePolicy === "forbid",
+      governance.selection.duplicatePolicy === "forbid",
   );
   const noPersistence = !hasPersistentStateRequest(schema) &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED");
@@ -1524,7 +1589,7 @@ function assessSelectionPoolContract(
   const noExternalOwnership = !hasExternalOrSharedOwnership(schema);
   const noSecondTrigger = triggerKeyCount <= 1 &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED");
-  const noMultiConfirm = (schema.selection?.cardinality ?? "single") === "single" &&
+  const noMultiConfirm = (governance.selection.cardinality ?? "single") === "single" &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_CONFIRM_NOT_SUPPORTED");
   const noArbitraryCustomEffectFamily = !hasCustomEffectFamilyRequest(schema) &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED");

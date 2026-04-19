@@ -353,7 +353,7 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
     "Choose Your Talent",
   );
   assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
-  assert.equal(result.admissionDiagnostics?.verdict, "admitted_explicit");
+  assert.equal(result.admissionDiagnostics?.verdict, "admitted_compressed");
   assert.equal(result.admissionDiagnostics?.proposal.baseSource, "example_seed");
 }
 

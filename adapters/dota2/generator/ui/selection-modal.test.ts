@@ -5,6 +5,7 @@
  */
 
 import { generateSelectionModalComponent } from "./selection-modal.js";
+import { generateLessStyles } from "./less-styles.js";
 import { WritePlanEntry } from "../../assembler/index.js";
 
 function assert(condition: unknown, message: string): void {
@@ -604,6 +605,35 @@ function testInventoryPanelGeneration() {
   console.log("✓ Test 16 passed\n");
 }
 
+function testSelectionModalStylesWrapAdditionalCards() {
+  console.log("Test 17: Selection modal styles wrap additional cards");
+
+  const lessEntry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.less",
+    contentType: "less",
+    parameters: {
+      choiceCount: 5,
+      inventory: {
+        enabled: true,
+        capacity: 16,
+        storeSelectedItems: true,
+        blockDrawWhenFull: true,
+        fullMessage: "Selection inventory full",
+        presentation: "persistent_panel",
+      },
+    },
+  };
+
+  const lessCode = generateLessStyles("ui.selection_modal", lessEntry, "test_feature");
+
+  assert(lessCode.includes("flow-children: right-wrap;"), "Should wrap cards instead of clipping additional options");
+  assert(lessCode.includes("margin: 8px;"), "Should leave room between wrapped cards");
+
+  console.log("✓ Test 17 passed\n");
+}
+
 // Run all tests
 console.log("=== Selection Modal Generator Tests ===\n");
 testBasicGeneration();
@@ -626,4 +656,5 @@ testDebugLogs();
 testNoLessImport();
 testPreventDisabledSelection();
 testInventoryPanelGeneration();
+testSelectionModalStylesWrapAdditionalCards();
 console.log("=== All tests passed ===");
