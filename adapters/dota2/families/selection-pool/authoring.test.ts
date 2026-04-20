@@ -966,7 +966,7 @@ function testUnsupportedContractEscapeHonestBlocks(): void {
   assert.equal(resolution.blocked, true);
   assert.ok(
     resolution.reasons.some((reason) => reason.includes("one trigger owner")) ||
-      resolution.reasons.some((reason) => reason.includes("cross-feature grants")),
+      resolution.reasons.some((reason) => reason.includes("session-only")),
   );
   assert.equal(resolution.admissionDiagnostics?.verdict, "governance_blocked");
 }

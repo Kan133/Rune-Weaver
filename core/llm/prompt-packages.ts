@@ -193,6 +193,46 @@ function buildWizardFewShots(): LLMMessage[] {
       },
     },
     {
+      user: "Create one gameplay ability feature with no trigger key. It should not auto-attach to the hero. The granted ability shell should remain available for the current match only and must not save across matches or profiles.",
+      assistant: {
+        classification: { intentKind: "micro-feature", confidence: "high" },
+        requirements: {
+          functional: [
+            "Define one gameplay ability shell with no trigger key and no automatic attachment.",
+            "Treat the shell as current-match runtime state only, not external persistence or profile storage.",
+          ],
+        },
+        interaction: {
+          activations: [
+            { actor: "system", kind: "system", input: "shell granted", phase: "occur", repeatability: "repeatable", confirmation: "implicit" },
+          ],
+        },
+        timing: {
+          duration: { kind: "persistent" },
+        },
+        stateModel: {
+          states: [
+            {
+              id: "granted_shell_session_state",
+              summary: "Track whether the granted shell remains available during the current match.",
+              owner: "feature",
+              lifetime: "session",
+              kind: "generic",
+              mutationMode: "update",
+            },
+          ],
+        },
+        effects: {
+          operations: ["apply"],
+          durationSemantics: "persistent",
+        },
+        resolvedAssumptions: [
+          "Runtime or session-long persistence does not imply cross-match save, external storage, or cross-feature targeting.",
+        ],
+        uncertainties: [],
+      },
+    },
+    {
       user: "Make a system where collected echoes tune a reality lattice and change future pulses.",
       assistant: {
         classification: { intentKind: "standalone-system", confidence: "low" },
@@ -281,6 +321,55 @@ function buildUpdateFewShots(): LLMMessage[] {
         ],
       },
     },
+    {
+      user: [
+        "Current feature context:",
+        JSON.stringify({
+          featureId: "grantable_shell_demo",
+          preservedModuleBackbone: ["gameplay_ability"],
+          admittedSkeleton: ["gameplay_ability"],
+          preservedInvariants: ["Do not add cross-match save or external storage unless explicitly requested."],
+          boundedFields: {},
+        }, null, 2),
+        "",
+        "Requested update:",
+        "Keep the granted shell available for the current match only. Do not save it across matches or profiles.",
+      ].join("\n"),
+      assistant: {
+        requestedChange: {
+          classification: { intentKind: "micro-feature", confidence: "high" },
+          requirements: {
+            functional: ["Keep the granted shell active for the current match only without cross-match save semantics."],
+          },
+          timing: {
+            duration: { kind: "persistent" },
+          },
+          stateModel: {
+            states: [
+              {
+                id: "shell_session_state",
+                summary: "Track the shell during the current match only.",
+                owner: "feature",
+                lifetime: "session",
+                kind: "generic",
+                mutationMode: "update",
+              },
+            ],
+          },
+          effects: {
+            durationSemantics: "persistent",
+          },
+          uncertainties: [],
+        },
+        delta: {
+          preserve: [{ path: "skeleton", kind: "composition", summary: "Preserve the existing ability shell backbone." }],
+          modify: [{ path: "timing.duration", kind: "state", summary: "Keep the shell alive during the current match only." }],
+        },
+        resolvedAssumptions: [
+          "Current-match runtime persistence does not imply cross-match save, profile storage, or external ownership.",
+        ],
+      },
+    },
   ];
 
   return examples.flatMap((example) => [
@@ -327,6 +416,7 @@ export function buildWizardCreatePromptPackage(input: WizardPackageInput): Workf
         "Governance is handled downstream; do not output readiness, blocked, weak, or implementation verdicts.",
         "Do not judge implementation readiness, blocked state, blueprint legality, host write feasibility, or runtime support.",
         "Preserve exact scalar facts and explicit negative constraints.",
+        "Unless the prompt explicitly asks for cross-match retention, account/profile save, external storage, or a named external owner or boundary, interpret persistent wording as runtime or session-long existence only.",
         'Interpret "removed from future draws", "no longer appear after selection", and "永久移除出抽取池" as same-feature eligibility mutation unless the user explicitly asks for persistence, save/storage, cross-match, or external ownership.',
         "Use uncertainties only when you need to preserve missing or ambiguous semantic information that would materially change interpretation.",
         "Do not invent UI, persistence, cross-feature coupling, inventory, or extra semantics that the user explicitly forbids.",
@@ -382,6 +472,7 @@ export function buildWizardUpdatePromptPackage(input: UpdateWizardPackageInput):
         "Prefer preserve semantics over rebuild semantics.",
         "Do not restate or rebuild the whole existing feature unless the user explicitly asks for a rewrite.",
         "Keep the requestedChange semantic-only and return compact delta notes.",
+        "Unless the prompt explicitly asks for cross-match retention, account/profile save, external storage, or a named external owner or boundary, interpret persistent wording as runtime or session-long existence only.",
         'Do not reinterpret "confirm exactly one candidate" or single-confirm invariants as a request to change selection.choiceCount.',
         "Do not output readiness, blocked/weak labels, or implementation verdicts.",
         "Represent unknown or change-sensitive gaps with uncertainties in the requestedChange schema instead of pretending the update is blocked.",

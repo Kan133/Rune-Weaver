@@ -19,6 +19,11 @@ import {
   getActiveFeatures,
 } from "../../../core/workspace/index.js";
 import { migrateBaselineAbilities } from "../kv/baseline-migrator.js";
+import {
+  GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+  readProviderAbilityExportArtifact,
+  readSelectionGrantBindingArtifact,
+} from "../cross-feature/index.js";
 
 export interface BridgeRefreshResult {
   success: boolean;
@@ -318,6 +323,14 @@ function generateServerIndexContent(
     selectionFlowFile?: string;
     selectionFlowClass?: string;
   }> = [];
+  const autoAttachAbilityNames = new Set<string>();
+  const preloadedAbilityNames = new Set<string>();
+  const selectionGrantPlans: Array<{
+    featureId: string;
+    selectionFlowFile: string;
+    selectionFlowClass: string;
+    bindings: Array<{ objectId: string; targetFeatureId: string; abilityName: string }>;
+  }> = [];
 
   for (const feature of activeFeatures) {
     const wiringPlan: {
@@ -329,6 +342,7 @@ function generateServerIndexContent(
       selectionFlowFile?: string;
       selectionFlowClass?: string;
     } = { featureId: feature.featureId };
+    const featureGeneratedAbilityNames = new Set<string>();
 
     const featureKvFiles = feature.generatedFiles.filter(
       (file) => file.includes("npc_abilities_custom") && file.endsWith(".txt")
@@ -343,13 +357,31 @@ function generateServerIndexContent(
           for (const match of abilityNameMatches) {
             const nameMatch = match.match(/"([^"]+)"/);
             if (nameMatch && nameMatch[1] && nameMatch[1].startsWith("rw_")) {
-              const abilityName = nameMatch[1];
-              if (!generatedAbilityNames.includes(abilityName)) {
-                generatedAbilityNames.push(abilityName);
-              }
+              featureGeneratedAbilityNames.add(nameMatch[1]);
             }
           }
         }
+      }
+    }
+
+    const providerExportArtifact = readProviderAbilityExportArtifact(hostRoot, feature.featureId);
+    if (providerExportArtifact?.surfaces?.length) {
+      for (const surface of providerExportArtifact.surfaces) {
+        featureGeneratedAbilityNames.add(surface.abilityName);
+        if (surface.attachmentMode === "auto_on_activate") {
+          autoAttachAbilityNames.add(surface.abilityName);
+        }
+      }
+    } else {
+      for (const abilityName of featureGeneratedAbilityNames) {
+        autoAttachAbilityNames.add(abilityName);
+      }
+    }
+
+    for (const abilityName of featureGeneratedAbilityNames) {
+      preloadedAbilityNames.add(abilityName);
+      if (!generatedAbilityNames.includes(abilityName)) {
+        generatedAbilityNames.push(abilityName);
       }
     }
 
@@ -398,10 +430,41 @@ function generateServerIndexContent(
     if (wiringPlan.keyBindingFile && wiringPlan.poolFile && wiringPlan.selectionFlowFile) {
       runtimeWiringPlans.push(wiringPlan);
     }
+
+    const bindingArtifact = readSelectionGrantBindingArtifact(hostRoot, feature.featureId);
+    if (bindingArtifact?.bindings?.length && wiringPlan.selectionFlowFile && wiringPlan.selectionFlowClass) {
+      const bindings = bindingArtifact.bindings.flatMap((binding) => {
+        const providerArtifact = readProviderAbilityExportArtifact(hostRoot, binding.targetFeatureId);
+        const providerSurface = providerArtifact?.surfaces.find(
+          (surface) => surface.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+        );
+        if (!providerSurface) {
+          return [];
+        }
+        preloadedAbilityNames.add(providerSurface.abilityName);
+        if (!generatedAbilityNames.includes(providerSurface.abilityName)) {
+          generatedAbilityNames.push(providerSurface.abilityName);
+        }
+        return [{
+          objectId: binding.objectId,
+          targetFeatureId: binding.targetFeatureId,
+          abilityName: providerSurface.abilityName,
+        }];
+      });
+
+      if (bindings.length > 0) {
+        selectionGrantPlans.push({
+          featureId: feature.featureId,
+          selectionFlowFile: wiringPlan.selectionFlowFile,
+          selectionFlowClass: wiringPlan.selectionFlowClass,
+          bindings,
+        });
+      }
+    }
   }
 
   const abilityBlocks: string[] = [];
-  for (const name of generatedAbilityNames) {
+  for (const name of autoAttachAbilityNames) {
     const safeName = name.replace(/-/g, "_");
     abilityBlocks.push(`    const abilityName_${safeName} = "${name}";
     if (hero.HasAbility(abilityName_${safeName})) {
@@ -418,7 +481,7 @@ function generateServerIndexContent(
     }`);
   }
 
-  const heroAttachmentCode = generatedAbilityNames.length > 0 ? `
+  const heroAttachmentCode = autoAttachAbilityNames.size > 0 ? `
   // ========================================================================
   // Hero Attachment - Rune Weaver Phase 1 Minimal Implementation
   // Defers attachment until hero spawns via npc_spawned hook
@@ -457,6 +520,7 @@ ${abilityBlocks.join("\n")}
 // Dynamic module loading to avoid Lua local variable limit
 const moduleDescriptors = ${JSON.stringify(moduleDescriptors, null, 2)};
 const runtimeWiringPlans = ${JSON.stringify(runtimeWiringPlans, null, 2)};
+const selectionGrantPlans = ${JSON.stringify(selectionGrantPlans, null, 2)};
 
 function isGeneratedKeyBindingAbilityModule(fileName: string): boolean {
   return fileName.endsWith("_input_key_binding_ability");
@@ -537,24 +601,69 @@ function wireRuntimeFeatures(loadedModules: Record<string, any>): void {
   }
 }
 
+function registerSelectionGrantHandlers(loadedModules: Record<string, any>): void {
+  for (const plan of selectionGrantPlans) {
+    const selectionFlow = getRwSingleton(
+      loadedModules,
+      "rune_weaver.generated.server." + plan.selectionFlowFile,
+      plan.selectionFlowClass
+    );
+
+    if (!selectionFlow || typeof selectionFlow.registerOutcomeHandler !== "function") {
+      continue;
+    }
+
+    selectionFlow.registerOutcomeHandler((context: { playerId: number; option: { id: string } }) => {
+      const binding = plan.bindings.find((candidate) => candidate.objectId === context.option.id);
+      if (!binding) {
+        return { handled: false };
+      }
+
+      const hero = PlayerResource.GetSelectedHeroEntity(context.playerId as PlayerID);
+      if (!hero) {
+        print("[Rune Weaver] Selection grant: no hero found for player " + context.playerId);
+        return { handled: false };
+      }
+
+      const abilityPath = "rune_weaver.abilities." + binding.abilityName;
+      require(abilityPath);
+
+      if (!hero.HasAbility(binding.abilityName)) {
+        hero.AddAbility(binding.abilityName);
+      }
+
+      const ability = hero.FindAbilityByName(binding.abilityName);
+      if (!ability) {
+        print("[Rune Weaver] Selection grant: failed to resolve ability " + binding.abilityName);
+        return { handled: false };
+      }
+
+      ability.SetLevel(1);
+      print("[Rune Weaver] Selection grant: granted " + binding.abilityName + " from feature " + binding.targetFeatureId);
+      return { handled: true };
+    });
+  }
+}
+
 // Rune Weaver Generated Ability Names for Hero Attachment
 // These abilities will be automatically attached to heroes by the host addon
 // Format: abilityName = "rw_xxx"
-${generatedAbilityNames.map((name) => `const ${name.replace(/-/g, "_").toUpperCase()}_ABILITY = "${name}";`).join("\n")}
+${Array.from(preloadedAbilityNames).map((name) => `const ${name.replace(/-/g, "_").toUpperCase()}_ABILITY = "${name}";`).join("\n")}
 
 export function activateRwGeneratedServer(): void {
   const loadedModules = loadRwGeneratedModules();
 
   // Preload ability wrappers to ensure registerAbility() executes before AddAbility()
   // Using dynamic require path to avoid TSTL compile-time resolution
-${generatedAbilityNames.map((name) => `  { const abilityPath = "rune_weaver.abilities.${name}"; require(abilityPath); }`).join("\n")}
+${Array.from(preloadedAbilityNames).map((name) => `  { const abilityPath = "rune_weaver.abilities.${name}"; require(abilityPath); }`).join("\n")}
 
   wireRuntimeFeatures(loadedModules);
+  registerSelectionGrantHandlers(loadedModules);
 
   // Mount ${activeFeatures.length} active features
 ${heroAttachmentCode}
   print("[Rune Weaver] ${activeFeatures.length} server modules activated");
-  print("[Rune Weaver] Hero attachment abilities registered: ${generatedAbilityNames.length}");
+  print("[Rune Weaver] Hero attachment abilities registered: ${autoAttachAbilityNames.size}");
 }
 `;
 }

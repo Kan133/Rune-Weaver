@@ -43,6 +43,7 @@ export interface Dota2BlueprintEnrichmentResult<TBlueprint extends Blueprint = B
 function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
   blueprint: TBlueprint,
   featureAuthoring: SelectionPoolFeatureAuthoring,
+  status: NormalizedBlueprintStatus,
 ): TBlueprint {
   const modules = buildSelectionPoolFamilyModules(featureAuthoring);
   const connections = buildSelectionPoolFamilyConnections();
@@ -63,6 +64,7 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
       existingPatterns.add(patternId);
     }
   }
+  const requiresReview = status === "weak";
 
   return {
     ...blueprint,
@@ -75,7 +77,7 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
     featureAuthoring,
     moduleRecords,
     readyForAssembly: true,
-    status: blueprint.status === "blocked" ? "blocked" : "ready",
+    status,
     designDraft: blueprint.designDraft
       ? {
           ...blueprint.designDraft,
@@ -92,14 +94,14 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
       : blueprint.designDraft,
     implementationStrategy: "family",
     maturity: "templated",
-    ...(blueprint.commitDecision
-      ? {
-          commitDecision: {
-            ...blueprint.commitDecision,
-            canAssemble: true,
-          },
-        }
-      : {}),
+    commitDecision: {
+      outcome: requiresReview ? "exploratory" : "committable",
+      canAssemble: true,
+      canWriteHost: true,
+      requiresReview,
+      reasons: [],
+      stage: blueprint.commitDecision?.stage || "blueprint",
+    },
     ...(fillContracts.length > 0 ? { fillContracts } : {}),
   };
 }
@@ -361,17 +363,14 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     };
   }
 
-  const enriched = applySelectionPoolModuleParameters(blueprint, normalized.featureAuthoring);
   const status: NormalizedBlueprintStatus =
-    normalized.warnings.length > 0 && (enriched.status || "ready") === "ready"
+    normalized.warnings.length > 0 || blueprint.status === "weak" || blueprint.status === "blocked"
       ? "weak"
-      : (enriched.status || "ready") as NormalizedBlueprintStatus;
+      : "ready";
+  const enriched = applySelectionPoolModuleParameters(blueprint, normalized.featureAuthoring, status);
 
   return {
-    blueprint: {
-      ...enriched,
-      status,
-    },
+    blueprint: enriched,
     status,
     issues: projectAdmissionIssues(normalized.admissionDiagnostics, normalized.warnings),
     admissionDiagnostics: normalized.admissionDiagnostics,
@@ -396,10 +395,14 @@ export function enrichDota2UpdateBlueprint<TBlueprint extends Blueprint>(
     requestedChange: updateIntent.requestedChange,
     updateIntent,
   });
+  const status: NormalizedBlueprintStatus =
+    blueprint.status === "weak" || blueprint.status === "blocked"
+      ? "weak"
+      : "ready";
 
   return {
-    blueprint: applySelectionPoolModuleParameters(blueprint, mergedFeatureAuthoring),
-    status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
+    blueprint: applySelectionPoolModuleParameters(blueprint, mergedFeatureAuthoring, status),
+    status,
     issues: [],
   };
 }

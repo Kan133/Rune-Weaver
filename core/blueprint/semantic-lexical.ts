@@ -3,8 +3,12 @@ import { IntentSchema } from "../schema/types";
 const NEGATIVE_CONSTRAINT_PATTERNS = [
   /\bwith\s+no\s+(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)(?:\s*(?:,|and|or)\s*(?:no\s+)?(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?))*\b/giu,
   /\bwithout\s+(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
+  /\b(?:with|without|has|have)\s+no\s+(?:direct\s+)?(?:trigger|activation)\s+key\b/giu,
+  /\bno\s+(?:direct\s+)?(?:trigger|activation)\s+key\b/giu,
   /\b(?:do not|don't|must not|mustn't|should not)\s+add\s+(?:ui|inventory|persistence|persist(?:ent|ence)?|cross-feature(?:\s+coupling)?|cross feature(?:\s+coupling)?)\b/giu,
   /\b(?:do not|don't|must not|mustn't|should not)\s+(?:use|include|introduce|require|depend on|couple to)\s+(?:any\s+)?(?:ui|inventory(?:\s+mechanics?)?|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
+  /\b(?:does|do)\s+not\s+auto-attach(?:\s+to\s+the\s+hero)?\b/giu,
+  /\bnot\s+auto-attach(?:ed|ing)?(?:\s+to\s+the\s+hero)?\b/giu,
   /\bno\s+(?:ui|inventory|inventory\s+mechanics|persistence|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
   /\b(?:is|are|be|remain|stays?)\s+not\s+(?:persistent|persist(?:ent|ence)?|cross-feature(?:\s+(?:coupling|composition))?|cross feature(?:\s+(?:coupling|composition))?)\b/giu,
 ];

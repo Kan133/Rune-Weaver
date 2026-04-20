@@ -605,8 +605,18 @@ function testInventoryPanelGeneration() {
   console.log("✓ Test 16 passed\n");
 }
 
-function testSelectionModalStylesWrapAdditionalCards() {
-  console.log("Test 17: Selection modal styles wrap additional cards");
+function testSelectionModalCentersDynamicRows() {
+  console.log("Test 17: Selection modal centers dynamic rows");
+
+  const tsxEntry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {
+      choiceCount: 5,
+    },
+  };
 
   const lessEntry: WritePlanEntry = {
     sourcePattern: "ui.selection_modal",
@@ -626,10 +636,16 @@ function testSelectionModalStylesWrapAdditionalCards() {
     },
   };
 
+  const tsxCode = generateSelectionModalComponent("TestModal", "test_feature", tsxEntry);
   const lessCode = generateLessStyles("ui.selection_modal", lessEntry, "test_feature");
 
-  assert(lessCode.includes("flow-children: right-wrap;"), "Should wrap cards instead of clipping additional options");
-  assert(lessCode.includes("margin: 8px;"), "Should leave room between wrapped cards");
+  assert(tsxCode.includes("computeSelectionColumns"), "Should compute row layout from the live option count");
+  assert(tsxCode.includes("selectionRows"), "Should group options into dynamic rows");
+  assert(tsxCode.includes('className="modal-options-row"'), "Should render dedicated centered option rows");
+  assert(lessCode.includes(".modal-options-row"), "Should style dedicated option rows");
+  assert(lessCode.includes("width: fit-children;"), "Option rows should shrink to their children before centering");
+  assert(lessCode.includes("flow-children: right;"), "Each option row should lay cards out horizontally");
+  assert(lessCode.includes("margin: 0px 8px;"), "Cards should keep horizontal spacing without forcing extra vertical wrap pressure");
 
   console.log("✓ Test 17 passed\n");
 }
@@ -656,5 +672,5 @@ testDebugLogs();
 testNoLessImport();
 testPreventDisabledSelection();
 testInventoryPanelGeneration();
-testSelectionModalStylesWrapAdditionalCards();
+testSelectionModalCentersDynamicRows();
 console.log("=== All tests passed ===");

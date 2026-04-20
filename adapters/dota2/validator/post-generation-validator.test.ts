@@ -17,6 +17,7 @@ function createMockHost(root: string): void {
   const dirs = [
     "game/scripts/npc",
     "game/scripts/vscripts/rune_weaver/abilities",
+    "game/scripts/src/rune_weaver/features",
     "game/scripts/src/rune_weaver/generated/server",
     "game/scripts/src/rune_weaver/generated/shared",
     "content/panorama/src/rune_weaver/generated/ui",
@@ -120,6 +121,64 @@ function createValidAbilitiesFile(root: string): void {
   writeFileSync(join(root, "game/scripts/vscripts/rune_weaver/abilities/ability_test_2.lua"), "-- Ability 2\n", "utf-8");
 }
 
+function writeProviderExportArtifact(root: string, featureId: string, abilityName: string): void {
+  const providerDir = join(root, "game/scripts/src/rune_weaver/features", featureId);
+  mkdirSync(providerDir, { recursive: true });
+  writeFileSync(
+    join(providerDir, "dota2-provider-ability-export.json"),
+    JSON.stringify(
+      {
+        adapter: "dota2_provider_ability_export",
+        version: 1,
+        featureId,
+        surfaces: [
+          {
+            surfaceId: "grantable_primary_hero_ability",
+            abilityName,
+            attachmentMode: "grant_only",
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
+}
+
+function writeProviderAbilityArtifacts(
+  root: string,
+  options?: {
+    abilityName?: string;
+    luaSymbol?: string;
+    scriptFileName?: string;
+    includeLuaFile?: boolean;
+  },
+): void {
+  const abilityName = options?.abilityName || "rw_provider_test";
+  const luaSymbol = options?.luaSymbol || abilityName;
+  const scriptFileName = options?.scriptFileName || abilityName;
+  const kvContent = `"DOTAAbilities"
+{
+  "${abilityName}"
+  {
+    "BaseClass" "ability_lua"
+    "ScriptFile" "rune_weaver/abilities/${scriptFileName}"
+    "AbilityBehavior" "DOTA_ABILITY_BEHAVIOR_NO_TARGET"
+  }
+}
+`;
+
+  writeFileSync(join(root, "game/scripts/npc/npc_abilities_custom.txt"), kvContent, "utf-8");
+  if (options?.includeLuaFile !== false) {
+    writeFileSync(
+      join(root, "game/scripts/vscripts/rune_weaver/abilities", `${scriptFileName}.lua`),
+      `if ${luaSymbol} == nil then\n  ${luaSymbol} = class({})\nend\n`,
+      "utf-8",
+    );
+  }
+}
+
 function cleanupMockHost(root: string): void {
   if (existsSync(root)) {
     rmSync(root, { recursive: true, force: true });
@@ -214,6 +273,54 @@ async function runTests(): Promise<void> {
     assert(seedCheck && !seedCheck.passed);
     assert(seedCheck.message.includes("missing weighted pool sources"));
     console.log("  PASS");
+
+    const providerHost = join(process.cwd(), "tmp/test-host-post-gen-provider");
+    createMockHost(providerHost);
+    try {
+      console.log("\nTest 10: Provider export identity passes when export, KV, and Lua agree...");
+      writeProviderExportArtifact(providerHost, "provider_feature", "rw_provider_test");
+      writeProviderAbilityArtifacts(providerHost);
+      const providerPassResult = validatePostGeneration(providerHost);
+      const providerPassCheck = providerPassResult.checks.find((check) => check.check === "provider_ability_exports");
+      assert(providerPassCheck?.passed, providerPassCheck?.message);
+      console.log("  PASS");
+
+      console.log("\nTest 11: Provider export fails when exported ability is missing from KV...");
+      writeProviderExportArtifact(providerHost, "provider_feature", "rw_missing_provider");
+      writeProviderAbilityArtifacts(providerHost, { abilityName: "rw_provider_test" });
+      const missingKvResult = validatePostGeneration(providerHost);
+      const missingKvCheck = missingKvResult.checks.find((check) => check.check === "provider_ability_exports");
+      assert(missingKvCheck && !missingKvCheck.passed);
+      assert(missingKvCheck.details?.some((detail) => detail.includes("not found in npc_abilities_custom.txt")));
+      console.log("  PASS");
+
+      console.log("\nTest 12: Provider export fails when Lua runtime symbol drifts...");
+      writeProviderExportArtifact(providerHost, "provider_feature", "rw_provider_test");
+      writeProviderAbilityArtifacts(providerHost, {
+        abilityName: "rw_provider_test",
+        luaSymbol: "placeholder_fire_ability",
+      });
+      const driftResult = validatePostGeneration(providerHost);
+      const driftCheck = driftResult.checks.find((check) => check.check === "provider_ability_exports");
+      assert(driftCheck && !driftCheck.passed);
+      assert(driftCheck.details?.some((detail) => detail.includes("does not match exported ability")));
+      console.log("  PASS");
+
+      console.log("\nTest 13: Provider export fails when ScriptFile target is missing...");
+      writeProviderExportArtifact(providerHost, "provider_feature", "rw_provider_test");
+      writeProviderAbilityArtifacts(providerHost, {
+        abilityName: "rw_provider_test",
+        scriptFileName: "rw_provider_missing",
+        includeLuaFile: false,
+      });
+      const missingScriptResult = validatePostGeneration(providerHost);
+      const missingScriptCheck = missingScriptResult.checks.find((check) => check.check === "provider_ability_exports");
+      assert(missingScriptCheck && !missingScriptCheck.passed);
+      assert(missingScriptCheck.details?.some((detail) => detail.includes("does not exist")));
+      console.log("  PASS");
+    } finally {
+      cleanupMockHost(providerHost);
+    }
 
     console.log("\n" + "=".repeat(50));
     console.log("All tests passed!");

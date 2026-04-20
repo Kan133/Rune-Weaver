@@ -44,6 +44,7 @@ import type {
   RelationCandidate,
   UpdateIntent,
   SelectionPoolAdmissionDiagnostics,
+  WizardClarificationAuthority,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../core/schema/types.js";
@@ -57,6 +58,7 @@ import {
 import type { CleanupPlan, CleanupExecutionResult } from "../../adapters/dota2/regenerate/index.js";
 import type { RollbackPlan, RollbackExecutionResult } from "../../adapters/dota2/rollback/index.js";
 import { shouldUseArtifactSynthesis } from "../../adapters/dota2/synthesis/index.js";
+import { applyDota2GrantSeam } from "../../adapters/dota2/cross-feature/index.js";
 import { resolveReviewArtifactOutputDir } from "./dota2/review-artifacts.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
 import { saveCreateSemanticArtifacts, type SemanticArtifactSummary } from "./dota2/semantic-artifacts.js";
@@ -156,6 +158,7 @@ export interface Dota2ReviewArtifact {
     updateIntent: UpdateIntent;
   };
   clarificationPlan?: WizardClarificationPlan;
+  clarificationAuthority?: WizardClarificationAuthority;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   semanticArtifacts?: SemanticArtifactSummary;
@@ -703,9 +706,9 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     schema,
     usedFallback,
     clarificationPlan,
+    clarificationAuthority,
     relationCandidates,
     workspaceSemanticContext,
-    requiresClarification,
   } = intentSchemaResult;
   artifact.stages.intentSchema = {
     success: schema !== null,
@@ -744,6 +747,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       : undefined,
   };
   artifact.clarificationPlan = clarificationPlan;
+  artifact.clarificationAuthority = clarificationAuthority;
   artifact.relationCandidates = relationCandidates;
   artifact.workspaceSemanticContext = workspaceSemanticContext;
 
@@ -753,14 +757,12 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
-  if (requiresClarification) {
+  if (clarificationAuthority.blocksBlueprint) {
     artifact.finalVerdict.weakestStage = "intentSchema";
-    artifact.finalVerdict.remainingRisks = [
-      "IntentSchema requires clarification before Blueprint generation can continue.",
-    ];
-    artifact.finalVerdict.nextSteps = [
-      "Answer the clarification questions and rerun the command.",
-    ];
+    artifact.finalVerdict.remainingRisks = clarificationAuthority.reasons.length > 0
+      ? clarificationAuthority.reasons
+      : ["IntentSchema requires clarification before Blueprint generation can continue."];
+    artifact.finalVerdict.nextSteps = ["Answer the clarification questions and rerun the command."];
     return artifact;
   }
 
@@ -782,8 +784,9 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       existingFeature: existingFeatureContext.feature,
       proposalSource: usedFallback ? "fallback" : "llm",
     },
+    clarificationAuthority,
   );
-  const blueprint = finalBlueprint;
+  let blueprint = finalBlueprint;
   const blueprintView = finalBlueprint || blueprintDraft;
   const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
   artifact.stages.blueprint = {
@@ -1072,6 +1075,30 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     generatorRoutingPlan ?? undefined,
     stableFeatureId
   );
+
+  if (writePlan && blueprint) {
+    const workspaceForGrantSeam = initializeWorkspace(options.hostRoot);
+    const grantSeam = applyDota2GrantSeam({
+      hostRoot: options.hostRoot,
+      featureId: stableFeatureId,
+      prompt: options.prompt,
+      schema,
+      blueprint,
+      writePlan,
+      relationCandidates,
+      clarificationAuthority,
+      currentFeature: existingFeatureContext.feature,
+      workspaceFeatures: workspaceForGrantSeam.success && workspaceForGrantSeam.workspace
+        ? workspaceForGrantSeam.workspace.features
+        : [],
+    });
+    blueprint = grantSeam.blueprint;
+    if (grantSeam.notes.length > 0) {
+      artifact.stages.blueprint.issues.push(...grantSeam.notes);
+    }
+    artifact.stages.assemblyPlan.readyForHostWrite = writePlan.readyForHostWrite;
+    artifact.stages.assemblyPlan.blockers = [...new Set([...(artifact.stages.assemblyPlan.blockers || []), ...(writePlan.readinessBlockers || [])])];
+  }
 
   // T120-R1: Use helper for generator stage assembly
   artifact.stages.generator = buildGeneratorStage(writePlan, generatorIssues);

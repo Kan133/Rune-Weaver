@@ -106,6 +106,106 @@ try {
     rmSync(missingEntryHost, { recursive: true, force: true });
   }
 
+  console.log("Test 6: refreshBridge respects grant-only provider exports and wires selection grant handlers");
+  const crossFeatureHost = createTempHost();
+  try {
+    mkdirSync(join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "generated", "shared"), { recursive: true });
+    mkdirSync(join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "features", "skill_provider_demo"), { recursive: true });
+    mkdirSync(join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "features", "consumer_draw_demo"), { recursive: true });
+
+    writeFileSync(
+      join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "generated", "server", "consumer_draw_demo_input_trigger_input_key_binding.ts"),
+      "export class ConsumerDrawDemoInputTriggerInputKeyBinding {}\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "generated", "shared", "consumer_draw_demo_weighted_pool_data_weighted_pool.ts"),
+      "export class ConsumerDrawDemoWeightedPoolDataWeightedPool {}\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "generated", "server", "consumer_draw_demo_selection_flow_rule_selection_flow.ts"),
+      "export class ConsumerDrawDemoSelectionFlowRuleSelectionFlow {}\n",
+      "utf-8",
+    );
+
+    writeFileSync(
+      join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "features", "skill_provider_demo", "dota2-provider-ability-export.json"),
+      JSON.stringify({
+        adapter: "dota2_provider_ability_export",
+        version: 1,
+        featureId: "skill_provider_demo",
+        surfaces: [
+          {
+            surfaceId: "grantable_primary_hero_ability",
+            abilityName: "rw_skill_provider_demo",
+            attachmentMode: "grant_only",
+          },
+        ],
+      }, null, 2),
+      "utf-8",
+    );
+    writeFileSync(
+      join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "features", "consumer_draw_demo", "selection-grant-bindings.json"),
+      JSON.stringify({
+        adapter: "dota2_selection_grant_binding",
+        version: 1,
+        featureId: "consumer_draw_demo",
+        bindings: [
+          {
+            objectId: "TL007",
+            targetFeatureId: "skill_provider_demo",
+            targetSurfaceId: "grantable_primary_hero_ability",
+            relation: "grants",
+            applyBehavior: "grant_primary_hero_ability",
+          },
+        ],
+      }, null, 2),
+      "utf-8",
+    );
+
+    const crossFeatureRefresh = refreshBridge(crossFeatureHost, {
+      version: "0.1.0",
+      hostType: "dota2-x-template",
+      hostRoot: crossFeatureHost,
+      addonName: "bridge_cross_feature_test",
+      initializedAt: new Date().toISOString(),
+      features: [
+        {
+          featureId: "skill_provider_demo",
+          status: "active",
+          generatedFiles: [
+            "game/scripts/src/rune_weaver/features/skill_provider_demo/dota2-provider-ability-export.json",
+          ],
+        },
+        {
+          featureId: "consumer_draw_demo",
+          status: "active",
+          generatedFiles: [
+            "game/scripts/src/rune_weaver/generated/server/consumer_draw_demo_input_trigger_input_key_binding.ts",
+            "game/scripts/src/rune_weaver/generated/shared/consumer_draw_demo_weighted_pool_data_weighted_pool.ts",
+            "game/scripts/src/rune_weaver/generated/server/consumer_draw_demo_selection_flow_rule_selection_flow.ts",
+            "game/scripts/src/rune_weaver/features/consumer_draw_demo/selection-grant-bindings.json",
+          ],
+        },
+      ] as any,
+    });
+    assert(crossFeatureRefresh.success, "refreshBridge should succeed for cross-feature grant wiring");
+
+    const generatedServerIndex = readFileSync(
+      join(crossFeatureHost, "game", "scripts", "src", "rune_weaver", "generated", "server", "index.ts"),
+      "utf-8",
+    );
+    assert(generatedServerIndex.includes("registerSelectionGrantHandlers"), "generated server index should wire selection grant handlers");
+    assert(generatedServerIndex.includes("rw_skill_provider_demo"), "generated server index should preload the grant-only provider ability");
+    assert(generatedServerIndex.includes("Selection grant: granted "), "generated server index should register the grant runtime");
+    assert(generatedServerIndex.includes("from feature "), "generated server index should keep the provider feature reference in the grant runtime log");
+    assert(generatedServerIndex.includes('Hero attachment abilities registered: 0'), "grant-only provider should not be auto-attached on activation");
+    console.log("✓ Test 6 passed");
+  } finally {
+    rmSync(crossFeatureHost, { recursive: true, force: true });
+  }
+
   console.log("=== All tests passed ===");
 } finally {
   rmSync(hostRoot, { recursive: true, force: true });

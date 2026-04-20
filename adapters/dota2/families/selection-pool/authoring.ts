@@ -60,3 +60,5 @@ export {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 };
+
+export { refreshSelectionPoolWritePlanEntries } from "./lifecycle.js";

@@ -110,26 +110,28 @@ export function normalizeIntentSchema(
       confidence: normalizeClassificationConfidence(candidate.classification?.confidence),
     },
     actors: normalizeActors(candidate.actors),
-    requirements: normalizedCandidate.requirements ?? requirements,
-    constraints: normalizedCandidate.constraints ?? constraints,
-    interaction: normalizedCandidate.interaction ?? interaction,
-    targeting: normalizedCandidate.targeting ?? targeting,
-    timing: normalizedCandidate.timing,
-    spatial: normalizedCandidate.spatial ?? spatial,
-    stateModel: normalizedCandidate.stateModel,
-    flow: normalizedCandidate.flow ?? flow,
-    selection: normalizedCandidate.selection,
-    effects: normalizedCandidate.effects,
-    outcomes: normalizedCandidate.outcomes,
-    contentModel: normalizedCandidate.contentModel,
-    composition: normalizedCandidate.composition,
-    integrations: normalizedCandidate.integrations ?? integrations,
-    uiRequirements: normalizedCandidate.uiRequirements,
+    requirements: pickNormalizedSection(normalizedCandidate, "requirements", requirements),
+    constraints: pickNormalizedSection(normalizedCandidate, "constraints", constraints),
+    interaction: pickNormalizedSection(normalizedCandidate, "interaction", interaction),
+    targeting: pickNormalizedSection(normalizedCandidate, "targeting", targeting),
+    timing: pickNormalizedSection(normalizedCandidate, "timing", timing),
+    spatial: pickNormalizedSection(normalizedCandidate, "spatial", spatial),
+    stateModel: pickNormalizedSection(normalizedCandidate, "stateModel", stateModel),
+    flow: pickNormalizedSection(normalizedCandidate, "flow", flow),
+    selection: pickNormalizedSection(normalizedCandidate, "selection", selection),
+    effects: pickNormalizedSection(normalizedCandidate, "effects", effects),
+    outcomes: pickNormalizedSection(normalizedCandidate, "outcomes", outcomes),
+    contentModel: pickNormalizedSection(normalizedCandidate, "contentModel", contentModel),
+    composition: pickNormalizedSection(normalizedCandidate, "composition", composition),
+    integrations: pickNormalizedSection(normalizedCandidate, "integrations", integrations),
+    uiRequirements: pickNormalizedSection(normalizedCandidate, "uiRequirements", uiRequirements),
     normalizedMechanics: finalAnalysis.governanceDecisions.normalizedMechanics.value,
     acceptanceInvariants: normalizeInvariants(candidate.acceptanceInvariants),
     uncertainties: projectOpenSemanticResidueToUncertainties(finalAnalysis.openSemanticResidue),
     resolvedAssumptions: projectOpenSemanticResidueToResolvedAssumptions(finalAnalysis.openSemanticResidue),
-    parameters: normalizeModuleSafeParameters(normalizedCandidate.parameters ?? candidate.parameters),
+    parameters: normalizeModuleSafeParameters(
+      pickNormalizedSection(normalizedCandidate, "parameters", candidate.parameters),
+    ),
   });
 }
 
@@ -141,4 +143,14 @@ function coerceIntentSchemaCandidate(
 
 function finalizeNormalizedIntentSchema(schema: IntentSchema): IntentSchema {
   return schema;
+}
+
+function pickNormalizedSection<TKey extends keyof IntentSchema>(
+  candidate: Partial<IntentSchema>,
+  key: TKey,
+  fallback: IntentSchema[TKey],
+): IntentSchema[TKey] {
+  return Object.prototype.hasOwnProperty.call(candidate, key)
+    ? (candidate[key] as IntentSchema[TKey])
+    : fallback;
 }

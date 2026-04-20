@@ -20,7 +20,8 @@ export interface PromptSemanticHints {
   noRepeatAfterSelection: boolean;
   returnsUnchosenToPool?: boolean;
   immediateOutcome: boolean;
-  explicitPersistence: boolean;
+  explicitRuntimePersistence: boolean;
+  explicitExternalPersistence: boolean;
   explicitCrossFeature?: boolean;
   rarityDisplay: boolean;
   uiSurface: boolean;

@@ -328,6 +328,40 @@ ${hasInventory ? "      GameEvents.Unsubscribe(inventorySub);\n" : ""}      Game
   }, []);
 ${placeholderPaddingLogic}
   const displayItems = ${hasPlaceholderSupport ? "padWithPlaceholders(modalItems)" : "modalItems"};
+  const computeSelectionColumns = (count: number): number => {
+    if (count <= 1) {
+      return 1;
+    }
+
+    const maxColumns = Math.min(3, count);
+    let bestColumns = 1;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (let columns = 1; columns <= maxColumns; columns += 1) {
+      const rowCount = Math.ceil(count / columns);
+      const lastRowCount = count % columns === 0 ? columns : count % columns;
+      const raggedness = columns - lastRowCount;
+      const score = rowCount * 10 + raggedness;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestColumns = columns;
+      }
+    }
+
+    return bestColumns;
+  };
+  const selectionColumns = computeSelectionColumns(displayItems.length);
+  const selectionRows = Array.from(
+    { length: Math.ceil(displayItems.length / selectionColumns) },
+    (_, rowIndex) => {
+      const rowStart = rowIndex * selectionColumns;
+      return displayItems.slice(rowStart, rowStart + selectionColumns).map((item, itemOffset) => ({
+        item,
+        index: rowStart + itemOffset,
+      }));
+    }
+  );
   const inventorySlots = inventoryEnabled
     ? Array.from({ length: inventoryCapacity }, (_, index) => inventoryItems[index] ?? null)
     : [];
@@ -442,31 +476,37 @@ ${placeholderPaddingLogic}
             </Panel>
 
             <Panel className="modal-content">
-              {displayItems.map((item, index) => (
-                <Panel
-                  key={item.id}
-                  className={\`selection-card \${selectedIndex === index ? "selected" : ""} \${item.disabled ? "disabled" : ""} \${item.isPlaceholder ? "placeholder" : ""}\`}
-                  onactivate={() => handleSelect(index)}
-                >
-                  ${payloadShape === "simple_text"
-                    ? `
-                  <Label className="card-name" text={item.name} />
-                  {item.description && <Label className="card-description" text={item.description} />}
+              <Panel className="modal-options">
+                {selectionRows.map((row, rowIndex) => (
+                  <Panel key={\`selection_row_\${rowIndex}\`} className="modal-options-row">
+                    {row.map(({ item, index }) => (
+                      <Panel
+                        key={item.id}
+                        className={\`selection-card \${selectedIndex === index ? "selected" : ""} \${item.disabled ? "disabled" : ""} \${item.isPlaceholder ? "placeholder" : ""}\`}
+                        onactivate={() => handleSelect(index)}
+                      >
+                        ${payloadShape === "simple_text"
+                          ? `
+                        <Label className="card-name" text={item.name} />
+                        {item.description && <Label className="card-description" text={item.description} />}
 `
-                    : payloadShape === "card_with_rarity"
-                      ? `
-                  {item.icon && <Image src={item.icon} />}
-                  <Label className="card-name" text={item.name} />
-                  <Label className="card-description" text={item.description || ""} />
-                  <Label className={\`card-tier \${item.tier ? \`tier-\${item.tier.toLowerCase()}\` : "tier-none"}\`} text={item.tier || ""} />
+                          : payloadShape === "card_with_rarity"
+                            ? `
+                        {item.icon && <Image src={item.icon} />}
+                        <Label className="card-name" text={item.name} />
+                        <Label className="card-description" text={item.description || ""} />
+                        <Label className={\`card-tier \${item.tier ? \`tier-\${item.tier.toLowerCase()}\` : "tier-none"}\`} text={item.tier || ""} />
 `
-                      : `
-                  {item.icon && <Image src={item.icon} />}
-                  <Label className="card-name" text={item.name} />
-                  <Label className="card-description" text={item.description || ""} />
+                            : `
+                        {item.icon && <Image src={item.icon} />}
+                        <Label className="card-name" text={item.name} />
+                        <Label className="card-description" text={item.description || ""} />
 `}
-                </Panel>
-              ))}
+                      </Panel>
+                    ))}
+                  </Panel>
+                ))}
+              </Panel>
             </Panel>
 
             <Panel className="modal-footer">

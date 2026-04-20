@@ -10,6 +10,7 @@ import type {
   IntentSchema,
   RelationCandidate,
   UpdateIntent,
+  WizardClarificationAuthority,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../../../core/schema/types.js";
@@ -29,6 +30,7 @@ import { classifyUpdateDiff, executeSelectiveUpdate, formatUpdateDiffResult, for
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
 import { shouldUseArtifactSynthesis } from "../../../../adapters/dota2/synthesis/index.js";
+import { applyDota2GrantSeam } from "../../../../adapters/dota2/cross-feature/index.js";
 import {
   resolveSelectionPoolWorkspaceFields,
 } from "../../../../adapters/dota2/families/selection-pool/index.js";
@@ -55,11 +57,15 @@ export interface UpdateCommandDeps {
     updateIntent: UpdateIntent | null;
     usedFallback: boolean;
     clarificationPlan?: WizardClarificationPlan;
+    clarificationAuthority: WizardClarificationAuthority;
     relationCandidates?: RelationCandidate[];
     workspaceSemanticContext?: WorkspaceSemanticContext;
     requiresClarification: boolean;
   }>;
-  buildUpdateBlueprint: (updateIntent: UpdateIntent) => Dota2BlueprintBuildResult;
+  buildUpdateBlueprint: (
+    updateIntent: UpdateIntent,
+    clarificationAuthority?: WizardClarificationAuthority,
+  ) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
     blueprint: Blueprint,
@@ -367,9 +373,9 @@ export async function runUpdateCommand(
     updateIntent,
     usedFallback,
     clarificationPlan,
+    clarificationAuthority,
     relationCandidates,
     workspaceSemanticContext,
-    requiresClarification,
   } = updateIntentResult;
   if (!requestedChange || !updateIntent || !currentFeatureContext) {
     console.error("\n❌ Failed to create UpdateIntent");
@@ -414,6 +420,7 @@ export async function runUpdateCommand(
     updateIntent,
   };
   artifact.clarificationPlan = clarificationPlan;
+  artifact.clarificationAuthority = clarificationAuthority;
   artifact.relationCandidates = relationCandidates;
   artifact.workspaceSemanticContext = workspaceSemanticContext;
   try {
@@ -444,10 +451,12 @@ export async function runUpdateCommand(
   console.log(`     Uncertainties: ${requestedChange.uncertainties?.length || 0}`);
   console.log(`     UI Needed: ${requestedChange.uiRequirements?.needed || false}`);
 
-  if (requiresClarification) {
+  if (clarificationAuthority.blocksBlueprint) {
     artifact.finalVerdict.weakestStage = "intentSchema";
     artifact.finalVerdict.remainingRisks.push(
-      "UpdateIntent requires clarification before Blueprint generation can continue.",
+      ...(clarificationAuthority.reasons.length > 0
+        ? clarificationAuthority.reasons
+        : ["UpdateIntent requires clarification before Blueprint generation can continue."]),
     );
     artifact.finalVerdict.nextSteps.push("Answer the clarification questions and rerun update.");
     persistReviewArtifact();
@@ -464,8 +473,8 @@ export async function runUpdateCommand(
     issues: blueprintIssues,
     status: blueprintStatus,
     moduleNeedsCount,
-  } = deps.buildUpdateBlueprint(updateIntent);
-  const blueprint = finalBlueprint;
+  } = deps.buildUpdateBlueprint(updateIntent, clarificationAuthority);
+  let blueprint = finalBlueprint;
   const blueprintView = finalBlueprint || blueprintDraft;
   const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
   if (!blueprint || !canContinueBlueprint) {
@@ -692,6 +701,28 @@ export async function runUpdateCommand(
     hostRealizationPlan,
     generatorRoutingPlan,
   );
+
+  if (writePlan && blueprint) {
+    const grantSeam = applyDota2GrantSeam({
+      hostRoot: options.hostRoot,
+      featureId: existingFeature.featureId,
+      prompt: options.prompt,
+      schema: requestedChange,
+      updateIntent,
+      blueprint,
+      writePlan,
+      relationCandidates,
+      clarificationAuthority,
+      currentFeature: existingFeature,
+      workspaceFeatures: workspaceResult.workspace.features,
+    });
+    blueprint = grantSeam.blueprint;
+    if (grantSeam.notes.length > 0) {
+      artifact.stages.blueprint.issues.push(...grantSeam.notes);
+    }
+    artifact.stages.assemblyPlan.readyForHostWrite = writePlan.readyForHostWrite;
+    artifact.stages.assemblyPlan.blockers = [...new Set([...(artifact.stages.assemblyPlan.blockers || []), ...(writePlan.readinessBlockers || [])])];
+  }
   if (!writePlan) {
     console.error(`\n❌ Failed to create WritePlan: ${generatorIssues.join(", ")}`);
     artifact.stages.generator = { success: false, generatedFiles: [], issues: generatorIssues };
@@ -847,6 +878,36 @@ export async function runUpdateCommand(
   if (!dependencyRevalidation.success) {
     artifact.finalVerdict.weakestStage = "dependencyRevalidation";
     artifact.finalVerdict.remainingRisks.push(...dependencyRevalidation.blockers);
+    persistReviewArtifact();
+    return false;
+  }
+
+  if (!options.dryRun && writePlan.readyForHostWrite === false && !options.force) {
+    const readinessBlockers = writePlan.readinessBlockers && writePlan.readinessBlockers.length > 0
+      ? writePlan.readinessBlockers
+      : ["Update host write is blocked by unresolved write authority."];
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 7: Selective Update Execution");
+    console.log("=".repeat(70));
+    console.log("  ⛔ Blocked by readiness gate");
+    for (const blocker of readinessBlockers) {
+      console.log(`    - ${blocker}`);
+    }
+    console.log("  Use --force only if you intentionally want to override the host write gate.");
+
+    artifact.stages.writeExecutor = {
+      success: false,
+      executedActions: 0,
+      skippedActions: 0,
+      failedActions: 0,
+      createdFiles: [],
+      modifiedFiles: [],
+      blockedByReadinessGate: true,
+      readinessBlockers,
+    };
+    artifact.finalVerdict.weakestStage = "writeExecutor";
+    artifact.finalVerdict.remainingRisks.push(...readinessBlockers);
+    artifact.finalVerdict.nextSteps.push("Resolve the unresolved provider/binding dependency before rerunning update.");
     persistReviewArtifact();
     return false;
   }

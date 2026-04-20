@@ -2,12 +2,18 @@ import { join } from "path";
 
 import { executeCleanup, formatCleanupPlan, formatCleanupResult, generateCleanupPlan } from "../../../../adapters/dota2/regenerate/index.js";
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
+import { shouldUseArtifactSynthesis } from "../../../../adapters/dota2/synthesis/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
 import { findFeatureById, initializeWorkspace } from "../../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/index.js";
 import { saveReviewArtifact } from "../review-artifacts.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
-import type { AssemblyPlan, Blueprint, IntentSchema } from "../../../../core/schema/types.js";
+import type {
+  AssemblyPlan,
+  Blueprint,
+  IntentSchema,
+  WizardClarificationAuthority,
+} from "../../../../core/schema/types.js";
 import type { PatternResolutionResult } from "../../../../core/patterns/resolver.js";
 import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../../../core/schema/types.js";
 import type { Dota2BlueprintBuildResult, FeatureMode } from "../planning.js";
@@ -17,8 +23,17 @@ export interface RegenerateCommandDeps {
     prompt: string,
     hostRoot: string,
     context?: { mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null; interactive?: boolean }
-  ) => Promise<{ schema: IntentSchema | null; usedFallback: boolean; requiresClarification: boolean }>;
-  buildBlueprint: (schema: IntentSchema, context: { prompt: string; hostRoot: string; mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null; proposalSource?: "llm" | "fallback" }) => Dota2BlueprintBuildResult;
+  ) => Promise<{
+    schema: IntentSchema | null;
+    usedFallback: boolean;
+    clarificationAuthority: WizardClarificationAuthority;
+    requiresClarification: boolean;
+  }>;
+  buildBlueprint: (
+    schema: IntentSchema,
+    context: { prompt: string; hostRoot: string; mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null; proposalSource?: "llm" | "fallback" },
+    clarificationAuthority?: WizardClarificationAuthority,
+  ) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
     blueprint: Blueprint,
@@ -80,7 +95,7 @@ export async function runRegenerateCommand(
   console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
   console.log(`   Status: ${existingFeature.status}`);
 
-  const { schema, usedFallback, requiresClarification } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
+  const { schema, usedFallback, clarificationAuthority } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
     mode: "regenerate",
     featureId: existingFeature.featureId,
     existingFeature,
@@ -90,8 +105,11 @@ export async function runRegenerateCommand(
     console.error("\n❌ Failed to create IntentSchema");
     return false;
   }
-  if (requiresClarification) {
+  if (clarificationAuthority.blocksBlueprint) {
     console.error("\n❌ Regenerate requires clarification before Blueprint generation can continue");
+    for (const reason of clarificationAuthority.reasons) {
+      console.error(`   - ${reason}`);
+    }
     return false;
   }
   console.log(`   IntentSchema Semantic Posture: ${getIntentSemanticPosture(schema)}`);
@@ -112,6 +130,7 @@ export async function runRegenerateCommand(
       existingFeature,
       proposalSource: usedFallback ? "fallback" : "llm",
     },
+    clarificationAuthority,
   );
   const blueprint = finalBlueprint;
   const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
@@ -123,7 +142,7 @@ export async function runRegenerateCommand(
   console.log(`   FinalBlueprint ModuleNeeds: ${moduleNeedsCount}`);
 
   const resolutionResult = deps.resolvePatternsFromBlueprint(blueprint);
-  if (resolutionResult.patterns.length === 0) {
+  if (resolutionResult.patterns.length === 0 && !shouldUseArtifactSynthesis(blueprint, resolutionResult)) {
     console.error("\n❌ No patterns resolved");
     return false;
   }

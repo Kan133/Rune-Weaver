@@ -75,6 +75,7 @@ function testBuildWizardMessagesExplicitlyBanImplementationAuthority() {
   assert.match(systemMessage, /Do not judge implementation readiness/i);
   assert.match(systemMessage, /Do not output readiness, blocked, weak/i);
   assert.match(systemMessage, /Do not infer or name implementation families/i);
+  assert.match(systemMessage, /interpret persistent wording as runtime or session-long existence only/i);
   assert.match(systemMessage, /same-feature eligibility mutation unless the user explicitly asks for persistence/i);
 }
 
@@ -118,6 +119,17 @@ function testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints
   assert.equal(schema.timing?.duration?.kind, undefined);
   assert.equal(schema.composition?.dependencies, undefined);
   assert.equal(Boolean(schema.stateModel?.states?.some((state) => state.lifetime === "persistent")), false);
+}
+
+function testCreateFallbackIntentSchemaKeepsRuntimePersistenceSessionLocal() {
+  const prompt =
+    "Create one gameplay ability feature with no trigger key. It should not auto-attach to the hero. The granted ability shell should remain available for the current match only.";
+  const schema = createFallbackIntentSchema(prompt, host);
+
+  assert.equal(schema.classification.intentKind, "micro-feature");
+  assert.equal(schema.timing?.duration?.kind, "persistent");
+  assert.equal(Boolean(schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system")), false);
+  assert.equal(Boolean(schema.stateModel?.states?.some((state) => state.owner === "external")), false);
 }
 
 function testNormalizeIntentSchemaDoesNotInventInventoryDetails() {
@@ -373,6 +385,182 @@ function testGovernanceDecisionFingerprintIgnoresNonGovernanceActivationNoise() 
   );
 }
 
+function testGovernanceDecisionsDoNotInventInputTriggerForSystemGrantActivation() {
+  const prompt = "Define a grant-only gameplay ability shell with no trigger key.";
+  const schema = normalizeIntentSchema(
+    {
+      request: {
+        rawPrompt: prompt,
+        goal: prompt,
+      },
+      classification: {
+        intentKind: "micro-feature",
+        confidence: "high",
+      },
+      requirements: {
+        functional: [
+          "Define one gameplay ability shell.",
+          "Do not assign any trigger key.",
+          "Do not auto-attach the shell to the hero.",
+        ],
+      },
+      interaction: {
+        activations: [{ actor: "system", kind: "system", input: "shell granted", phase: "occur", repeatability: "repeatable" }],
+      },
+      timing: {
+        duration: { kind: "persistent" },
+      },
+      effects: {
+        operations: ["apply"],
+        durationSemantics: "persistent",
+      },
+      stateModel: {
+        states: [{ id: "shell_granted_state", summary: "Track whether the shell was granted.", owner: "feature", lifetime: "session", mutationMode: "update" }],
+      },
+      composition: {
+        dependencies: [{ kind: "same-feature", relation: "grants", target: "placeholder fire ability", required: true }],
+      },
+      normalizedMechanics: {
+        trigger: true,
+        outcomeApplication: true,
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  const decisions = extractIntentSchemaGovernanceDecisions(schema);
+
+  assert.equal(decisions.activationContract.value.interactive, false);
+  assert.equal(decisions.normalizedMechanics.value.trigger, false);
+}
+
+function testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShell() {
+  const prompt =
+    "Create one gameplay ability shell only. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It only defines one primary hero ability named placeholder fire ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: {
+        rawPrompt: prompt,
+        goal: "Define a single gameplay ability shell named placeholder fire ability for later external granting, with no activation, input, auto-attach, grant logic, or modifier application.",
+      },
+      classification: {
+        intentKind: "cross-system-composition",
+        confidence: "high",
+      },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "The feature includes no grant logic.",
+          "The feature includes no modifier application.",
+          "The shell exists only as a definition for later external granting.",
+        ],
+        typed: [
+          {
+            id: "ability_shell_definition",
+            kind: "resource",
+            summary: "Define one primary hero ability shell named placeholder fire ability for later external granting.",
+            outputs: ["ability shell definition"],
+            invariants: [
+              "No activation key is assigned.",
+              "No player input activates this feature.",
+              "No automatic attachment occurs.",
+              "No grant logic is included.",
+              "No modifier application is included.",
+            ],
+            parameters: {
+              abilityName: "placeholder fire ability",
+              laterGranting: "external",
+            },
+            priority: "must",
+          },
+        ],
+      },
+      constraints: {
+        nonFunctional: ["Keep the feature limited to shell definition only."],
+      },
+      timing: {
+        duration: { kind: "persistent" },
+      },
+      stateModel: {
+        states: [
+          {
+            id: "ability_shell_definition_state",
+            summary: "The defined ability shell resource exists for later external granting.",
+            owner: "feature",
+            lifetime: "session",
+            mutationMode: "create",
+          },
+        ],
+      },
+      selection: {
+        mode: "deterministic",
+        source: "none",
+        choiceMode: "none",
+        cardinality: "single",
+        choiceCount: 1,
+      },
+      effects: {
+        operations: [],
+        durationSemantics: "persistent",
+      },
+      outcomes: {
+        operations: ["grant-feature"],
+      },
+      contentModel: {
+        collections: [
+          {
+            id: "defined_ability_shells",
+            role: "generic",
+            ownership: "feature",
+            updateMode: "replace",
+          },
+        ],
+      },
+      composition: {
+        dependencies: [
+          {
+            kind: "external-system",
+            relation: "grants",
+            target: "placeholder fire ability",
+            required: true,
+          },
+        ],
+      },
+      integrations: {
+        expectedBindings: [
+          {
+            id: "external_grant_binding",
+            kind: "bridge-point",
+            summary: "External source may grant the defined ability shell later.",
+            required: true,
+          },
+        ],
+      },
+      resolvedAssumptions: [],
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+      },
+    },
+    prompt,
+    host,
+  );
+
+  assert.equal(schema.classification.intentKind, "micro-feature");
+  assert.equal(schema.normalizedMechanics?.outcomeApplication, false);
+  assert.equal(schema.selection, undefined);
+  assert.equal(schema.outcomes, undefined);
+  assert.equal(schema.composition, undefined);
+  assert.equal(schema.integrations, undefined);
+  assert.equal(schema.uiRequirements?.needed || false, false);
+}
+
 function testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency() {
   const prompts = [
     "Press F4 to open a talent selection UI, draw 3 rarity-weighted talents from a pool, let the player choose 1, apply it immediately, permanently remove the selected talent from future draws, and return unchosen talents to the pool.",
@@ -477,8 +665,16 @@ async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
 
   assert.equal(result.schema.readiness, undefined);
   assert.ok((result.clarificationPlan?.questions.length || 0) >= 2);
-  assert.ok(result.clarificationPlan?.questions.some((question) => question.id === "clarify-cross-feature-target"));
-  assert.ok(result.clarificationPlan?.questions.some((question) => question.id === "clarify-persistence-scope"));
+  const crossFeatureQuestion = result.clarificationPlan?.questions.find(
+    (question) => question.id === "clarify-cross-feature-target",
+  );
+  const persistenceQuestion = result.clarificationPlan?.questions.find(
+    (question) => question.id === "clarify-persistence-scope",
+  );
+  assert.ok(crossFeatureQuestion);
+  assert.ok(persistenceQuestion);
+  assert.equal(crossFeatureQuestion?.impact, "write-blocking-unresolved-dependency");
+  assert.equal(persistenceQuestion?.impact, "blueprint-blocking-structural");
 }
 
 async function runTests() {
@@ -487,11 +683,14 @@ async function runTests() {
   testCreateFallbackIntentSchemaPreservesDashFacts();
   testCreateFallbackIntentSchemaPreservesWeightedDrawFacts();
   testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints();
+  testCreateFallbackIntentSchemaKeepsRuntimePersistenceSessionLocal();
   testNormalizeIntentSchemaDoesNotInventInventoryDetails();
   testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSemantics();
   testNormalizeIntentSchemaCanonicalizesCandidateDrawGovernanceCore();
   testNormalizeIntentSchemaKeepsExplicitPersistenceWhenRequested();
   testGovernanceDecisionFingerprintIgnoresNonGovernanceActivationNoise();
+  testGovernanceDecisionsDoNotInventInputTriggerForSystemGrantActivation();
+  testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShell();
   testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency();
   await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
   await testRunWizardToIntentSchemaProducesClarificationSidecar();

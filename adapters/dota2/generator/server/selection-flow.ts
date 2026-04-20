@@ -390,6 +390,10 @@ interface PoolCommitOptions {
   trackOwned?: boolean;
 }
 
+interface SelectionOutcomeHandlerResult {
+  handled: boolean;
+}
+
 interface PlayerSelection {
   playerId: number;
   options: SelectionOption[];
@@ -403,6 +407,7 @@ export class ${className} {
   private static instance: ${className};
   private activeSelections: Map<number, PlayerSelection> = new Map();
   private selectionCallbacks: Map<number, (option: SelectionOption) => void> = new Map();
+  private selectionOutcomeHandlers: Array<(context: { playerId: number; option: SelectionOption }) => SelectionOutcomeHandlerResult | void> = [];
 ${inventoryStateDeclaration}${progressionStateDeclaration}${hasEffectApplication ? `
   private rarityAttributeBonusMap: Record<string, { attribute: string; value: number }> = {
 ${rarityAttributeBonusMapCode}
@@ -438,6 +443,12 @@ ${inventoryMethods}${progressionMethods}
 ${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    this.sendToClient(playerId, options);
   }
 
+  registerOutcomeHandler(
+    handler: (context: { playerId: number; option: SelectionOption }) => SelectionOutcomeHandlerResult | void
+  ): void {
+    this.selectionOutcomeHandlers.push(handler);
+  }
+
   onPlayerSelect(playerId: number, optionIndex: number): void {
     const selection = this.activeSelections.get(playerId);
     if (!selection) return;
@@ -453,7 +464,10 @@ ${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    thi
 
     selection.isConfirmed = true;
     const selectedOption = selection.options[selection.selectedIndex];
-${poolCommitLogic}${inventoryCommitLogic}${progressionCommitLogic}${effectApplicationCall}
+${poolCommitLogic}${inventoryCommitLogic}${progressionCommitLogic}    const selectionOutcomeHandled = this.handleSelectionOutcome(playerId, selectedOption);
+${hasEffectApplication ? `    if (!selectionOutcomeHandled) {${effectApplicationCall}
+    }
+` : ""}
     const callback = this.selectionCallbacks.get(playerId);
     if (callback) {
       callback(selectedOption);
@@ -477,6 +491,17 @@ ${effectApplicationCode}
         }
       );
     }
+  }
+
+  private handleSelectionOutcome(playerId: number, option: SelectionOption): boolean {
+    for (const handler of this.selectionOutcomeHandlers) {
+      const result = handler({ playerId, option });
+      if (result && result.handled === true) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private fireConfirmationEvent(playerId: number, option: SelectionOption): void {

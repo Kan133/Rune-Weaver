@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 
 import type { IntentSchema } from "../schema/types.js";
 import {
+  buildWizardClarificationPlan,
   buildCurrentFeatureContext,
   buildUpdateWizardMessages,
   createUpdateIntentFromRequestedChange,
+  deriveWizardClarificationAuthority,
   runWizardToUpdateIntent,
 } from "./index.js";
 
@@ -502,6 +504,7 @@ function testUpdateWizardPromptStaysSemanticOnly() {
   assert.match(systemMessage, /semantic-only/i);
   assert.match(systemMessage, /Do not output readiness/i);
   assert.match(systemMessage, /Prefer preserve semantics over rebuild semantics/i);
+  assert.match(systemMessage, /interpret persistent wording as runtime or session-long existence only/i);
   assert.match(systemMessage, /single-confirm invariants/i);
 }
 
@@ -564,7 +567,11 @@ async function testRunWizardToUpdateIntentReturnsClarificationSidecar() {
 
   assert.equal(result.updateIntent.readiness, undefined);
   assert.ok((result.clarificationPlan?.questions.length || 0) >= 2);
-  assert.ok(result.clarificationPlan?.questions.some((question) => question.id === "clarify-cross-feature-target"));
+  const crossFeatureQuestion = result.clarificationPlan?.questions.find(
+    (question) => question.id === "clarify-cross-feature-target",
+  );
+  assert.ok(crossFeatureQuestion);
+  assert.equal(crossFeatureQuestion?.impact, "write-blocking-unresolved-dependency");
 }
 
 async function testRunWizardToUpdateIntentStripsInferredPersistenceFromInventoryUpdate() {
@@ -666,6 +673,91 @@ async function testRunWizardToUpdateIntentStripsInferredPersistenceFromInventory
   );
 }
 
+function testClarificationPlanDoesNotTreatRuntimePersistentAbilityShellAsStoragePersistence(): void {
+  const prompt =
+    "Create one gameplay ability feature with no trigger key. It should not auto-attach to the hero. It defines a primary hero ability shell that adds a level 1 placeholder fire ability to the current hero.";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "micro-feature" as const,
+      confidence: "high" as const,
+    },
+    requirements: {
+      functional: [
+        "Define one gameplay ability shell.",
+        "Do not assign any trigger key.",
+        "Do not auto-attach the shell to the hero.",
+        "Add a level 1 placeholder fire ability to the current hero.",
+      ],
+    },
+    constraints: {},
+    interaction: {
+      activations: [
+        {
+          actor: "system",
+          kind: "system" as const,
+          input: "shell granted",
+          phase: "occur" as const,
+          repeatability: "repeatable" as const,
+          confirmation: "implicit" as const,
+        },
+      ],
+    },
+    timing: {
+      duration: {
+        kind: "persistent" as const,
+      },
+    },
+    stateModel: {
+      states: [
+        {
+          id: "shell_granted_state",
+          summary: "Whether the shell has been granted during this session.",
+          owner: "feature" as const,
+          lifetime: "session" as const,
+          mutationMode: "update" as const,
+        },
+      ],
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "persistent" as const,
+    },
+    composition: {
+      dependencies: [
+        {
+          kind: "same-feature" as const,
+          relation: "grants" as const,
+          target: "placeholder fire ability",
+          required: true,
+        },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+  } as any satisfies IntentSchema;
+
+  const plan = buildWizardClarificationPlan({
+    rawText: prompt,
+    schema,
+  });
+  const authority = deriveWizardClarificationAuthority(plan);
+
+  assert.equal(plan?.questions.some((question) => question.id === "clarify-persistence-scope") ?? false, false);
+  assert.equal(plan?.questions.some((question) => question.id === "clarify-cross-feature-target") ?? false, false);
+  assert.equal(plan?.questions.some((question) => question.id === "clarify-conflicting-semantics") ?? false, false);
+  assert.equal(authority.blocksBlueprint, false);
+  assert.equal(authority.blocksWrite, false);
+}
+
 async function runTests() {
   testBuildCurrentFeatureContextStaysGeneric();
   testCreateUpdateIntentPreservesSkeletonAndDeltaWithoutReadiness();
@@ -676,6 +768,7 @@ async function runTests() {
   testExplicitChoiceCountChangeProducesDelta();
   testRestoreThreeChoiceChineseShorthandProducesDeltaAgainstPollutedTruth();
   testUpdateWizardPromptStaysSemanticOnly();
+  testClarificationPlanDoesNotTreatRuntimePersistentAbilityShellAsStoragePersistence();
   await testRunWizardToUpdateIntentReturnsClarificationSidecar();
   await testRunWizardToUpdateIntentStripsInferredPersistenceFromInventoryUpdate();
   console.log("core/wizard/update-intent.test.ts passed");

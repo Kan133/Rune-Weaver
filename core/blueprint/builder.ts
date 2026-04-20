@@ -871,6 +871,9 @@ export class BlueprintBuilder {
       ...(req.outputs || []),
     ]);
     const parameters = resolveRequirementParameters(req, category, schemaParams, schema);
+    if (category === "trigger" && !this.hasConcreteTriggerBinding(parameters)) {
+      return null;
+    }
 
     return {
       id: `${prefix}typed_${req.id || index}`,
@@ -902,6 +905,9 @@ export class BlueprintBuilder {
     const role = inferRoleFromCategory(category, [sanitizedRequirement]);
     const patternIds = getCanonicalPatternIds(category, role);
     const parameters = extractModuleParameters(category, schemaParams);
+    if (category === "trigger" && !this.hasConcreteTriggerBinding(parameters)) {
+      return null;
+    }
     
     return {
       id: `${prefix}func_${index}`,
@@ -944,6 +950,9 @@ export class BlueprintBuilder {
         detectSelectionFlowAsk(schema),
       );
       const parameters = this.collectMechanicModuleParameters(schema, category, role, schemaParams);
+      if (category === "trigger" && !this.hasConcreteTriggerBinding(parameters)) {
+        continue;
+      }
       const newModule: BlueprintModule = {
         id: `${prefix}${category}_${modules.length}`,
         role,
@@ -1034,6 +1043,14 @@ export class BlueprintBuilder {
     }
 
     return parameters;
+  }
+
+  private hasConcreteTriggerBinding(parameters: Record<string, unknown>): boolean {
+    return Boolean(
+      (typeof parameters.key === "string" && parameters.key.trim().length > 0)
+      || (typeof parameters.triggerKey === "string" && parameters.triggerKey.trim().length > 0)
+      || (typeof parameters.toKey === "string" && parameters.toKey.trim().length > 0),
+    );
   }
 
   private upsertModule(

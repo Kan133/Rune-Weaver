@@ -22,14 +22,36 @@ function testExtractPromptConstraintsPreservesNegativeRequirements() {
   );
 }
 
-function testExtractPromptConstraintsStillFlagsPositivePersistenceGap() {
+function testRuntimePersistenceDoesNotCreateExternalStorageGap() {
   const bundle = extractPromptConstraints({
-    rawText: "After drawing one option, persist it across matches.",
+    rawText: "Keep this shell persistent during the current match only.",
+  });
+
+  assert.equal(
+    bundle.openSemanticGaps.some((item) => item.includes("Persistence is requested")),
+    false,
+  );
+}
+
+function testExternalPersistenceStillFlagsStorageGap() {
+  const bundle = extractPromptConstraints({
+    rawText: "After drawing one option, save it across matches.",
   });
 
   assert.equal(
     bundle.openSemanticGaps.some((item) => item.includes("Persistence is requested")),
     true,
+  );
+}
+
+function testNamedExternalBoundaryDoesNotCreateStorageGap() {
+  const bundle = extractPromptConstraints({
+    rawText: "After drawing one option, save it across matches in profile storage.",
+  });
+
+  assert.equal(
+    bundle.openSemanticGaps.some((item) => item.includes("Persistence is requested")),
+    false,
   );
 }
 
@@ -54,7 +76,9 @@ function testDetectMustNotAddViolationsFindsUiPersistenceAndCrossFeatureLeakage(
 
 function runTests() {
   testExtractPromptConstraintsPreservesNegativeRequirements();
-  testExtractPromptConstraintsStillFlagsPositivePersistenceGap();
+  testRuntimePersistenceDoesNotCreateExternalStorageGap();
+  testExternalPersistenceStillFlagsStorageGap();
+  testNamedExternalBoundaryDoesNotCreateStorageGap();
   testDetectMustNotAddViolationsFindsUiPersistenceAndCrossFeatureLeakage();
   console.log("core/llm/prompt-constraints.test.ts passed");
 }

@@ -10,6 +10,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { loadWorkspace } from "../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
+import { extractLuaAbilityRuntimeSymbol } from "../provider-ability-identity.js";
 
 export interface PostGenerationValidationResult {
   valid: boolean;
@@ -35,6 +36,15 @@ interface ParsedAbilityBlock {
   name: string;
   lines: string[];
 }
+
+interface ProviderAbilityExportRecord {
+  featureId: string;
+  artifactPath: string;
+  abilityName: string;
+}
+
+const DOTA2_PROVIDER_EXPORT_ADAPTER = "dota2_provider_ability_export";
+const GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID = "grantable_primary_hero_ability";
 
 function countBraceDelta(line: string): number {
   let delta = 0;
@@ -127,6 +137,71 @@ function parseDotaAbilityBlocks(content: string): {
   return { hasRoot: true, malformed, abilities };
 }
 
+function collectProviderAbilityExports(hostRoot: string): {
+  records: ProviderAbilityExportRecord[];
+  issues: string[];
+} {
+  const featuresRoot = join(hostRoot, "game/scripts/src/rune_weaver/features");
+  if (!existsSync(featuresRoot)) {
+    return { records: [], issues: [] };
+  }
+
+  const records: ProviderAbilityExportRecord[] = [];
+  const issues: string[] = [];
+
+  for (const entry of readdirSync(featuresRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const artifactPath = join(featuresRoot, entry.name, "dota2-provider-ability-export.json");
+    if (!existsSync(artifactPath)) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(readFileSync(artifactPath, "utf-8"));
+      if (
+        parsed?.adapter !== DOTA2_PROVIDER_EXPORT_ADAPTER
+        || parsed?.version !== 1
+        || !Array.isArray(parsed?.surfaces)
+      ) {
+        issues.push(`${entry.name}: invalid provider export artifact shape`);
+        continue;
+      }
+
+      const surfaces = parsed.surfaces.filter(
+        (surface: unknown) =>
+          typeof surface === "object"
+          && surface !== null
+          && (surface as { surfaceId?: unknown }).surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+      );
+
+      if (surfaces.length !== 1) {
+        issues.push(`${entry.name}: expected exactly one grantable provider surface, found ${surfaces.length}`);
+        continue;
+      }
+
+      const abilityName = (surfaces[0] as { abilityName?: unknown }).abilityName;
+      if (typeof abilityName !== "string" || abilityName.trim().length === 0) {
+        issues.push(`${entry.name}: provider export is missing abilityName`);
+        continue;
+      }
+
+      records.push({
+        featureId: entry.name,
+        artifactPath,
+        abilityName: abilityName.trim(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      issues.push(`${entry.name}: failed to parse provider export artifact (${message})`);
+    }
+  }
+
+  return { records, issues };
+}
+
 /**
  * Main validation function - runs all P0 checks
  */
@@ -137,6 +212,7 @@ export function validatePostGeneration(hostRoot: string): PostGenerationValidati
   // Run all P0 checks
   checks.push(checkNpcAbilitiesStructure(hostRoot));
   checks.push(checkLuaScriptFilePaths(hostRoot));
+  checks.push(checkProviderAbilityExports(hostRoot));
   checks.push(checkWorkspaceGeneratedFilesExist(hostRoot));
   checks.push(checkServerIndexReferences(hostRoot));
   checks.push(checkUIGeneratedIndexMounts(hostRoot));
@@ -295,6 +371,116 @@ function checkLuaScriptFilePaths(hostRoot: string): PostGenerationCheck {
       check: checkName,
       passed: false,
       message: `Failed to check ScriptFile paths: ${message}`,
+    };
+  }
+}
+
+function checkProviderAbilityExports(hostRoot: string): PostGenerationCheck {
+  const checkName = "provider_ability_exports";
+  const collected = collectProviderAbilityExports(hostRoot);
+  if (collected.records.length === 0 && collected.issues.length === 0) {
+    return {
+      check: checkName,
+      passed: true,
+      message: "No Dota2 provider exports to validate",
+    };
+  }
+
+  const issues = [...collected.issues];
+  const kvPath = join(hostRoot, "game/scripts/npc/npc_abilities_custom.txt");
+  const vscriptsPath = join(hostRoot, "game/scripts/vscripts");
+
+  if (!existsSync(kvPath)) {
+    return {
+      check: checkName,
+      passed: false,
+      message: "Provider exports exist but npc_abilities_custom.txt is missing",
+      details: collected.records.map((record) => `${record.featureId}: ${record.abilityName}`),
+      suggestion: "Regenerate the provider feature so its exported ability block is written to npc_abilities_custom.txt.",
+    };
+  }
+
+  try {
+    const parsed = parseDotaAbilityBlocks(readFileSync(kvPath, "utf-8"));
+    if (!parsed.hasRoot || parsed.malformed.length > 0) {
+      return {
+        check: checkName,
+        passed: false,
+        message: "Cannot validate provider exports because npc_abilities_custom.txt is malformed",
+        details: parsed.hasRoot ? parsed.malformed : ["Missing DOTAAbilities root"],
+        suggestion: "Fix npc_abilities_custom.txt structure before relying on provider export validation.",
+      };
+    }
+
+    const abilitiesByName = new Map(parsed.abilities.map((ability) => [ability.name, ability]));
+
+    for (const record of collected.records) {
+      const abilityBlock = abilitiesByName.get(record.abilityName);
+      if (!abilityBlock) {
+        issues.push(`${record.featureId}: exported ability '${record.abilityName}' not found in npc_abilities_custom.txt`);
+        continue;
+      }
+
+      const blockContent = abilityBlock.lines.join("\n");
+      const scriptFileMatch = blockContent.match(/"ScriptFile"\s+"([^"]+)"/);
+      if (!scriptFileMatch?.[1]) {
+        issues.push(`${record.featureId}: ability '${record.abilityName}' is missing ScriptFile in npc_abilities_custom.txt`);
+        continue;
+      }
+
+      const scriptFile = scriptFileMatch[1];
+      const normalizedScriptPath = scriptFile.endsWith(".lua") ? scriptFile : `${scriptFile}.lua`;
+      const scriptLeaf = normalizedScriptPath.replace(/\\/g, "/").replace(/\.lua$/i, "").split("/").pop();
+      if (scriptLeaf !== record.abilityName) {
+        issues.push(
+          `${record.featureId}: exported ability '${record.abilityName}' points to ScriptFile '${scriptFile}' instead of '${record.abilityName}'`,
+        );
+      }
+
+      const fullScriptPath = join(vscriptsPath, normalizedScriptPath);
+      if (!existsSync(fullScriptPath)) {
+        issues.push(
+          `${record.featureId}: ScriptFile '${normalizedScriptPath}' for exported ability '${record.abilityName}' does not exist`,
+        );
+        continue;
+      }
+
+      const runtimeSymbol = extractLuaAbilityRuntimeSymbol(readFileSync(fullScriptPath, "utf-8"));
+      if (!runtimeSymbol) {
+        issues.push(
+          `${record.featureId}: Lua file '${normalizedScriptPath}' does not define a runtime symbol for exported ability '${record.abilityName}'`,
+        );
+        continue;
+      }
+
+      if (runtimeSymbol !== record.abilityName) {
+        issues.push(
+          `${record.featureId}: Lua runtime symbol '${runtimeSymbol}' does not match exported ability '${record.abilityName}'`,
+        );
+      }
+    }
+
+    if (issues.length > 0) {
+      return {
+        check: checkName,
+        passed: false,
+        message: `${issues.length} provider export identity issue(s) detected`,
+        details: issues,
+        suggestion: "Regenerate the provider feature so export, KV, and Lua all share one authoritative abilityName.",
+      };
+    }
+
+    return {
+      check: checkName,
+      passed: true,
+      message: `All ${collected.records.length} provider export(s) align with KV/Lua identity`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      check: checkName,
+      passed: false,
+      message: `Failed to validate provider exports: ${message}`,
     };
   }
 }

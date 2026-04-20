@@ -436,8 +436,11 @@ export function buildCurrentFeatureContext(
 }
 
 function promptRequestsExplicitPersistence(rawText: string): boolean {
-  return EXPLICIT_PERSISTENCE_REQUEST_PATTERN.test(rawText)
-    && !NEGATED_PERSISTENCE_REQUEST_PATTERN.test(rawText);
+  return /save|saved|save system|profile|profile storage|account|account profile|account storage|external storage|external system|database|nettable|across matches|across sessions|cross[- ]match|cross[- ]session|outside the current match|outside the current session|跨局|跨会话|存档|账号档案|外部存储|外部系统/iu.test(
+    rawText,
+  ) && !/(?:不要|不需要|无需|without|no|do not)\s*(?:save|saved|save system|profile|account|external storage|external system|database|nettable|across matches|across sessions|cross[- ]match|cross[- ]session|跨局|跨会话|存档|账号档案|外部存储|外部系统)/iu.test(
+    rawText,
+  );
 }
 
 function currentContextDisallowsPersistence(currentFeatureContext: CurrentFeatureContext): boolean {

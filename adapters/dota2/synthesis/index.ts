@@ -24,6 +24,10 @@ import { detectMustNotAddViolations } from "../../../core/llm/prompt-constraints
 import { buildModuleSynthesisPromptPackage } from "../../../core/llm/prompt-packages.js";
 import type { PatternResolutionResult } from "../../../core/patterns/resolver.js";
 import { buildDota2RetrievalBundle, lookupDota2HostSymbolsExact } from "../../../core/retrieval/index.js";
+import {
+  sanitizeDotaAbilityName,
+  validateAbilityContentIdentity,
+} from "../provider-ability-identity.js";
 
 interface LLMArtifactCandidate {
   content?: string;
@@ -57,6 +61,45 @@ function buildAbilityName(featureId: string, moduleId?: string): string {
   const base = sanitizeId(featureId) || "feature";
   const moduleSuffix = sanitizeId(moduleId || "");
   return moduleSuffix ? `rw_${base}_${moduleSuffix}` : `rw_${base}`;
+}
+
+function resolveBundleAbilityName(
+  blueprint: Blueprint,
+  featureId: string,
+  bundle: SynthesisBundlePlan,
+): {
+  abilityName: string;
+  warnings: string[];
+} {
+  const fallback = buildAbilityName(featureId, bundle.bundleId);
+  const rawCandidates = uniqueStrings(
+    bundle.moduleIds.flatMap((moduleId) => {
+      const module = blueprint.modules.find((candidate) => candidate.id === moduleId);
+      const abilityName = module?.parameters?.abilityName;
+      return typeof abilityName === "string" && abilityName.trim().length > 0
+        ? [abilityName.trim()]
+        : [];
+    }),
+  );
+
+  if (rawCandidates.length === 0) {
+    return { abilityName: fallback, warnings: [] };
+  }
+
+  const sanitizedCandidates = uniqueStrings(
+    rawCandidates.map((candidate) => sanitizeDotaAbilityName(candidate, fallback)),
+  );
+
+  if (sanitizedCandidates.length === 1) {
+    return { abilityName: sanitizedCandidates[0], warnings: [] };
+  }
+
+  return {
+    abilityName: fallback,
+    warnings: [
+      `Conflicting explicit abilityName parameters were present for synthesis bundle '${bundle.bundleId}'; used deterministic fallback '${fallback}'.`,
+    ],
+  };
 }
 
 function resolveAbilityBehavior(blueprint: Blueprint): string {
@@ -141,6 +184,22 @@ function buildAbilityKVContent(
     `  "ScriptFile"               "rune_weaver/abilities/${abilityName}"`,
     "}",
   ].join("\n");
+}
+
+function detectSynthesizedAbilityIdentityViolation(
+  artifact: SynthesizedArtifact,
+  candidateContent: string,
+): string | undefined {
+  const abilityName = artifact.metadata?.abilityName;
+  if (typeof abilityName !== "string" || abilityName.trim().length === 0) {
+    return undefined;
+  }
+
+  if (artifact.contentType !== "lua" && artifact.contentType !== "kv") {
+    return undefined;
+  }
+
+  return validateAbilityContentIdentity(artifact.contentType, candidateContent, abilityName);
 }
 
 function buildUITsxContent(componentSeed: string, blueprint: Blueprint): string {
@@ -657,10 +716,15 @@ export async function buildSynthesizedAssemblyPlanWithLLM(
           });
           const candidate = normalizeArtifactCandidate(response.object, artifact.content, artifact.summary);
           const violations = detectMustNotAddViolations(candidate.content, promptPackage.promptConstraints);
+          const identityViolation = detectSynthesizedAbilityIdentityViolation(artifact, candidate.content);
           if (violations.length > 0) {
             moduleViolations.push(...violations);
             moduleWarnings.push(
               `Rejected LLM candidate for ${artifact.targetPath}; kept deterministic fallback because it violated explicit must-not-add constraints.`,
+            );
+          } else if (identityViolation) {
+            moduleWarnings.push(
+              `Rejected LLM candidate for ${artifact.targetPath}; kept deterministic fallback because it drifted from authoritative ability identity '${String(artifact.metadata?.abilityName)}' (${identityViolation}).`,
             );
           } else {
             artifact.content = candidate.content;
@@ -1009,12 +1073,14 @@ function synthesizeBundle(
   }
 
   if (!isUiOnly && !needsBridge) {
-    const abilityName = buildAbilityName(featureId, bundle.bundleId);
+    const resolvedAbility = resolveBundleAbilityName(blueprint, featureId, bundle);
+    const abilityName = resolvedAbility.abilityName;
     const behavior = resolveAbilityBehavior(blueprint);
     const gameplaySummary =
       bundle.semanticRoles.length > 0
         ? bundle.semanticRoles.join(" + ")
         : bundle.primaryModuleId;
+    warnings.push(...resolvedAbility.warnings);
     artifacts.push(
       {
         id: `${featureId}_${bundle.bundleId}_lua`,

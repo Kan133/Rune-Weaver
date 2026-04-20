@@ -2,9 +2,13 @@ import type { PromptSemanticHints } from "./shared.js";
 import { normalizePositiveInteger } from "./shared.js";
 
 export const PERSISTENCE_SIGNAL_PATTERN =
-  /persist|persistence|save|saved|persistent|across matches|across sessions|cross[- ]match|cross[- ]session|跨局|跨会话|持久|永久保存|存档/iu;
+  /persist|persistence|save|saved|persistent|long[- ]lived|long[- ]term|across matches|across sessions|cross[- ]match|cross[- ]session|profile|account|external storage|external system|database|nettable|跨局|跨会话|持久|存档|账号档案|外部存储/iu;
+export const RUNTIME_PERSISTENCE_SIGNAL_PATTERN =
+  /persist|persistence|persistent|long[- ]lived|long[- ]term|stay available|remain available|remain active|current match|current session|session[- ]long|match[- ]long|本局|当前对局|当前会话|持续存在|长期存在|常驻/iu;
+export const EXTERNAL_PERSISTENCE_SIGNAL_PATTERN =
+  /save|saved|save system|profile|profile storage|account|account profile|account storage|external storage|external system|database|nettable|across matches|across sessions|cross[- ]match|cross[- ]session|outside the current match|outside the current session|跨局|跨会话|存档|账号档案|外部存储|外部系统/iu;
 export const CROSS_FEATURE_SIGNAL_PATTERN =
-  /grant another feature|grant feature|cross[- ]feature|another feature|另一个功能|另一个特性|跨功能|跨feature/iu;
+  /grant another feature|grant feature|cross[- ]feature|another feature|另一个功能|另一个特性|跨功能/iu;
 export const UI_SIGNAL_PATTERN =
   /ui|modal|dialog|panel|window|cards?|界面|面板|弹窗|窗口|卡牌/iu;
 export const INVENTORY_SIGNAL_PATTERN =
@@ -38,8 +42,15 @@ export function hasInventorySignal(rawText: string): boolean {
   return hasUnnegatedSignal(rawText, INVENTORY_SIGNAL_PATTERN);
 }
 
-export function hasExplicitPersistenceSignal(rawText: string): boolean {
-  return hasUnnegatedSignal(rawText, PERSISTENCE_SIGNAL_PATTERN);
+export function hasExplicitExternalPersistenceSignal(rawText: string): boolean {
+  return hasUnnegatedSignal(rawText, EXTERNAL_PERSISTENCE_SIGNAL_PATTERN);
+}
+
+export function hasExplicitRuntimePersistenceSignal(rawText: string): boolean {
+  return (
+    hasUnnegatedSignal(rawText, RUNTIME_PERSISTENCE_SIGNAL_PATTERN) ||
+    hasExplicitExternalPersistenceSignal(rawText)
+  );
 }
 
 export function hasExplicitCrossFeatureSignal(rawText: string): boolean {
@@ -47,7 +58,7 @@ export function hasExplicitCrossFeatureSignal(rawText: string): boolean {
 }
 
 export function hasSelectionEligibilityRemovalSignal(rawText: string): boolean {
-  return /remove from future eligibility|remove from later draws|later draws|later draw|future draws|future draw|future eligibility|permanently remove|permanently removed|removed from future candidate eligibility|后续不再出现|不再出现|从未来抽取中移除|从后续候选资格中移除|后续候选资格中移除|永久移除出抽取池/iu.test(
+  return /remove from future eligibility|remove from later draws|later draws|later draw|future draws|future draw|future eligibility|permanently remove|permanently removed|removed from future candidate eligibility|后续不再出现|不再出现|从未来抽取中移除|从后续候选资格中移除|永久移除出抽取池/iu.test(
     rawText,
   );
 }
@@ -102,7 +113,7 @@ export function collectPromptSemanticHints(rawText: string): PromptSemanticHints
     (triChoiceMatch ? parsePromptCountToken(triChoiceMatch[1]) : undefined) ||
     extractPromptCount(
       rawText,
-      /(\d+|[一二两三四五六七八九])\s*(?:个)?(?:候选|选项|choices?|options?|candidates?|cards?)/iu,
+      /(\d+|[一二两三四五六七八九])\s*(?:个?(?:候选|选项)|choices?|options?|candidates?|cards?)/iu,
     ) ||
     extractPromptCount(
       rawText,
@@ -112,19 +123,19 @@ export function collectPromptSemanticHints(rawText: string): PromptSemanticHints
     (triChoiceMatch ? parsePromptCountToken(triChoiceMatch[2]) : undefined) ||
     extractPromptCount(
       rawText,
-      /(?:choose|select|pick|选择|选中)\s*(\d+|[一二两三四五六七八九])\s*(?:个)?/iu,
+      /(?:choose|select|pick|选择|选中)\s*(\d+|[一二两三四五六七八九])\s*(?:个?)?/iu,
     );
   const candidatePool =
-    /candidate|pool|draw|draft|deck|候选|池|抽取|抽卡|卡池/iu.test(rawText);
+    /candidate|pool|draw|draft|deck|候选池|抽取|抽卡|卡池/iu.test(rawText);
   const playerChoice = /choose|select|pick|选择|选中|三选一|二选一/iu.test(rawText);
-  const rarityDisplay = /weight|weighted|rarity|tier|权重|加权|稀有度|稀有/iu.test(rawText);
+  const rarityDisplay = /weight|weighted|rarity|tier|权重|加权|稀有度/iu.test(rawText);
   const weightedDraw =
     /weight|weighted|权重|加权/iu.test(rawText) ||
     (rarityDisplay && candidatePool);
   const inventory = hasInventorySignal(rawText);
   const inventoryCapacity =
     extractPromptCount(rawText, /(\d+)\s*(?:slots?|格|格子|栏位)/iu) ||
-    extractPromptCount(rawText, /(?:inventory|panel|capacity|容量|仓库)(?:\s*(?:to|of|为))?\s*(\d+)/iu);
+    extractPromptCount(rawText, /(?:inventory|panel|capacity|容量|仓库)(?:\s*(?:to|of|为)?)\s*(\d+)/iu);
   const inventoryFullMessageMatch =
     rawText.match(/(?:inventory\s+full|仓库满了|库存已满).*?["“](.+?)["”]/iu) ||
     rawText.match(/["“](.+?)["”].*(?:inventory\s+full|仓库满了|库存已满)/iu);
@@ -134,8 +145,9 @@ export function collectPromptSemanticHints(rawText: string): PromptSemanticHints
     );
   const noRepeatAfterSelection = hasSelectionEligibilityRemovalSignal(rawText);
   const immediateOutcome =
-    /immediately|immediate|apply.*immediately|apply.*now|applies.*now|立即生效|立刻生效|马上生效|选中后立即/iu.test(rawText);
-  const explicitPersistence = hasExplicitPersistenceSignal(rawText);
+    /immediately|immediate|apply.*immediately|apply.*now|applies.*now|立即生效|立刻生效|马上生效|选中后立刻/iu.test(rawText);
+  const explicitRuntimePersistence = hasExplicitRuntimePersistenceSignal(rawText);
+  const explicitExternalPersistence = hasExplicitExternalPersistenceSignal(rawText);
   const uiSurface = hasUiSignal(rawText);
 
   return {
@@ -155,7 +167,8 @@ export function collectPromptSemanticHints(rawText: string): PromptSemanticHints
     noRepeatAfterSelection,
     returnsUnchosenToPool: hasReturnToPoolSignal(rawText),
     immediateOutcome,
-    explicitPersistence,
+    explicitRuntimePersistence,
+    explicitExternalPersistence,
     explicitCrossFeature: hasExplicitCrossFeatureSignal(rawText),
     rarityDisplay,
     uiSurface,

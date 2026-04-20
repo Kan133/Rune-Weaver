@@ -62,6 +62,9 @@ export function resolveRequirementCategory(
   if (detectSelectionLocalProgressionStateRequirement(req, schema)) {
     return "rule";
   }
+  if (req.kind === "generic" && looksLikeDefinitionResourceRequirement(req)) {
+    return "resource";
+  }
 
   return mapRequirementKindToCategory(req.kind);
 }
@@ -210,6 +213,15 @@ export function inferCategoryFromRequirement(
     return "effect";
   }
   if (
+    /\bresource\b/i.test(reqLower) ||
+    /\bshell\b/i.test(reqLower) ||
+    /\bdefinition\b/i.test(reqLower) ||
+    reqLower.includes("资源") ||
+    reqLower.includes("定义")
+  ) {
+    return "resource";
+  }
+  if (
     /\bui\b/i.test(reqLower) ||
     /\bpanel\b/i.test(reqLower) ||
     /\bmodal\b/i.test(reqLower) ||
@@ -337,6 +349,27 @@ function mapRequirementKindToCategory(
     default:
       return "effect";
   }
+}
+
+function looksLikeDefinitionResourceRequirement(
+  req: IntentRequirement,
+): boolean {
+  const text = [
+    req.summary,
+    ...(req.outputs || []),
+    ...(req.invariants || []),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    /\bresource\b/.test(text) ||
+    /\bshell\b/.test(text) ||
+    /\bdefinition\b/.test(text) ||
+    text.includes("资源") ||
+    text.includes("定义")
+  );
 }
 
 function inferUISemanticRole(

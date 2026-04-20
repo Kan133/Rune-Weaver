@@ -9,7 +9,7 @@ import {
 } from "./prompt-hints.js";
 import type { IntentRawFact, IntentRawFacts } from "./semantic-analysis.js";
 import type { PromptSemanticHints } from "./shared.js";
-import { normalizePositiveInteger, normalizePositiveNumber } from "./shared.js";
+import { isRecord, normalizePositiveInteger, normalizePositiveNumber } from "./shared.js";
 
 interface BuildIntentRawFactsInput {
   candidate: Partial<IntentSchema>;
@@ -128,8 +128,15 @@ export function buildIntentRawFacts(input: BuildIntentRawFactsInput): IntentRawF
   );
   pushRawFact(
     facts,
-    "prompt.composition.explicit_persistence",
-    promptHints.explicitPersistence || undefined,
+    "prompt.composition.runtime_persistence",
+    promptHints.explicitRuntimePersistence || undefined,
+    "prompt_hints",
+    "high",
+  );
+  pushRawFact(
+    facts,
+    "prompt.composition.external_persistence",
+    promptHints.explicitExternalPersistence || undefined,
     "prompt_hints",
     "high",
   );
@@ -167,6 +174,52 @@ export function buildIntentRawFacts(input: BuildIntentRawFactsInput): IntentRawF
     "prompt.constraint.no_cross_feature",
     hasExplicitNegativeSignal(rawText, CROSS_FEATURE_SIGNAL_PATTERN) ? true : undefined,
     "prompt_text",
+    "high",
+  );
+
+  const parameters = isRecord(candidate.parameters) ? candidate.parameters : {};
+  pushRawFact(
+    facts,
+    "schema.parameters.shell_only",
+    parameters.shellOnly === true ? true : undefined,
+    "parameters",
+    "high",
+  );
+  pushRawFact(
+    facts,
+    "schema.parameters.player_input",
+    typeof parameters.playerInput === "boolean" ? parameters.playerInput : undefined,
+    "parameters",
+    "high",
+  );
+  pushRawFact(
+    facts,
+    "schema.parameters.auto_attach",
+    typeof parameters.autoAttach === "boolean" ? parameters.autoAttach : undefined,
+    "parameters",
+    "high",
+  );
+  pushRawFact(
+    facts,
+    "schema.parameters.grant_logic_included",
+    typeof parameters.grantLogicIncluded === "boolean" ? parameters.grantLogicIncluded : undefined,
+    "parameters",
+    "high",
+  );
+  pushRawFact(
+    facts,
+    "schema.parameters.modifier_application_included",
+    typeof parameters.modifierApplicationIncluded === "boolean"
+      ? parameters.modifierApplicationIncluded
+      : undefined,
+    "parameters",
+    "high",
+  );
+  pushRawFact(
+    facts,
+    "schema.parameters.external_grant_later",
+    parameters.externalGrantLater === true ? true : undefined,
+    "parameters",
     "high",
   );
 

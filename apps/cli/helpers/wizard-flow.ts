@@ -8,6 +8,7 @@ import type {
   RelationCandidate,
   UpdateIntent,
   ValidationIssue,
+  WizardClarificationAuthority,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../../core/schema/types.js";
@@ -15,6 +16,7 @@ import type { LLMClient } from "../../../core/llm/types.js";
 import type { WizardRefinementContext } from "../../../core/wizard/types.js";
 import {
   buildWizardClarificationPlan,
+  deriveWizardClarificationAuthority,
   resolveRelationCandidates,
   runWizardToIntentSchema,
   runWizardToUpdateIntent,
@@ -34,6 +36,7 @@ interface SharedWizardInput {
 export interface WizardFlowResult {
   schema: IntentSchema;
   clarificationPlan?: WizardClarificationPlan;
+  clarificationAuthority: WizardClarificationAuthority;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   promptPackageId?: string;
@@ -123,6 +126,7 @@ function buildClarificationState(input: {
   workspaceSemanticContext?: WorkspaceSemanticContext;
   relationCandidates?: RelationCandidate[];
   clarificationPlan?: WizardClarificationPlan;
+  clarificationAuthority: WizardClarificationAuthority;
 } {
   const workspaceSemanticContext = resolveWorkspaceSemanticContext(input.hostRoot);
   const relationCandidates = resolveRelationCandidates({
@@ -142,6 +146,7 @@ function buildClarificationState(input: {
     ...(workspaceSemanticContext ? { workspaceSemanticContext } : {}),
     ...(relationCandidates.length > 0 ? { relationCandidates } : {}),
     ...(clarificationPlan ? { clarificationPlan } : {}),
+    clarificationAuthority: deriveWizardClarificationAuthority(clarificationPlan),
   };
 }
 

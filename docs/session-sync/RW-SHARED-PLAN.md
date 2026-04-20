@@ -22,14 +22,14 @@ Use these status markers:
 Current step:
 
 - Step 6. Validation / evidence / case generalization
-- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, and the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts. The active slice remains to refresh dependency-driven revalidation evidence, harden exploratory grounding quality, and decide which successful exploratory outputs are ready for stabilization or graduation.
+- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts, and the provider-side ability identity alignment that stops cross-feature provider export from guessing `abilityName` when KV/Lua/export truth does not close. A fresh live `rw-test3` proof has now also shown that stacked updates can keep a cross-feature reward consumer working through `3 -> 5 choices` plus `16-slot inventory`, and the follow-up preservation fix has removed the last known hole where unrelated source-backed updates could strip `selection-grant-bindings.json`, dependency edges, and bridge grant-plan truth. The active slice is back to evidence closure on the stricter provider/consumer seam and exploratory grounding quality.
 
 Primary blocker:
 
 - The blocker is no longer missing V2 control-plane pieces, grammar gating removal, single-skill bundle convergence, facet-warning cleanup, source-backed update purity, templated `talent_draw` lifecycle stability, or initialized-host exploratory commit evidence.
 - The blocker is now:
   - dependency-driven revalidation needs a fresh provider/consumer proof pass on the converged planning/update surface
-  - synthesis grounding and deferred evidence warnings still need tighter exact-symbol backing on exploratory cases
+  - synthesis grounding and deferred evidence warnings still need tighter exact-symbol backing on exploratory cases beyond the provider identity seam that just landed
   - exploratory outputs are still review-required and not yet converged into stabilized reusable assets
 
 Plan items:
@@ -51,7 +51,9 @@ Plan items:
 - `[done]` Stabilize create-side `IntentSchema` governance semantics for the bounded local weighted-selection / `talent_draw` cluster, including a 3-prompt x 5-run wizard stability proof with `governance-core variants = 1`.
 - `[done]` Refactor `IntentSchema` internals into first-class `raw facts / governance decisions / open semantic residue` layers while keeping the public contract stable.
 - `[done]` Push `IntentGovernanceDecisions` into downstream Dota2 blueprint / `selection_pool` family-admission / planning consumers so schema-surface wording no longer changes governance branches.
+- `[done]` Align Dota2 provider ability identity so provider export only closes when KV / Lua / export share one authoritative runtime `abilityName`, and validator now rejects mismatched provider exports before host write can claim success.
 - `[doing]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases on top of the cleaner planning/update surface.
+- `[done]` Close the cross-feature consumer update-preservation hole so unrelated bounded updates keep existing provider bindings without requiring prompt restatement.
 - `[doing]` Reduce synthesis grounding warnings further on exploratory asks.
 - `[todo]` Decide which repeated exploratory outputs are ready to graduate into reusable assets.
 

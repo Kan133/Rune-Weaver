@@ -146,9 +146,9 @@ function buildFallbackTiming(rawFacts: IntentRawFacts): IntentTimingContract | u
   const cooldownSeconds = normalizePositiveNumber(readRawFactValue(rawFacts, "prompt.timing.cooldown_seconds"));
   const durationSeconds = normalizePositiveNumber(readRawFactValue(rawFacts, "prompt.timing.duration_seconds"));
   const intervalSeconds = normalizePositiveNumber(readRawFactValue(rawFacts, "prompt.timing.interval_seconds"));
-  const explicitPersistence = readRawFactValue<boolean>(rawFacts, "prompt.composition.explicit_persistence");
+  const runtimePersistence = readRawFactValue<boolean>(rawFacts, "prompt.composition.runtime_persistence");
 
-  if (!cooldownSeconds && !durationSeconds && !intervalSeconds && !explicitPersistence) {
+  if (!cooldownSeconds && !durationSeconds && !intervalSeconds && !runtimePersistence) {
     return undefined;
   }
 
@@ -156,7 +156,7 @@ function buildFallbackTiming(rawFacts: IntentRawFacts): IntentTimingContract | u
     cooldownSeconds,
     delaySeconds: undefined,
     intervalSeconds,
-    duration: explicitPersistence
+    duration: runtimePersistence
       ? { kind: "persistent" }
       : durationSeconds
         ? { kind: "timed", seconds: durationSeconds }
@@ -242,7 +242,7 @@ function buildFallbackOutcomes(
   if (readRawFactValue<boolean>(rawFacts, "prompt.composition.explicit_cross_feature")) {
     operations.add("grant-feature");
   }
-  if (readRawFactValue<boolean>(rawFacts, "prompt.composition.explicit_persistence")) {
+  if (readRawFactValue<boolean>(rawFacts, "prompt.composition.external_persistence")) {
     operations.add("update-state");
   }
 
@@ -282,7 +282,7 @@ function buildFallbackComposition(rawFacts: IntentRawFacts): IntentCompositionCo
     });
   }
 
-  if (readRawFactValue<boolean>(rawFacts, "prompt.composition.explicit_persistence")) {
+  if (readRawFactValue<boolean>(rawFacts, "prompt.composition.external_persistence")) {
     dependencies.push({
       kind: "external-system",
       relation: "writes",

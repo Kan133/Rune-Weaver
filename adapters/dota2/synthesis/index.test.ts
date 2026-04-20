@@ -243,6 +243,21 @@ function makeBackboneExploratoryBlueprint(): Blueprint {
   } as Blueprint;
 }
 
+function makeNamedShellBlueprint(): Blueprint {
+  const blueprint = makeExploratoryBlueprint();
+  blueprint.modules = blueprint.modules.map((module) =>
+    module.id === "fire_dash_core"
+      ? {
+          ...module,
+          parameters: {
+            abilityName: "Placeholder Fire Ability",
+          },
+        }
+      : module,
+  );
+  return blueprint;
+}
+
 async function withDisabledLLM<T>(run: () => Promise<T>): Promise<T> {
   const keys = [
     "RW_LLM_PROCESS_ENV_OVERRIDES",
@@ -357,9 +372,26 @@ function testBuildSynthesizedAssemblyPlanPreservesBackboneTruth(): void {
   );
 }
 
+function testBuildSynthesizedAssemblyPlanUsesSanitizedExplicitAbilityName(): void {
+  const blueprint = makeNamedShellBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+
+  const luaArtifact = result.synthesis.artifacts.find((artifact) => artifact.contentType === "lua");
+  const kvArtifact = result.synthesis.artifacts.find((artifact) => artifact.contentType === "kv");
+  assert.ok(luaArtifact);
+  assert.ok(kvArtifact);
+  assert.equal(luaArtifact?.metadata?.abilityName, "placeholder_fire_ability");
+  assert.equal(kvArtifact?.metadata?.abilityName, "placeholder_fire_ability");
+  assert.ok(luaArtifact?.targetPath.endsWith("placeholder_fire_ability.lua"));
+  assert.ok(luaArtifact?.content.includes("if placeholder_fire_ability == nil then"));
+  assert.ok(kvArtifact?.content.includes('"placeholder_fire_ability"'));
+  assert.ok(kvArtifact?.content.includes('"ScriptFile"               "rune_weaver/abilities/placeholder_fire_ability"'));
+}
+
 async function runTests() {
   testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility();
   testBuildSynthesizedAssemblyPlanPreservesBackboneTruth();
+  testBuildSynthesizedAssemblyPlanUsesSanitizedExplicitAbilityName();
   await testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPlan();
   await testGroundingIgnoresLocallyDefinedLuaHelpers();
   console.log("adapters/dota2/synthesis/index.test.ts passed");

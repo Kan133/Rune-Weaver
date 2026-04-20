@@ -25,6 +25,11 @@ interface ScalarMatch {
   value: string | number | boolean;
 }
 
+const EXTERNAL_PERSISTENCE_SIGNAL_PATTERN =
+  /save|saved|save system|profile|profile storage|account|account profile|account storage|external storage|external system|database|nettable|across matches|across sessions|cross[- ]match|cross[- ]session|outside the current match|outside the current session|跨局|跨会话|存档|账号档案|外部存储|外部系统/iu;
+const NAMED_EXTERNAL_PERSISTENCE_BOUNDARY_PATTERN =
+  /save system|profile|profile storage|account|account profile|account storage|external storage|external system|database|nettable|存档系统|账号档案|外部存储|外部系统/iu;
+
 const NEGATIVE_CONSTRAINT_PATTERNS: Array<{ summary: string; pattern: RegExp }> = [
   { summary: "Do not add UI, modal, panel, or presentation surfaces unless explicitly required.", pattern: /(?:不要|不需要|无需|别|不能|no|without)\s*(?:任何)?\s*(?:ui|界面|面板|弹窗|窗口|modal|panel|presentation)/iu },
   { summary: "Do not add inventory or stored-selection mechanics unless explicitly required.", pattern: /(?:不要|不需要|无需|别|不能|no|without)\s*(?:任何)?\s*(?:inventory|库存|仓库|背包|persistent panel|panel inventory)/iu },
@@ -67,6 +72,14 @@ function isNegatedOccurrence(sourceText: string, index: number): boolean {
   return /(?:不要|不需要|无需|别|不能|禁止|no|without|do not)\s*(?:any\s*)?$/iu.test(prefix);
 }
 
+function hasExternalPersistenceSignal(sourceText: string): boolean {
+  return EXTERNAL_PERSISTENCE_SIGNAL_PATTERN.test(sourceText);
+}
+
+function hasNamedExternalPersistenceBoundary(sourceText: string): boolean {
+  return NAMED_EXTERNAL_PERSISTENCE_BOUNDARY_PATTERN.test(sourceText);
+}
+
 function collectOpenSemanticGaps(sourceText: string): string[] {
   const openSemanticGaps: string[] = [];
 
@@ -76,6 +89,12 @@ function collectOpenSemanticGaps(sourceText: string): string[] {
     for (const match of sourceText.matchAll(matcher)) {
       const matchIndex = match.index ?? -1;
       if (pattern.requiresPositiveContext && matchIndex >= 0 && isNegatedOccurrence(sourceText, matchIndex)) {
+        continue;
+      }
+      if (
+        pattern.summary === "Persistence is requested but the exact storage boundary is not named." &&
+        (!hasExternalPersistenceSignal(sourceText) || hasNamedExternalPersistenceBoundary(sourceText))
+      ) {
         continue;
       }
       matched = true;

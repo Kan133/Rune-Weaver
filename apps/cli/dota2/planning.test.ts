@@ -4,7 +4,9 @@ import { buildBlueprint, buildUpdateBlueprint, createWritePlan } from "./plannin
 import {
   buildCurrentFeatureContext,
   createUpdateIntentFromRequestedChange,
+  normalizeIntentSchema,
 } from "../../../core/wizard/index.js";
+import { enrichDota2CreateBlueprint } from "../../../adapters/dota2/blueprint/index.js";
 import {
   getSelectionPoolSourceArtifactRelativePath,
   materializeSelectionPoolSourceArtifact,
@@ -442,6 +444,601 @@ function testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton():
   );
 }
 
+function testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable(): void {
+  const prompt =
+    "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply the chosen local placeholder immediately, remove the selected reward from future draws, return unchosen rewards to the pool, and later bind one reward to another feature when its target is resolved.";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "cross-system-composition" as const,
+      confidence: "high" as const,
+    },
+    readiness: "ready" as const,
+    requirements: {
+      functional: [
+        "Run a local weighted three-choice draw shell.",
+        "Apply the chosen local placeholder immediately.",
+        "Remove the selected reward from future draws and return unchosen rewards to the pool.",
+        "Later bind one reward to another feature.",
+      ],
+    },
+    constraints: {},
+    selection: {
+      mode: "weighted" as const,
+      source: "weighted-pool" as const,
+      choiceMode: "user-chosen" as const,
+      choiceCount: 3,
+      cardinality: "single" as const,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      commitment: "immediate" as const,
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "reward_pool",
+          role: "candidate-options" as const,
+          ownership: "feature" as const,
+          updateMode: "replace" as const,
+        },
+      ],
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "instant" as const,
+    },
+    outcomes: {
+      operations: ["grant-feature"] as const,
+    },
+    composition: {
+      dependencies: [
+        {
+          kind: "cross-feature" as const,
+          relation: "grants" as const,
+          required: true,
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  } as any;
+
+  const result = buildBlueprint(
+    schema,
+    {
+      prompt,
+      hostRoot: "D:\\test3",
+      mode: "create",
+      featureId: "consumer_draw_demo",
+      proposalSource: "fallback",
+    },
+    {
+      blocksBlueprint: false,
+      blocksWrite: true,
+      requiresReview: true,
+      unresolvedDependencies: [
+        {
+          id: "cross-feature-target",
+          kind: "cross-feature-target",
+          summary: "Cross-feature semantics are present, but the target feature boundary is not explicit.",
+          questionIds: ["clarify-cross-feature-target"],
+        },
+      ],
+      reasons: ["Cross-feature semantics are present, but the target feature boundary is not explicit."],
+    },
+  );
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
+  assert.equal(result.finalBlueprint?.commitDecision?.canWriteHost, false);
+}
+
+function testBuildBlueprintLetsSelectionPoolFamilyOverrideSupersededCrossFeatureBlockers(): void {
+  const prompt =
+    "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply the chosen local placeholder immediately, remove the selected reward from future draws, return unchosen rewards to the pool, and later bind one reward to another feature when its target is resolved.";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "cross-system-composition" as const,
+      confidence: "high" as const,
+    },
+    requirements: {
+      functional: [
+        "Press F4 to open a local reward draw UI.",
+        "Draw exactly 3 rarity-weighted reward candidates from a local pool.",
+        "Let the player choose exactly 1 of the 3 candidates.",
+        "Apply the chosen reward's local placeholder immediately upon selection.",
+        "Remove the selected reward from future draws within the same feature pool.",
+        "Return unchosen rewards to the pool after the selection resolves.",
+        "Allow a reward to be bound later to another feature after that reward's target is resolved.",
+      ],
+      typed: [
+        {
+          id: "f4_trigger",
+          kind: "trigger" as const,
+          summary: "F4 activates the reward draw flow.",
+          parameters: { triggerKey: "F4" },
+          priority: "must" as const,
+        },
+        {
+          id: "weighted_draw",
+          kind: "rule" as const,
+          summary: "Select 3 rarity-weighted reward candidates from a local pool.",
+          parameters: { choiceCount: 3 },
+          priority: "must" as const,
+        },
+        {
+          id: "player_choice",
+          kind: "ui" as const,
+          summary: "Present the 3 candidates as cards and let the player choose 1.",
+          parameters: { commitCount: 1, presentation: "cards" },
+          priority: "must" as const,
+        },
+        {
+          id: "immediate_placeholder_apply",
+          kind: "effect" as const,
+          summary: "Apply the chosen reward's local placeholder immediately after selection.",
+          priority: "must" as const,
+        },
+        {
+          id: "pool_mutation",
+          kind: "state" as const,
+          summary: "Remove the selected reward from future draws and return unchosen rewards to the pool.",
+          priority: "must" as const,
+        },
+        {
+          id: "deferred_binding",
+          kind: "integration" as const,
+          summary: "Store enough information to bind a reward later to another feature when its target becomes resolved.",
+          priority: "must" as const,
+        },
+      ],
+    },
+    constraints: {
+      hostConstraints: [
+        "The draw UI is local.",
+        "The chosen effect initially applies as a local placeholder before later target binding.",
+      ],
+    },
+    interaction: {
+      activations: [
+        {
+          actor: "player",
+          kind: "key" as const,
+          input: "F4",
+          phase: "press" as const,
+          repeatability: "repeatable" as const,
+          confirmation: "implicit" as const,
+        },
+      ],
+    },
+    stateModel: {
+      states: [
+        {
+          id: "local_reward_pool_state",
+          summary: "Session-local state that tracks available rewards and future-draw eligibility.",
+          owner: "feature" as const,
+          lifetime: "session" as const,
+          mutationMode: "update" as const,
+        },
+        {
+          id: "presented_candidates_state",
+          summary: "Ephemeral state holding the 3 currently drawn reward candidates for the active choice.",
+          owner: "feature" as const,
+          lifetime: "ephemeral" as const,
+          mutationMode: "create" as const,
+        },
+        {
+          id: "pending_binding_state",
+          summary: "Tracks selected reward data that waits for a future target-resolution step before binding to another feature.",
+          owner: "feature" as const,
+          lifetime: "session" as const,
+          mutationMode: "update" as const,
+        },
+      ],
+    },
+    selection: {
+      mode: "weighted" as const,
+      source: "weighted-pool" as const,
+      choiceMode: "user-chosen" as const,
+      cardinality: "single" as const,
+      choiceCount: 3,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      commitment: "immediate" as const,
+    },
+    effects: {
+      operations: ["apply", "remove"] as const,
+      targets: ["selected local placeholder", "future draw eligibility"],
+      durationSemantics: "instant" as const,
+    },
+    outcomes: {
+      operations: ["apply-effect", "update-state", "emit-event"] as const,
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "reward_pool",
+          role: "candidate-options" as const,
+          ownership: "feature" as const,
+          updateMode: "replace" as const,
+          itemSchema: [
+            { name: "rewardId", type: "string" as const, required: true, semanticRole: "unique reward identity" },
+            { name: "rarity", type: "enum" as const, required: true, semanticRole: "rarity classification" },
+            { name: "weight", type: "number" as const, required: true, semanticRole: "draw weighting" },
+            { name: "placeholderRef", type: "effect-ref" as const, required: true, semanticRole: "immediate local application" },
+            { name: "bindingTargetRef", type: "object-ref" as const, required: false, semanticRole: "deferred cross-feature binding target" },
+          ],
+        },
+      ],
+    },
+    composition: {
+      dependencies: [
+        {
+          kind: "same-feature" as const,
+          relation: "reads" as const,
+          target: "local reward pool",
+          required: true,
+        },
+        {
+          kind: "same-feature" as const,
+          relation: "writes" as const,
+          target: "future draw eligibility state",
+          required: true,
+        },
+        {
+          kind: "cross-feature" as const,
+          relation: "syncs-with" as const,
+          target: "target feature",
+          required: true,
+        },
+        {
+          kind: "cross-feature" as const,
+          relation: "triggers" as const,
+          target: "deferred reward binding on target resolution",
+          required: true,
+        },
+      ],
+    },
+    integrations: {
+      expectedBindings: [
+        {
+          id: "f4_entry",
+          kind: "entry-point" as const,
+          summary: "Activation entry point for F4-triggered local reward draw.",
+          required: true,
+        },
+        {
+          id: "reward_draw_ui_surface",
+          kind: "ui-surface" as const,
+          summary: "Local UI surface for displaying 3 reward cards and accepting a single choice.",
+          required: true,
+        },
+        {
+          id: "target_resolution_hook",
+          kind: "event-hook" as const,
+          summary: "A hook or signal that indicates when a deferred reward target has been resolved.",
+          required: true,
+        },
+        {
+          id: "cross_feature_binding_bridge",
+          kind: "bridge-point" as const,
+          summary: "Bridge used to bind the selected reward to another feature after target resolution.",
+          required: true,
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["local_reward_draw_ui", "reward_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [
+      {
+        id: "unc_target_resolution_source",
+        summary: "The source and format of the future target-resolution signal are not specified.",
+        affects: ["blueprint", "realization"],
+        severity: "medium" as const,
+      },
+    ],
+    resolvedAssumptions: [
+      "The reward pool is local to this feature.",
+      "The immediate application step affects a local placeholder first, while later bind-to-feature behavior stays deferred.",
+    ],
+    parameters: {
+      triggerKey: "F4",
+      choiceCount: 3,
+      commitCount: 1,
+    },
+    isReadyForBlueprint: true,
+  } as any;
+
+  const blockedBlueprint = {
+    id: "cross_system_composition_fixture",
+    version: "1.0",
+    summary: "Blocked generic blueprint placeholder",
+    sourceIntent: {
+      goal: prompt,
+      intentKind: "cross-system-composition",
+    },
+    modules: [
+      {
+        id: "mod_generic_trigger",
+        role: "input_trigger",
+        category: "trigger",
+        responsibilities: ["Generic trigger placeholder"],
+      },
+      {
+        id: "mod_generic_bridge",
+        role: "integration_bridge",
+        category: "integration",
+        responsibilities: ["Generic integration placeholder"],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    status: "blocked" as const,
+    readyForAssembly: false,
+    commitDecision: {
+      outcome: "blocked" as const,
+      canAssemble: false,
+      canWriteHost: false,
+      requiresReview: true,
+      reasons: [
+        "Standalone entity/session state semantics request persistent/external/shared ownership and are governance-blocked.",
+      ],
+    },
+  } as any;
+
+  const enrichedBlockedBlueprint = enrichDota2CreateBlueprint(blockedBlueprint, {
+    schema,
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "consumer_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(enrichedBlockedBlueprint.blueprint);
+  assert.equal(enrichedBlockedBlueprint.admissionDiagnostics?.verdict, "admitted_explicit");
+  assert.equal(enrichedBlockedBlueprint.blueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(enrichedBlockedBlueprint.blueprint?.status, "weak");
+  assert.equal(enrichedBlockedBlueprint.blueprint?.commitDecision?.outcome, "exploratory");
+  assert.equal(enrichedBlockedBlueprint.blueprint?.commitDecision?.canAssemble, true);
+  assert.equal(enrichedBlockedBlueprint.blueprint?.commitDecision?.canWriteHost, true);
+
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "consumer_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.admissionDiagnostics?.verdict, "admitted_explicit");
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
+  assert.equal(result.finalBlueprint?.commitDecision?.canWriteHost, true);
+  assert.equal(result.issues.some((issue) => issue.startsWith("FINAL_BLUEPRINT_")), false);
+}
+
+function testBuildBlueprintDoesNotInventInputKeyBindingFromNegativeActivationConstraint(): void {
+  const prompt =
+    "Define a gameplay ability feature that has no activation key and does not auto-attach to the hero. It only defines a primary hero ability shell for a level 1 placeholder fire ability on the current hero.";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "micro-feature" as const,
+      confidence: "high" as const,
+    },
+    requirements: {
+      functional: [
+        "Define a gameplay ability feature that has no activation key and does not auto-attach to the hero.",
+        "Only define a primary hero ability shell for a level 1 placeholder fire ability on the current hero.",
+      ],
+      typed: [
+        {
+          id: "primary_ability_shell",
+          kind: "resource" as const,
+          summary: "Define a primary hero ability shell.",
+          parameters: {
+            abilityLevel: 1,
+            autoAttach: false,
+          },
+          priority: "must" as const,
+        },
+      ],
+    },
+    constraints: {},
+    timing: {
+      duration: {
+        kind: "persistent" as const,
+      },
+    },
+    stateModel: {
+      states: [
+        {
+          id: "ability_shell_definition",
+          summary: "Definition state for the ability shell.",
+          owner: "feature" as const,
+          lifetime: "session" as const,
+          mutationMode: "create" as const,
+        },
+      ],
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "persistent" as const,
+      targets: ["current hero"],
+    },
+    composition: {
+      dependencies: [
+        {
+          kind: "same-feature" as const,
+          relation: "grants" as const,
+          target: "current_hero",
+          required: true,
+        },
+      ],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+  } as any;
+
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "grant_only_provider_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "input_trigger"), false);
+  assert.equal(result.finalBlueprint?.patternHints.some((hint) => hint.suggestedPatterns.includes("input.key_binding")), false);
+}
+
+function testBuildBlueprintDoesNotInventModifierApplierForDefinitionOnlyProviderShell(): void {
+  const prompt =
+    "Create one gameplay ability shell only. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It only defines one primary hero ability named placeholder fire ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: {
+        rawPrompt: prompt,
+        goal: prompt,
+      },
+      classification: {
+        intentKind: "cross-system-composition" as const,
+        confidence: "high" as const,
+      },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "The feature includes no grant logic.",
+          "The feature includes no modifier application.",
+          "The shell exists only as a definition for later external granting.",
+        ],
+        typed: [
+          {
+            id: "primary_ability_shell",
+            kind: "generic" as const,
+            summary: "Define a primary hero ability shell.",
+            outputs: ["ability shell definition"],
+            parameters: {
+              abilityName: "placeholder fire ability",
+            },
+            priority: "must" as const,
+          },
+        ],
+      },
+      constraints: {},
+      timing: {
+        duration: {
+          kind: "persistent" as const,
+        },
+      },
+      stateModel: {
+        states: [
+          {
+            id: "ability_shell_definition",
+            summary: "Definition state for the ability shell.",
+            owner: "feature" as const,
+            lifetime: "session" as const,
+            mutationMode: "create" as const,
+          },
+        ],
+      },
+      selection: {
+        mode: "deterministic" as const,
+        source: "none" as const,
+        choiceMode: "none" as const,
+        cardinality: "single" as const,
+        choiceCount: 1,
+      },
+      outcomes: {
+        operations: ["grant-feature"] as const,
+      },
+      composition: {
+        dependencies: [
+          {
+            kind: "external-system" as const,
+            relation: "grants" as const,
+            target: "placeholder fire ability",
+            required: true,
+          },
+        ],
+      },
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+      },
+      resolvedAssumptions: [],
+    } as any,
+    prompt,
+    { kind: "dota2-x-template" as const },
+  );
+
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "grant_only_provider_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.finalBlueprint?.modules.length, 1);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "effect_application"), false);
+  assert.equal(result.finalBlueprint?.patternHints.some((hint) => hint.category === "effect"), false);
+}
+
 function testSelectionPoolContractDoesNotInjectStandaloneInventoryState(): void {
   const prompt =
     '给现有天赋抽取功能增加一个常驻天赋库存界面：15 格。玩家每次从 F4 三选一中确认的天赋都进入库存。库存满了后，再按 F4 不再继续抽取，并在库存界面显示 "Talent inventory full"。保持现有 F4 三选一抽取逻辑、稀有度展示和已选天赋不再出现的行为不变。';
@@ -759,6 +1356,10 @@ function runTests(): void {
   testCreateWritePlanKeepsSynthesizedBundleArtifactsCollapsed();
   testBuildBlueprintAppliesSelectionPoolCreateEnrichment();
   testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton();
+  testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable();
+  testBuildBlueprintLetsSelectionPoolFamilyOverrideSupersededCrossFeatureBlockers();
+  testBuildBlueprintDoesNotInventInputKeyBindingFromNegativeActivationConstraint();
+  testBuildBlueprintDoesNotInventModifierApplierForDefinitionOnlyProviderShell();
   testSelectionPoolContractDoesNotInjectStandaloneInventoryState();
   testSelectionPoolUpdateExpansionUsesGenericDeltaContract();
   testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge();

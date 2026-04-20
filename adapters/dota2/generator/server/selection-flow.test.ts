@@ -288,6 +288,30 @@ function testNoPoolStateMirroring() {
   console.log("✓ Test 13 passed\n");
 }
 
+function testSelectionOutcomeHookSupportsExternalHandlers() {
+  console.log("Test 14: selection outcome hook supports external handlers");
+
+  const entry = createMockEntry({
+    choiceCount: 3,
+    effectApplication: {
+      enabled: true,
+      rarityAttributeBonusMap: {
+        R: { attribute: "strength", value: 10 },
+      },
+    },
+  });
+
+  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
+
+  assert(code.includes("selectionOutcomeHandlers"), "Should contain selection outcome handler registry");
+  assert(code.includes("registerOutcomeHandler"), "Should expose outcome handler registration");
+  assert(code.includes("handleSelectionOutcome"), "Should route confirmations through the generic outcome hook");
+  assert(code.includes("const selectionOutcomeHandled = this.handleSelectionOutcome"), "Should evaluate external outcome handling before default effects");
+  assert(code.includes("if (!selectionOutcomeHandled) {"), "Should suppress default placeholder effects when an external handler takes over");
+
+  console.log("✓ Test 14 passed\n");
+}
+
 // Run all tests
 console.log("=== Selection Flow Generator Tests ===\n");
 testBasicGeneration();
@@ -303,4 +327,5 @@ testDeferredApplyMode();
 testInventoryExtension();
 testLocalProgressionExtension();
 testNoPoolStateMirroring();
+testSelectionOutcomeHookSupportsExternalHandlers();
 console.log("=== All tests passed ===");

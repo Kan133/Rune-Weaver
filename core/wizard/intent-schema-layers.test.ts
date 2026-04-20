@@ -59,6 +59,82 @@ function testExplicitPersistenceStaysGovernanceVisible() {
   assert.deepEqual(analysis.governanceDecisions.canonicalizationEligible.value, []);
 }
 
+function testRuntimePersistenceFactsDoNotInventExternalPersistence() {
+  const prompt =
+    "Create one gameplay ability feature with no trigger key. It should not auto-attach to the hero. The granted ability shell should remain available for the current match only.";
+  const schema = createFallbackIntentSchema(prompt, host);
+  const analysis = analyzeIntentSemanticLayers(schema, prompt, host);
+
+  assert.equal(findFactValue(analysis.rawFacts, "prompt.composition.runtime_persistence"), true);
+  assert.equal(findFactValue(analysis.rawFacts, "prompt.composition.external_persistence"), undefined);
+  assert.equal(analysis.governanceDecisions.crossSystemComposition.value, false);
+  assert.equal(
+    Boolean(schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system")),
+    false,
+  );
+}
+
+function testDefinitionOnlyProviderShellStaysLocalAndDoesNotDriftIntoGrantApplication() {
+  const prompt =
+    "Create one gameplay ability shell only. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It only defines one primary hero ability named placeholder fire ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: { rawPrompt: prompt, goal: prompt },
+      classification: { intentKind: "cross-system-composition", confidence: "high" },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "The feature includes no grant logic.",
+          "The feature includes no modifier application.",
+          "The shell exists only as a definition for later external granting.",
+        ],
+        typed: [
+          {
+            id: "ability_shell_definition",
+            kind: "resource",
+            summary: "Define one primary hero ability shell for later external granting.",
+            outputs: ["ability shell definition"],
+            priority: "must",
+          },
+        ],
+      },
+      constraints: {},
+      selection: {
+        mode: "deterministic",
+        source: "none",
+        choiceMode: "none",
+        choiceCount: 1,
+        cardinality: "single",
+      },
+      outcomes: { operations: ["grant-feature"] },
+      composition: {
+        dependencies: [{ kind: "external-system", relation: "grants", target: "placeholder fire ability", required: true }],
+      },
+      stateModel: {
+        states: [{ id: "provider_shell_state", summary: "Provider shell definition", owner: "feature", lifetime: "session", mutationMode: "create" }],
+      },
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+  const analysis = analyzeIntentSemanticLayers(schema, prompt, host);
+
+  assert.equal(analysis.governanceDecisions.intentKind.value, "micro-feature");
+  assert.equal(analysis.governanceDecisions.crossSystemComposition.value, false);
+  assert.equal(analysis.governanceDecisions.normalizedMechanics.value.outcomeApplication, false);
+  assert.deepEqual(analysis.governanceDecisions.outcomeContract.value.operations || [], []);
+  assert.deepEqual(analysis.governanceDecisions.compositionContract.value.dependencies || [], []);
+}
+
 function testDashPromptDoesNotAccidentallyEnterCandidateDrawDecision() {
   const prompt = "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离。";
   const schema = createFallbackIntentSchema(prompt, host);
@@ -243,6 +319,8 @@ async function runTests() {
   testRawFactsStayStableForSamePrompt();
   testParaphraseGovernanceDecisionsStayAlignedForCandidateDraw();
   testExplicitPersistenceStaysGovernanceVisible();
+  testRuntimePersistenceFactsDoNotInventExternalPersistence();
+  testDefinitionOnlyProviderShellStaysLocalAndDoesNotDriftIntoGrantApplication();
   testDashPromptDoesNotAccidentallyEnterCandidateDrawDecision();
   testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk();
   testFallbackAndStructuredPathShareGovernanceCore();

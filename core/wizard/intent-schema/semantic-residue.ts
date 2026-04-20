@@ -114,7 +114,7 @@ export function shouldSuppressBoundedCandidateDrawDetailSummary(
 
   const text = value.toLowerCase();
   const isPersistenceNoise =
-    !promptHints.explicitPersistence &&
+    !promptHints.explicitRuntimePersistence &&
     /persist|persistence|cross match|cross-session|current session|current match|session-only|跨局|跨会话|持久|本局|当前会话/iu.test(
       value,
     );
@@ -200,7 +200,7 @@ function normalizeResolvedAssumptionResidue(
 ): IntentOpenSemanticResidue {
   const normalized = new Set(normalizeStringArray(value) || []);
 
-  if (promptHints.noRepeatAfterSelection && !promptHints.explicitPersistence) {
+  if (promptHints.noRepeatAfterSelection && !promptHints.explicitRuntimePersistence) {
     normalized.add(
       "Selection no-repeat history defaults to session scope unless persistence is explicitly requested.",
     );

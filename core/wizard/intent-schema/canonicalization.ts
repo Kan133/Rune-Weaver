@@ -1,6 +1,7 @@
 import type { IntentSchema } from "../../schema/types.js";
 import { analyzeIntentSemanticLayers } from "./semantic-analysis.js";
 import { CANDIDATE_DRAW_CANONICALIZATION_PASS } from "./canonicalization-pass-candidate-draw.js";
+import { DEFINITION_ONLY_PROVIDER_CANONICALIZATION_PASS } from "./canonicalization-pass-definition-only-provider.js";
 import type {
   IntentSchemaCanonicalizationPass,
   IntentSchemaCanonicalizationPassResult,
@@ -14,6 +15,7 @@ interface IntentSchemaCanonicalizationResult extends IntentSchemaCanonicalizatio
 
 const INTENT_SCHEMA_CANONICALIZATION_PASSES: IntentSchemaCanonicalizationPass[] = [
   CANDIDATE_DRAW_CANONICALIZATION_PASS,
+  DEFINITION_ONLY_PROVIDER_CANONICALIZATION_PASS,
 ].sort((left, right) => right.priority - left.priority);
 
 export function runIntentSchemaCanonicalizationPasses(input: {

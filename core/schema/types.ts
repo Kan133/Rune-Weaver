@@ -176,11 +176,33 @@ export interface IntentUncertainty {
   severity: "low" | "medium" | "high";
 }
 
+export type WizardClarificationImpact =
+  | "advisory"
+  | "write-blocking-unresolved-dependency"
+  | "blueprint-blocking-structural";
+
+export interface WizardUnresolvedDependency {
+  id: string;
+  kind: "cross-feature-target" | "existing-feature-target" | "generic";
+  summary: string;
+  questionIds: string[];
+}
+
+export interface WizardClarificationAuthority {
+  blocksBlueprint: boolean;
+  blocksWrite: boolean;
+  requiresReview: boolean;
+  unresolvedDependencies: WizardUnresolvedDependency[];
+  reasons: string[];
+}
+
 export interface WizardClarificationQuestion {
   id: string;
   question: string;
   targetPaths?: string[];
   reason: string;
+  impact?: WizardClarificationImpact;
+  unresolvedDependencyId?: string;
 }
 
 export interface LegacyRequiredClarification {
@@ -195,6 +217,7 @@ export interface WizardClarificationPlan {
   requiredForFaithfulInterpretation: boolean;
   targetPaths: string[];
   reason: string;
+  authority?: WizardClarificationAuthority;
 }
 
 export interface IntentSchema {

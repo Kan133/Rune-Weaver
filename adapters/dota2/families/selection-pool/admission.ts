@@ -55,11 +55,6 @@ const FAMILY_BLOCK_PATTERNS: Array<{ code: string; test: RegExp; reason: string 
     reason: "selection_pool remains session-only and does not admit persistence in the current family contract.",
   },
   {
-    code: "SELECTION_POOL_CROSS_FEATURE_NOT_SUPPORTED",
-    test: /(?:grant skill|grant another feature|cross-feature|授予技能|授予另一个(?:技能)?\s*feature|feature 耦合)/i,
-    reason: "selection_pool does not yet admit cross-feature grants or feature coupling.",
-  },
-  {
     code: "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED",
     test: /(?:custom effect|new effect family|新的效果族|自定义效果族|dash|projectile|summon|spawn helper)/i,
     reason: "selection_pool keeps effect behavior inside the current bounded placeholder effect profile and does not admit arbitrary new effect families.",
@@ -217,8 +212,6 @@ function assessSelectionPoolContract(
   );
   const noPersistence = !hasPersistentStateRequest(schema) &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED");
-  const noCrossFeature = !hasCrossFeatureRequest(schema) &&
-    !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_CROSS_FEATURE_NOT_SUPPORTED");
   const noExternalOwnership = !hasExternalOrSharedOwnership(schema);
   const noSecondTrigger = triggerKeyCount <= 1 &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED");
@@ -292,13 +285,6 @@ function assessSelectionPoolContract(
         : "selection_pool does not admit persistence in the bounded family contract.",
     },
     {
-      atom: "no_cross_feature",
-      satisfied: noCrossFeature,
-      detail: noCrossFeature
-        ? "Prompt/schema stay inside same-feature ownership."
-        : "selection_pool does not admit cross-feature grants or coupling.",
-    },
-    {
       atom: "no_external_ownership",
       satisfied: noExternalOwnership,
       detail: noExternalOwnership
@@ -330,7 +316,6 @@ function assessSelectionPoolContract(
 
   const blockerCodes = dedupeStrings([
     !noPersistence ? "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED" : undefined,
-    !noCrossFeature ? "SELECTION_POOL_CROSS_FEATURE_NOT_SUPPORTED" : undefined,
     !noExternalOwnership ? "SELECTION_POOL_EXTERNAL_OWNERSHIP_NOT_SUPPORTED" : undefined,
     !noSecondTrigger ? "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED" : undefined,
     !noMultiConfirm ? "SELECTION_POOL_MULTI_CONFIRM_NOT_SUPPORTED" : undefined,
@@ -420,6 +405,16 @@ function buildSelectionPoolAdmissionDiagnostics(input: {
         { metadata: { skeletonSignals } },
       ),
     );
+    if (hasCrossFeatureRequest(input.schema)) {
+      contractFindings.push(
+        createAdmissionFinding(
+          "contract",
+          "SELECTION_POOL_EXTERNALIZED_CROSS_FEATURE_GRANT",
+          "info",
+          "Cross-feature reward application remains external to selection_pool; family admission only covers the local draw shell.",
+        ),
+      );
+    }
   }
   const proposalFindings = input.proposal
     ? [

@@ -54,6 +54,16 @@ export function deriveIntentGovernanceDecisions(
 
   if (crossSystemComposition) {
     intentKind = "cross-system-composition";
+  } else if (intentKind === "cross-system-composition") {
+    if (hasUiOnly) {
+      intentKind = "ui-surface";
+    } else if (requestsStandaloneSystem) {
+      intentKind = "standalone-system";
+    } else if (nonUiGameplayPresent) {
+      intentKind = "micro-feature";
+    } else {
+      intentKind = "unknown";
+    }
   } else if (candidateDrawEligible) {
     intentKind = "standalone-system";
   } else if (intentKind === "unknown" && hasUiOnly) {
@@ -177,7 +187,9 @@ function buildActivationContract(
 ) {
   const activations = interaction?.activations || [];
   return {
-    interactive: activations.some((activation) => activation.kind !== "passive"),
+    interactive: activations.some(
+      (activation) => activation.kind === "key" || activation.kind === "mouse",
+    ),
     kinds: uniqueSortedStrings(activations.map((activation) => activation.kind)),
     inputs: uniqueSortedStrings(activations.map((activation) => activation.input)),
     phases: uniqueSortedStrings(activations.map((activation) => activation.phase)),
@@ -314,7 +326,9 @@ function normalizeNormalizedMechanics(
   const contentModel = candidate.contentModel;
 
   const hasInteractiveActivation =
-    (interaction?.activations || []).some((activation) => activation.kind !== "passive");
+    (interaction?.activations || []).some(
+      (activation) => activation.kind === "key" || activation.kind === "mouse",
+    );
   const hasCandidateCollection =
     selection?.source === "candidate-collection" ||
     selection?.source === "weighted-pool" ||
@@ -399,7 +413,7 @@ function isCanonicalCandidateDrawGovernanceCore(
   }
 
   if (
-    hasTrueRawFact(rawFacts, "prompt.composition.explicit_persistence") ||
+    hasTrueRawFact(rawFacts, "prompt.composition.runtime_persistence") ||
     hasTrueRawFact(rawFacts, "prompt.composition.explicit_cross_feature") ||
     hasTrueRawFact(rawFacts, "prompt.inventory.enabled")
   ) {
