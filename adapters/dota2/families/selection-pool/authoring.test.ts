@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import {
   EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
   TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
-  TALENT_DRAW_EXAMPLE_INVENTORY_UPDATE_PROMPT,
   TALENT_DRAW_EXAMPLE_SOURCE_UPDATE_PROMPT,
-} from "./examples.js";
+} from "./__fixtures__/examples.js";
 import {
+  compileSelectionPoolModuleParameters,
   deriveSelectionPoolCurrentContextHints,
   mergeSelectionPoolFeatureAuthoringForUpdate,
   normalizeSelectionPoolFeatureAuthoringProposal,
@@ -20,6 +20,9 @@ const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
 
 const NO_UI_FIREBALL_PROMPT =
   "做一个主动技能，不要UI，不要inventory，不要persistence。按Q生成一个跟随玩家2秒的火焰球，每0.5秒对附近敌人造成一次伤害。";
+
+const GENERIC_INVENTORY_UPDATE_PROMPT =
+  "给当前功能增加一个存储面板，16格，存满了就不能再抽了";
 
 function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
   const resolution = resolveSelectionPoolFamily({
@@ -87,12 +90,13 @@ function testCanonicalUpdateExpandsPoolToTwenty(): void {
     updateResolution.proposal?.parameters.objects.slice(0, 6),
     existingResolution.proposal?.parameters.objects,
   );
-  assert.ok(updateResolution.proposal?.parameters.objects.some((item) => item.id === "R003"));
-  assert.ok(updateResolution.proposal?.parameters.objects.some((item) => item.id === "SR006"));
-  assert.equal(updateResolution.proposal?.parameters.objects.at(-1)?.id, "UR002");
+  assert.equal(
+    new Set(updateResolution.proposal?.parameters.objects.map((item) => item.id)).size,
+    20,
+  );
 }
 
-function testCanonicalInventoryUpdateKeepsExampleInventoryCopy(): void {
+function testGenericInventoryUpdateUsesPromptAuthority(): void {
   const existingResolution = resolveSelectionPoolFamily({
     prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
     hostRoot: "D:\\test3",
@@ -102,12 +106,12 @@ function testCanonicalInventoryUpdateKeepsExampleInventoryCopy(): void {
   });
 
   const updateResolution = resolveSelectionPoolFamily({
-    prompt: TALENT_DRAW_EXAMPLE_INVENTORY_UPDATE_PROMPT,
+    prompt: GENERIC_INVENTORY_UPDATE_PROMPT,
     hostRoot: "D:\\test3",
     mode: "update",
-    featureId: "talent_draw_demo",
+    featureId: "standalone_system_75dh",
     existingFeature: {
-      featureId: "talent_draw_demo",
+      featureId: "standalone_system_75dh",
       intentKind: "standalone-system",
       status: "active",
       revision: 1,
@@ -129,8 +133,60 @@ function testCanonicalInventoryUpdateKeepsExampleInventoryCopy(): void {
   });
 
   assert.equal(updateResolution.blocked, false);
-  assert.equal(updateResolution.proposal?.parameters.inventory?.capacity, 15);
-  assert.equal(updateResolution.proposal?.parameters.inventory?.fullMessage, "Talent inventory full");
+  assert.equal(updateResolution.proposal?.parameters.inventory?.capacity, 16);
+  assert.equal(updateResolution.proposal?.parameters.inventory?.fullMessage, "Selection inventory full");
+}
+
+function testInventoryPromptDoesNotDependOnFeatureId(): void {
+  const prompts = [
+    "talent_draw_demo",
+    "reward_draw_demo",
+    "standalone_system_75dh",
+  ].map((featureId) =>
+    resolveSelectionPoolFamily({
+      prompt: GENERIC_INVENTORY_UPDATE_PROMPT,
+      hostRoot: "D:\\test3",
+      mode: "update",
+      featureId,
+      existingFeature: {
+        featureId,
+        intentKind: "standalone-system",
+        status: "active",
+        revision: 1,
+        blueprintId: "bp",
+        selectedPatterns: [],
+        generatedFiles: [],
+        entryBindings: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        featureAuthoring: {
+          mode: "source-backed",
+          profile: "selection_pool",
+          objectKind: "talent",
+          parameters: resolveSelectionPoolFamily({
+            prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+            hostRoot: "D:\\test3",
+            mode: "create",
+            featureId,
+            proposalSource: "fallback",
+          }).proposal!.parameters,
+          parameterSurface: resolveSelectionPoolFamily({
+            prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+            hostRoot: "D:\\test3",
+            mode: "create",
+            featureId,
+            proposalSource: "fallback",
+          }).proposal!.parameterSurface,
+        },
+      },
+      proposalSource: "existing-feature",
+    }),
+  );
+
+  const capacities = new Set(prompts.map((result) => result.proposal?.parameters.inventory?.capacity));
+  const messages = new Set(prompts.map((result) => result.proposal?.parameters.inventory?.fullMessage));
+  assert.deepEqual([...capacities], [16]);
+  assert.deepEqual([...messages], ["Selection inventory full"]);
 }
 
 function testSiblingEquipmentPromptUsesSameFamily(): void {
@@ -528,7 +584,7 @@ function testUpdateMergeUsesUpdateIntentAuthority(): void {
   });
 
   assert.equal(merged.parameters.objects.length, 20);
-  assert.ok(merged.parameters.objects.some((item) => item.id === "R003"));
+  assert.equal(new Set(merged.parameters.objects.map((item) => item.id)).size, 20);
   assert.ok(merged.notes?.some((note) => note.includes("UpdateIntent authority")));
 }
 
@@ -693,6 +749,210 @@ function testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit(): void {
   assert.equal(merged.parameters.objects.length, 20);
 }
 
+function testUpdateMergeRestoresInventoryContractFromBoundedAuthority(): void {
+  const existingResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "standalone_system_75dh",
+    proposalSource: "fallback",
+  });
+  const currentFeatureAuthoring = {
+    mode: "source-backed" as const,
+    profile: "selection_pool" as const,
+    objectKind: existingResolution.proposal?.objectKind,
+    parameters: existingResolution.proposal!.parameters,
+    parameterSurface: existingResolution.proposal!.parameterSurface,
+  };
+  const requestedChange: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: GENERIC_INVENTORY_UPDATE_PROMPT,
+      goal: GENERIC_INVENTORY_UPDATE_PROMPT,
+    },
+    classification: {
+      intentKind: "standalone-system",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Add a 16-slot storage panel to the current selection system.",
+        "When the panel is full, do not start another draw.",
+      ],
+      interactions: [
+        "Confirmed selected items are added into the 16-slot inventory panel.",
+      ],
+      outputs: [
+        "Persistent inventory panel UI.",
+      ],
+    },
+    stateModel: {
+      states: [
+        {
+          id: "selection_inventory",
+          summary: "Store confirmed selected items in current-feature session state.",
+          owner: "feature",
+          lifetime: "session",
+          kind: "inventory",
+          mutationMode: "update",
+        },
+      ],
+    },
+    normalizedMechanics: {
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+    },
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+  const updateIntent = createUpdateIntentFromRequestedChange(
+    {
+      featureId: "standalone_system_75dh",
+      revision: 1,
+      intentKind: "standalone-system",
+      selectedPatterns: [],
+      sourceBacked: true,
+      featureAuthoring: currentFeatureAuthoring,
+      admittedSkeleton: [
+        "input.key_binding",
+        "data.weighted_pool",
+        "rule.selection_flow",
+        "ui.selection_modal",
+      ],
+      preservedInvariants: [],
+      boundedFields: {
+        triggerKey: "F4",
+        choiceCount: 3,
+        objectCount: 6,
+      },
+    },
+    requestedChange,
+  );
+  updateIntent.delta.add.push({
+    path: "selection.inventory",
+    kind: "state",
+    summary: "Add session-scoped inventory behavior for storing selected items.",
+  });
+  updateIntent.delta.modify.push({
+    path: "selection.inventory.capacity",
+    kind: "state",
+    summary: "Set inventory capacity to 16 slots.",
+    oldValue: undefined,
+    newValue: 16,
+    reason: "Explicit bounded storage capacity request.",
+  });
+  updateIntent.delta.modify.push({
+    path: "rule.selection_flow.precondition",
+    kind: "trigger",
+    summary: "Gate draw activation so F4 cannot open a new draw when inventory is full.",
+  });
+
+  const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
+    currentFeatureAuthoring,
+    requestedChange,
+    updateIntent,
+  });
+  const compiled = compileSelectionPoolModuleParameters(merged);
+
+  assert.equal(merged.parameters.choiceCount, 3);
+  assert.equal(merged.parameters.inventory?.enabled, true);
+  assert.equal(merged.parameters.inventory?.capacity, 16);
+  assert.equal(merged.parameters.inventory?.blockDrawWhenFull, true);
+  assert.equal(compiled.selection_modal.inventory?.capacity, 16);
+  assert.equal(compiled.selection_flow.inventory?.blockDrawWhenFull, true);
+}
+
+function testUpdateMergeDoesNotInventInventoryCapacity(): void {
+  const existingResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "standalone_system_75dh",
+    proposalSource: "fallback",
+  });
+  const currentFeatureAuthoring = {
+    mode: "source-backed" as const,
+    profile: "selection_pool" as const,
+    objectKind: existingResolution.proposal?.objectKind,
+    parameters: existingResolution.proposal!.parameters,
+    parameterSurface: existingResolution.proposal!.parameterSurface,
+  };
+  const requestedChange: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "给当前功能增加一个存储面板，满了就不能再抽了",
+      goal: "给当前功能增加一个存储面板，满了就不能再抽了",
+    },
+    classification: {
+      intentKind: "standalone-system",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: ["Add a storage panel and block draws when it is full."],
+    },
+    normalizedMechanics: {
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+    },
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+  const updateIntent = createUpdateIntentFromRequestedChange(
+    {
+      featureId: "standalone_system_75dh",
+      revision: 1,
+      intentKind: "standalone-system",
+      selectedPatterns: [],
+      sourceBacked: true,
+      featureAuthoring: currentFeatureAuthoring,
+      admittedSkeleton: [
+        "input.key_binding",
+        "data.weighted_pool",
+        "rule.selection_flow",
+        "ui.selection_modal",
+      ],
+      preservedInvariants: [],
+      boundedFields: {
+        triggerKey: "F4",
+        choiceCount: 3,
+        objectCount: 6,
+      },
+    },
+    requestedChange,
+  );
+  updateIntent.delta.add.push({
+    path: "selection.inventory",
+    kind: "state",
+    summary: "Add session-scoped inventory behavior for storing selected items.",
+  });
+
+  const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
+    currentFeatureAuthoring: {
+      ...currentFeatureAuthoring,
+      parameters: {
+        ...currentFeatureAuthoring.parameters,
+        inventory: undefined,
+      },
+    },
+    requestedChange,
+    updateIntent,
+  });
+
+  assert.equal(merged.parameters.inventory, undefined);
+}
+
 function testUnsupportedContractEscapeHonestBlocks(): void {
   const resolution = resolveSelectionPoolFamily({
     prompt: "给这个抽取系统再加第二个触发键，并且支持跨局保存与授予另一个技能 feature。",
@@ -713,7 +973,8 @@ function testUnsupportedContractEscapeHonestBlocks(): void {
 
 testCanonicalCreateSeedsSelectionPoolAuthoring();
 testCanonicalUpdateExpandsPoolToTwenty();
-testCanonicalInventoryUpdateKeepsExampleInventoryCopy();
+testGenericInventoryUpdateUsesPromptAuthority();
+testInventoryPromptDoesNotDependOnFeatureId();
 testSiblingEquipmentPromptUsesSameFamily();
 testOriginalTalentDrawPromptCompressesIntoSelectionPool();
 testNoUiFireballPromptStaysNotApplicable();
@@ -723,6 +984,8 @@ testSelectionPoolCurrentContextHintsExposeBoundedFields();
 testUpdateMergeUsesUpdateIntentAuthority();
 testUpdateMergePrefersRequestedTargetTriggerKey();
 testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit();
+testUpdateMergeRestoresInventoryContractFromBoundedAuthority();
+testUpdateMergeDoesNotInventInventoryCapacity();
 testUnsupportedContractEscapeHonestBlocks();
 
 console.log("adapters/dota2/families/selection-pool/authoring.test.ts passed");

@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import { BlueprintBuilder, buildBlueprint } from "./builder";
 import type { IntentSchema } from "../schema/types";
 import {
-  buildSelectionPoolExampleParameters,
   getSelectionPoolParameterSurface,
   resolveSelectionPoolFamily,
-  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
 } from "../../adapters/dota2/families/selection-pool/index.js";
+import {
+  buildSelectionPoolExampleParameters,
+  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+} from "../../adapters/dota2/families/selection-pool/__fixtures__/examples.js";
 import {
   buildCurrentFeatureContext,
   createUpdateIntentFromRequestedChange,

@@ -10,8 +10,8 @@
         "featureId": "standalone_system_75dh",
         "intentKind": "standalone-system",
         "status": "active",
-        "revision": 2,
-        "blueprintId": "standalone_system_h3n1",
+        "revision": 3,
+        "blueprintId": "standalone_system_wpmh",
         "modules": [
           {
             "moduleId": "selection_input",
@@ -285,6 +285,14 @@
             "applyMode": "immediate",
             "postSelectionPoolBehavior": "remove_selected_from_remaining",
             "trackSelectedItems": true,
+            "inventory": {
+              "enabled": true,
+              "capacity": 16,
+              "storeSelectedItems": true,
+              "blockDrawWhenFull": true,
+              "fullMessage": "Selection inventory full",
+              "presentation": "persistent_panel"
+            },
             "display": {
               "title": "Choose Your Selection",
               "description": "Select one of the following options",
@@ -384,7 +392,8 @@
           },
           "notes": [
             "selection_pool proposal seeded from generic family defaults.",
-            "selection_pool update merge was normalized from workspace-backed current feature context and UpdateIntent authority."
+            "selection_pool update merge was normalized from workspace-backed current feature context and UpdateIntent authority.",
+            "selection_pool update merge restored the requested session-only inventory contract from bounded update authority."
           ]
         },
         "integrationPoints": [
@@ -409,7 +418,7 @@
             "FinalBlueprint remains reviewable/exploratory and can continue with weaker guarantees"
           ],
           "blockers": [],
-          "lastValidatedAt": "2026-04-19T23:03:37.169Z",
+          "lastValidatedAt": "2026-04-19T23:43:45.156Z",
           "blueprint": {
             "status": "needs_review",
             "warnings": [
@@ -423,35 +432,35 @@
             "warnings": [],
             "blockers": [],
             "summary": "Artifact synthesis",
-            "checkedAt": "2026-04-19T23:03:37.169Z"
+            "checkedAt": "2026-04-19T23:43:45.156Z"
           },
           "repair": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-19T23:03:37.169Z"
+            "checkedAt": "2026-04-19T23:43:45.156Z"
           },
           "dependency": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-19T23:03:37.169Z"
+            "checkedAt": "2026-04-19T23:43:45.156Z"
           },
           "host": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Host validation",
-            "checkedAt": "2026-04-19T23:03:37.169Z"
+            "checkedAt": "2026-04-19T23:43:45.156Z"
           },
           "runtime": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Runtime validation",
-            "checkedAt": "2026-04-19T23:03:37.169Z"
+            "checkedAt": "2026-04-19T23:43:45.156Z"
           }
         },
         "dependencyEdges": [],
@@ -470,12 +479,12 @@
           "reviewModules": []
         },
         "createdAt": "2026-04-19T22:55:52.851Z",
-        "updatedAt": "2026-04-19T23:03:37.169Z"
+        "updatedAt": "2026-04-19T23:43:45.156Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-19T23:03:37.171Z",
+    "exportedAt": "2026-04-19T23:43:45.158Z",
     "exportedBy": "rune-weaver-cli",
     "sourceHostRoot": "D:\\rw-test1",
     "version": "0.1"

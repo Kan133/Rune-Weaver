@@ -1,7 +1,7 @@
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import {
   TALENT_DRAW_EXAMPLE_INVENTORY_UPDATE_PROMPT,
-} from "../../../../adapters/dota2/families/selection-pool/examples.js";
+} from "../../../../adapters/dota2/families/selection-pool/__fixtures__/examples.js";
 
 export interface DemoScenario {
   id: string;

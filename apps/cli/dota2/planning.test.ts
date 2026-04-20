@@ -6,11 +6,13 @@ import {
   createUpdateIntentFromRequestedChange,
 } from "../../../core/wizard/index.js";
 import {
-  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
   getSelectionPoolSourceArtifactRelativePath,
   materializeSelectionPoolSourceArtifact,
   resolveSelectionPoolFamily,
 } from "../../../adapters/dota2/families/selection-pool/index.js";
+import {
+  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+} from "../../../adapters/dota2/families/selection-pool/__fixtures__/examples.js";
 
 const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
   "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
@@ -350,11 +352,11 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
   );
   assert.equal(
     result.blueprint?.modules.find((module) => module.role === "selection_modal")?.parameters?.title,
-    "Choose Your Talent",
+    "Choose Your Selection",
   );
   assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
   assert.equal(result.admissionDiagnostics?.verdict, "admitted_compressed");
-  assert.equal(result.admissionDiagnostics?.proposal.baseSource, "example_seed");
+  assert.equal(result.admissionDiagnostics?.proposal.baseSource, "generic_seed");
 }
 
 function testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton(): void {

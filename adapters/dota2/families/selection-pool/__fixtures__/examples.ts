@@ -2,7 +2,7 @@ import type {
   SelectionPoolFeatureAuthoringParameters,
   SelectionPoolObjectKind,
   SelectionPoolObjectTier,
-} from "../../../../core/schema/types.js";
+} from "../../../../../core/schema/types.js";
 
 export interface SelectionPoolExampleObject {
   id: string;
@@ -21,11 +21,6 @@ export interface SelectionPoolFamilyExample {
   sourceExpansionPrompt?: string;
   inventoryDefaults?: NonNullable<SelectionPoolFeatureAuthoringParameters["inventory"]>;
   parameters: SelectionPoolFeatureAuthoringParameters;
-}
-
-export interface SelectionPoolExampleExpansionPreset {
-  targetCount: number;
-  objects: SelectionPoolExampleObject[];
 }
 
 function createDisplayDefaults(objectKind: SelectionPoolObjectKind): NonNullable<SelectionPoolFeatureAuthoringParameters["display"]> {
@@ -137,26 +132,6 @@ export const TALENT_DRAW_EXAMPLE_OBJECTS: SelectionPoolExampleObject[] = [
   { id: "UR001", label: "Ultimate Growth", description: "+10 All Attributes", weight: 10, tier: "UR" },
 ];
 
-export const TALENT_DRAW_EXAMPLE_EXPANSION_20: SelectionPoolExampleExpansionPreset = {
-  targetCount: 20,
-  objects: [
-    { id: "R003", label: "Strength Boost 03", description: "+10 Strength", weight: 40, tier: "R" },
-    { id: "R004", label: "Strength Boost 04", description: "+10 Strength", weight: 40, tier: "R" },
-    { id: "R005", label: "Strength Boost 05", description: "+10 Strength", weight: 40, tier: "R" },
-    { id: "R006", label: "Strength Boost 06", description: "+10 Strength", weight: 40, tier: "R" },
-    { id: "R007", label: "Strength Boost 07", description: "+10 Strength", weight: 40, tier: "R" },
-    { id: "R008", label: "Strength Boost 08", description: "+10 Strength", weight: 40, tier: "R" },
-    { id: "SR003", label: "Agility Boost 03", description: "+10 Agility", weight: 30, tier: "SR" },
-    { id: "SR004", label: "Agility Boost 04", description: "+10 Agility", weight: 30, tier: "SR" },
-    { id: "SR005", label: "Agility Boost 05", description: "+10 Agility", weight: 30, tier: "SR" },
-    { id: "SR006", label: "Agility Boost 06", description: "+10 Agility", weight: 30, tier: "SR" },
-    { id: "SSR002", label: "Intelligence Boost 02", description: "+10 Intelligence", weight: 20, tier: "SSR" },
-    { id: "SSR003", label: "Intelligence Boost 03", description: "+10 Intelligence", weight: 20, tier: "SSR" },
-    { id: "SSR004", label: "Intelligence Boost 04", description: "+10 Intelligence", weight: 20, tier: "SSR" },
-    { id: "UR002", label: "Ultimate Growth 02", description: "+10 All Attributes", weight: 10, tier: "UR" },
-  ],
-};
-
 export const EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT =
   "做一个按 F4 触发的三选一装备抽取系统。玩家按 F4 后，从加权装备池抽出 3 个候选装备，显示卡牌选择 UI。玩家选择 1 个后立即应用效果，并且已选择的装备后续不再出现。";
 
@@ -194,45 +169,6 @@ export const EQUIPMENT_DRAW_EXAMPLE: SelectionPoolFamilyExample = {
   createPrompt: EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
   parameters: createBaseParameters("equipment", EQUIPMENT_DRAW_EXAMPLE_OBJECTS),
 };
-
-export const SELECTION_POOL_FAMILY_EXAMPLES: SelectionPoolFamilyExample[] = [
-  TALENT_DRAW_EXAMPLE,
-  EQUIPMENT_DRAW_EXAMPLE,
-];
-
-export function getSelectionPoolExampleById(id: string): SelectionPoolFamilyExample | undefined {
-  return SELECTION_POOL_FAMILY_EXAMPLES.find((example) => example.id === id || example.featureId === id);
-}
-
-export function getSelectionPoolExampleInventoryDefaults(
-  id: string | undefined,
-): NonNullable<SelectionPoolFeatureAuthoringParameters["inventory"]> | undefined {
-  if (!id) {
-    return undefined;
-  }
-
-  return getSelectionPoolExampleById(id)?.inventoryDefaults;
-}
-
-export function getSelectionPoolExampleExpansionObjects(
-  id: string | undefined,
-  targetCount: number,
-): SelectionPoolExampleObject[] | undefined {
-  if (!id) {
-    return undefined;
-  }
-
-  const example = getSelectionPoolExampleById(id);
-  if (!example) {
-    return undefined;
-  }
-
-  if (example.id === TALENT_DRAW_EXAMPLE.id && targetCount === TALENT_DRAW_EXAMPLE_EXPANSION_20.targetCount) {
-    return TALENT_DRAW_EXAMPLE_EXPANSION_20.objects.map((object) => ({ ...object }));
-  }
-
-  return undefined;
-}
 
 export function getSelectionPoolDefaultObjects(
   objectKind: SelectionPoolObjectKind,

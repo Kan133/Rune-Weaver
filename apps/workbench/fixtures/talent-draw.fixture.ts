@@ -1,4 +1,4 @@
-import { TALENT_DRAW_EXAMPLE } from "../../../adapters/dota2/families/selection-pool/examples.js";
+import { TALENT_DRAW_EXAMPLE } from "../../../adapters/dota2/families/selection-pool/__fixtures__/examples.js";
 
 /**
  * Talent Draw Demo Fixture

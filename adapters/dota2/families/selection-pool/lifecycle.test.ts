@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import type { FeatureAuthoring } from "../../../../core/schema/types.js";
 import type { WritePlan } from "../../assembler/index.js";
-import { buildSelectionPoolExampleParameters } from "./examples.js";
+import { buildSelectionPoolExampleParameters } from "./__fixtures__/examples.js";
 import {
   appendSelectionPoolSourceModelEntry,
   resolveSelectionPoolWorkspaceFields,
