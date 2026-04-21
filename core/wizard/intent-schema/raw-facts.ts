@@ -10,6 +10,7 @@ import {
 import type { IntentRawFact, IntentRawFacts } from "./semantic-analysis.js";
 import type { PromptSemanticHints } from "./shared.js";
 import { isRecord, normalizePositiveInteger, normalizePositiveNumber } from "./shared.js";
+import { extractTriggerKeySignal } from "../trigger-key-extraction.js";
 
 interface BuildIntentRawFactsInput {
   candidate: Partial<IntentSchema>;
@@ -37,6 +38,17 @@ export function buildIntentRawFacts(input: BuildIntentRawFactsInput): IntentRawF
     keyMatch?.[1] ? "high" : "medium",
     keyMatch?.[0],
   );
+  const explicitTriggerKeySignal = extractTriggerKeySignal(rawText);
+  if (explicitTriggerKeySignal?.key) {
+    pushRawFact(
+      facts,
+      "prompt.interaction.trigger_key",
+      explicitTriggerKeySignal.key,
+      "prompt_text",
+      "high",
+      explicitTriggerKeySignal.evidenceText,
+    );
+  }
   pushRawFact(
     facts,
     "prompt.interaction.passive",

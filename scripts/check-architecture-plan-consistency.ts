@@ -7,9 +7,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 
 const paths = {
-  intentPlan: path.join(repoRoot, "docs", "INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md"),
-  blueprintProposal: path.join(repoRoot, "docs", "BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md"),
-  blueprintNormalizer: path.join(repoRoot, "docs", "BLUEPRINT-NORMALIZER-PROPOSAL.md"),
+  intentPlan: path.join(repoRoot, "docs", "planning", "intent-blueprint", "INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md"),
+  blueprintProposal: path.join(repoRoot, "docs", "planning", "intent-blueprint", "BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md"),
+  blueprintNormalizer: path.join(repoRoot, "docs", "planning", "intent-blueprint", "BLUEPRINT-NORMALIZER-PROPOSAL.md"),
   moduleNeed: path.join(repoRoot, "docs", "MODULE-NEED-SEAM-PROPOSAL.md"),
   patternPlan: path.join(repoRoot, "docs", "PATTERN-UPDATE-PLAN.md"),
   patternContract: path.join(repoRoot, "docs", "PATTERN-CONTRACT-VNEXT-PROPOSAL.md"),

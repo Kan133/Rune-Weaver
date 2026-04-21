@@ -10,7 +10,10 @@ import type {
   IntentSchema,
   UpdateIntent,
 } from "../../../core/schema/types.js";
+import { analyzeIntentSemanticLayers } from "../../../core/wizard/index.js";
+import type { IntentSemanticAnalysis } from "../../../core/wizard/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
+import { requireGovernedUpdateExecutionView } from "../../../core/blueprint/update-execution-view.js";
 import {
   buildSelectionPoolFillContracts,
   compileSelectionPoolModuleParameters,
@@ -19,6 +22,14 @@ import {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "../families/selection-pool/index.js";
+import { applyGenericWeightedPoolProjection } from "../weighted-pool/index.js";
+import {
+  applyCreateClosureToAdmissionDiagnostics,
+  applyCreateReadinessDecisionToBlueprint,
+  resolveCreateFamilyClosureDecision,
+  resolveCreateReadinessDecision,
+  type CreateReadinessDecision,
+} from "./create-readiness.js";
 
 type SelectionPoolFeatureAuthoring = CoreFeatureAuthoring<
   SelectionPoolFeatureAuthoringParameters,
@@ -38,6 +49,7 @@ export interface Dota2BlueprintEnrichmentResult<TBlueprint extends Blueprint = B
   status: NormalizedBlueprintStatus;
   issues: string[];
   admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
+  createReadinessDecision?: CreateReadinessDecision;
 }
 
 function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
@@ -313,6 +325,7 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
   blueprint: TBlueprint,
   input: {
     schema: IntentSchema;
+    semanticAnalysis?: IntentSemanticAnalysis;
     prompt: string;
     hostRoot: string;
     mode?: "create" | "update" | "regenerate";
@@ -321,6 +334,10 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     proposalSource?: "llm" | "fallback";
   },
 ): Dota2BlueprintEnrichmentResult<TBlueprint> {
+  const semanticAnalysis = input.semanticAnalysis || analyzeIntentSemanticLayers(input.schema, input.prompt, {
+    kind: "dota2-x-template",
+    projectRoot: input.hostRoot,
+  });
   const resolution = resolveSelectionPoolFamily({
     prompt: input.prompt,
     hostRoot: input.hostRoot,
@@ -332,20 +349,36 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
   });
 
   if (!resolution.handled || !resolution.proposal) {
+    const projectedBlueprint = applyGenericWeightedPoolProjection(blueprint, input.schema, {
+      prompt: input.prompt,
+      includeEntries: true,
+    });
+    const createReadinessDecision = resolveCreateReadinessDecision({
+      semanticAnalysis,
+      familyAdmission: resolution.admissionDiagnostics,
+      blueprint: projectedBlueprint,
+    });
     return {
-      blueprint,
-      status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
+      blueprint: applyCreateReadinessDecisionToBlueprint(projectedBlueprint, createReadinessDecision),
+      status: createReadinessDecision.status,
       issues: projectAdmissionIssues(resolution.admissionDiagnostics),
       admissionDiagnostics: resolution.admissionDiagnostics,
+      createReadinessDecision,
     };
   }
 
   if (resolution.blocked) {
-    return {
+    const createReadinessDecision = resolveCreateReadinessDecision({
+      semanticAnalysis,
+      familyAdmission: resolution.admissionDiagnostics,
       blueprint,
-      status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
+    });
+    return {
+      blueprint: applyCreateReadinessDecisionToBlueprint(blueprint, createReadinessDecision),
+      status: createReadinessDecision.status,
       issues: projectAdmissionIssues(resolution.admissionDiagnostics),
       admissionDiagnostics: resolution.admissionDiagnostics,
+      createReadinessDecision,
     };
   }
 
@@ -355,25 +388,52 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     resolution.admissionDiagnostics,
   );
   if (!normalized.featureAuthoring) {
-    return {
+    const createReadinessDecision = resolveCreateReadinessDecision({
+      semanticAnalysis,
+      familyAdmission: normalized.admissionDiagnostics,
       blueprint,
-      status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
+      warnings: normalized.warnings,
+    });
+    return {
+      blueprint: applyCreateReadinessDecisionToBlueprint(blueprint, createReadinessDecision),
+      status: createReadinessDecision.status,
       issues: projectAdmissionIssues(normalized.admissionDiagnostics, normalized.warnings),
       admissionDiagnostics: normalized.admissionDiagnostics,
+      createReadinessDecision,
     };
   }
 
-  const status: NormalizedBlueprintStatus =
-    normalized.warnings.length > 0 || blueprint.status === "weak" || blueprint.status === "blocked"
-      ? "weak"
-      : "ready";
-  const enriched = applySelectionPoolModuleParameters(blueprint, normalized.featureAuthoring, status);
+  const familyProjectedBlueprint = applySelectionPoolModuleParameters(
+    blueprint,
+    normalized.featureAuthoring,
+    "ready",
+  );
+  const closureDecision = resolveCreateFamilyClosureDecision({
+    semanticAnalysis,
+    familyAdmission: normalized.admissionDiagnostics,
+  });
+  const admissionDiagnostics = applyCreateClosureToAdmissionDiagnostics(
+    normalized.admissionDiagnostics,
+    closureDecision,
+  );
+  const createReadinessDecision = resolveCreateReadinessDecision({
+    semanticAnalysis,
+    familyAdmission: admissionDiagnostics,
+    closureDecision,
+    blueprint: familyProjectedBlueprint,
+    warnings: normalized.warnings,
+  });
+  const enriched = applyCreateReadinessDecisionToBlueprint(
+    familyProjectedBlueprint,
+    createReadinessDecision,
+  );
 
   return {
     blueprint: enriched,
-    status,
-    issues: projectAdmissionIssues(normalized.admissionDiagnostics, normalized.warnings),
-    admissionDiagnostics: normalized.admissionDiagnostics,
+    status: createReadinessDecision.status,
+    issues: projectAdmissionIssues(admissionDiagnostics, normalized.warnings),
+    admissionDiagnostics,
+    createReadinessDecision,
   };
 }
 
@@ -383,8 +443,15 @@ export function enrichDota2UpdateBlueprint<TBlueprint extends Blueprint>(
 ): Dota2BlueprintEnrichmentResult<TBlueprint> {
   const currentFeatureAuthoring = updateIntent.currentFeatureContext.featureAuthoring;
   if (!isSelectionPoolFeatureAuthoring(currentFeatureAuthoring)) {
+    const executionView = requireGovernedUpdateExecutionView(
+      updateIntent,
+      "Dota2 update blueprint enrichment",
+    );
     return {
-      blueprint,
+      blueprint: applyGenericWeightedPoolProjection(blueprint, executionView.governedChange, {
+        prompt: executionView.governedChange.request.rawPrompt,
+        includeEntries: false,
+      }),
       status: (blueprint.status || "ready") as NormalizedBlueprintStatus,
       issues: [],
     };
@@ -392,7 +459,6 @@ export function enrichDota2UpdateBlueprint<TBlueprint extends Blueprint>(
 
   const mergedFeatureAuthoring = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
-    requestedChange: updateIntent.requestedChange,
     updateIntent,
   });
   const status: NormalizedBlueprintStatus =

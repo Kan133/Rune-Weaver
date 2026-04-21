@@ -1,6 +1,5 @@
 import type {
   HostDescriptor,
-  IntentClassification,
   IntentCompositionContract,
   IntentContentModelContract,
   IntentEffectContract,

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { FeatureDetail, refreshFeatureAfterUpdate } from "./FeatureDetail";
 import { useFeatureStore } from "@/hooks/useFeatureStore";
+import type { Feature } from "@/types/feature";
 
 const baseFeature = {
   id: "talent_draw_demo",
@@ -59,7 +60,7 @@ function resetStore(featureRevision = 1, generatedFiles = baseFeature.generatedF
         ...baseFeature,
         revision: featureRevision,
         generatedFiles,
-      } as any,
+      } as Feature,
     ],
     selectedFeatureId: baseFeature.id,
     workspace: {

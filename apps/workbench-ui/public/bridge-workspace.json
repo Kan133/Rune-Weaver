@@ -2,678 +2,16 @@
   "workspace": {
     "version": "0.1.0",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:\\rw-test3",
-    "addonName": "rw_test3",
-    "initializedAt": "2026-04-20T08:11:09.830Z",
+    "hostRoot": "D:\\rw-test9",
+    "addonName": "rw_test9",
+    "initializedAt": "2026-04-21T07:43:56.050Z",
     "features": [
       {
-        "featureId": "micro_feature_q74b",
-        "intentKind": "micro-feature",
-        "status": "active",
-        "revision": 1,
-        "blueprintId": "micro_feature_q74b",
-        "modules": [
-          {
-            "moduleId": "mod_typed_ability_shell_definition",
-            "bundleId": "gameplay_ability_mod_typed_ability_shell_definition_1",
-            "role": "gameplay-core",
-            "category": "resource",
-            "sourceKind": "synthesized",
-            "selectedPatternIds": [],
-            "artifactTargets": [
-              "server"
-            ],
-            "ownedPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_q74b_gameplay_ability_mod_typed_ability_shell_definition_1.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "fillContractIds": [],
-            "reviewRequired": true,
-            "implementationStrategy": "exploratory",
-            "maturity": "exploratory",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [
-              "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_q74b_gameplay_ability_mod_typed_ability_shell_definition_1.lua",
-              "game/scripts/npc/npc_abilities_custom.txt"
-            ],
-            "resolvedFrom": "exploratory",
-            "summary": "Synthesized implementation for unresolved module 'resource_pool' via bundle 'gameplay_ability_mod_typed_ability_shell_definition_1'",
-            "requiredOutputs": [
-              "primary hero ability shell definition"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [
-              "micro_feature_q74b_gameplay_ability_mod_typed_ability_shell_definition_1_lua",
-              "micro_feature_q74b_gameplay_ability_mod_typed_ability_shell_definition_1_kv"
-            ],
-            "requiresReview": true,
-            "metadata": {
-              "moduleIds": [
-                "mod_typed_ability_shell_definition"
-              ],
-              "promptPackageId": "synthesis.module",
-              "bundleId": "gameplay_ability_mod_typed_ability_shell_definition_1",
-              "evidenceRefs": [
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::19",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Mapping Table v1",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "| Source pattern / unit class | Typical realization | Notes |\n| --- | --- | --- |\n| `input.key_binding` | `ts` | Custom input capture and trigger orchestration are runtime concerns |\n| `effect.dash` | `kv+ts` | Ability shell often fits static config; dash behavior usually needs r",
-                  "score": 0.3380281690140845,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Mapping Table v1"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::19"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > KV + TS Hybrid Cases",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The following categories should generally bias toward `kv+ts`:\n\n- Dota2 ability shell defined statically, but behavior implemented dynamically\n- modifier registration via host-native naming/config with runtime logic in TS\n- features where the host expects ability or modifier meta",
-                  "score": 0.2676056338028169,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "KV + TS Hybrid Cases"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::9"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::13",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Lua Cases (Narrow Scope — T125)",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "The following may bias toward `lua`:\n\n- ability + modifier patterns where Dota2 VScript is the preferred runtime medium\n- short_time_buff-style mechanics with same-file ability and modifier layout\n- cases where lua metadata schema has been explicitly defined\n\n**Critical boundary*",
-                  "score": 0.2112676056338028,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Lua Cases (Narrow Scope — T125)"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::13"
-                  }
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::6",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > What This Policy Assumes",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "This policy assumes:\n\n- Dota2 host capabilities are known at a coarse level\n- many gameplay properties are host-native and fit KV\n- some runtime behavior clearly requires TS\n- some gameplay features naturally split between static KV shell and runtime TS logic\n- UI remains on the ",
-                  "score": 0.19444444444444445,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "What This Policy Assumes"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::6"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::abilities::README.md::4",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities API > 对 Rune Weaver 的直接价值",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\abilities\\README.md",
-                  "snippet": "- `input.key_binding` 触发后如何接入 ability 逻辑\n- `effect.dash` 这类 server effect 最终落到 ability / unit 调用边界\n- 后续技能绑定、冷却、施法约束时会继续依赖本类知识",
-                  "score": 0.08450704225352113,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities API",
-                      "对 Rune Weaver 的直接价值"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "knowledge::dota2-host::api::abilities::README.md::4"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::abilities::README.md::5",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities API > 当前缺口",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\abilities\\README.md",
-                  "snippet": "- 还没有把 ability 专题切成更细的：\n  - cast\n  - cooldown\n  - behavior\n  - targeting\n\n这是后续 P1 工作，不是当前阻塞项。",
-                  "score": 0.08450704225352113,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities API",
-                      "当前缺口"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "knowledge::dota2-host::api::abilities::README.md::5"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::abilities::README.md::1",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities API > 用途",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\abilities\\README.md",
-                  "snippet": "- 汇总 ability 相关宿主 API\n- 支撑 ability-oriented Pattern 的 host binding\n- 支撑 server 侧写入目标规划",
-                  "score": 0.056338028169014086,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities API",
-                      "用途"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "knowledge::dota2-host::api::abilities::README.md::1"
-                  }
-                },
-                {
-                  "id": "knowledge::dota2-host::api::abilities::README.md::3",
-                  "sourceKind": "curated_host",
-                  "title": "Abilities API > 当前可用方式",
-                  "path": "D:\\Rune Weaver\\knowledge\\dota2-host\\api\\abilities\\README.md",
-                  "snippet": "优先从 `api.json` 中查：\n\n- 以 `CDOTABaseAbility`、`CDOTA_Ability_*`、`CBaseEntity` 为核心的可调用 API\n\n优先从 `api-types.json` 中查：\n\n- ability 相关类型\n- ability 行为、返回值和参数类型",
-                  "score": 0.056338028169014086,
-                  "metadata": {
-                    "headingPath": [
-                      "Abilities API",
-                      "当前可用方式"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "knowledge::dota2-host::api::abilities::README.md::3"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_buff.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Buff.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "Get the owner of the ability responsible for the modifier. | () => CDOTA_BaseNPC | nil",
-                  "symbol": "CDOTA_Buff.GetCaster",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Buff",
-                    "signature": "() => CDOTA_BaseNPC | nil",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdotabaseability.getcaster",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTABaseAbility.GetCaster",
-                  "path": "vscripts/api.json",
-                  "snippet": "Get the owner of this ability. | () => CDOTA_BaseNPC",
-                  "symbol": "CDOTABaseAbility.GetCaster",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTABaseAbility",
-                    "signature": "() => CDOTA_BaseNPC",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.getabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.GetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "() => Vector",
-                  "symbol": "CBaseEntity.GetAbsOrigin",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "() => Vector",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cbaseentity.setabsorigin",
-                  "sourceKind": "raw_reference",
-                  "title": "CBaseEntity.SetAbsOrigin",
-                  "path": "vscripts/api.json",
-                  "snippet": "(origin: Vector) => nil",
-                  "symbol": "CBaseEntity.SetAbsOrigin",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CBaseEntity",
-                    "signature": "(origin: Vector) => nil",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::emitsoundon",
-                  "sourceKind": "raw_reference",
-                  "title": "EmitSoundOn",
-                  "path": "vscripts/api.json",
-                  "snippet": "Play named sound on Entity. | (soundName: string, entity: CBaseEntity) => nil",
-                  "symbol": "EmitSoundOn",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(soundName: string, entity: CBaseEntity) => nil",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_ability_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Ability_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "Cast time finished, spell effects begin. | () => nil",
-                  "symbol": "CDOTA_Ability_Lua.OnSpellStart",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Ability_Lua",
-                    "signature": "() => nil",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdota_item_lua.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTA_Item_Lua.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "Cast time finished, spell effects begin. | () => nil",
-                  "symbol": "CDOTA_Item_Lua.OnSpellStart",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTA_Item_Lua",
-                    "signature": "() => nil",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-member::cdotabaseability.onspellstart",
-                  "sourceKind": "raw_reference",
-                  "title": "CDOTABaseAbility.OnSpellStart",
-                  "path": "vscripts/api.json",
-                  "snippet": "() => nil",
-                  "symbol": "CDOTABaseAbility.OnSpellStart",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "api-member",
-                    "domain": "vscripts",
-                    "containerName": "CDOTABaseAbility",
-                    "signature": "() => nil",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "workspace::evidence::1",
-                  "sourceKind": "workspace_evidence",
-                  "title": "Synthesized bundle context",
-                  "snippet": "bundleId=gameplay_ability_mod_typed_ability_shell_definition_1 | moduleIds=mod_typed_ability_shell_definition"
-                },
-                {
-                  "id": "workspace::evidence::2",
-                  "sourceKind": "workspace_evidence",
-                  "title": "Owned artifact target",
-                  "snippet": "game/scripts/npc/npc_abilities_custom.txt"
-                },
-                {
-                  "id": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21",
-                  "sourceKind": "governance",
-                  "title": "Dota2 Host Realization Policy > Decision Order v1",
-                  "path": "D:\\Rune Weaver\\docs\\hosts\\dota2\\DOTA2-HOST-REALIZATION-POLICY.md",
-                  "snippet": "For each realization unit, Dota2 Host Realization v1 should apply roughly this order:\n\n1. Is the unit clearly a UI surface?\n- if yes, route to `ui`\n\n2. Is the unit clearly expressible as host-native static configuration only?\n- if yes, bias to `kv`\n\n3. Does the unit require custo",
-                  "score": 0.2112676056338028,
-                  "metadata": {
-                    "headingPath": [
-                      "Dota2 Host Realization Policy",
-                      "Decision Order v1"
-                    ],
-                    "headingLevel": 2,
-                    "sourceChunkId": "docs::hosts::dota2::DOTA2-HOST-REALIZATION-POLICY.md::21"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::addfowviewer",
-                  "sourceKind": "raw_reference",
-                  "title": "AddFOWViewer",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID | Add temporary vision for a given team.",
-                  "symbol": "AddFOWViewer",
-                  "score": 3,
-                  "metadata": {
-                    "symbol": "AddFOWViewer",
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(teamId: DOTATeam_t, location: Vector, radius: float, duration: float, obstructedVision: bool) => ViewerID"
-                  }
-                },
-                {
-                  "id": "vscripts/api.json::api-function::anglediff",
-                  "sourceKind": "raw_reference",
-                  "title": "AngleDiff",
-                  "path": "vscripts/api.json",
-                  "snippet": "[vscripts] api-function | sig: (arg1: float, arg2: float) => float | Returns the number of degrees difference between two yaw angles.",
-                  "symbol": "AngleDiff",
-                  "score": 3,
-                  "metadata": {
-                    "symbol": "AngleDiff",
-                    "symbolKind": "api-function",
-                    "domain": "vscripts",
-                    "signature": "(arg1: float, arg2: float) => float"
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_unit_target",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_UNIT_TARGET",
-                  "path": "engine-enums.json",
-                  "snippet": "UNIT_TARGET",
-                  "symbol": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_UNIT_TARGET",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "UNIT_TARGET",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_unit_target",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_UNIT_TARGET",
-                  "path": "panorama/enums.json",
-                  "snippet": "8",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_UNIT_TARGET",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "8",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_unit_target",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_UNIT_TARGET",
-                  "path": "vscripts/enums.json",
-                  "snippet": "8",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_UNIT_TARGET",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "vscripts",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "8",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "panorama/enums.json",
-                  "snippet": "",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "panorama",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum::dota_ability_behavior",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR",
-                  "path": "vscripts/enums.json",
-                  "snippet": "",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "vscripts",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum::abilitybehavior",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior",
-                  "path": "engine-enums.json",
-                  "snippet": "",
-                  "symbol": "AbilityBehavior",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum",
-                    "domain": "engine",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_passive",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_PASSIVE",
-                  "path": "engine-enums.json",
-                  "snippet": "PASSIVE",
-                  "symbol": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_PASSIVE",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "PASSIVE",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_passive",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_PASSIVE",
-                  "path": "panorama/enums.json",
-                  "snippet": "2",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_PASSIVE",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "2",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_passive",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_PASSIVE",
-                  "path": "vscripts/enums.json",
-                  "snippet": "2",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_PASSIVE",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "vscripts",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "2",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "engine-enums.json::enum-member::abilitybehavior.dota_ability_behavior_hidden",
-                  "sourceKind": "raw_reference",
-                  "title": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_HIDDEN",
-                  "path": "engine-enums.json",
-                  "snippet": "HIDDEN",
-                  "symbol": "AbilityBehavior.DOTA_ABILITY_BEHAVIOR_HIDDEN",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "engine",
-                    "containerName": "AbilityBehavior",
-                    "signature": "HIDDEN",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "panorama/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_hidden",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_HIDDEN",
-                  "path": "panorama/enums.json",
-                  "snippet": "1",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_HIDDEN",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "panorama",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "1",
-                    "exact": true
-                  }
-                },
-                {
-                  "id": "vscripts/enums.json::enum-member::dota_ability_behavior.dota_ability_behavior_hidden",
-                  "sourceKind": "raw_reference",
-                  "title": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_HIDDEN",
-                  "path": "vscripts/enums.json",
-                  "snippet": "1",
-                  "symbol": "DOTA_ABILITY_BEHAVIOR.DOTA_ABILITY_BEHAVIOR_HIDDEN",
-                  "score": 200,
-                  "metadata": {
-                    "symbolKind": "enum-member",
-                    "domain": "vscripts",
-                    "containerName": "DOTA_ABILITY_BEHAVIOR",
-                    "signature": "1",
-                    "exact": true
-                  }
-                }
-              ],
-              "assumptions": [
-                "The requested shell name 'placeholder fire ability' is realized as the valid Lua/Dota ability class identifier 'placeholder_fire_ability'.",
-                "A minimal empty class definition satisfies the requirement for a primary hero ability shell definition intended only for later granting.",
-                "No OnSpellStart, intrinsic modifier, upgrade, grant, or auto-application logic is included to preserve the shell-only invariant.",
-                "The required ability shell name is realized as the valid Dota 2 KV identifier placeholder_fire_ability.",
-                "A hidden passive ability satisfies the requirement that no activation key is bound and no player input activates the shell.",
-                "Using ability_datadriven without events, modifiers, or intrinsic modifier declarations preserves shell-only behavior.",
-                "No mana cost, cooldown, cast range, cast point, or targeting fields are included so the shell remains non-activatable and behavior-minimal."
-              ]
-            },
-            "reviewReasons": [
-              "Module 'mod_typed_ability_shell_definition' was synthesized inside bundle 'gameplay_ability_mod_typed_ability_shell_definition_1' because no reusable family/pattern implementation fully matched it.",
-              "Module has no templated pattern backing and remains exploratory."
-            ]
-          }
-        ],
-        "selectedPatterns": [],
-        "generatedFiles": [
-          "game/scripts/vscripts/rune_weaver/abilities/rw_micro_feature_q74b_gameplay_ability_mod_typed_ability_shell_definition_1.lua",
-          "game/scripts/src/rune_weaver/features/micro_feature_q74b/dota2-provider-ability-export.json",
-          "game/scripts/npc/npc_abilities_custom.txt"
-        ],
-        "entryBindings": [
-          {
-            "target": "server",
-            "file": "game/scripts/src/modules/index.ts",
-            "kind": "import"
-          }
-        ],
-        "integrationPoints": [],
-        "gapFillBoundaries": [],
-        "maturity": "exploratory",
-        "implementationStrategy": "exploratory",
-        "featureContract": {
-          "exports": [
-            {
-              "id": "grantable_primary_hero_ability",
-              "kind": "capability",
-              "summary": "Can grant one primary hero ability through the Dota2 host ability surface."
-            }
-          ],
-          "consumes": [
-            {
-              "id": "ability_shell_definition",
-              "kind": "data",
-              "summary": "A single primary hero ability shell definition named placeholder fire ability with no activation or runtime application behavior."
-            }
-          ],
-          "integrationSurfaces": [],
-          "stateScopes": []
-        },
-        "validationStatus": {
-          "status": "needs_review",
-          "warnings": [],
-          "blockers": [],
-          "lastValidatedAt": "2026-04-20T08:59:02.831Z",
-          "blueprint": {
-            "status": "unvalidated",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Blueprint planning-stage validation"
-          },
-          "repair": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-20T08:59:02.831Z"
-          },
-          "dependency": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-20T08:59:02.831Z"
-          },
-          "host": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Host validation",
-            "checkedAt": "2026-04-20T08:59:02.831Z"
-          },
-          "runtime": {
-            "status": "passed",
-            "warnings": [],
-            "blockers": [],
-            "summary": "Runtime validation",
-            "checkedAt": "2026-04-20T08:59:02.831Z"
-          }
-        },
-        "commitDecision": {
-          "outcome": "exploratory",
-          "canAssemble": true,
-          "canWriteHost": true,
-          "requiresReview": true,
-          "reasons": [
-            "[module:mod_typed_ability_shell_definition] Module 'mod_typed_ability_shell_definition' was synthesized inside bundle 'gameplay_ability_mod_typed_ability_shell_definition_1' because no reusable family/pattern implementation fully matched it.",
-            "[module:mod_typed_ability_shell_definition] Module has no templated pattern backing and remains exploratory."
-          ],
-          "stage": "final",
-          "impactedFeatures": [],
-          "dependencyBlockers": [],
-          "downgradedFeatures": [],
-          "reviewModules": [
-            "mod_typed_ability_shell_definition"
-          ]
-        },
-        "createdAt": "2026-04-20T08:59:02.833Z",
-        "updatedAt": "2026-04-20T08:59:02.833Z"
-      },
-      {
-        "featureId": "standalone_system_sp3i",
+        "featureId": "standalone_system_kjki",
         "intentKind": "standalone-system",
         "status": "active",
-        "revision": 8,
-        "blueprintId": "standalone_system_7l9r",
+        "revision": 2,
+        "blueprintId": "standalone_system_tqjn",
         "modules": [
           {
             "moduleId": "selection_input",
@@ -774,7 +112,7 @@
               "server"
             ],
             "ownedPaths": [
-              "game/scripts/src/rune_weaver/generated/server/standalone_system_sp3i_selection_flow_rule_selection_flow.ts"
+              "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts"
             ],
             "fillContractIds": [
               "selection_flow.effect_mapping"
@@ -786,7 +124,7 @@
               "server"
             ],
             "artifactPaths": [
-              "game/scripts/src/rune_weaver/generated/server/standalone_system_sp3i_selection_flow_rule_selection_flow.ts"
+              "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts"
             ],
             "resolvedFrom": "family",
             "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
@@ -823,8 +161,8 @@
               "ui"
             ],
             "ownedPaths": [
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_selection_modal_ui_selection_modal.tsx",
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_selection_modal_ui_selection_modal.less"
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less"
             ],
             "fillContractIds": [
               "ui.selection_modal.payload_adapter"
@@ -836,8 +174,8 @@
               "ui"
             ],
             "artifactPaths": [
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_selection_modal_ui_selection_modal.tsx",
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_selection_modal_ui_selection_modal.less"
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less"
             ],
             "resolvedFrom": "family",
             "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
@@ -864,15 +202,50 @@
           "ui.selection_modal"
         ],
         "generatedFiles": [
-          "game/scripts/src/rune_weaver/generated/server/standalone_system_sp3i_selection_flow_rule_selection_flow.ts",
-          "game/scripts/src/rune_weaver/generated/shared/standalone_system_sp3i_weighted_pool_data_weighted_pool.ts",
-          "game/scripts/src/rune_weaver/generated/server/standalone_system_sp3i_input_trigger_input_key_binding_ability.ts",
-          "game/scripts/src/rune_weaver/generated/server/standalone_system_sp3i_input_trigger_input_key_binding.ts",
-          "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_selection_modal_ui_selection_modal.tsx",
-          "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_selection_modal_ui_selection_modal.less",
-          "content/panorama/src/rune_weaver/generated/ui/standalone_system_sp3i_input_trigger_input_key_binding_emitter.tsx",
-          "game/scripts/src/rune_weaver/features/standalone_system_sp3i/selection-pool.source.json",
-          "game/scripts/src/rune_weaver/features/standalone_system_sp3i/selection-grant-bindings.json"
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/generated/shared/standalone_system_kjki_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding.ts",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json"
+        ],
+        "ownedArtifacts": [
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/shared/standalone_system_kjki_weighted_pool_data_weighted_pool.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding_ability.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_input_trigger_input_key_binding_emitter.tsx"
+          },
+          {
+            "kind": "rw_source_model",
+            "path": "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json",
+            "adapter": "selection_pool",
+            "version": 1
+          }
         ],
         "entryBindings": [
           {
@@ -889,14 +262,14 @@
         "sourceModel": {
           "adapter": "selection_pool",
           "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/standalone_system_sp3i/selection-pool.source.json"
+          "path": "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json"
         },
         "featureAuthoring": {
           "mode": "source-backed",
           "profile": "selection_pool",
           "parameters": {
             "triggerKey": "F4",
-            "choiceCount": 5,
+            "choiceCount": 3,
             "objects": [
               {
                 "id": "SEL_R001",
@@ -939,20 +312,6 @@
                 "description": "+10 All Attributes",
                 "weight": 10,
                 "tier": "UR"
-              },
-              {
-                "id": "SEL_R003",
-                "label": "Selection R003",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "SEL_R004",
-                "label": "Selection R004",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
               }
             ],
             "drawMode": "multiple_without_replacement",
@@ -975,7 +334,7 @@
               "description": "Select one of the following options",
               "inventoryTitle": "Selection Inventory",
               "payloadShape": "card_with_rarity",
-              "minDisplayCount": 5
+              "minDisplayCount": 3
             },
             "placeholderConfig": {
               "id": "empty_selection_slot",
@@ -1065,13 +424,12 @@
           "sourceArtifactRef": {
             "adapter": "selection_pool",
             "version": 1,
-            "path": "game/scripts/src/rune_weaver/features/standalone_system_sp3i/selection-pool.source.json"
+            "path": "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json"
           },
           "notes": [
             "selection_pool proposal seeded from generic family defaults.",
-            "selection_pool update merge was normalized from workspace-backed current feature context and UpdateIntent authority.",
-            "Dota2 selection grant seam appended a local placeholder reward object for cross-feature binding.",
-            "selection_pool update merge restored the requested session-only inventory contract from bounded update authority."
+            "selection_pool update merge was normalized from current feature truth and UpdateIntent authority.",
+            "selection_pool update merge restored the requested session-only inventory contract from UpdateIntent authority."
           ]
         },
         "integrationPoints": [
@@ -1082,91 +440,19 @@
           "weighted_pool.selection_policy",
           "ui.selection_modal.payload_adapter"
         ],
-        "dependsOn": [
-          "micro_feature_q74b"
-        ],
         "maturity": "templated",
         "implementationStrategy": "family",
         "featureContract": {
-          "exports": [
-            {
-              "id": "selection_inventory",
-              "kind": "state",
-              "summary": "Runtime/session inventory of confirmed selected items."
-            },
-            {
-              "id": "selection_trigger_entry",
-              "kind": "integration",
-              "summary": "Reuse the existing F4 trigger entry."
-            },
-            {
-              "id": "selection_modal_surface",
-              "kind": "integration",
-              "summary": "Preserve the existing selection modal for candidate confirmation."
-            },
-            {
-              "id": "inventory_panel_surface",
-              "kind": "integration",
-              "summary": "Add a persistent panel surface for stored items."
-            },
-            {
-              "id": "reward_binding_micro_feature_q74b",
-              "kind": "integration",
-              "summary": "Keep the current reward binding to micro_feature_q74b unchanged."
-            }
-          ],
-          "consumes": [
-            {
-              "id": "inventory_panel_ui",
-              "kind": "capability",
-              "summary": "Provide a persistent panel surface that displays stored drawn items with 16 slots."
-            },
-            {
-              "id": "store_selected_item",
-              "kind": "state",
-              "summary": "Store each confirmed selected item in feature-owned runtime inventory state."
-            },
-            {
-              "id": "weighted_pool",
-              "kind": "capability",
-              "summary": "Consumes dependency via reads"
-            },
-            {
-              "id": "selection_inventory",
-              "kind": "capability",
-              "summary": "Consumes dependency via writes"
-            },
-            {
-              "id": "micro_feature_q74b",
-              "kind": "integration",
-              "summary": "Consumes dependency via syncs-with"
-            },
-            {
-              "id": "grantable_primary_hero_ability",
-              "kind": "capability",
-              "summary": "Consumes a provider feature that can grant one primary hero ability."
-            }
-          ],
-          "integrationSurfaces": [
-            "selection_trigger_entry",
-            "selection_modal_surface",
-            "inventory_panel_surface",
-            "reward_binding_micro_feature_q74b"
-          ],
-          "stateScopes": [
-            {
-              "stateId": "selection_inventory",
-              "scope": "session",
-              "owner": "feature",
-              "summary": "Runtime/session inventory of confirmed selected items."
-            }
-          ]
+          "exports": [],
+          "consumes": [],
+          "integrationSurfaces": [],
+          "stateScopes": []
         },
         "validationStatus": {
           "status": "passed",
           "warnings": [],
           "blockers": [],
-          "lastValidatedAt": "2026-04-20T12:00:02.797Z",
+          "lastValidatedAt": "2026-04-21T07:52:59.942Z",
           "blueprint": {
             "status": "unvalidated",
             "warnings": [],
@@ -1178,65 +464,38 @@
             "warnings": [],
             "blockers": [],
             "summary": "Artifact synthesis",
-            "checkedAt": "2026-04-20T12:00:02.797Z"
+            "checkedAt": "2026-04-21T07:52:59.942Z"
           },
           "repair": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-20T12:00:02.797Z"
+            "checkedAt": "2026-04-21T07:52:59.942Z"
           },
           "dependency": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-20T12:00:02.797Z"
+            "checkedAt": "2026-04-21T07:52:59.942Z"
           },
           "host": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Host validation",
-            "checkedAt": "2026-04-20T12:00:02.797Z"
+            "checkedAt": "2026-04-21T07:52:59.942Z"
           },
           "runtime": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Runtime validation",
-            "checkedAt": "2026-04-20T12:00:02.797Z"
+            "checkedAt": "2026-04-21T07:52:59.942Z"
           }
         },
-        "dependencyEdges": [
-          {
-            "relation": "reads",
-            "targetSurfaceId": "weighted_pool",
-            "required": true,
-            "summary": "same-feature:reads:weighted_pool"
-          },
-          {
-            "relation": "writes",
-            "targetSurfaceId": "selection_inventory",
-            "required": true,
-            "summary": "same-feature:writes:selection_inventory"
-          },
-          {
-            "relation": "syncs_with",
-            "targetFeatureId": "micro_feature_q74b",
-            "targetSurfaceId": "micro_feature_q74b",
-            "required": true,
-            "summary": "cross-feature:syncs-with:micro_feature_q74b"
-          },
-          {
-            "relation": "grants",
-            "targetFeatureId": "micro_feature_q74b",
-            "targetSurfaceId": "grantable_primary_hero_ability",
-            "required": true,
-            "summary": "cross-feature reward grants:micro_feature_q74b:grantable_primary_hero_ability"
-          }
-        ],
+        "dependencyEdges": [],
         "commitDecision": {
           "outcome": "committable",
           "canAssemble": true,
@@ -1249,15 +508,15 @@
           "downgradedFeatures": [],
           "reviewModules": []
         },
-        "createdAt": "2026-04-20T09:00:30.217Z",
-        "updatedAt": "2026-04-20T12:00:02.798Z"
+        "createdAt": "2026-04-21T07:45:51.010Z",
+        "updatedAt": "2026-04-21T07:52:59.943Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-20T12:00:02.800Z",
+    "exportedAt": "2026-04-21T07:52:59.946Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\rw-test3",
+    "sourceHostRoot": "D:\\rw-test9",
     "version": "0.1"
   }
 }

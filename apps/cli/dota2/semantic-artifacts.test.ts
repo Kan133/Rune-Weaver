@@ -4,6 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 import {
+  createPendingSemanticExportStatus,
+  createWrittenSemanticExportStatus,
   saveCreateSemanticArtifacts,
   saveUpdateSemanticArtifacts,
 } from "./semantic-artifacts.js";
@@ -79,6 +81,34 @@ function testCreateWriteExportsFeatureLocalIntentSchema(): void {
     generatedAt: "2026-04-18T00:00:00.000Z",
     blueprint: sampleBlueprint,
     finalBlueprint: sampleFinalBlueprint,
+    semanticAnalysis: {
+      rawFacts: [],
+      governanceDecisions: {} as any,
+      openSemanticResidue: [
+        {
+          id: "unc_local_reward_consequence",
+          summary: "The chosen reward consequence boundary is still unspecified inside the local placeholder profile.",
+          surface: "effect_profile",
+          class: "blueprint_relevant",
+          disposition: "open",
+          affects: ["blueprint"],
+          severity: "medium",
+          targetPaths: ["effects", "outcomes", "parameters"],
+          source: "schema.uncertainty",
+        },
+      ],
+    } as any,
+    createReadinessDecision: {
+      status: "ready",
+      requiresReview: false,
+      remainingResidue: [],
+      closedResidue: [
+        {
+          id: "unc_local_reward_consequence",
+        },
+      ],
+      reasons: [],
+    } as any,
     intentSchema: {
       version: "1.0",
       host: { kind: "dota2-x-template" },
@@ -144,6 +174,20 @@ function testCreateWriteExportsFeatureLocalIntentSchema(): void {
   const payload = JSON.parse(readFileSync(expectedPath, "utf-8"));
   assert.equal(payload.featureId, "talent_draw_demo");
   assert.equal(payload.commandKind, "create");
+  assert.equal(payload.semanticAnalysis.openSemanticResidue[0].surface, "effect_profile");
+  assert.equal(payload.createReadinessDecision.status, "ready");
+}
+
+function testSemanticExportStatusHelpersReflectWrittenState(): void {
+  const pending = createPendingSemanticExportStatus("not yet");
+  assert.equal(pending.written, false);
+  assert.equal(pending.reason, "not yet");
+
+  const written = createWrittenSemanticExportStatus({
+    rootDir: join(tempRoot, "semantic"),
+  });
+  assert.equal(written.written, true);
+  assert.equal(written.rootDir, join(tempRoot, "semantic"));
 }
 
 function testUpdateDryRunExportsReviewMirrorArtifacts(): void {
@@ -242,6 +286,7 @@ function testUpdateDryRunExportsReviewMirrorArtifacts(): void {
 
 try {
   testCreateWriteExportsFeatureLocalIntentSchema();
+  testSemanticExportStatusHelpersReflectWrittenState();
   testUpdateDryRunExportsReviewMirrorArtifacts();
   console.log("apps/cli/dota2/semantic-artifacts.test.ts passed");
 } finally {

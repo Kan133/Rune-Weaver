@@ -4,7 +4,7 @@
  * Executes repair actions based on their kind.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import type {
   PostGenerationRepairAction,
@@ -77,12 +77,6 @@ async function fixLessImports(
 
   const hudStylesPath = join(hostRoot, "content/panorama/src/hud/styles.less");
 
-  if (!existsSync(hudStylesPath)) {
-    result.message = `hud/styles.less not found at ${hudStylesPath}`;
-    result.errors = [result.message];
-    return result;
-  }
-
   try {
     const missingImports = action.data?.missingImports || findMissingLessImports(hostRoot);
 
@@ -92,9 +86,16 @@ async function fixLessImports(
       return result;
     }
 
-    const existingContent = readFileSync(hudStylesPath, "utf-8");
+    const existingContent = existsSync(hudStylesPath)
+      ? readFileSync(hudStylesPath, "utf-8")
+      : "";
+    if (!existsSync(hudStylesPath)) {
+      mkdirSync(join(hostRoot, "content/panorama/src/hud"), { recursive: true });
+    }
     const newImports = missingImports.join("\n");
-    const updatedContent = `${newImports}\n${existingContent}`;
+    const updatedContent = existingContent.trim().length > 0
+      ? `${newImports}\n${existingContent}`
+      : `${newImports}\n`;
 
     writeFileSync(hudStylesPath, updatedContent, "utf-8");
 

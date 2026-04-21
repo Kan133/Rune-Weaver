@@ -20,6 +20,8 @@ import {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "./admission.js";
+import { extractSelectionPoolAdmissionBlockers } from "./diagnostics.js";
+import { detectSelectionPoolFallbackIntent, type DetectSelectionPoolFallbackIntentInput } from "./fallback-detection.js";
 import {
   deriveSelectionPoolCurrentContextHints,
   mergeSelectionPoolFeatureAuthoringForUpdate,
@@ -32,6 +34,7 @@ import {
 } from "./materialization.js";
 
 export type {
+  DetectSelectionPoolFallbackIntentInput,
   FeatureAuthoring,
   FeatureAuthoringNormalizationResult,
   FeatureAuthoringProposal,
@@ -50,7 +53,9 @@ export {
   buildSelectionPoolFillContracts,
   compileSelectionPoolModuleParameters,
   createSelectionPoolLifecycleState,
+  detectSelectionPoolFallbackIntent,
   deriveSelectionPoolCurrentContextHints,
+  extractSelectionPoolAdmissionBlockers,
   getLegacyTalentDrawSourceArtifactRelativePath,
   getSelectionPoolParameterSurface,
   getSelectionPoolSourceArtifactRelativePath,

@@ -13,10 +13,15 @@
  * - 如果某一侧无法验证，明确报告限制
  */
 
-import { exec, execSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
+import { exec } from "child_process";
+import { existsSync } from "fs";
 import { join } from "path";
 import { promisify } from "util";
+import {
+  buildExternalRuntimeDiagnosticLimitation,
+  extractDiagnosticFileFromMessage,
+  partitionRuntimeValidationDiagnostics,
+} from "./runtime-validation-scope.js";
 
 const execAsync = promisify(exec);
 
@@ -128,13 +133,7 @@ export async function validateServerRuntime(
     const output = stdout + stderr;
     if (output && output.trim().length > 0) {
       const parsedErrors = parseTypeScriptErrors(output, hostRoot);
-      result.errors = parsedErrors.errors;
-      result.warnings = parsedErrors.warnings;
-      result.errorCount = result.errors.length;
-
-      if (result.errors.length > 0) {
-        result.success = false;
-      }
+      applyScopedDiagnostics(result, parsedErrors, "server", hostRoot);
     }
 
     result.checkedFiles = findCheckedFiles(runeWeaverDir);
@@ -147,9 +146,8 @@ export async function validateServerRuntime(
     
     const fullOutput = [errorMessage, errorObj.stdout || "", errorObj.stderr || ""].join("\n");
     const parsedErrors = parseTypeScriptErrors(fullOutput, hostRoot);
-    result.errors = parsedErrors.errors;
-    result.warnings = parsedErrors.warnings;
-    result.errorCount = result.errors.length;
+    result.success = true;
+    applyScopedDiagnostics(result, parsedErrors, "server", hostRoot);
 
     if (result.errors.length > 0) {
       result.success = false;
@@ -230,13 +228,7 @@ export async function validateUIRuntime(
     const output = stdout + stderr;
     if (output && output.trim().length > 0) {
       const parsedErrors = parseTypeScriptErrors(output, hostRoot);
-      result.errors = parsedErrors.errors;
-      result.warnings = parsedErrors.warnings;
-      result.errorCount = result.errors.length;
-
-      if (result.errors.length > 0) {
-        result.success = false;
-      }
+      applyScopedDiagnostics(result, parsedErrors, "ui", hostRoot);
     }
 
     result.checkedFiles = findCheckedFiles(runeWeaverDir);
@@ -249,9 +241,8 @@ export async function validateUIRuntime(
     
     const fullOutput = [errorMessage, errorObj.stdout || "", errorObj.stderr || ""].join("\n");
     const parsedErrors = parseTypeScriptErrors(fullOutput, hostRoot);
-    result.errors = parsedErrors.errors;
-    result.warnings = parsedErrors.warnings;
-    result.errorCount = result.errors.length;
+    result.success = true;
+    applyScopedDiagnostics(result, parsedErrors, "ui", hostRoot);
 
     if (result.errors.length > 0) {
       result.success = false;
@@ -349,7 +340,7 @@ function parseTypeScriptErrors(
       const [, code, message] = errorMatch;
 
       errors.push({
-        file: "",
+        file: extractDiagnosticFileFromMessage(message) || "",
         line: 0,
         column: 0,
         code,
@@ -363,7 +354,7 @@ function parseTypeScriptErrors(
       const [, code, message] = errorMatch;
 
       errors.push({
-        file: "",
+        file: extractDiagnosticFileFromMessage(message) || "",
         line: 0,
         column: 0,
         code,
@@ -386,6 +377,33 @@ function parseTypeScriptErrors(
   }
 
   return { errors, warnings };
+}
+
+function applyScopedDiagnostics(
+  result: RuntimeValidationResult,
+  parsedDiagnostics: { errors: ValidationError[]; warnings: ValidationWarning[] },
+  side: "server" | "ui",
+  hostRoot: string,
+): void {
+  const scopedErrors = partitionRuntimeValidationDiagnostics(parsedDiagnostics.errors, side, hostRoot);
+  const scopedWarnings = partitionRuntimeValidationDiagnostics(parsedDiagnostics.warnings, side, hostRoot);
+  const externalLimitation = buildExternalRuntimeDiagnosticLimitation(
+    scopedErrors.external,
+    side,
+    hostRoot,
+  );
+
+  result.errors = scopedErrors.relevant;
+  result.warnings = scopedWarnings.relevant;
+  result.errorCount = scopedErrors.relevant.length;
+
+  if (externalLimitation) {
+    result.limitations.push(externalLimitation);
+  }
+
+  if (result.errorCount > 0) {
+    result.success = false;
+  }
 }
 
 function findCheckedFiles(dir: string): string[] {

@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-20
 > Read when: locating deeper implementation references after the baseline and routing docs are already understood
 > Do not use for: top-level execution authority, replacing routing, or bypassing registry trust checks
 
@@ -45,13 +45,17 @@ They are not the current source of truth for:
 
 - [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
   - current layering and stage boundaries
+- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+  - current Wizard/Blueprint/Assembly contract truth
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+  - current staged clarification and Blueprint continuation boundary
+- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
+  - current LLM placement and non-authority boundary
 - [SYSTEM-ARCHITECTURE-ZH.md](/D:/Rune%20Weaver/docs/SYSTEM-ARCHITECTURE-ZH.md)
   - higher-level product/system architecture reference
 
 ## Blueprint Layer
 
-- [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md)
-  - Blueprint stage responsibility and boundary
 - [BLUEPRINT-PATTERN-RESOLUTION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PATTERN-RESOLUTION.md)
   - Blueprint-to-pattern resolution reference
 - [BLUEPRINT-VALIDATION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-VALIDATION.md)

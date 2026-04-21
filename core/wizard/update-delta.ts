@@ -4,6 +4,10 @@ import type {
   UpdateDeltaItem,
   UpdateIntent,
 } from "../schema/types.js";
+import {
+  extractRequestedTriggerKeyFromPrompt,
+  extractTriggerKeySignal,
+} from "./trigger-key-extraction.js";
 
 function normalizePositiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -78,16 +82,40 @@ function hasExplicitChoiceCountChangeSignal(rawPrompt: string): boolean {
   ].some((pattern) => pattern.test(rawPrompt));
 }
 
-export function readRequestedTriggerKey(requestedChange: IntentSchema): string | undefined {
+function normalizeTriggerKey(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim().toUpperCase()
+    : undefined;
+}
+
+export function readRequestedTriggerKey(
+  requestedChange: IntentSchema,
+  currentTriggerKey?: string,
+): string | undefined {
+  const promptSignal = extractTriggerKeySignal(requestedChange.request.rawPrompt || "");
+  if (promptSignal?.kind === "rebind" && promptSignal.key) {
+    return promptSignal.key;
+  }
+
   const fromParameters = requestedChange.parameters?.triggerKey;
   if (typeof fromParameters === "string" && fromParameters.trim()) {
     return fromParameters.trim().toUpperCase();
   }
 
   const activation = (requestedChange.interaction?.activations || []).find((item) => item.kind === "key");
-  return typeof activation?.input === "string" && activation.input.trim()
-    ? activation.input.trim().toUpperCase()
-    : undefined;
+  if (typeof activation?.input === "string" && activation.input.trim()) {
+    return activation.input.trim().toUpperCase();
+  }
+
+  const promptTriggerKey = extractRequestedTriggerKeyFromPrompt(requestedChange.request.rawPrompt || "");
+  if (promptTriggerKey) {
+    const normalizedCurrentTriggerKey = normalizeTriggerKey(currentTriggerKey);
+    if (!normalizedCurrentTriggerKey || promptTriggerKey !== normalizedCurrentTriggerKey) {
+      return promptTriggerKey;
+    }
+  }
+
+  return promptTriggerKey;
 }
 
 export function readExplicitRequestedChoiceCountChange(requestedChange: IntentSchema): number | undefined {
@@ -159,7 +187,7 @@ export function collectDeterministicUpdateDelta(input: {
     }
   }
 
-  const triggerKey = readRequestedTriggerKey(requestedChange);
+  const triggerKey = readRequestedTriggerKey(requestedChange, boundedFields.triggerKey);
   if (triggerKey && triggerKey !== boundedFields.triggerKey) {
     modify.push({
       path: "input.triggerKey",

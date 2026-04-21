@@ -2,7 +2,7 @@
  * Doctor Command - Rune Weaver Specific Checks
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { validatePostGeneration } from "../../../../adapters/dota2/validator/post-generation-validator.js";
 import type { DoctorCheck } from "./doctor-checks.js";
@@ -131,6 +131,33 @@ function readActiveFeatureCount(hostRoot: string): number | null {
   } catch {
     return null;
   }
+}
+
+function findGeneratedUiLessFiles(hostRoot: string): string[] {
+  const generatedUiRoot = join(hostRoot, "content/panorama/src/rune_weaver/generated/ui");
+  if (!existsSync(generatedUiRoot)) {
+    return [];
+  }
+
+  const files: string[] = [];
+  const stack = [generatedUiRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || !existsSync(current)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.name.endsWith(".less")) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
 }
 
 export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
@@ -272,6 +299,7 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
   const hudEntry = join(hostRoot, "content/panorama/src/hud/script.tsx");
   const hudStyles = join(hostRoot, "content/panorama/src/hud/styles.less");
   const activeFeatureCount = readActiveFeatureCount(hostRoot);
+  const generatedUiLessFiles = findGeneratedUiLessFiles(hostRoot);
   const issues: string[] = [];
 
   if (!existsSync(serverEntry)) {
@@ -300,7 +328,14 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
     issues.push("Missing content/panorama/src/hud/styles.less");
   } else {
     const content = readFileSync(hudStyles, "utf-8");
-    if ((activeFeatureCount ?? 1) > 0 && !content.includes("rune_weaver")) {
+    if (!/\.rune-weaver-root\s*\{/.test(content)) {
+      issues.push("hud/styles.less does not declare .rune-weaver-root");
+    }
+    if (
+      (activeFeatureCount ?? 1) > 0
+      && generatedUiLessFiles.length > 0
+      && !/@import "\.\.\/rune_weaver\/generated\/ui\/[^"]+\.less";/.test(content)
+    ) {
       issues.push("hud/styles.less does not import Rune Weaver styles");
     }
   }

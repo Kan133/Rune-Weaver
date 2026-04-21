@@ -2,7 +2,6 @@ import type {
   DependencyImpactRecord,
   DependencyRevalidationResult,
   FeatureContract,
-  FeatureDependencyEdge,
   ValidationStatus,
 } from "../schema/types.js";
 import type { RuneWeaverFeatureRecord, RuneWeaverWorkspace } from "./types.js";

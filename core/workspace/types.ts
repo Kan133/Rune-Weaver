@@ -34,6 +34,33 @@ export interface FeatureSourceModelRef {
   path: string;
 }
 
+export type ManagedAggregateOwner = "dota2-ability-kv-aggregate";
+
+export type FeatureOwnedArtifact =
+  | {
+      kind: "generated_file";
+      path: string;
+    }
+  | {
+      kind: "rw_source_model";
+      path: string;
+      adapter?: string;
+      version?: number;
+    }
+  | {
+      kind: "ability_kv_fragment";
+      path: string;
+      aggregateTargetPath: string;
+      abilityName: string;
+      scriptFile: string;
+      managedBy: ManagedAggregateOwner;
+    }
+  | {
+      kind: "materialized_aggregate";
+      path: string;
+      managedBy: ManagedAggregateOwner;
+    };
+
 export interface RuneWeaverFeatureRecord {
   featureId: string;
   featureName?: string;
@@ -44,6 +71,7 @@ export interface RuneWeaverFeatureRecord {
   modules?: ModuleImplementationRecord[];
   selectedPatterns: string[];
   generatedFiles: string[];
+  ownedArtifacts?: FeatureOwnedArtifact[];
   entryBindings: EntryBinding[];
   sourceModel?: FeatureSourceModelRef;
   featureAuthoring?: FeatureAuthoring;
@@ -94,6 +122,7 @@ export interface FeatureWriteResult {
   modules?: ModuleImplementationRecord[] | null;
   selectedPatterns: string[];
   generatedFiles: string[];
+  ownedArtifacts?: FeatureOwnedArtifact[];
   entryBindings: EntryBinding[];
   sourceModel?: FeatureSourceModelRef | null;
   featureAuthoring?: FeatureAuthoring | null;

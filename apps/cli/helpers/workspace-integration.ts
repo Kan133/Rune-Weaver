@@ -13,7 +13,7 @@
  */
 
 import type { Blueprint, AssemblyModule, AssemblyPlan } from "../../../core/schema/types.js";
-import type { WritePlan, WritePlanEntry } from "../../../adapters/dota2/assembler/index.js";
+import type { WritePlan } from "../../../adapters/dota2/assembler/index.js";
 import type { WriteResult } from "../../../adapters/dota2/executor/write-executor.js";
 import {
   initializeWorkspace,
@@ -23,7 +23,6 @@ import {
   updateFeatureInWorkspace,
   extractEntryBindings,
   deriveFeatureLifecycleFromModules,
-  RuneWeaverWorkspace,
   RuneWeaverFeatureRecord,
   FeatureWriteResult,
   ModuleImplementationRecord,
@@ -33,6 +32,10 @@ import { resolveDota2GapFillBoundaryIdsForPatterns } from "../../../adapters/dot
 import {
   resolveSelectionPoolWorkspaceFields,
 } from "../../../adapters/dota2/families/selection-pool/index.js";
+import {
+  buildOwnedArtifactsFromWritePlan,
+  buildWritePlanGeneratedFiles,
+} from "../../../adapters/dota2/kv/index.js";
 
 export type FeatureMode = "create" | "update" | "regenerate";
 
@@ -383,13 +386,7 @@ export function updateWorkspaceState(
   if (writeResult && writeResult.success) {
     generatedFiles = [...writeResult.createdFiles, ...writeResult.modifiedFiles];
   } else {
-    const executableEntries = writePlan.entries.filter((e: WritePlanEntry) => !e.deferred);
-    const kvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType === "kv");
-    const nonKvEntriesForWs = executableEntries.filter((e: WritePlanEntry) => e.contentType !== "kv");
-    const kvTargetPathsForWs = new Set(kvEntriesForWs.map((e: WritePlanEntry) => e.targetPath));
-    const aggregatedKvFilesForWs = Array.from(kvTargetPathsForWs);
-    const nonKvFilesForWs = nonKvEntriesForWs.map((e: WritePlanEntry) => e.targetPath);
-    generatedFiles = [...nonKvFilesForWs, ...aggregatedKvFilesForWs];
+    generatedFiles = buildWritePlanGeneratedFiles(writePlan);
   }
 
   const sourceBackedFields = resolveSelectionPoolWorkspaceFields(
@@ -403,6 +400,12 @@ export function updateWorkspaceState(
     modules: modules || existingFeature?.modules || [],
     priorCommitDecision: blueprint.commitDecision || existingFeature?.commitDecision,
   });
+  const ownedArtifacts = buildOwnedArtifactsFromWritePlan({
+    writePlan,
+    sourceModelPath: sourceBackedFields.sourceModel?.path,
+    sourceModelAdapter: sourceBackedFields.sourceModel?.adapter,
+    sourceModelVersion: sourceBackedFields.sourceModel?.version,
+  });
 
   const featureResult: FeatureWriteResult = {
     featureId,
@@ -410,6 +413,7 @@ export function updateWorkspaceState(
     modules,
     selectedPatterns: assemblyPlan.selectedPatterns.map((p) => p.patternId),
     generatedFiles,
+    ownedArtifacts,
     entryBindings,
     sourceModel: sourceBackedFields.sourceModel,
     featureAuthoring: sourceBackedFields.featureAuthoring,

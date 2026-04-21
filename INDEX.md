@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-phase-change
-> Last verified: 2026-04-18
+> Last verified: 2026-04-20
 > Read when: entering the repo and locating the right control docs
 > Do not use for: overriding DOC-STATUS-REGISTRY or AGENT-DOC-ROUTING
 
@@ -79,6 +79,19 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 - [AGENT-DOC-ROUTING.md](/D:/Rune%20Weaver/docs/AGENT-DOC-ROUTING.md)
   - task-based routing guide for which docs agents should read
 
+### Intent / Wizard / Blueprint Surface
+
+- [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+  - current cross-host execution layering and authority boundaries
+- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+  - current Wizard/Blueprint/Assembly contract truth
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+  - current staged clarification and Blueprint continuation boundary
+- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
+  - current LLM placement and non-authority boundary
+- [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md)
+  - Dota2 companion reference after reading the four root docs above
+
 ### Fresh Coordination Inputs
 
 - [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)
@@ -126,16 +139,16 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 - active planning docs should be explicitly marked and must not override the baseline
 - [DOC-GOVERNANCE-AUDIT-2026-04-14.md](/D:/Rune%20Weaver/docs/DOC-GOVERNANCE-AUDIT-2026-04-14.md)
   - documentation cleanup audit for current mainline; planning/reference only
-- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
-  - proposed architecture update for richer intent modeling and bounded blueprint-stage LLM assistance
+- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
+  - residual intent/blueprint planning tracker; planning-only after baseline ratification
 - [MODULE-NEED-SEAM-PROPOSAL.md](/D:/Rune%20Weaver/docs/MODULE-NEED-SEAM-PROPOSAL.md)
   - canonical cross-lane planning seam for normalized blueprint module needs
-- [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-VNEXT-PROPOSAL.md)
-  - proposed typed IntentSchema vNext contract
-- [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md)
-  - proposed `BlueprintProposal` contract and proposal-side authority boundary
-- [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-NORMALIZER-PROPOSAL.md)
-  - proposed deterministic normalization gate and `FinalBlueprint` boundary
+- [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-VNEXT-PROPOSAL.md)
+  - residual typed IntentSchema vNext proposal details
+- [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md)
+  - residual `BlueprintProposal` planning notes
+- [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-NORMALIZER-PROPOSAL.md)
+  - residual normalization planning notes
 - [PATTERN-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/PATTERN-UPDATE-PLAN.md)
   - proposed pattern evolution plan for scale, host-realization routing, and bounded gap fill
 - [PATTERN-CONTRACT-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/PATTERN-CONTRACT-VNEXT-PROPOSAL.md)
@@ -146,6 +159,7 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
   - proposed typed `FillSlot` contract and bounded gap-fill gating
 - [ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md](/D:/Rune%20Weaver/docs/ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md)
   - proposed main-controller boundary for running governance, intent-blueprint, and pattern lanes in parallel
+- comparison-era Wizard/Blueprint contract docs now live in [archive/docs/2026-04-intent-blueprint-doc-governance/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-intent-blueprint-doc-governance/README.md)
 - superseded phase/workbench/UI future-contract docs have been moved to [archive/docs/2026-04-mvp-reset/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-mvp-reset/README.md)
 - superseded packet queue / completion tracker docs have been moved to [archive/docs/2026-04-post-abcd-plan-reset/README.md](/D:/Rune%20Weaver/archive/docs/2026-04-post-abcd-plan-reset/README.md)
 - regenerate / rollback heavy lifecycle contracts
@@ -193,6 +207,8 @@ Rune Weaver does not own:
 
 - [DOCUMENT-GOVERNANCE.md](/D:/Rune%20Weaver/docs/DOCUMENT-GOVERNANCE.md)
 - [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
 - [HOST-INTEGRATION-DOTA2.md](/D:/Rune%20Weaver/docs/hosts/dota2/HOST-INTEGRATION-DOTA2.md)
 - [QA.md](/D:/Rune%20Weaver/docs/QA.md)
 - [ENGINEERING-GUARDRAILS.md](/D:/Rune%20Weaver/docs/ENGINEERING-GUARDRAILS.md)

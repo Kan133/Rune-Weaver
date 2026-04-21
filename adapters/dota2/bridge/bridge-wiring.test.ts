@@ -2,7 +2,12 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { join } from "path";
 import { tmpdir } from "os";
 
-import { injectHostEntryBridge, ensureBridgeFiles, refreshBridge } from "./index.js";
+import {
+  injectHostEntryBridge,
+  ensureBridgeFiles,
+  refreshBridge,
+  shouldMaintainHudStyles,
+} from "./index.js";
 
 function assert(condition: unknown, message: string): void {
   if (!condition) {
@@ -205,6 +210,73 @@ try {
   } finally {
     rmSync(crossFeatureHost, { recursive: true, force: true });
   }
+
+  console.log("Test 7: refreshBridge creates hud/styles.less when generated UI LESS exists on disk even if workspace metadata lags");
+  const missingStylesHost = mkdtempSync(join(tmpdir(), "rw-bridge-styles-"));
+  try {
+    mkdirSync(join(missingStylesHost, "game", "scripts", "src", "modules"), { recursive: true });
+    mkdirSync(join(missingStylesHost, "game", "scripts", "src", "rune_weaver", "generated", "server"), { recursive: true });
+    mkdirSync(join(missingStylesHost, "content", "panorama", "src", "hud"), { recursive: true });
+    mkdirSync(join(missingStylesHost, "content", "panorama", "src", "rune_weaver", "generated", "ui"), { recursive: true });
+    writeFileSync(
+      join(missingStylesHost, "game", "scripts", "src", "modules", "index.ts"),
+      `export function ActivateModules() {\n  print("host activate");\n}\n`,
+      "utf-8",
+    );
+    writeFileSync(
+      join(missingStylesHost, "content", "panorama", "src", "hud", "script.tsx"),
+      `import React from "react";\nimport { render } from "react-panorama-x";\nrender(<Panel />, $.GetContextPanel());\n`,
+      "utf-8",
+    );
+    writeFileSync(
+      join(missingStylesHost, "content", "panorama", "src", "rune_weaver", "generated", "ui", "reward_panel.less"),
+      `.reward-panel { width: 100%; }\n`,
+      "utf-8",
+    );
+
+    const workspace = {
+      version: "0.1.0",
+      hostType: "dota2-x-template",
+      hostRoot: missingStylesHost,
+      addonName: "bridge_styles_test",
+      initializedAt: new Date().toISOString(),
+      features: [
+        {
+          featureId: "ui_reward_demo",
+          status: "active",
+          generatedFiles: [
+            "content/panorama/src/rune_weaver/generated/ui/index.tsx",
+          ],
+        },
+      ],
+    } as any;
+
+    assert(!shouldMaintainHudStyles(workspace.features), "workspace metadata alone should stay quiet when it does not record UI less");
+    const refreshResult = refreshBridge(missingStylesHost, workspace);
+    assert(refreshResult.success, "refreshBridge should succeed when creating hud/styles.less");
+    const hudStylesPath = join(missingStylesHost, "content", "panorama", "src", "hud", "styles.less");
+    const hudStyles = readFileSync(hudStylesPath, "utf-8");
+    assert(hudStyles.includes('@import "../rune_weaver/generated/ui/reward_panel.less";'), "hud styles should import generated ui less");
+    assert(hudStyles.includes(".rune-weaver-root"), "hud styles should include root mount style when generated ui less exists");
+    console.log("✓ Test 7 passed");
+  } finally {
+    rmSync(missingStylesHost, { recursive: true, force: true });
+  }
+
+  console.log("Test 8: generated style requirement stays false when no UI LESS exists");
+  assert(
+    !shouldMaintainHudStyles([
+      {
+        featureId: "no_ui_less_demo",
+        status: "active",
+        generatedFiles: [
+          "game/scripts/src/rune_weaver/generated/server/no_ui_less_demo.ts",
+        ],
+      } as any,
+    ]),
+    "doctor/bridge style checks should stay quiet without generated ui less",
+  );
+  console.log("✓ Test 8 passed");
 
   console.log("=== All tests passed ===");
 } finally {

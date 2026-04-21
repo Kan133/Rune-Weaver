@@ -12,7 +12,20 @@ export const CROSS_FEATURE_SIGNAL_PATTERN =
 export const UI_SIGNAL_PATTERN =
   /ui|modal|dialog|panel|window|cards?|界面|面板|弹窗|窗口|卡牌/iu;
 export const INVENTORY_SIGNAL_PATTERN =
-  /inventory|backpack|storage|stash|persistent panel|仓库|库存|背包|格子|栏位/iu;
+  /inventory|inventory panel|backpack|backpack panel|storage|storage panel|stash|stash panel|persistent panel|仓库|仓库面板|库存|库存面板|背包|背包面板|存储|存储面板|格子|栏位/iu;
+
+const INVENTORY_SLOT_CAPACITY_PATTERN =
+  /(\d+)\s*(?:slots?|格|格子|栏位)/iu;
+const INVENTORY_CONTEXT_CAPACITY_PATTERN =
+  /(?:inventory|panel|storage|stash|capacity|仓库|库存|背包|存储面板|库存面板|仓库面板)(?:\s*(?:to|of|为)?)\s*(\d+)/iu;
+const INVENTORY_MAX_COUNT_PATTERN =
+  /(?:最多|最大|上限|最高|capacity|up to|max(?:imum)?|holds?|hold|supports?|可容纳|容纳)\s*(\d+)\s*(?:个|项|entries?|items?)?/iu;
+const INVENTORY_STORE_SELECTED_PATTERN =
+  /store selected|store the selected|keep selected|selection goes into inventory|selected.*inventory|confirmed.*inventory|显示在仓库|放入仓库|存入仓库/iu;
+const INVENTORY_AUTO_STORE_PATTERN =
+  /(?:(?:selected|confirmed)\s*(?:items?|rewards?|options?|choices?)|(?:drawn|picked)\s*(?:rewards?|options?)|抽取到的(?:选项|奖励)|抽到的(?:选项|奖励)|已抽取的(?:选项|奖励)|已选择的(?:选项|奖励)|奖励|选项).{0,20}(?:自动)?(?:出现在|显示在|加入(?:到|至)?|放入|存入|进入|收纳到|存放到|appear in|show in|added to|go into).{0,20}(?:inventory|backpack|storage|stash|panel|仓库|库存|背包|面板)/iu;
+const INVENTORY_PURPOSE_STORE_PATTERN =
+  /(?:用于|用来|用以|for)\s*(?:存放|保存|收纳|store|keep|hold).{0,20}(?:抽取到的(?:选项|奖励)|抽到的(?:选项|奖励)|已抽取的(?:选项|奖励)|已选择的(?:选项|奖励)|rewards?|options?|choices?|selected items?)/iu;
 
 export function withGlobalFlag(pattern: RegExp): RegExp {
   return new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
@@ -70,8 +83,18 @@ export function hasReturnToPoolSignal(rawText: string): boolean {
 }
 
 export function inferInventoryStoreSelectedItems(rawText: string): boolean {
-  return /store selected|store the selected|keep selected|selection goes into inventory|selected.*inventory|confirmed.*inventory|显示在仓库|放入仓库|存入仓库/iu.test(
-    rawText,
+  return (
+    INVENTORY_STORE_SELECTED_PATTERN.test(rawText) ||
+    (hasInventorySignal(rawText) &&
+      (INVENTORY_AUTO_STORE_PATTERN.test(rawText) || INVENTORY_PURPOSE_STORE_PATTERN.test(rawText)))
+  );
+}
+
+function inferInventoryCapacity(rawText: string): number | undefined {
+  return (
+    extractPromptCount(rawText, INVENTORY_SLOT_CAPACITY_PATTERN) ||
+    extractPromptCount(rawText, INVENTORY_CONTEXT_CAPACITY_PATTERN) ||
+    (hasInventorySignal(rawText) ? extractPromptCount(rawText, INVENTORY_MAX_COUNT_PATTERN) : undefined)
   );
 }
 
@@ -128,14 +151,14 @@ export function collectPromptSemanticHints(rawText: string): PromptSemanticHints
   const candidatePool =
     /candidate|pool|draw|draft|deck|候选池|抽取|抽卡|卡池/iu.test(rawText);
   const playerChoice = /choose|select|pick|选择|选中|三选一|二选一/iu.test(rawText);
-  const rarityDisplay = /weight|weighted|rarity|tier|权重|加权|稀有度/iu.test(rawText);
+  const rarityDisplay =
+    /weight|weighted|rarity|tier|probability|chance|odds|drop rate|权重|加权|稀有度|概率|几率|掉率|掉落率|品级|品阶/iu.test(rawText) ||
+    /\bR\b|\bSR\b|\bSSR\b|\bUR\b/iu.test(rawText);
   const weightedDraw =
-    /weight|weighted|权重|加权/iu.test(rawText) ||
+    /weight|weighted|probability|chance|odds|drop rate|权重|加权|概率|几率|掉率|掉落率/iu.test(rawText) ||
     (rarityDisplay && candidatePool);
   const inventory = hasInventorySignal(rawText);
-  const inventoryCapacity =
-    extractPromptCount(rawText, /(\d+)\s*(?:slots?|格|格子|栏位)/iu) ||
-    extractPromptCount(rawText, /(?:inventory|panel|capacity|容量|仓库)(?:\s*(?:to|of|为)?)\s*(\d+)/iu);
+  const inventoryCapacity = inferInventoryCapacity(rawText);
   const inventoryFullMessageMatch =
     rawText.match(/(?:inventory\s+full|仓库满了|库存已满).*?["“](.+?)["”]/iu) ||
     rawText.match(/["“](.+?)["”].*(?:inventory\s+full|仓库满了|库存已满)/iu);

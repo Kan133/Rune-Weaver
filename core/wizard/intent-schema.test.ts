@@ -5,11 +5,13 @@ import {
   buildWizardMessages,
   createFallbackIntentSchema,
   extractIntentSchemaGovernanceDecisions,
+  finalizeCreateIntentSchema,
   stableIntentGovernanceDecisionFingerprint,
   stableIntentSchemaGovernanceFingerprint,
   normalizeIntentSchema,
   runWizardToIntentSchema,
 } from "./intent-schema.js";
+import { WIZARD_PROVIDER_TIMEOUT_MS } from "./provider-timeout.js";
 
 const host = { kind: "dota2-x-template" as const };
 
@@ -107,6 +109,48 @@ function testCreateFallbackIntentSchemaPreservesWeightedDrawFacts() {
   assert.equal(schema.contentModel?.collections?.[0]?.role, "candidate-options");
 }
 
+function testCreateFallbackIntentSchemaRecognizesRarityProbabilitySignalsWithoutWeightedKeyword() {
+  const schema = createFallbackIntentSchema(
+    "创建一个抽取系统，按下F4跳出三个选项，进行选择后可以应用到玩家英雄身上，选项有R/SR/SSR/UR四种等级，等级区分抽取概率和外观",
+    host,
+  );
+
+  assert.equal(schema.selection?.mode, "weighted");
+  assert.equal(schema.selection?.source, "weighted-pool");
+  assert.equal(schema.selection?.choiceCount, 3);
+  assert.equal(schema.normalizedMechanics?.weightedSelection, true);
+  assert.equal(schema.contentModel?.collections?.[0]?.itemSchema?.some((item) => item.name === "rarity"), true);
+}
+
+function testFinalizeCreateIntentSchemaAppliesDeterministicPromptParameters() {
+  const prompt = "按下F4显示3 choices并让玩家选择一个。";
+  const finalized = finalizeCreateIntentSchema({
+    version: "1.0",
+    host,
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system",
+    },
+    requirements: {
+      functional: [prompt],
+    },
+    constraints: {},
+    normalizedMechanics: {
+      candidatePool: true,
+      weightedSelection: true,
+    },
+    resolvedAssumptions: [],
+  } as IntentSchema, prompt);
+
+  assert.equal(finalized.parameters?.triggerKey, "F4");
+  assert.equal(finalized.parameters?.choiceCount, 3);
+  assert.equal(finalized.normalizedMechanics.trigger, true);
+  assert.equal(finalized.normalizedMechanics.playerChoice, true);
+}
+
 function testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints() {
   const schema = createFallbackIntentSchema(
     "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离。",
@@ -130,6 +174,19 @@ function testCreateFallbackIntentSchemaKeepsRuntimePersistenceSessionLocal() {
   assert.equal(schema.timing?.duration?.kind, "persistent");
   assert.equal(Boolean(schema.composition?.dependencies?.some((dependency) => dependency.kind === "external-system")), false);
   assert.equal(Boolean(schema.stateModel?.states?.some((state) => state.owner === "external")), false);
+}
+
+function testCreateFallbackIntentSchemaRecognizesStoragePanelInventorySemantics() {
+  const schema = createFallbackIntentSchema(
+    "为该抽取系统创建一个16格的存储面板，抽取到的选项会自动出现在面板上。",
+    host,
+  );
+
+  assert.equal(schema.selection?.inventory?.enabled, true);
+  assert.equal(schema.selection?.inventory?.capacity, 16);
+  assert.equal(schema.selection?.inventory?.storeSelectedItems, true);
+  assert.equal(schema.selection?.inventory?.presentation, "persistent_panel");
+  assert.equal(schema.uiRequirements?.surfaces?.includes("inventory_panel"), true);
 }
 
 function testNormalizeIntentSchemaDoesNotInventInventoryDetails() {
@@ -625,6 +682,24 @@ async function testRunWizardToIntentSchemaFallsBackOnProviderFailure() {
   assert.ok(result.issues.some((issue) => issue.code === "WIZARD_GENERIC_FALLBACK"));
 }
 
+async function testRunWizardToIntentSchemaUsesBoundedProviderTimeout() {
+  let capturedTimeoutMs: number | undefined;
+
+  await runWizardToIntentSchema({
+    client: {
+      async generateObject(input) {
+        capturedTimeoutMs = input.timeoutMs;
+        throw new Error("provider offline");
+      },
+    },
+    input: {
+      rawText: "Create a passive aura that gives nearby allies bonus armor.",
+    },
+  });
+
+  assert.equal(capturedTimeoutMs, WIZARD_PROVIDER_TIMEOUT_MS);
+}
+
 async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
   const schemaObject: Partial<IntentSchema> = {
     request: {
@@ -682,8 +757,11 @@ async function runTests() {
   testBuildWizardMessagesExplicitlyBanImplementationAuthority();
   testCreateFallbackIntentSchemaPreservesDashFacts();
   testCreateFallbackIntentSchemaPreservesWeightedDrawFacts();
+  testCreateFallbackIntentSchemaRecognizesRarityProbabilitySignalsWithoutWeightedKeyword();
+  testFinalizeCreateIntentSchemaAppliesDeterministicPromptParameters();
   testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints();
   testCreateFallbackIntentSchemaKeepsRuntimePersistenceSessionLocal();
+  testCreateFallbackIntentSchemaRecognizesStoragePanelInventorySemantics();
   testNormalizeIntentSchemaDoesNotInventInventoryDetails();
   testNormalizeIntentSchemaDropsSelectionShellWhenPromptHasNoSelectionSemantics();
   testNormalizeIntentSchemaCanonicalizesCandidateDrawGovernanceCore();
@@ -693,6 +771,7 @@ async function runTests() {
   testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShell();
   testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency();
   await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
+  await testRunWizardToIntentSchemaUsesBoundedProviderTimeout();
   await testRunWizardToIntentSchemaProducesClarificationSidecar();
   console.log("core/wizard/intent-schema.test.ts passed");
 }

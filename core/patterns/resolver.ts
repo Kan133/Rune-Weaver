@@ -21,7 +21,6 @@ import {
   UnresolvedModuleNeed,
 } from "../schema/types";
 import {
-  getCanonicalPatternMeta,
   getCanonicalPatterns,
   isCanonicalPatternAvailable,
 } from "./canonical-patterns";
@@ -92,10 +91,7 @@ interface CandidatePatternScore {
   matchedOptionalCapabilities: string[];
 }
 
-const MODULE_NEED_FAMILY_HINT = "family";
-
 export function resolvePatterns(blueprint: Blueprint): PatternResolutionResult {
-  const patterns: ResolvedPattern[] = [];
   const unresolved: UnresolvedPattern[] = [];
   const moduleRecords: ModuleImplementationRecord[] = [];
   const unresolvedModuleNeeds: UnresolvedModuleNeed[] = [];

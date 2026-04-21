@@ -191,8 +191,11 @@ function testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk() {
   );
 
   assert.equal(catalogResidue?.class, "bounded_detail_only");
+  assert.equal(catalogResidue?.surface, "candidate_catalog");
   assert.equal(ownerResidue?.class, "governance_relevant");
+  assert.equal(ownerResidue?.surface, "state_scope");
   assert.equal(assumptionResidue?.disposition, "assumed");
+  assert.equal(assumptionResidue?.surface, "state_scope");
 }
 
 function testFallbackAndStructuredPathShareGovernanceCore() {

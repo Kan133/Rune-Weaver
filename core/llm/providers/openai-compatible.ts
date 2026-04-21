@@ -47,7 +47,7 @@ export class OpenAICompatibleClient implements LLMClient {
       ...input.providerOptions,
     };
 
-    const response = await this.postChatCompletions(payload);
+    const response = await this.postChatCompletions(payload, input.timeoutMs);
     const text = extractTextFromResponse(response);
 
     return {
@@ -58,7 +58,7 @@ export class OpenAICompatibleClient implements LLMClient {
   }
 
   async generateObject<T>(
-    input: GenerateObjectInput<T>
+    input: GenerateObjectInput
   ): Promise<GenerateObjectResult<T>> {
     const schemaPrompt = buildObjectSchemaPrompt(
       input.schemaName,
@@ -79,7 +79,7 @@ export class OpenAICompatibleClient implements LLMClient {
       max_tokens: input.maxTokens,
       response_format: { type: "json_object" },
       ...input.providerOptions,
-    });
+    }, input.timeoutMs);
 
     const rawText = extractTextFromResponse(response);
 
@@ -101,12 +101,15 @@ export class OpenAICompatibleClient implements LLMClient {
     }
   }
 
-  protected async postChatCompletions(payload: Record<string, unknown>) {
+  protected async postChatCompletions(
+    payload: Record<string, unknown>,
+    timeoutOverrideMs?: number,
+  ) {
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
     let httpResponse: Response;
     const controller = new AbortController();
-    const timeoutMs = this.config.timeoutMs ?? 30000;
+    const timeoutMs = timeoutOverrideMs ?? this.config.timeoutMs ?? 30000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {

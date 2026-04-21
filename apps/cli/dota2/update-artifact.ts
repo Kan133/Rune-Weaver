@@ -12,6 +12,7 @@ export function createUpdateReviewArtifact(options: Dota2CLIOptions): Dota2Revie
       "artifactSynthesis",
       "assemblyPlan",
       "hostRealization",
+      "generatorRouting",
       "generator",
       "localRepair",
       "dependencyRevalidation",
@@ -61,6 +62,7 @@ export function createUpdateReviewArtifact(options: Dota2CLIOptions): Dota2Revie
     blockers: [],
   };
   artifact.stages.hostRealization = { success: false, units: [], blockers: [] };
+  artifact.stages.generatorRouting = { success: false, routes: [], warnings: [], blockers: [] };
   artifact.stages.generator = { success: false, generatedFiles: [], issues: [] };
   artifact.stages.localRepair = {
     success: true,

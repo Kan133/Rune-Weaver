@@ -34,7 +34,7 @@ export const CANDIDATE_DRAW_CANONICALIZATION_PASS: IntentSchemaCanonicalizationP
     "parameters",
     "openSemanticResidue",
   ],
-  matches(candidate, _context, semanticAnalysis) {
+  matches(_candidate, _context, semanticAnalysis) {
     return semanticAnalysis.governanceDecisions.canonicalizationEligible.value.includes(
       "candidate_draw_governance_core",
     );

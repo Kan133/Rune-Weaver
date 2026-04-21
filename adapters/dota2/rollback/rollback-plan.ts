@@ -9,6 +9,8 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { RuneWeaverFeatureRecord, RuneWeaverWorkspace } from "../../../core/workspace/index.js";
+import { resolveFeatureOwnedArtifacts } from "../kv/owned-artifacts.js";
+import { isAbilityKvAggregatePath } from "../kv/contract.js";
 
 export interface RollbackPlan {
   featureId: string;
@@ -50,14 +52,28 @@ export function generateRollbackPlan(
   const abilityNamesToRemove: string[] = [];
   const bridgeEffectsToRefresh: string[] = [];
 
-  for (const filePath of feature.generatedFiles) {
-    for (const ownedPath of expandRollbackOwnedFiles(filePath)) {
+  for (const artifact of resolveFeatureOwnedArtifacts(feature)) {
+    if (artifact.kind === "materialized_aggregate") {
+      continue;
+    }
+    if (artifact.kind === "generated_file" && isAbilityKvAggregatePath(artifact.path)) {
+      continue;
+    }
+
+    const artifactPaths =
+      artifact.kind === "generated_file"
+        ? expandRollbackOwnedFiles(artifact.path)
+        : [artifact.path];
+    for (const ownedPath of artifactPaths) {
       if (isRwOwnedPath(ownedPath) && !isBridgePoint(ownedPath) && !filesToDelete.includes(ownedPath)) {
         filesToDelete.push(ownedPath);
       }
     }
 
-    const abilityName = extractAbilityName(filePath);
+    const abilityName =
+      artifact.kind === "ability_kv_fragment"
+        ? artifact.abilityName
+        : extractAbilityName(artifact.path);
     if (abilityName && !abilityNamesToRemove.includes(abilityName)) {
       abilityNamesToRemove.push(abilityName);
     }
@@ -144,7 +160,10 @@ export function validateFeatureExclusivity(
         continue;
       }
 
-      if (otherFeature.generatedFiles.includes(filePath)) {
+      const otherOwnedPaths = resolveFeatureOwnedArtifacts(otherFeature)
+        .filter((artifact) => artifact.kind !== "materialized_aggregate")
+        .map((artifact) => artifact.path);
+      if (otherOwnedPaths.includes(filePath)) {
         issues.push(
           `File '${filePath}' is also owned by feature '${otherFeature.featureId}'. ` +
           `Cannot delete files shared with other features.`

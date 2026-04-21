@@ -8,6 +8,7 @@ import type {
   IntentGovernanceDecisions,
   IntentOpenSemanticResidue,
   IntentOpenSemanticResidueItem,
+  IntentSemanticSurface,
   IntentRawFacts,
 } from "./semantic-analysis.js";
 import type { PromptSemanticHints } from "./shared.js";
@@ -70,6 +71,7 @@ export function appendResolvedAssumptionResidue(
     affects?: IntentUncertainty["affects"];
     severity?: IntentUncertainty["severity"];
     source?: IntentOpenSemanticResidueItem["source"];
+    surface?: IntentOpenSemanticResidueItem["surface"];
   },
 ): IntentOpenSemanticResidue {
   const next = [...openSemanticResidue];
@@ -80,10 +82,12 @@ export function appendResolvedAssumptionResidue(
     next.push({
       id: `assumption_${sanitizeResidueId(summary)}`,
       summary,
+      surface: input.surface ?? classifyResidueSurface(summary, input.affects),
       class: input.class ?? "governance_relevant",
       disposition: "assumed",
       affects: input.affects ?? ["intent", "blueprint"],
       severity: input.severity ?? "low",
+      targetPaths: resolveResidueTargetPaths(input.surface ?? classifyResidueSurface(summary, input.affects)),
       source: input.source ?? "canonicalization",
     });
   }
@@ -148,10 +152,12 @@ function normalizeSchemaUncertaintyResidue(
         typeof item.summary === "string" && item.summary.trim()
           ? item.summary
           : "Unspecified uncertainty",
+      surface: classifyResidueSurface(item.summary, item.affects),
       class: classifyResidue(item.summary, item.affects),
       disposition: "open" as const,
       affects: Array.isArray(item.affects) && item.affects.length > 0 ? item.affects : ["intent"],
       severity: item.severity === "low" || item.severity === "medium" || item.severity === "high" ? item.severity : "medium",
+      targetPaths: resolveResidueTargetPaths(classifyResidueSurface(item.summary, item.affects)),
       source: "schema.uncertainty" as const,
     }));
 }
@@ -174,20 +180,26 @@ function normalizeLegacyClarificationResidue(candidate: Partial<IntentSchema>): 
         typeof item.question === "string" && item.question.trim()
           ? item.question.trim()
           : "Legacy clarification signal retained as open semantic residue.",
+      surface: classifyResidueSurface(item.question, ["intent", "blueprint"]),
       class: classifyResidue(item.question, ["intent", "blueprint"]),
       disposition: "open" as const,
       affects: ["intent", "blueprint"] as IntentUncertainty["affects"],
       severity: item.blocksFinalization === true ? ("high" as const) : ("medium" as const),
+      targetPaths: resolveResidueTargetPaths(
+        classifyResidueSurface(item.question, ["intent", "blueprint"]),
+      ),
       source: "legacy.required_clarification" as const,
     }));
 
   const openQuestionResidue = legacyOpenQuestions.map((question, index) => ({
     id: `legacy_open_question_${index + 1}`,
     summary: question,
+    surface: classifyResidueSurface(question, ["intent"]),
     class: classifyResidue(question, ["intent"]),
     disposition: "open" as const,
     affects: ["intent"] as IntentUncertainty["affects"],
     severity: "medium" as const,
+    targetPaths: resolveResidueTargetPaths(classifyResidueSurface(question, ["intent"])),
     source: "legacy.open_question" as const,
   }));
 
@@ -209,10 +221,14 @@ function normalizeResolvedAssumptionResidue(
   return [...normalized].map((summary) => ({
     id: `assumption_${sanitizeResidueId(summary)}`,
     summary,
+    surface: classifyResidueSurface(summary, ["intent", "blueprint"]),
     class: classifyResidue(summary, ["intent", "blueprint"]),
     disposition: "assumed" as const,
     affects: ["intent", "blueprint"] as IntentUncertainty["affects"],
     severity: "low" as const,
+    targetPaths: resolveResidueTargetPaths(
+      classifyResidueSurface(summary, ["intent", "blueprint"]),
+    ),
     source: "schema.resolved_assumption" as const,
   }));
 }
@@ -224,6 +240,7 @@ function dedupeOpenSemanticResidue(
   for (const item of openSemanticResidue) {
     const key = [
       item.summary,
+      item.surface,
       item.class,
       item.disposition,
       item.affects.join(","),
@@ -248,8 +265,17 @@ function classifyResidue(
     return "bounded_detail_only";
   }
 
+  const surface = classifyResidueSurface(summary, affects);
+  if (surface === "candidate_catalog" || surface === "ui_presentation" || surface === "effect_profile") {
+    return "blueprint_relevant";
+  }
+
+  if (surface === "activation" || surface === "state_scope" || surface === "composition_boundary") {
+    return "governance_relevant";
+  }
+
   if (
-    /storage|owner|ownership|persistent|persist|cross-feature|cross feature|external|integrate|which system|state model|boundary|保存|存储|持久|跨功能|外部系统|归属|边界/iu.test(
+    /storage|owner|ownership|owned|session-local|persistent|persist|cross-feature|cross feature|external|integrate|which system|state model|boundary|binding|target[- ]resolution|provider|consumer|保存|存储|持久|跨功能|外部系统|归属|边界|绑定|目标解析|提供者|消费者/iu.test(
       summary,
     )
   ) {
@@ -261,6 +287,65 @@ function classifyResidue(
   }
 
   return "governance_relevant";
+}
+
+function classifyResidueSurface(
+  summary: unknown,
+  affects: IntentUncertainty["affects"] | undefined,
+): IntentSemanticSurface {
+  if (typeof summary === "string" && summary.trim()) {
+    if (/(?:trigger|activation|hotkey|key binding|按键|触发键|触发方式)/iu.test(summary)) {
+      return "activation";
+    }
+
+    if (/(?:cross-feature|cross feature|external system|target feature|target[- ]resolution|deferred binding|binding target|compose|composition|bridge|grant|integration|provider|consumer|跨功能|外部系统|目标功能|目标解析|绑定|提供者|消费者|边界)/iu.test(summary)) {
+      return "composition_boundary";
+    }
+
+    if (/(?:persist|persistence|owner|ownership|owned|session-local|storage|state scope|session scope|inventory capacity|slot|保存|持久|归属|存储|状态范围|库存|仓库)/iu.test(summary)) {
+      return "state_scope";
+    }
+
+    if (/(?:catalog|candidate contents|candidate catalog|option list|icon|label|copy|description|object definition|候选池内容|候选目录|图标|名称|描述)/iu.test(summary)) {
+      return "candidate_catalog";
+    }
+
+    if (/(?:modal|panel|dialog|ui surface|presentation|layout|window|界面|面板|弹窗|展示)/iu.test(summary)) {
+      return "ui_presentation";
+    }
+
+    if (/(?:effect|effect profile|consequence|reward outcome|visual effect|appearance|rarity effect|占位效果|效果|后果|外观)/iu.test(summary)) {
+      return "effect_profile";
+    }
+  }
+
+  if (affects?.includes("blueprint") || affects?.includes("pattern") || affects?.includes("realization")) {
+    return "selection_flow";
+  }
+
+  return "state_scope";
+}
+
+function resolveResidueTargetPaths(
+  surface: IntentSemanticSurface,
+): string[] {
+  switch (surface) {
+    case "activation":
+      return ["interaction.activations", "flow.triggerSummary", "requirements.typed"];
+    case "candidate_catalog":
+      return ["contentModel.collections", "selection", "parameters"];
+    case "ui_presentation":
+      return ["uiRequirements", "integrations.expectedBindings"];
+    case "effect_profile":
+      return ["effects", "outcomes", "parameters"];
+    case "state_scope":
+      return ["stateModel.states", "composition.dependencies"];
+    case "composition_boundary":
+      return ["composition.dependencies", "integrations.expectedBindings"];
+    case "selection_flow":
+    default:
+      return ["selection", "flow", "requirements.typed"];
+  }
 }
 
 function isStructuredCandidateDrawPrompt(promptHints: PromptSemanticHints): boolean {

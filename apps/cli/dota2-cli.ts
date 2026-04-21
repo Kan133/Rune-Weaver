@@ -11,7 +11,7 @@
  *   npm run cli -- dota2 run "<prompt>" --host D:\test1 --force
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -61,7 +61,24 @@ import { shouldUseArtifactSynthesis } from "../../adapters/dota2/synthesis/index
 import { applyDota2GrantSeam } from "../../adapters/dota2/cross-feature/index.js";
 import { resolveReviewArtifactOutputDir } from "./dota2/review-artifacts.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
-import { saveCreateSemanticArtifacts, type SemanticArtifactSummary } from "./dota2/semantic-artifacts.js";
+import {
+  createPendingSemanticExportStatus,
+  createWrittenSemanticExportStatus,
+  saveCreateSemanticArtifacts,
+  type SemanticArtifactSummary,
+} from "./dota2/semantic-artifacts.js";
+import {
+  buildArtifactSynthesisStageFromPlan,
+  buildGeneratorRoutingStage,
+  buildHostRealizationStage,
+} from "./dota2/pipeline/assembly-stage-results.js";
+import {
+  createCreateReviewArtifact,
+  createDota2ReviewArtifactBuilder,
+  persistDota2ReviewArtifact,
+} from "./dota2/pipeline/review-artifact.js";
+import { runPipelineStage } from "./dota2/pipeline/stage-runner.js";
+import { orchestrateValidation } from "./dota2/pipeline/validation-orchestration.js";
 import { runDeleteCommand } from "./dota2/commands/delete.js";
 import { runGapFillCommand } from "./dota2/commands/gap-fill.js";
 import type { GapFillMode } from "../../core/gap-fill/index.js";
@@ -88,7 +105,6 @@ import {
 import type { Dota2BlueprintBuildResult } from "./dota2/planning.js";
 import { executeWrite } from "./dota2/write-executor.js";
 import { runLocalRepairWithLLM } from "../../core/local-repair/index.js";
-import { buildFinalValidationStatus, calculateFinalCommitDecision } from "../../core/pipeline/final-commit-gate.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -98,6 +114,7 @@ export interface Dota2CLIOptions {
   command: "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback" | "delete" | "validate" | "repair" | "doctor" | "demo" | "lifecycle" | "gap-fill";
   prompt: string;
   hostRoot: string;
+  inputProvenance?: CLIInputProvenance;
   featureId?: string;
   scenario?: string;
   boundaryId?: string;
@@ -115,11 +132,25 @@ export interface Dota2CLIOptions {
   mapName?: string;
 }
 
+export interface CLIInputProvenance {
+  requestedSubcommand: string;
+  normalizedCommand: string;
+  promptSource?: "positional" | "--input" | "base64-env";
+  promptHash?: string;
+}
+
+export interface SemanticExportStatus {
+  written: boolean;
+  reason?: string;
+  rootDir?: string;
+}
+
 export interface Dota2ReviewArtifact {
   version: string;
   generatedAt: string;
   commandKind: "creation" | "maintenance";
   applicableStages: string[];
+  inputProvenance?: CLIInputProvenance;
   cliOptions: {
     command: string;
     prompt: string;
@@ -162,6 +193,7 @@ export interface Dota2ReviewArtifact {
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   semanticArtifacts?: SemanticArtifactSummary;
+  semanticExportStatus?: SemanticExportStatus;
   moduleTruth?: {
     totalModules: number;
     sourceBreakdown: { family: number; pattern: number; synthesized: number };
@@ -359,6 +391,7 @@ export function showDota2Help(): void {
 
 命令:
   run        运行完整主链路（默认 dry-run 模式�?
+  create     run 的显式 alias，保留 create 入口但统一走同一条执行链
   dry-run    预演模式，不写入文件
   review     生成 review artifact，不写入文件
   regenerate 重新生成已有 feature
@@ -483,11 +516,7 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
 
   const artifact = await runPipeline(options);
 
-  const outputDir = resolveReviewArtifactOutputDir(options.output);
-  mkdirSync(outputDir, { recursive: true });
-
-  const outputPath = options.output || join(outputDir, `dota2-review-${Date.now()}.json`);
-  writeFileSync(outputPath, JSON.stringify(artifact, null, 2), "utf-8");
+  const outputPath = persistDota2ReviewArtifact(artifact, options);
 
   if (!options.output) {
     console.log(`\n📄 Review artifact saved: ${outputPath}`);
@@ -501,8 +530,18 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
   );
 }
 
-function getIntentSemanticPosture(schema: { uncertainties?: Array<unknown> }): "ready" | "weak" {
-  return (schema.uncertainties?.length || 0) > 0 ? "weak" : "ready";
+function getCreateSemanticPosture(
+  semanticAnalysis: { openSemanticResidue?: Array<{ class: string }> } | undefined,
+): "ready" | "weak" {
+  if (!semanticAnalysis?.openSemanticResidue) {
+    return "weak";
+  }
+
+  return semanticAnalysis.openSemanticResidue.some(
+    (item) => item.disposition === "open" && item.class !== "bounded_detail_only",
+  )
+    ? "weak"
+    : "ready";
 }
 
 function summarizeModuleSources(
@@ -581,73 +620,8 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   console.log(`⚙️  Mode: ${options.dryRun ? "dry-run" : options.write ? (options.force ? "write (force)" : "write") : "dry-run"}`);
   const reviewArtifactOutputDir = resolveReviewArtifactOutputDir(options.output);
 
-  const artifact: Dota2ReviewArtifact = {
-    version: "1.0",
-    generatedAt: new Date().toISOString(),
-    commandKind: "creation",
-    applicableStages: [
-      "intentSchema",
-      "blueprint",
-      "patternResolution",
-      "artifactSynthesis",
-      "assemblyPlan",
-      "hostRealization",
-      "generatorRouting",
-      "generator",
-      "localRepair",
-      "dependencyRevalidation",
-      "finalCommitDecision",
-      "writeExecutor",
-      "hostValidation",
-      "runtimeValidation",
-      "workspaceState"
-    ],
-    cliOptions: {
-      command: options.command,
-      prompt: options.prompt,
-      hostRoot: options.hostRoot,
-      featureId: options.featureId,
-      dryRun: options.dryRun,
-      write: options.write,
-      force: options.force,
-    },
-    input: {
-      rawPrompt: options.prompt,
-      goal: options.prompt,
-    },
-    intentSchema: {
-      usedFallback: false,
-      intentKind: "unknown",
-      uiNeeded: false,
-      mechanics: [],
-    },
-    stages: {
-      intentSchema: { success: false, summary: "", issues: [] },
-      blueprint: { success: false, summary: "", moduleCount: 0, patternHints: [], issues: [] },
-      patternResolution: { success: false, resolvedPatterns: [], unresolvedPatterns: [], issues: [], complete: false },
-      artifactSynthesis: { success: true, triggered: false, artifacts: [], warnings: [], blockers: [], skipped: true },
-      assemblyPlan: { success: false, selectedPatterns: [], writeTargets: [], readyForHostWrite: false, blockers: [] },
-      hostRealization: { success: false, units: [], blockers: [] },
-      generator: { success: false, generatedFiles: [], issues: [] },
-      localRepair: { success: true, triggered: false, attempted: false, repairedTargets: [], warnings: [], blockers: [], skipped: true },
-      dependencyRevalidation: { success: true, impactedFeatures: [], blockers: [], downgradedFeatures: [], compatibleFeatures: [], skipped: true },
-      finalCommitDecision: { success: false, outcome: "blocked", requiresReview: true, reasons: [], reviewModules: [], impactedFeatures: [], dependencyBlockers: [], downgradedFeatures: [], skipped: true },
-      writeExecutor: { success: false, executedActions: 0, skippedActions: 0, failedActions: 0, createdFiles: [], modifiedFiles: [] },
-      hostValidation: { success: false, checks: [], issues: [], details: {} },
-      runtimeValidation: { success: true, serverPassed: true, uiPassed: true, serverErrors: 0, uiErrors: 0, limitations: [] },
-      workspaceState: { success: true, featureId: "", totalFeatures: 0, skipped: true },
-    },
-    finalVerdict: {
-      pipelineComplete: false,
-      completionKind: "partial",
-      weakestStage: "",
-      sufficientForDemo: false,
-      hasUnresolvedPatterns: false,
-      wasForceOverride: false,
-      remainingRisks: [],
-      nextSteps: [],
-    },
-  };
+  const artifact = createCreateReviewArtifact(options);
+  const artifactBuilder = createDota2ReviewArtifactBuilder(artifact);
 
   const featureMode = getFeatureMode(options.command);
   const existingFeatureContext = resolveExistingFeatureContext(
@@ -704,6 +678,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   });
   const {
     schema,
+    semanticAnalysis,
     usedFallback,
     clarificationPlan,
     clarificationAuthority,
@@ -712,7 +687,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   } = intentSchemaResult;
   artifact.stages.intentSchema = {
     success: schema !== null,
-    summary: schema ? `${schema.request.goal} [${getIntentSemanticPosture(schema)}]` : "",
+    summary: schema ? `${schema.request.goal} [${getCreateSemanticPosture(semanticAnalysis || undefined)}]` : "",
     issues: schema ? [`IntentSchema uncertainties: ${schema.uncertainties?.length || 0}`] : [],
     usedFallback,
   };
@@ -721,7 +696,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     usedFallback,
     intentKind: schema?.classification.intentKind || "unknown",
     uiNeeded: schema?.uiRequirements?.needed || false,
-    readiness: schema ? getIntentSemanticPosture(schema) : undefined,
+    readiness: schema ? getCreateSemanticPosture(semanticAnalysis || undefined) : undefined,
     mechanics: schema ? Object.entries(schema.normalizedMechanics)
       .filter(([, v]) => v === true)
       .map(([k]) => k) : [],
@@ -752,12 +727,18 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   artifact.workspaceSemanticContext = workspaceSemanticContext;
 
   if (!schema) {
+    artifact.semanticExportStatus = createPendingSemanticExportStatus(
+      "Semantic artifacts were not written because intent schema generation did not complete.",
+    );
     artifact.finalVerdict.weakestStage = "intentSchema";
     artifact.finalVerdict.remainingRisks = ["Failed to create IntentSchema"];
     return artifact;
   }
 
   if (clarificationAuthority.blocksBlueprint) {
+    artifact.semanticExportStatus = createPendingSemanticExportStatus(
+      "Semantic artifacts were not written because clarification blocked blueprint generation.",
+    );
     artifact.finalVerdict.weakestStage = "intentSchema";
     artifact.finalVerdict.remainingRisks = clarificationAuthority.reasons.length > 0
       ? clarificationAuthority.reasons
@@ -774,11 +755,13 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     status: blueprintStatus,
     moduleNeedsCount,
     admissionDiagnostics,
+    createReadinessDecision,
   }: Dota2BlueprintBuildResult = buildBlueprint(
     schema,
     {
       prompt: options.prompt,
       hostRoot: options.hostRoot,
+      semanticAnalysis: semanticAnalysis || undefined,
       mode: featureMode,
       featureId: options.featureId || existingFeatureContext.feature?.featureId,
       existingFeature: existingFeatureContext.feature,
@@ -813,6 +796,9 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   };
 
   if (!blueprint || !canContinueBlueprint) {
+    artifact.semanticExportStatus = createPendingSemanticExportStatus(
+      "Semantic artifacts were not written because blueprint generation did not produce an assemblable final blueprint.",
+    );
     artifact.finalVerdict.weakestStage = "blueprint";
     artifact.finalVerdict.remainingRisks = blueprintIssues.length > 0
       ? blueprintIssues
@@ -827,19 +813,26 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     blueprintId: blueprint.id,
   });
   try {
-    artifact.semanticArtifacts = saveCreateSemanticArtifacts({
+    const semanticArtifacts = saveCreateSemanticArtifacts({
       hostRoot: options.hostRoot,
       featureId: stableFeatureId,
       dryRun: options.dryRun || !options.write,
       reviewOutputDir: reviewArtifactOutputDir,
       intentSchema: schema,
+      semanticAnalysis: semanticAnalysis || undefined,
+      createReadinessDecision,
       blueprint: blueprintDraft || undefined,
       finalBlueprint: blueprint || undefined,
       commandKind: "create",
       generatedAt: artifact.generatedAt,
     });
+    artifact.semanticArtifacts = semanticArtifacts;
+    artifact.semanticExportStatus = createWrittenSemanticExportStatus(semanticArtifacts);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    artifact.semanticExportStatus = createPendingSemanticExportStatus(
+      `Semantic artifacts failed to export: ${message}`,
+    );
     artifact.finalVerdict.remainingRisks.push(`Failed to export create semantic artifacts: ${message}`);
   }
 
@@ -896,52 +889,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     blockers,
   };
 
-  artifact.stages.artifactSynthesis = plan?.artifactSynthesisResult
-    ? {
-        success: plan.artifactSynthesisResult.success,
-        triggered: true,
-        strategy: plan.artifactSynthesisResult.strategy,
-        sourceKind: plan.artifactSynthesisResult.sourceKind,
-        promptPackageId: plan.artifactSynthesisResult.promptPackageId,
-        artifacts: plan.artifactSynthesisResult.artifacts.map((item) => ({
-          id: item.id,
-          moduleId: item.moduleId,
-          outputKind: item.outputKind,
-          targetPath: item.targetPath,
-          summary: item.summary,
-        })),
-        bundles: buildSynthesisBundleView(plan),
-        moduleBundleMap: buildSynthesisModuleBundleMap(plan),
-        bundleArtifacts: buildSynthesisBundleArtifacts(plan),
-        synthesizedModuleIds: plan.artifactSynthesisResult.moduleResults?.map((item) => item.moduleId) || [],
-        warnings: plan.artifactSynthesisResult.warnings,
-        blockers: plan.artifactSynthesisResult.blockers,
-        retrievalSummary: plan.artifactSynthesisResult.retrievalSummary?.tiersUsed.length
-          ? `${plan.artifactSynthesisResult.retrievalSummary.evidenceCount} refs across tiers ${plan.artifactSynthesisResult.retrievalSummary.tiersUsed.join(", ")}`
-          : undefined,
-        evidenceRefs: plan.artifactSynthesisResult.evidenceRefs?.map((item) => ({
-          title: item.title,
-          sourceKind: item.sourceKind,
-          path: item.path,
-        })),
-        mustNotAddViolations: plan.artifactSynthesisResult.moduleResults?.flatMap((item) => item.mustNotAddViolations || []) || [],
-        grounding: plan.artifactSynthesisResult.grounding?.map((item) => ({
-          artifactId: item.artifactId,
-          verifiedSymbols: item.verifiedSymbols,
-          allowlistedSymbols: item.allowlistedSymbols,
-          weakSymbols: item.weakSymbols,
-          unknownSymbols: item.unknownSymbols,
-          warnings: item.warnings,
-        })),
-      }
-    : {
-        success: true,
-        triggered: false,
-        artifacts: [],
-        warnings: [],
-        blockers: [],
-        skipped: true,
-      };
+  artifact.stages.artifactSynthesis = buildArtifactSynthesisStageFromPlan(plan);
 
   if (!plan) {
     artifact.finalVerdict.weakestStage = "assemblyPlan";
@@ -962,108 +910,68 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   }
 
   // Stage 4.5: Host Realization
-  let hostRealizationPlan: HostRealizationPlan | null = null;
-  try {
-    hostRealizationPlan = realizeDota2Host(plan);
-    console.log("\n" + "=".repeat(70));
-    console.log("Stage 4.5: Host Realization");
-    console.log("=".repeat(70));
-    console.log(summarizeRealization(hostRealizationPlan));
-
-    artifact.stages.hostRealization = {
-      success: hostRealizationPlan.blockers.length === 0,
-      units: hostRealizationPlan.units.map((u) => ({
-        id: u.id,
-        sourceModuleId: u.sourceModuleId,
-        sourcePatternIds: u.sourcePatternIds,
-        sourceKind: u.sourceKind,
-        role: u.role,
-        realizationType: u.realizationType,
-        hostTargets: u.hostTargets,
-        confidence: u.confidence,
-        blockers: u.blockers,
-      })),
-      blockers: hostRealizationPlan.blockers,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(`  �?Host Realization failed: ${message}`);
+  const hostRealizationStage = await runPipelineStage(
+    { id: "hostRealization", label: "Stage 4.5: Host Realization", mode: "create" },
+    () => realizeDota2Host(plan),
+  );
+  if (!hostRealizationStage.ok || !hostRealizationStage.value) {
+    const message = hostRealizationStage.error || "Host realization failed";
+    console.log(`  ❌ Host Realization failed: ${message}`);
     artifact.stages.hostRealization = {
       success: false,
       units: [],
       blockers: [message],
     };
-    artifact.finalVerdict.weakestStage = "hostRealization";
-    artifact.finalVerdict.remainingRisks = [message];
+    artifactBuilder.setFinalVerdict({ weakestStage: "hostRealization" }).addRemainingRisk(message);
     return artifact;
   }
+  const hostRealizationPlan = hostRealizationStage.value;
+  console.log(summarizeRealization(hostRealizationPlan));
+  artifact.stages.hostRealization = buildHostRealizationStage(hostRealizationPlan);
 
   // Stage 4.6: Generator Routing (T115)
   // Routes HostRealizationPlan to concrete generator families
-  let generatorRoutingPlan: GeneratorRoutingPlan | null = null;
-  try {
-    generatorRoutingPlan = generateGeneratorRoutingPlan(hostRealizationPlan);
-    
-    console.log("\n" + "=".repeat(70));
-    console.log("Stage 4.6: Generator Routing");
-    console.log("=".repeat(70));
-    
-    // Summarize routing results
-    const tsRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ts");
-    const uiRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "ui");
-    const kvRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "kv");
-    const luaRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "lua");
-    const bridgeRoutes = generatorRoutingPlan.routes.filter(r => r.routeKind === "bridge");
-    
-    console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
-    console.log(`    - TS routes: ${tsRoutes.length} (${tsRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
-    console.log(`    - UI routes: ${uiRoutes.length} (${uiRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
-    console.log(`    - KV routes: ${kvRoutes.length} (${kvRoutes.filter(r => !r.blockers?.length).length} unblocked, ${kvRoutes.filter(r => r.blockers?.length).length} blocked)`);
-    console.log(`    - Lua routes: ${luaRoutes.length} (${luaRoutes.filter(r => !r.blockers?.length).length} unblocked)`);
-    console.log(`    - Bridge routes: ${bridgeRoutes.length}`);
-    
-    if (generatorRoutingPlan.warnings.length > 0) {
-      console.log(`  Warnings:`);
-      for (const warning of generatorRoutingPlan.warnings) {
-        console.log(`    - ${warning}`);
-      }
-    }
-    
-    if (generatorRoutingPlan.blockers.length > 0) {
-      console.log(`  Blockers:`);
-      for (const blocker of generatorRoutingPlan.blockers) {
-        console.log(`    - ${blocker}`);
-      }
-    }
-    
-    artifact.stages.generatorRouting = {
-      success: generatorRoutingPlan.blockers.length === 0,
-      routes: generatorRoutingPlan.routes.map(r => ({
-        id: r.id,
-        sourceUnitId: r.sourceUnitId,
-        sourceKind: r.sourceKind,
-        generatorFamily: r.generatorFamily,
-        routeKind: r.routeKind,
-        hostTarget: r.hostTarget,
-        rationale: r.rationale,
-        blockers: r.blockers,
-      })),
-      warnings: generatorRoutingPlan.warnings,
-      blockers: generatorRoutingPlan.blockers,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(`  �?Generator Routing failed: ${message}`);
+  const generatorRoutingStage = await runPipelineStage(
+    { id: "generatorRouting", label: "Stage 4.6: Generator Routing", mode: "create" },
+    () => generateGeneratorRoutingPlan(hostRealizationPlan),
+  );
+  if (!generatorRoutingStage.ok || !generatorRoutingStage.value) {
+    const message = generatorRoutingStage.error || "Generator routing failed";
+    console.log(`  ❌ Generator Routing failed: ${message}`);
     artifact.stages.generatorRouting = {
       success: false,
       routes: [],
       warnings: [],
       blockers: [message],
     };
-    artifact.finalVerdict.weakestStage = "generatorRouting";
-    artifact.finalVerdict.remainingRisks = [message];
+    artifactBuilder.setFinalVerdict({ weakestStage: "generatorRouting" }).addRemainingRisk(message);
     return artifact;
   }
+  const generatorRoutingPlan = generatorRoutingStage.value;
+  const tsRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "ts");
+  const uiRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "ui");
+  const kvRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "kv");
+  const luaRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "lua");
+  const bridgeRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "bridge");
+  console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
+  console.log(`    - TS routes: ${tsRoutes.length} (${tsRoutes.filter((route) => !route.blockers?.length).length} unblocked)`);
+  console.log(`    - UI routes: ${uiRoutes.length} (${uiRoutes.filter((route) => !route.blockers?.length).length} unblocked)`);
+  console.log(`    - KV routes: ${kvRoutes.length} (${kvRoutes.filter((route) => !route.blockers?.length).length} unblocked, ${kvRoutes.filter((route) => route.blockers?.length).length} blocked)`);
+  console.log(`    - Lua routes: ${luaRoutes.length} (${luaRoutes.filter((route) => !route.blockers?.length).length} unblocked)`);
+  console.log(`    - Bridge routes: ${bridgeRoutes.length}`);
+  if (generatorRoutingPlan.warnings.length > 0) {
+    console.log("  Warnings:");
+    for (const warning of generatorRoutingPlan.warnings) {
+      console.log(`    - ${warning}`);
+    }
+  }
+  if (generatorRoutingPlan.blockers.length > 0) {
+    console.log("  Blockers:");
+    for (const blocker of generatorRoutingPlan.blockers) {
+      console.log(`    - ${blocker}`);
+    }
+  }
+  artifact.stages.generatorRouting = buildGeneratorRoutingStage(generatorRoutingPlan);
 
   // Stage 5: Generator
   const { writePlan, issues: generatorIssues } = createWritePlan(
@@ -1312,10 +1220,10 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
 
   artifact.stages.runtimeValidation = runtimeValidationResult;
 
-  const finalCommitDecision = calculateFinalCommitDecision({
+  const validationOrchestration = orchestrateValidation({
     blueprint,
-    hostBlockers: hostRealizationPlan?.blockers,
-    routingBlockers: generatorRoutingPlan?.blockers,
+    hostRealizationPlan,
+    generatorRoutingPlan,
     governanceBlockers:
       governanceCheck.hasConflict && governanceCheck.recommendedAction === "block"
         ? governanceCheck.conflicts.map((conflict) => conflict.explanation)
@@ -1326,57 +1234,12 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       warnings: localRepairResult.warnings,
     },
     dependencyRevalidation,
-    hostValidation: {
-      success: hostValidation.success,
-      issues: hostValidation.issues,
-    },
-    runtimeValidation: {
-      success: runtimeValidationResult.success,
-      limitations: runtimeValidationResult.limitations,
-      skipped: runtimeValidationResult.skipped,
-    },
+    hostValidation,
+    runtimeValidation: runtimeValidationResult,
     dryRun: options.dryRun,
   });
-  const finalValidationStatus = buildFinalValidationStatus(
-    blueprint,
-    {
-      blueprint,
-      hostBlockers: hostRealizationPlan?.blockers,
-      routingBlockers: generatorRoutingPlan?.blockers,
-      governanceBlockers:
-        governanceCheck.hasConflict && governanceCheck.recommendedAction === "block"
-          ? governanceCheck.conflicts.map((conflict) => conflict.explanation)
-          : [],
-      localRepair: {
-        success: localRepairResult.success,
-        blockers: localRepairResult.blockers,
-        warnings: localRepairResult.warnings,
-      },
-      dependencyRevalidation,
-      hostValidation: {
-        success: hostValidation.success,
-        issues: hostValidation.issues,
-      },
-      runtimeValidation: {
-        success: runtimeValidationResult.success,
-        limitations: runtimeValidationResult.limitations,
-        skipped: runtimeValidationResult.skipped,
-      },
-      dryRun: options.dryRun,
-    },
-    finalCommitDecision,
-  );
-
-  artifact.stages.finalCommitDecision = {
-    success: finalCommitDecision.outcome !== "blocked",
-    outcome: finalCommitDecision.outcome,
-    requiresReview: finalCommitDecision.requiresReview,
-    reasons: finalCommitDecision.reasons,
-    reviewModules: finalCommitDecision.reviewModules || [],
-    impactedFeatures: finalCommitDecision.impactedFeatures || [],
-    dependencyBlockers: finalCommitDecision.dependencyBlockers || [],
-    downgradedFeatures: finalCommitDecision.downgradedFeatures || [],
-  };
+  const { finalCommitDecision, finalValidationStatus } = validationOrchestration;
+  artifact.stages.finalCommitDecision = validationOrchestration.stageResult;
 
   console.log("\n" + "=".repeat(70));
   console.log("Stage 9: Final Commit Decision");

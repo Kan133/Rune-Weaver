@@ -1,95 +1,59 @@
-// F008: Workspace JSON to Feature Adapter
-// Bridges RuneWeaverWorkspace (from rune-weaver.workspace.json) to frontend Feature type
-// Allows UI to consume real persisted feature records from workspace
+import type { RuneWeaverWorkspace, RuneWeaverFeatureRecord } from '@/types/workspace';
+import type { Feature, Group, FeatureStatus } from '@/types/feature';
+import { deriveFeatureGroupFromWorkspaceRecord } from '@/data/featureGroupProjection';
 
-import type { RuneWeaverWorkspace, RuneWeaverFeatureRecord } from "@/types/workspace";
-import type { Feature, Group, FeatureStatus } from "@/types/feature";
-
-const PATTERN_TO_GAP_FILL_BOUNDARIES: Record<string, string[]> = {
-  "rule.selection_flow": ["selection_flow.effect_mapping"],
-  "data.weighted_pool": ["weighted_pool.selection_policy"],
-  "ui.selection_modal": ["ui.selection_modal.payload_adapter"],
-};
-
-// F008: Convert workspace record status to frontend FeatureStatus
 function mapWorkspaceStatus(status: string): FeatureStatus {
   switch (status) {
-    case "active":
-      return "active";
-    case "disabled":
-    case "archived":
-      return "draft";
-    case "rolled_back":
-      return "error";
+    case 'active':
+      return 'active';
+    case 'disabled':
+    case 'archived':
+      return 'draft';
+    case 'rolled_back':
+      return 'error';
     default:
-      return "draft";
+      return 'unknown';
   }
 }
 
-// F008: Derive group from intentKind or patterns
-function deriveGroup(record: RuneWeaverFeatureRecord): string {
-  const intentKind = record.intentKind?.toLowerCase() || "";
-
-  if (intentKind.includes("ability") || intentKind.includes("skill")) {
-    return "skill";
+function deriveWorkspaceStatusMessage(status: RuneWeaverFeatureRecord['status']): string | null {
+  switch (status) {
+    case 'active':
+      return '功能已激活';
+    case 'disabled':
+      return '功能已禁用';
+    case 'archived':
+      return '功能已归档';
+    case 'rolled_back':
+      return '功能已回滚';
+    default:
+      return null;
   }
-  if (intentKind.includes("hero") || intentKind.includes("unit")) {
-    return "hero";
-  }
-  if (intentKind.includes("system") || intentKind.includes("mechanic")) {
-    return "system";
-  }
-  if (intentKind.includes("item")) {
-    return "item";
-  }
-
-  // Fallback: check patterns
-  const patterns = record.selectedPatterns || [];
-  if (patterns.some((p: string) => p.includes("ability") || p.includes("skill"))) {
-    return "skill";
-  }
-  if (patterns.some((p: string) => p.includes("system"))) {
-    return "system";
-  }
-
-  return "skill"; // Default group
 }
 
-function deriveGapFillBoundaries(record: RuneWeaverFeatureRecord): string[] {
-  if (record.gapFillBoundaries && record.gapFillBoundaries.length > 0) {
-    return record.gapFillBoundaries;
+function deriveWorkspaceWarnings(status: RuneWeaverFeatureRecord['status']): string[] {
+  switch (status) {
+    case 'disabled':
+      return ['功能当前处于禁用状态'];
+    case 'rolled_back':
+      return ['功能当前处于回滚状态'];
+    default:
+      return [];
   }
-
-  const boundaries = new Set<string>();
-  for (const patternId of record.selectedPatterns || []) {
-    for (const boundaryId of PATTERN_TO_GAP_FILL_BOUNDARIES[patternId] || []) {
-      boundaries.add(boundaryId);
-    }
-  }
-  return [...boundaries];
 }
 
-// F008: Convert a single workspace record to Feature
-export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord): Feature {
-  const group = deriveGroup(record);
-
-  // Build review signals from workspace record
-  const hasGeneratedFiles = record.generatedFiles && record.generatedFiles.length > 0;
-  const isActive = record.status === "active";
+export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord, hostType?: string | null): Feature {
+  const isActive = record.status === 'active';
 
   const reviewSignals = {
     proposalStatus: {
       ready: isActive,
-      percentage: isActive ? 100 : record.status === "disabled" ? 50 : 75,
-      message: isActive
-        ? "功能已激活"
-        : record.status === "disabled"
-        ? "功能已禁用"
-        : "功能已回滚",
+      percentage: isActive ? 100 : null,
+      message: deriveWorkspaceStatusMessage(record.status),
     },
     gapFillSummary: {
-      autoFilled: record.selectedPatterns?.length || 0,
-      needsAttention: 0, // Workspace doesn't store gap fill history
+      autoFilled: 0,
+      needsAttention: 0,
     },
     categoryEClarification: {
       count: 0,
@@ -97,8 +61,8 @@ export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord): 
     },
     invalidPatternIds: [],
     readiness: {
-      score: isActive ? 95 : 60,
-      warnings: record.status === "disabled" ? ["功能当前处于禁用状态"] : [],
+      score: null,
+      warnings: deriveWorkspaceWarnings(record.status),
     },
   };
 
@@ -106,63 +70,64 @@ export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord): 
     id: record.featureId,
     displayName: record.featureName || record.featureId,
     systemId: record.featureId,
-    group,
-    parentId: null, // Workspace doesn't store hierarchy yet
+    group: deriveFeatureGroupFromWorkspaceRecord(record),
+    parentId: null,
     childrenIds: record.dependsOn || [],
     status: mapWorkspaceStatus(record.status),
     revision: record.revision,
     updatedAt: new Date(record.updatedAt),
     patterns: record.selectedPatterns || [],
     generatedFiles: record.generatedFiles || [],
-    gapFillBoundaries: deriveGapFillBoundaries(record),
+    gapFillBoundaries: record.gapFillBoundaries || [],
     integrationPoints: record.integrationPoints || [],
     hostRealization: {
-      host: "Dota2",
-      context: record.blueprintId || "",
-      syncStatus: hasGeneratedFiles ? "synced" : "pending",
+      host: hostType || null,
+      context: record.blueprintId || null,
+      syncStatus: 'unknown',
     },
     reviewSignals,
   };
 }
 
-// F008: Convert workspace features to Feature array
 export function adaptWorkspaceToFeatures(workspace: RuneWeaverWorkspace): Feature[] {
-  return workspace.features.map((record: RuneWeaverFeatureRecord) => adaptWorkspaceRecordToFeature(record));
+  return workspace.features.map((record: RuneWeaverFeatureRecord) => adaptWorkspaceRecordToFeature(record, workspace.hostType));
 }
 
-// F008: Derive groups from workspace features
 export function deriveGroupsFromWorkspace(workspace: RuneWeaverWorkspace): Group[] {
   const features = adaptWorkspaceToFeatures(workspace);
   const groupCounts = new Map<string, number>();
 
   features.forEach((feature) => {
-    const count = groupCounts.get(feature.group) || 0;
-    groupCounts.set(feature.group, count + 1);
+    const groupId = feature.group || 'unknown';
+    const count = groupCounts.get(groupId) || 0;
+    groupCounts.set(groupId, count + 1);
   });
 
   const groupNames: Record<string, string> = {
-    skill: "技能",
-    hero: "英雄",
-    system: "系统",
-    item: "物品",
+    skill: '技能',
+    hero: '英雄',
+    system: '系统',
+    item: '物品',
+    unknown: '未知',
   };
 
   const groupIcons: Record<string, string> = {
-    skill: "Zap",
-    hero: "User",
-    system: "Settings",
-    item: "Package",
+    skill: 'Zap',
+    hero: 'User',
+    system: 'Settings',
+    item: 'Package',
+    unknown: 'CircleHelp',
   };
 
   const groups: Group[] = [
-    { id: "all", name: "全部 Features", icon: "Layers", count: features.length },
+    { id: 'all', name: '全部 Features', icon: 'Layers', count: features.length },
   ];
 
   groupCounts.forEach((count, groupId) => {
     groups.push({
       id: groupId,
       name: groupNames[groupId] || groupId,
-      icon: groupIcons[groupId] || "Layers",
+      icon: groupIcons[groupId] || 'Layers',
       count,
     });
   });
@@ -170,7 +135,6 @@ export function deriveGroupsFromWorkspace(workspace: RuneWeaverWorkspace): Group
   return groups;
 }
 
-// F011: Bridge artifact structure from CLI export
 export interface BridgeArtifact {
   workspace: RuneWeaverWorkspace;
   _bridge: {
@@ -181,11 +145,7 @@ export interface BridgeArtifact {
   };
 }
 
-// F008: Load workspace from JSON file (for dev mode)
-// F011: Also handles bridge artifact format from CLI export
-export async function loadWorkspaceFromFile(
-  path: string
-): Promise<RuneWeaverWorkspace | null> {
+export async function loadWorkspaceFromFile(path: string): Promise<RuneWeaverWorkspace | null> {
   try {
     const response = await fetch(path);
     if (!response.ok) {
@@ -194,15 +154,13 @@ export async function loadWorkspaceFromFile(
     }
     const data = await response.json();
 
-    // F011: Detect bridge artifact format (CLI export)
     if (data._bridge && data.workspace) {
-      console.log(`[F011] Loaded bridge artifact from CLI export:`);
+      console.log('[F011] Loaded bridge artifact from CLI export:');
       console.log(`  - Exported at: ${data._bridge.exportedAt}`);
       console.log(`  - Source host: ${data._bridge.sourceHostRoot}`);
       return data.workspace as RuneWeaverWorkspace;
     }
 
-    // Standard workspace format
     return data as RuneWeaverWorkspace;
   } catch (error) {
     console.warn(`[F008] Error loading workspace: ${error}`);
@@ -210,9 +168,8 @@ export async function loadWorkspaceFromFile(
   }
 }
 
-// F011: Load workspace with bridge metadata
 export async function loadWorkspaceWithMeta(
-  path: string
+  path: string,
 ): Promise<{
   workspace: RuneWeaverWorkspace | null;
   bridgeMeta: { exportedAt: string; exportedBy: string; sourceHostRoot: string; version: string } | null;
@@ -225,7 +182,6 @@ export async function loadWorkspaceWithMeta(
     }
     const data = await response.json();
 
-    // F011: Detect bridge artifact format (CLI export)
     if (data._bridge && data.workspace) {
       return {
         workspace: data.workspace as RuneWeaverWorkspace,
@@ -233,7 +189,6 @@ export async function loadWorkspaceWithMeta(
       };
     }
 
-    // Standard workspace format
     return { workspace: data as RuneWeaverWorkspace, bridgeMeta: null };
   } catch (error) {
     console.warn(`[F011] Error loading workspace: ${error}`);
@@ -241,5 +196,4 @@ export async function loadWorkspaceWithMeta(
   }
 }
 
-// F008: Default workspace path for dev mode
-export const DEFAULT_WORKSPACE_PATH = "/sample-workspace.json";
+export const DEFAULT_WORKSPACE_PATH = '/bridge-workspace.json';

@@ -1,19 +1,11 @@
-import type { IntentSchema, UpdateIntent } from "../../../../core/schema/types.js";
-import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/types.js";
+import type { UpdateIntent } from "../../../../core/schema/types.js";
+import { requireGovernedUpdateExecutionView } from "../../../../core/blueprint/update-execution-view.js";
 import {
   coercePositiveInteger,
   dedupeStrings,
   expandObjectPoolToCount,
   getInventoryDefaults,
   normalizeFeatureAuthoringParameters,
-  parseChoiceCount,
-  parseInventoryCapacity,
-  parseQuotedMessage,
-  parseRequestedObjectCount,
-  parseTriggerKey,
-  promptRequestsFullBlock,
-  promptRequestsInventoryContract,
-  promptRequestsStoredSelections,
   resolveSelectionPoolObjectKind,
   resolveSelectionPoolParametersFromFeature,
   type FeatureAuthoring,
@@ -21,184 +13,138 @@ import {
   type SelectionPoolInventoryUpdateRequest,
   type SelectionPoolRequestedUpdate,
 } from "./shared.js";
+import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/types.js";
 
-function getUpdateDeltaRecords(updateIntent: UpdateIntent): Array<Record<string, unknown>> {
+function getUpdateDeltaRecords(updateIntent: UpdateIntent) {
   return [
     ...(updateIntent.delta.add || []),
     ...(updateIntent.delta.modify || []),
-  ].map((item) => item as unknown as Record<string, unknown>);
+    ...(updateIntent.delta.remove || []),
+  ];
 }
 
 function hasDeltaPath(updateIntent: UpdateIntent, matcher: string | RegExp): boolean {
   return getUpdateDeltaRecords(updateIntent).some((item) => {
-    const path = typeof item.path === "string" ? item.path : "";
     if (matcher instanceof RegExp) {
-      return matcher.test(path);
+      return matcher.test(item.path);
     }
-    return path === matcher;
+    return item.path === matcher;
+  });
+}
+
+function findDeltaItem(updateIntent: UpdateIntent, matcher: string | RegExp) {
+  return getUpdateDeltaRecords(updateIntent).find((item) => {
+    if (matcher instanceof RegExp) {
+      return matcher.test(item.path);
+    }
+    return item.path === matcher;
   });
 }
 
 function findDeltaNewValue(updateIntent: UpdateIntent, matcher: string | RegExp): unknown {
-  return getUpdateDeltaRecords(updateIntent).find((item) => {
-    const path = typeof item.path === "string" ? item.path : "";
-    if (matcher instanceof RegExp) {
-      return matcher.test(path);
-    }
-    return path === matcher;
-  })?.newValue;
-}
-
-function collectStructuredTexts(requestedChange: IntentSchema, updateIntent: UpdateIntent): string[] {
-  const deltaTexts = [
-    ...(updateIntent.delta.add || []),
-    ...(updateIntent.delta.modify || []),
-  ].flatMap((item) => [item.path, item.summary].filter((value): value is string => typeof value === "string" && value.trim().length > 0));
-
-  return [
-    requestedChange.request.rawPrompt,
-    requestedChange.request.goal,
-    ...(requestedChange.requirements?.functional || []),
-    ...(requestedChange.requirements?.interactions || []),
-    ...(requestedChange.requirements?.dataNeeds || []),
-    ...(requestedChange.requirements?.outputs || []),
-    ...(requestedChange.constraints?.hostConstraints || []),
-    ...(requestedChange.constraints?.nonFunctional || []),
-    requestedChange.flow?.triggerSummary,
-    ...(requestedChange.flow?.sequence || []),
-    ...(requestedChange.resolvedAssumptions || []),
-    ...(requestedChange.uncertainties || []).map((item) => item.summary),
-    ...deltaTexts,
-  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return findDeltaItem(updateIntent, matcher)?.newValue;
 }
 
 function extractRequestedObjectCountFromUpdateIntent(updateIntent: UpdateIntent): number | undefined {
-  for (const item of getUpdateDeltaRecords(updateIntent)) {
-    const path = typeof item.path === "string" ? item.path : "";
-    if (!path) {
-      continue;
-    }
-    if (/(^|\.)(objectCount)$/.test(path)) {
-      const resolvedCount = coercePositiveInteger(item.newValue);
-      if (typeof resolvedCount === "number") {
-        return resolvedCount;
-      }
-    }
-    if (/(^|\.)(objects)$/.test(path) && Array.isArray(item.newValue)) {
-      const objectCount = item.newValue.length;
-      if (objectCount > 0) {
-        return objectCount;
-      }
-    }
+  const explicitObjectCount = coercePositiveInteger(
+    findDeltaNewValue(updateIntent, /content\.collection\.objectCount$/),
+  );
+  if (typeof explicitObjectCount === "number") {
+    return explicitObjectCount;
   }
-  return undefined;
-}
 
-function resolveRequestedObjectCountForUpdate(
-  requestedChange: IntentSchema,
-  updateIntent: UpdateIntent,
-): number | undefined {
-  const structuredTexts = collectStructuredTexts(requestedChange, updateIntent);
-  return extractRequestedObjectCountFromUpdateIntent(updateIntent)
-    || structuredTexts
-      .map((text) => parseRequestedObjectCount(text))
-      .find((value): value is number => typeof value === "number");
+  return coercePositiveInteger(updateIntent.governedChange?.parameters?.objectCount);
 }
 
 function extractRequestedInventoryUpdate(
   currentFeatureAuthoring: FeatureAuthoring,
-  requestedChange: IntentSchema,
   updateIntent: UpdateIntent,
 ): SelectionPoolInventoryUpdateRequest | undefined {
+  const executionView = requireGovernedUpdateExecutionView(
+    updateIntent,
+    "selection_pool update inventory merge",
+  );
   const existingInventory = currentFeatureAuthoring.parameters.inventory;
-  const structuredTexts = collectStructuredTexts(requestedChange, updateIntent);
-  const explicitCapacity =
-    coercePositiveInteger(findDeltaNewValue(updateIntent, /selection\.inventory\.capacity$/))
-    || (typeof requestedChange.selection?.inventory?.capacity === "number"
-      ? Math.floor(requestedChange.selection.inventory.capacity)
-      : undefined)
-    || structuredTexts
-      .map((text) => parseInventoryCapacity(text))
-      .find((value): value is number => typeof value === "number");
-  const explicitFullMessage =
-    (typeof requestedChange.selection?.inventory?.fullMessage === "string"
-      ? requestedChange.selection.inventory.fullMessage
-      : undefined)
-    || (typeof findDeltaNewValue(updateIntent, /selection\.inventory\.fullMessage$/) === "string"
-      ? String(findDeltaNewValue(updateIntent, /selection\.inventory\.fullMessage$/))
-      : undefined)
-    || structuredTexts
-      .map((text) => parseQuotedMessage(text))
-      .find((value): value is string => typeof value === "string" && value.trim().length > 0);
-  const inventoryPathRequested = hasDeltaPath(updateIntent, /inventory/);
-  const inventoryTextRequested = structuredTexts.some((text) => promptRequestsInventoryContract(text));
-  const inventoryStateRequested = (requestedChange.stateModel?.states || []).some((state) => state.kind === "inventory");
-  const enabled =
-    requestedChange.selection?.inventory?.enabled === true ||
-    inventoryPathRequested ||
-    inventoryTextRequested ||
-    inventoryStateRequested;
+  const governedInventory = executionView.governedChange.selection?.inventory;
+  const inventoryPathRequested = hasDeltaPath(updateIntent, /selection\.inventory/);
+  const inventoryEnabled =
+    governedInventory?.enabled === true ||
+    inventoryPathRequested;
 
-  if (!enabled) {
+  if (!inventoryEnabled) {
     return undefined;
   }
 
-  const storeSelectedItems =
-    requestedChange.selection?.inventory?.storeSelectedItems === true ||
-    structuredTexts.some((text) =>
-      promptRequestsStoredSelections(text) ||
-      /(?:confirmed|selected|chosen).*(?:inventory|storage|stash)|(?:确认|选中|抽取后).*(?:加入|进入|存入|显示在).*(?:库存|仓库|面板)/i.test(text),
-    );
-  const blockDrawWhenFull =
-    requestedChange.selection?.inventory?.blockDrawWhenFull === true ||
-    structuredTexts.some((text) =>
-      promptRequestsFullBlock(text) ||
-      /(?:inventory|storage|库存|仓库|面板).*(?:full|满了|满仓|存满了).*(?:block|cannot draw|不再抽取|不能再抽|抽取无效)/i.test(text),
-    );
-
-  const capacity = explicitCapacity || existingInventory?.capacity;
+  const capacity =
+    coercePositiveInteger(findDeltaNewValue(updateIntent, /selection\.inventory\.capacity$/))
+    || (typeof governedInventory?.capacity === "number"
+      ? Math.floor(governedInventory.capacity)
+      : undefined)
+    || existingInventory?.capacity;
   if (!capacity) {
     return undefined;
   }
 
+  const fullMessage =
+    (typeof findDeltaNewValue(updateIntent, /selection\.inventory\.fullMessage$/) === "string"
+      ? String(findDeltaNewValue(updateIntent, /selection\.inventory\.fullMessage$/))
+      : undefined)
+    || governedInventory?.fullMessage
+    || existingInventory?.fullMessage
+    || getInventoryDefaults().fullMessage;
+  const storeSelectedItems =
+    typeof findDeltaNewValue(updateIntent, /selection\.inventory\.storeSelectedItems$/) === "boolean"
+      ? Boolean(findDeltaNewValue(updateIntent, /selection\.inventory\.storeSelectedItems$/))
+      : governedInventory?.storeSelectedItems === true || existingInventory?.storeSelectedItems === true;
+  const blockDrawWhenFull =
+    typeof findDeltaNewValue(updateIntent, /selection\.inventory\.blockDrawWhenFull$/) === "boolean"
+      ? Boolean(findDeltaNewValue(updateIntent, /selection\.inventory\.blockDrawWhenFull$/))
+      : governedInventory?.blockDrawWhenFull === true || existingInventory?.blockDrawWhenFull === true;
+
   return {
     enabled: true,
     capacity,
-    storeSelectedItems: storeSelectedItems || existingInventory?.storeSelectedItems === true,
-    blockDrawWhenFull: blockDrawWhenFull || existingInventory?.blockDrawWhenFull === true,
-    fullMessage: explicitFullMessage || existingInventory?.fullMessage || getInventoryDefaults().fullMessage,
+    storeSelectedItems,
+    blockDrawWhenFull,
+    fullMessage,
     presentation: "persistent_panel",
   };
 }
 
 function extractRequestedUpdate(
   currentFeatureAuthoring: FeatureAuthoring,
-  requestedChange: IntentSchema,
   updateIntent: UpdateIntent,
 ): SelectionPoolRequestedUpdate {
+  const executionView = requireGovernedUpdateExecutionView(
+    updateIntent,
+    "selection_pool update merge",
+  );
+  const activation = (
+    executionView.governedChange.interaction?.activations
+    || []
+  ).find((item) => item.kind === "key");
   const requestedTriggerKey = hasDeltaPath(updateIntent, "input.triggerKey")
     ? (
       (typeof findDeltaNewValue(updateIntent, "input.triggerKey") === "string"
         ? String(findDeltaNewValue(updateIntent, "input.triggerKey"))
         : undefined)
-      || parseTriggerKey(requestedChange.request.rawPrompt)
+      || (typeof activation?.input === "string" ? activation.input : undefined)
     )
     : undefined;
   const requestedChoiceCount = hasDeltaPath(updateIntent, /selection\.choiceCount$/)
     ? (
-      (typeof requestedChange.selection?.choiceCount === "number" && requestedChange.selection.choiceCount > 0
-        ? Math.floor(requestedChange.selection.choiceCount)
+      coercePositiveInteger(findDeltaNewValue(updateIntent, /selection\.choiceCount$/))
+      || (typeof executionView.governedChange.selection?.choiceCount === "number"
+        ? Math.floor(executionView.governedChange.selection.choiceCount)
         : undefined)
-      || coercePositiveInteger(findDeltaNewValue(updateIntent, /selection\.choiceCount$/))
-      || parseChoiceCount(requestedChange.request.rawPrompt)
     )
     : undefined;
 
   return {
     triggerKey: requestedTriggerKey,
     choiceCount: requestedChoiceCount,
-    objectCount: resolveRequestedObjectCountForUpdate(requestedChange, updateIntent),
-    inventory: extractRequestedInventoryUpdate(currentFeatureAuthoring, requestedChange, updateIntent),
+    objectCount: extractRequestedObjectCountFromUpdateIntent(updateIntent),
+    inventory: extractRequestedInventoryUpdate(currentFeatureAuthoring, updateIntent),
   };
 }
 
@@ -232,7 +178,7 @@ export function deriveSelectionPoolCurrentContextHints(
 }
 
 function currentSelectionPoolInvariants(): string[] {
-  return dedupeStrings([...[
+  return dedupeStrings([
     "single trigger entry only",
     "weighted pool candidate source",
     "confirm exactly one candidate",
@@ -241,15 +187,14 @@ function currentSelectionPoolInvariants(): string[] {
     "no persistence",
     "no cross-feature grants",
     "no arbitrary custom effect family",
-  ]]);
+  ]);
 }
 
 export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
   currentFeatureAuthoring: FeatureAuthoring;
-  requestedChange: IntentSchema;
   updateIntent: UpdateIntent;
 }): FeatureAuthoring {
-  const { currentFeatureAuthoring, requestedChange, updateIntent } = input;
+  const { currentFeatureAuthoring, updateIntent } = input;
   const metadataObjectKind =
     resolveSelectionPoolObjectKind(currentFeatureAuthoring.parameters.objectKind)
     || resolveSelectionPoolObjectKind(currentFeatureAuthoring.objectKind);
@@ -258,7 +203,7 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
     metadataObjectKind,
   );
 
-  const requestedUpdate = extractRequestedUpdate(currentFeatureAuthoring, requestedChange, updateIntent);
+  const requestedUpdate = extractRequestedUpdate(currentFeatureAuthoring, updateIntent);
 
   if (requestedUpdate.triggerKey) {
     merged = normalizeFeatureAuthoringParameters(
@@ -303,9 +248,9 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
 
   const notes = dedupeStrings([
     ...(currentFeatureAuthoring.notes || []),
-    "selection_pool update merge was normalized from workspace-backed current feature context and UpdateIntent authority.",
+    "selection_pool update merge was normalized from current feature truth and UpdateIntent authority.",
     requestedUpdate.inventory
-      ? "selection_pool update merge restored the requested session-only inventory contract from bounded update authority."
+      ? "selection_pool update merge restored the requested session-only inventory contract from UpdateIntent authority."
       : undefined,
   ]);
 

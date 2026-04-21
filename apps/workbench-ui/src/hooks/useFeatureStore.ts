@@ -446,7 +446,7 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
     let features = state.features;
 
     if (state.selectedGroupId !== 'all') {
-      features = features.filter((feature) => feature.group === state.selectedGroupId);
+      features = features.filter((feature) => (feature.group || 'unknown') === state.selectedGroupId);
     }
 
     if (state.searchQuery) {

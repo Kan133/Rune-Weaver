@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 
 import type { Blueprint } from "../../../core/schema/types.js";
 import {
+  ABILITY_KV_AGGREGATE_TARGET_PATH,
+  buildAbilityKvFragmentPath,
+  resolveAbilityKvScriptFile,
+} from "../kv/contract.js";
+import {
   buildSynthesizedAssemblyPlan,
   buildSynthesizedAssemblyPlanWithLLM,
 } from "./index.js";
@@ -258,6 +263,46 @@ function makeNamedShellBlueprint(): Blueprint {
   return blueprint;
 }
 
+function makeNonWritableSupportBlueprint(): Blueprint {
+  return {
+    id: "rw_contract_only_gap",
+    version: "1.0",
+    summary: "A contract-only unresolved module.",
+    sourceIntent: {
+      intentKind: "cross-system-composition",
+      goal: "Wire one cross-feature contract without inventing host runtime shells.",
+    },
+    modules: [
+      {
+        id: "contract_only_bridge",
+        role: "cross_feature_contract",
+        category: "integration",
+        responsibilities: ["Resolve one explicit cross-feature contract artifact."],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: false,
+    implementationStrategy: "exploratory",
+    unresolvedModuleNeeds: [
+      {
+        moduleId: "contract_only_bridge",
+        semanticRole: "cross_feature_contract",
+        category: "integration",
+        reason: "No reusable contract artifact implementation was admitted.",
+        requiredCapabilities: ["cross_feature.contract"],
+        requiredOutputs: ["bridge.artifact"],
+        artifactTargets: ["bridge"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+    ],
+  } as Blueprint;
+}
+
 async function withDisabledLLM<T>(run: () => Promise<T>): Promise<T> {
   const keys = [
     "RW_LLM_PROCESS_ENV_OVERRIDES",
@@ -307,6 +352,16 @@ async function testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPl
   );
   assert.ok(withFallback.synthesis.artifacts.some((artifact) => artifact.hostTarget === "lua_ability"));
   assert.ok(withFallback.synthesis.artifacts.some((artifact) => artifact.hostTarget === "ability_kv"));
+  const kvArtifact = withFallback.synthesis.artifacts.find((artifact) => artifact.outputKind === "kv");
+  assert.ok(kvArtifact);
+  assert.equal(
+    kvArtifact!.targetPath,
+    buildAbilityKvFragmentPath(blueprint.id, "rw_rw_fire_dash_gameplay_ability_fire_dash_core_1"),
+  );
+  assert.equal(kvArtifact!.metadata?.abilityName, "rw_rw_fire_dash_gameplay_ability_fire_dash_core_1");
+  assert.equal(kvArtifact!.metadata?.scriptFile, resolveAbilityKvScriptFile("rw_rw_fire_dash_gameplay_ability_fire_dash_core_1"));
+  assert.equal(kvArtifact!.metadata?.aggregateTargetPath, ABILITY_KV_AGGREGATE_TARGET_PATH);
+  assert.equal(kvArtifact!.metadata?.kvArtifactKind, "fragment");
   assert.ok((withFallback.synthesis.grounding || []).length >= 2);
   assert.equal(
     (withFallback.synthesis.grounding || []).every((item) => item.unknownSymbols.length === 0),
@@ -388,10 +443,24 @@ function testBuildSynthesizedAssemblyPlanUsesSanitizedExplicitAbilityName(): voi
   assert.ok(kvArtifact?.content.includes('"ScriptFile"               "rune_weaver/abilities/placeholder_fire_ability"'));
 }
 
+function testBuildSynthesizedAssemblyPlanDoesNotInventWritableShellsForContractOnlyNeeds(): void {
+  const blueprint = makeNonWritableSupportBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+
+  assert.equal(result.synthesis.artifacts.length, 0);
+  assert.equal(result.plan.writeTargets.length, 0);
+  assert.equal(result.synthesis.moduleRecords.length, 0);
+  assert.equal(result.synthesis.unresolvedModuleNeeds.length, 1);
+  assert.ok(
+    result.synthesis.blockers.some((blocker) => blocker.includes("cannot invent bridge ownership")),
+  );
+}
+
 async function runTests() {
   testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility();
   testBuildSynthesizedAssemblyPlanPreservesBackboneTruth();
   testBuildSynthesizedAssemblyPlanUsesSanitizedExplicitAbilityName();
+  testBuildSynthesizedAssemblyPlanDoesNotInventWritableShellsForContractOnlyNeeds();
   await testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPlan();
   await testGroundingIgnoresLocallyDefinedLuaHelpers();
   console.log("adapters/dota2/synthesis/index.test.ts passed");

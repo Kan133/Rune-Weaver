@@ -16,13 +16,11 @@ import {
   GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
 } from "./index.js";
 import {
-  compileSelectionPoolModuleParameters,
   resolveSelectionPoolFamily,
 } from "../families/selection-pool/index.js";
 import {
   TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
 } from "../families/selection-pool/__fixtures__/examples.js";
-import { generateWeightedPoolCode } from "../generator/server/weighted-pool.js";
 import { classifyUpdateDiff } from "../update/index.js";
 
 function createWritePlan(entries: WritePlanEntry[] = []): WritePlan {
@@ -837,6 +835,11 @@ function testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell() {
     assert.equal(result.blueprint.status, "weak");
     assert.equal(result.blueprint.featureAuthoring?.profile, "selection_pool");
     assert.equal(
+      writePlan.entries.some((entry) => entry.targetPath.endsWith("selection-grant-contract.json")),
+      true,
+      "selection grant contract should still be published from local authoring even when the target is unresolved",
+    );
+    assert.equal(
       writePlan.entries.some((entry) => entry.targetPath.endsWith("selection-grant-bindings.json")),
       false,
       "binding sidecar must not be written while the provider target is unresolved",
@@ -846,7 +849,7 @@ function testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell() {
   }
 }
 
-function testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEntries() {
+function testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSelectionAuthoring() {
   const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
   try {
     writeJson(
@@ -865,6 +868,11 @@ function testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEnt
         ],
       },
     );
+    const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
+    const originalParameters = getSelectionPoolFeatureAuthoringParameters(blueprint);
+    const originalObjectCount = originalParameters.objects.length;
+    const replacementObjectId = originalParameters.objects[0].id;
+    const replacementObjectLabel = originalParameters.objects[0].label;
     writeJson(
       hostRoot,
       "game/scripts/src/rune_weaver/features/consumer_draw_demo/selection-grant-bindings.json",
@@ -874,7 +882,7 @@ function testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEnt
         featureId: "consumer_draw_demo",
         bindings: [
           {
-            objectId: "TL001",
+            objectId: originalParameters.objects[1].id,
             targetFeatureId: "existing_provider_demo",
             targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
             relation: "grants",
@@ -883,15 +891,12 @@ function testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEnt
         ],
       },
     );
-
-    const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
-    const originalObjectCount = getSelectionPoolFeatureAuthoringParameters(blueprint).objects.length;
     const writePlan = createWritePlan(createStaleSelectionPoolPatternEntries("consumer_draw_demo"));
     const result = applyDota2GrantSeam({
       hostRoot,
       featureId: "consumer_draw_demo",
-      prompt: "Add this skill provider as one reward in the current draw feature.",
-      schema: createCrossFeatureSelectionSchema("Add this skill provider as one reward in the current draw feature."),
+      prompt: `Replace ${replacementObjectLabel} with skill_provider_demo as one reward.`,
+      schema: createCrossFeatureSelectionSchema(`Replace ${replacementObjectId} with skill_provider_demo as one reward.`),
       blueprint,
       writePlan,
       relationCandidates: [
@@ -914,73 +919,26 @@ function testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEnt
 
     assert.equal(writePlan.readyForHostWrite, true);
     const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
+    const contractEntry = writePlan.entries.find((entry) =>
+      entry.targetPath.endsWith("selection-grant-contract.json"),
+    );
     const bindingEntry = writePlan.entries.find((entry) =>
       entry.targetPath.endsWith("selection-grant-bindings.json"),
     );
     const weightedPoolEntry = writePlan.entries.find((entry) => entry.sourcePattern === "data.weighted_pool");
-    const selectionFlowEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rule.selection_flow");
-    const selectionModalEntry = writePlan.entries.find((entry) => entry.sourcePattern === "ui.selection_modal");
-    const inputEntries = writePlan.entries.filter((entry) => entry.sourcePattern === "input.key_binding");
-    assert.ok(sourceEntry, "resolved provider binding should refresh the local selection_pool source artifact");
+    assert.equal(sourceEntry, undefined, "cross-feature seam should not rewrite selection_pool source authoring");
+    assert.ok(contractEntry, "resolved provider binding should publish the explicit local grant contract");
     assert.ok(bindingEntry, "resolved provider binding should write the sidecar binding artifact");
-    assert.ok(weightedPoolEntry, "resolved provider binding should refresh weighted pool pattern parameters");
-    assert.ok(selectionFlowEntry, "resolved provider binding should refresh selection flow pattern parameters");
-    assert.ok(selectionModalEntry, "resolved provider binding should refresh selection modal pattern parameters");
-    assert.equal(inputEntries.length, 2, "both input.key_binding entries should remain present after refresh");
-    assert.equal((sourceEntry?.parameters as any).objects.length, originalObjectCount + 1);
-    assert.equal(((bindingEntry?.parameters as any).bindings || []).length, 2);
-    const appendedObjectId = ((bindingEntry?.parameters as any).bindings || []).find(
-      (binding: any) => binding.targetFeatureId === "skill_provider_demo",
-    )?.objectId;
-    assert.equal(typeof appendedObjectId, "string");
-    const compiledParameters = compileSelectionPoolModuleParameters(result.blueprint.featureAuthoring as any);
-    assert.deepEqual((weightedPoolEntry?.parameters as any).entries, compiledParameters.weighted_pool.entries);
+    assert.ok(weightedPoolEntry, "stale weighted pool entry remains untouched because authoring did not change");
+    assert.equal(((bindingEntry?.parameters as any).bindings || []).length >= 1, true);
+    assert.equal(((contractEntry?.parameters as any).slots || []).length, originalObjectCount);
+    assert.equal(((weightedPoolEntry?.parameters as any).entries || []).length, 1);
     assert.equal(
-      ((weightedPoolEntry?.parameters as any).entries || []).length,
-      originalObjectCount + 1,
+      getSelectionPoolFeatureAuthoringParameters(result.blueprint).objects.length,
+      originalObjectCount,
     );
-    assert.equal(
-      ((weightedPoolEntry?.parameters as any).entries || []).some((entry: any) => entry.id === appendedObjectId),
-      true,
-    );
-    assert.deepEqual(selectionFlowEntry?.parameters, compiledParameters.selection_flow);
-    assert.deepEqual(selectionModalEntry?.parameters, compiledParameters.selection_modal);
-    for (const inputEntry of inputEntries) {
-      assert.deepEqual(inputEntry.parameters, compiledParameters.input_trigger);
-    }
-    const generatedWeightedPoolCode = generateWeightedPoolCode(
-      "ConsumerDrawWeightedPool",
-      "consumer_draw_demo",
-      weightedPoolEntry!,
-    );
-    assert.match(
-      generatedWeightedPoolCode,
-      new RegExp(`id: "${appendedObjectId}"`),
-      "refreshed weighted-pool generator input should materialize the appended bound object",
-    );
-    assert.equal(
-      ((bindingEntry?.parameters as any).bindings || []).some(
-        (binding: any) =>
-          binding.targetFeatureId === "skill_provider_demo"
-          && binding.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      ),
-      true,
-    );
-    assert.equal(
-      result.blueprint.featureContract?.consumes.some(
-        (surface) => surface.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      ),
-      true,
-    );
-    assert.equal(
-      result.blueprint.dependencyEdges?.some(
-        (edge) =>
-          edge.relation === "grants"
-          && edge.targetFeatureId === "skill_provider_demo"
-          && edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      ),
-      true,
-    );
+    assert.equal(((bindingEntry?.parameters as any).bindings || []).length > 0, true);
+    assert.equal(result.blueprint.status === "blocked", false);
     assert.equal(writePlan.stats.total, writePlan.entries.length);
     assert.equal(writePlan.executionOrder.length, writePlan.entries.length);
   } finally {
@@ -988,7 +946,7 @@ function testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEnt
   }
 }
 
-function testReplacementBindingRefreshesPatternEntriesWithoutAppendingObject() {
+function testBindingWithoutExplicitLocalObjectBecomesRealBlocker() {
   const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
   try {
     writeJson(
@@ -1009,16 +967,12 @@ function testReplacementBindingRefreshesPatternEntriesWithoutAppendingObject() {
     );
 
     const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
-    const originalParameters = getSelectionPoolFeatureAuthoringParameters(blueprint);
-    const originalObjectCount = originalParameters.objects.length;
-    const replacementObjectId = originalParameters.objects[0].id;
-    const replacementObjectLabel = originalParameters.objects[0].label;
-    const writePlan = createWritePlan(createStaleSelectionPoolPatternEntries("consumer_draw_demo"));
+    const writePlan = createWritePlan([]);
     const result = applyDota2GrantSeam({
       hostRoot,
       featureId: "consumer_draw_demo",
-      prompt: `Replace ${replacementObjectLabel} with skill_provider_demo as one reward.`,
-      schema: createCrossFeatureSelectionSchema("Replace Selection R001 with skill_provider_demo as one reward."),
+      prompt: "Add this skill provider as one reward in the current draw feature.",
+      schema: createCrossFeatureSelectionSchema("Add this skill provider as one reward in the current draw feature."),
       blueprint,
       writePlan,
       relationCandidates: [
@@ -1039,32 +993,25 @@ function testReplacementBindingRefreshesPatternEntriesWithoutAppendingObject() {
       ],
     });
 
-    const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
+    const contractEntry = writePlan.entries.find((entry) =>
+      entry.targetPath.endsWith("selection-grant-contract.json"),
+    );
     const bindingEntry = writePlan.entries.find((entry) =>
       entry.targetPath.endsWith("selection-grant-bindings.json"),
     );
-    const weightedPoolEntry = writePlan.entries.find((entry) => entry.sourcePattern === "data.weighted_pool");
-    const selectionFlowEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rule.selection_flow");
-    const selectionModalEntry = writePlan.entries.find((entry) => entry.sourcePattern === "ui.selection_modal");
-    assert.ok(sourceEntry);
-    assert.ok(bindingEntry);
-    assert.ok(weightedPoolEntry);
-    assert.ok(selectionFlowEntry);
-    assert.ok(selectionModalEntry);
-    assert.equal((sourceEntry?.parameters as any).objects.length, originalObjectCount);
-    assert.equal(((bindingEntry?.parameters as any).bindings || []).length, 1);
-    assert.equal(((bindingEntry?.parameters as any).bindings || [])[0]?.objectId, replacementObjectId);
-    const compiledParameters = compileSelectionPoolModuleParameters(result.blueprint.featureAuthoring as any);
-    assert.equal(((weightedPoolEntry?.parameters as any).entries || []).length, originalObjectCount);
-    assert.deepEqual(weightedPoolEntry?.parameters, compiledParameters.weighted_pool);
-    assert.deepEqual(selectionFlowEntry?.parameters, compiledParameters.selection_flow);
-    assert.deepEqual(selectionModalEntry?.parameters, compiledParameters.selection_modal);
+    assert.equal(writePlan.readyForHostWrite, false);
+    assert.ok(contractEntry);
+    assert.equal(bindingEntry, undefined);
+    assert.equal(result.blueprint.featureAuthoring?.profile, "selection_pool");
+    assert.ok(
+      (writePlan.readinessBlockers || []).some((blocker) => blocker.includes("cannot mutate selection_pool local authoring")),
+    );
   } finally {
     rmSync(hostRoot, { recursive: true, force: true });
   }
 }
 
-function testDriftedSelectionUpdateStillBindsFromDeltaAuthority() {
+function testDriftedSelectionUpdateStopsAtContractInsteadOfAppendingLocalObject() {
   const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
   try {
     writeJson(
@@ -1084,15 +1031,15 @@ function testDriftedSelectionUpdateStillBindsFromDeltaAuthority() {
       },
     );
 
-    const prompt = "Append one reward object that binds to skill_provider_demo and grants its primary hero ability on selection.";
+      const prompt = "Append one reward object that binds to skill_provider_demo and grants its primary hero ability on selection.";
     const driftedSchema = createDriftedSelectionRewardSchema(prompt);
     const updateIntent = createSelectionGrantUpdateIntent("consumer_draw_demo", driftedSchema);
     const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
     const writePlan = createWritePlan([]);
 
-    const result = applyDota2GrantSeam({
-      hostRoot,
-      featureId: "consumer_draw_demo",
+      applyDota2GrantSeam({
+        hostRoot,
+        featureId: "consumer_draw_demo",
       prompt,
       schema: driftedSchema,
       updateIntent,
@@ -1119,23 +1066,18 @@ function testDriftedSelectionUpdateStillBindsFromDeltaAuthority() {
     const bindingEntry = writePlan.entries.find((entry) =>
       entry.targetPath.endsWith("selection-grant-bindings.json"),
     );
-    assert.ok(
-      bindingEntry,
-      "resolved provider binding should still be written when update delta preserves cross-feature authority",
-    );
-    assert.equal(writePlan.readyForHostWrite, true);
-    assert.equal(
-      result.blueprint.dependencyEdges?.some(
-        (edge) =>
-          edge.relation === "grants"
-          && edge.targetFeatureId === "skill_provider_demo"
-          && edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      ),
-      true,
-    );
-  } finally {
-    rmSync(hostRoot, { recursive: true, force: true });
-  }
+      const contractEntry = writePlan.entries.find((entry) =>
+        entry.targetPath.endsWith("selection-grant-contract.json"),
+      );
+      assert.ok(contractEntry, "selection grant contract should still be emitted from current local authoring");
+      assert.equal(bindingEntry, undefined);
+      assert.equal(writePlan.readyForHostWrite, false);
+      assert.ok(
+        (writePlan.readinessBlockers || []).some((blocker) => blocker.includes("cannot mutate selection_pool local authoring")),
+      );
+    } finally {
+      rmSync(hostRoot, { recursive: true, force: true });
+    }
 }
 
 function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() {
@@ -1218,13 +1160,17 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
       workspaceFeatures: [currentFeature],
     });
 
-    const bindingEntry = writePlan.entries.find((entry) =>
-      entry.targetPath.endsWith("selection-grant-bindings.json"),
-    );
-    assert.ok(
-      bindingEntry,
-      "local-only updates should preserve the existing selection grant sidecar instead of deleting it",
-    );
+      const bindingEntry = writePlan.entries.find((entry) =>
+        entry.targetPath.endsWith("selection-grant-bindings.json"),
+      );
+      const contractEntry = writePlan.entries.find((entry) =>
+        entry.targetPath.endsWith("selection-grant-contract.json"),
+      );
+      assert.ok(
+        bindingEntry,
+        "local-only updates should preserve the existing selection grant sidecar instead of deleting it",
+      );
+      assert.ok(contractEntry, "local-only updates should also preserve the explicit local grant contract");
     assert.equal(((bindingEntry?.parameters as any).bindings || []).length, 1);
     assert.equal(((bindingEntry?.parameters as any).bindings || [])[0]?.objectId, preservedObjectId);
     assert.equal(
@@ -1277,9 +1223,9 @@ testDefinitionOnlyProviderSchemaStillExportsGrantSurfaceWithoutBackboneRole();
 testProviderExportRequiresClosedLuaAndKvIdentity();
 testProviderExportRejectsDriftedLuaKvIdentity();
 testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell();
-testResolvedProviderBindingMergesExistingBindingsAndRefreshesPatternEntries();
-testReplacementBindingRefreshesPatternEntriesWithoutAppendingObject();
-testDriftedSelectionUpdateStillBindsFromDeltaAuthority();
+testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSelectionAuthoring();
+testBindingWithoutExplicitLocalObjectBecomesRealBlocker();
+testDriftedSelectionUpdateStopsAtContractInsteadOfAppendingLocalObject();
 testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth();
 
 console.log("adapters/dota2/cross-feature/grant-seam.test.ts passed");

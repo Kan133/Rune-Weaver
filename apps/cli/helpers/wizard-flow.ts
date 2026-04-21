@@ -3,6 +3,7 @@ import { createInterface } from "readline";
 import type {
   CurrentFeatureContext,
   IntentSchema,
+  HostDescriptor,
   PromptConstraintBundle,
   RetrievalBundle,
   RelationCandidate,
@@ -15,12 +16,14 @@ import type {
 import type { LLMClient } from "../../../core/llm/types.js";
 import type { WizardRefinementContext } from "../../../core/wizard/types.js";
 import {
+  analyzeIntentSemanticLayers,
   buildWizardClarificationPlan,
   deriveWizardClarificationAuthority,
   resolveRelationCandidates,
   runWizardToIntentSchema,
   runWizardToUpdateIntent,
 } from "../../../core/wizard/index.js";
+import type { IntentSemanticAnalysis } from "../../../core/wizard/index.js";
 import { loadWorkspaceSemanticContext } from "../../../core/workspace/index.js";
 
 interface SharedWizardInput {
@@ -33,8 +36,22 @@ interface SharedWizardInput {
   allowInteractive?: boolean;
 }
 
+function buildWizardHostDescriptor(hostRoot?: string) {
+  return hostRoot
+    ? {
+        kind: "dota2-x-template" as const,
+        projectRoot: hostRoot,
+      }
+    : undefined;
+}
+
+function resolveWizardHostDescriptor(hostRoot?: string): HostDescriptor {
+  return buildWizardHostDescriptor(hostRoot) ?? { kind: "dota2-x-template" as const };
+}
+
 export interface WizardFlowResult {
   schema: IntentSchema;
+  semanticAnalysis?: IntentSemanticAnalysis;
   clarificationPlan?: WizardClarificationPlan;
   clarificationAuthority: WizardClarificationAuthority;
   relationCandidates?: RelationCandidate[];
@@ -120,6 +137,7 @@ function resolveWorkspaceSemanticContext(hostRoot?: string): WorkspaceSemanticCo
 function buildClarificationState(input: {
   rawText: string;
   schema: IntentSchema;
+  semanticAnalysis?: IntentSemanticAnalysis;
   hostRoot?: string;
   currentFeatureContext?: CurrentFeatureContext;
 }): {
@@ -137,6 +155,7 @@ function buildClarificationState(input: {
   const clarificationPlan = buildWizardClarificationPlan({
     rawText: input.rawText,
     schema: input.schema,
+    semanticAnalysis: input.semanticAnalysis,
     currentFeatureContext: input.currentFeatureContext,
     workspaceSemanticContext,
     relationCandidates,
@@ -160,21 +179,29 @@ export async function resolveCreateWizardFlow(
       client: input.client,
       input: {
         rawText: input.rawText,
+        host: buildWizardHostDescriptor(input.hostRoot),
         model: input.model,
         temperature: input.temperature,
         providerOptions: input.providerOptions,
         refinementContext,
       },
     });
+    const semanticAnalysis = analyzeIntentSemanticLayers(
+      result.schema,
+      input.rawText,
+      resolveWizardHostDescriptor(input.hostRoot),
+    );
     const clarificationState = buildClarificationState({
       rawText: input.rawText,
       schema: result.schema,
+      semanticAnalysis,
       hostRoot: input.hostRoot,
     });
 
     if (!shouldRunInteractiveClarification(input.allowInteractive, clarificationState.clarificationPlan)) {
       return {
         schema: result.schema,
+        semanticAnalysis,
         issues: result.issues,
         valid: result.valid,
         usedFallback: detectWizardFallback(result.issues),
@@ -190,6 +217,7 @@ export async function resolveCreateWizardFlow(
     if (transcript.length === 0) {
       return {
         schema: result.schema,
+        semanticAnalysis,
         issues: result.issues,
         valid: result.valid,
         usedFallback: detectWizardFallback(result.issues),
@@ -211,20 +239,28 @@ export async function resolveCreateWizardFlow(
     client: input.client,
     input: {
       rawText: input.rawText,
+      host: buildWizardHostDescriptor(input.hostRoot),
       model: input.model,
       temperature: input.temperature,
       providerOptions: input.providerOptions,
       refinementContext,
     },
   });
+  const semanticAnalysis = analyzeIntentSemanticLayers(
+    finalResult.schema,
+    input.rawText,
+    resolveWizardHostDescriptor(input.hostRoot),
+  );
   const clarificationState = buildClarificationState({
     rawText: input.rawText,
     schema: finalResult.schema,
+    semanticAnalysis,
     hostRoot: input.hostRoot,
   });
 
   return {
     schema: finalResult.schema,
+    semanticAnalysis,
     issues: finalResult.issues,
     valid: finalResult.valid,
     usedFallback: detectWizardFallback(finalResult.issues),
@@ -249,6 +285,7 @@ export async function resolveUpdateWizardFlow(
       input: {
         rawText: input.rawText,
         currentFeatureContext: input.currentFeatureContext,
+        host: buildWizardHostDescriptor(input.hostRoot),
         model: input.model,
         temperature: input.temperature,
         providerOptions: input.providerOptions,
@@ -306,6 +343,7 @@ export async function resolveUpdateWizardFlow(
     input: {
       rawText: input.rawText,
       currentFeatureContext: input.currentFeatureContext,
+      host: buildWizardHostDescriptor(input.hostRoot),
       model: input.model,
       temperature: input.temperature,
       providerOptions: input.providerOptions,

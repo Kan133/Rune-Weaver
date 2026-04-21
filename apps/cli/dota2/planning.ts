@@ -21,15 +21,18 @@ import { resolvePatterns, PatternResolutionResult } from "../../../core/patterns
 import { AssemblyPlanBuilder, AssemblyPlanConfig } from "../../../core/pipeline/assembly-plan.js";
 import { createLLMClientFromEnv, isLLMConfigured, readLLMExecutionConfig } from "../../../core/llm/factory.js";
 import {
+  analyzeIntentSemanticLayers,
   buildWizardClarificationPlan,
   buildCurrentFeatureContext,
   createFallbackIntentSchema as createGenericFallbackIntentSchema,
   createUpdateIntentFromRequestedChange,
   deriveWizardClarificationAuthority,
-  extractNumericParameters,
+  finalizeCreateIntentSchema,
   resolveRelationCandidates,
 } from "../../../core/wizard/index.js";
+import type { IntentSemanticAnalysis } from "../../../core/wizard/index.js";
 import { enrichDota2CreateBlueprint, enrichDota2UpdateBlueprint } from "../../../adapters/dota2/blueprint/index.js";
+import type { CreateReadinessDecision } from "../../../adapters/dota2/blueprint/index.js";
 import {
   initializeWorkspace,
   findFeatureById,
@@ -42,6 +45,7 @@ import {
   buildSynthesizedAssemblyPlanWithLLM,
   shouldUseArtifactSynthesis,
 } from "../../../adapters/dota2/synthesis/index.js";
+import { refreshWeightedPoolWritePlan } from "../../../adapters/dota2/weighted-pool/index.js";
 import { alignWritePlanWithExistingFeature } from "../helpers/index.js";
 import { resolveCreateWizardFlow, resolveUpdateWizardFlow } from "../helpers/wizard-flow.js";
 
@@ -56,6 +60,7 @@ export interface CreateIntentSchemaContext {
 
 export interface CreateIntentSchemaResult {
   schema: IntentSchema | null;
+  semanticAnalysis: IntentSemanticAnalysis | null;
   usedFallback: boolean;
   clarificationPlan?: WizardClarificationPlan;
   clarificationAuthority: WizardClarificationAuthority;
@@ -82,45 +87,6 @@ export interface CreateUpdateIntentResult {
   requiresClarification: boolean;
 }
 
-function inferFallbackInventoryContract(prompt: string): {
-  enabled: boolean;
-  capacity: number;
-  storeSelectedItems: boolean;
-  blockDrawWhenFull: boolean;
-  fullMessage: string;
-  presentation: "persistent_panel";
-} | undefined {
-  const lowerPrompt = prompt.toLowerCase();
-  const mentionsInventory = hasAnyKeyword(lowerPrompt, [
-    "inventory",
-    "panel",
-    "仓库",
-    "库存",
-    "背包",
-    "格",
-  ]);
-
-  if (!mentionsInventory) {
-    return undefined;
-  }
-
-  const capacityMatch =
-    prompt.match(/(\d+)\s*(?:slot|slots|格)/i) ||
-    prompt.match(/(?:capacity|容量)\s*(?:to|为|=)?\s*(\d+)/i);
-  const messageMatch =
-    prompt.match(/["“](.+?)["”]/) ||
-    prompt.match(/显示\s*[:：]\s*(.+)$/i);
-
-  return {
-    enabled: true,
-    capacity: Math.max(1, parseInt(capacityMatch?.[1] || "15", 10)),
-    storeSelectedItems: true,
-    blockDrawWhenFull: true,
-    fullMessage: (messageMatch?.[1] || "Inventory full").trim(),
-    presentation: "persistent_panel",
-  };
-}
-
 export interface Dota2BlueprintBuildResult {
   blueprint: Blueprint | null;
   finalBlueprint: FinalBlueprint | null;
@@ -128,25 +94,54 @@ export interface Dota2BlueprintBuildResult {
   issues: string[];
   moduleNeedsCount: number;
   admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
+  createReadinessDecision?: CreateReadinessDecision;
 }
 
 export interface Dota2BlueprintBuildContext {
   prompt: string;
   hostRoot: string;
+  semanticAnalysis?: IntentSemanticAnalysis;
   mode?: FeatureMode;
   featureId?: string;
   existingFeature?: RuneWeaverFeatureRecord | null;
   proposalSource?: "llm" | "fallback";
 }
 
-function getIntentSemanticPosture(schema: Pick<IntentSchema, "uncertainties">): "ready" | "weak" {
-  return (schema.uncertainties?.length || 0) > 0 ? "weak" : "ready";
+export function getCreateSemanticPosture(
+  semanticAnalysis: Pick<IntentSemanticAnalysis, "openSemanticResidue"> | null | undefined,
+): "ready" | "weak" {
+  if (!semanticAnalysis) {
+    return "weak";
+  }
+
+  return semanticAnalysis.openSemanticResidue.some(
+    (item) => item.disposition === "open" && item.class !== "bounded_detail_only",
+  )
+    ? "weak"
+    : "ready";
+}
+
+function getUpdateIntentSemanticPosture(updateIntent: UpdateIntent): "ready" | "weak" {
+  if (!updateIntent.semanticAnalysis) {
+    return "weak";
+  }
+
+  const scope = updateIntent.semanticAnalysis.governanceDecisions.scope.value;
+  const blocked = updateIntent.semanticAnalysis.governanceDecisions.mutationAuthority.value.blocked;
+  const hasRelevantResidue = updateIntent.semanticAnalysis.openSemanticResidue.some((item) =>
+    item.disposition === "open" && item.class !== "bounded_detail_only",
+  );
+
+  return scope === "ambiguous" || blocked.length > 0 || hasRelevantResidue
+    ? "weak"
+    : "ready";
 }
 
 function resolveClarificationState(
   prompt: string,
   schema: IntentSchema,
   hostRoot: string,
+  semanticAnalysis?: IntentSemanticAnalysis,
   currentFeatureContext?: CurrentFeatureContext,
 ): {
   clarificationPlan?: WizardClarificationPlan;
@@ -165,6 +160,7 @@ function resolveClarificationState(
   const clarificationPlan = buildWizardClarificationPlan({
     rawText: prompt,
     schema,
+    semanticAnalysis,
     currentFeatureContext,
     workspaceSemanticContext,
     relationCandidates,
@@ -329,15 +325,20 @@ export async function createIntentSchema(
   if (!isLLMConfigured(process.cwd())) {
     console.log("  ⚠️  LLM not configured, using fallback");
     const schema = createFallbackIntentSchema(prompt, hostRoot);
-    const clarificationState = resolveClarificationState(prompt, schema, hostRoot);
+    const semanticAnalysis = analyzeIntentSemanticLayers(schema, prompt, {
+      kind: "dota2-x-template",
+      projectRoot: hostRoot,
+    });
+    const clarificationState = resolveClarificationState(prompt, schema, hostRoot, semanticAnalysis);
     console.log("  ℹ️  IntentSchema created via fallback (prompt analysis)");
     console.log(`     Goal: ${schema.request.goal}`);
     console.log(`     Intent Kind: ${schema.classification.intentKind}`);
-    console.log(`     Semantic Posture: ${getIntentSemanticPosture(schema)}`);
+    console.log(`     Semantic Posture: ${getCreateSemanticPosture(semanticAnalysis)}`);
     console.log(`     Uncertainties: ${schema.uncertainties?.length || 0}`);
     console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
     return {
       schema,
+      semanticAnalysis,
       usedFallback: true,
       promptPackageId: "wizard.create",
       ...clarificationState,
@@ -362,51 +363,33 @@ export async function createIntentSchema(
         });
 
         if (result.valid && result.schema) {
-          const baseParams = extractNumericParameters(prompt);
-          const normalizedMechanics = applyMechanicHints(
-            {
-              trigger: false,
-              candidatePool: false,
-              weightedSelection: false,
-              playerChoice: false,
-              uiModal: false,
-              outcomeApplication: false,
-              resourceConsumption: false,
-              ...(result.schema.normalizedMechanics || {}),
-            },
-            baseParams
+          const schema = finalizeCreateIntentSchema(result.schema, prompt);
+          const semanticAnalysis = analyzeIntentSemanticLayers(schema, prompt, {
+            kind: "dota2-x-template",
+            projectRoot: hostRoot,
+          });
+          const clarificationState = resolveClarificationState(
+            prompt,
+            schema,
+            hostRoot,
+            semanticAnalysis,
           );
-          let schema = {
-            ...result.schema,
-            host: {
-              kind: "dota2-x-template" as const,
-              projectRoot: hostRoot,
-            },
-            normalizedMechanics,
-          };
-
-          if (Object.keys(baseParams).length > 0) {
-            (schema as any).parameters = baseParams;
-          }
 
           console.log("  ✅ IntentSchema created via LLM Wizard");
           console.log(`     Goal: ${schema.request.goal}`);
           console.log(`     Intent Kind: ${schema.classification.intentKind}`);
-          console.log(`     Semantic Posture: ${getIntentSemanticPosture(schema)}`);
+          console.log(`     Semantic Posture: ${getCreateSemanticPosture(semanticAnalysis)}`);
           console.log(`     Uncertainties: ${schema.uncertainties?.length || 0}`);
           console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
 
           return {
             schema,
+            semanticAnalysis,
             usedFallback: result.usedFallback,
-            clarificationPlan: result.clarificationPlan,
-            clarificationAuthority: result.clarificationAuthority,
-            relationCandidates: result.relationCandidates,
-            workspaceSemanticContext: result.workspaceSemanticContext,
             promptPackageId: result.promptPackageId,
             promptConstraints: result.promptConstraints,
             retrievalBundle: result.retrievalBundle,
-            requiresClarification: result.requiresClarification,
+            ...clarificationState,
           };
         }
 
@@ -443,16 +426,21 @@ export async function createIntentSchema(
   }
 
   const schema = createFallbackIntentSchema(prompt, hostRoot);
-  const clarificationState = resolveClarificationState(prompt, schema, hostRoot);
+  const semanticAnalysis = analyzeIntentSemanticLayers(schema, prompt, {
+    kind: "dota2-x-template",
+    projectRoot: hostRoot,
+  });
+  const clarificationState = resolveClarificationState(prompt, schema, hostRoot, semanticAnalysis);
   console.log("  ℹ️  IntentSchema created via fallback (prompt analysis)");
   console.log(`     Goal: ${schema.request.goal}`);
   console.log(`     Intent Kind: ${schema.classification.intentKind}`);
-  console.log(`     Semantic Posture: ${getIntentSemanticPosture(schema)}`);
+  console.log(`     Semantic Posture: ${getCreateSemanticPosture(semanticAnalysis)}`);
   console.log(`     Uncertainties: ${schema.uncertainties?.length || 0}`);
   console.log(`     UI Needed: ${schema.uiRequirements?.needed || false}`);
 
   return {
     schema,
+    semanticAnalysis,
     usedFallback: true,
     promptPackageId: "wizard.create",
     ...clarificationState,
@@ -475,6 +463,7 @@ export async function createUpdateIntent(
       prompt,
       requestedChange,
       hostRoot,
+      undefined,
       currentFeatureContext,
     );
     return {
@@ -557,6 +546,7 @@ export async function createUpdateIntent(
     prompt,
     requestedChange,
     hostRoot,
+    undefined,
     currentFeatureContext,
   );
 
@@ -574,254 +564,13 @@ function createFallbackIntentSchema(
   prompt: string,
   hostRoot: string,
 ): IntentSchema {
-  return createGenericFallbackIntentSchema(prompt, {
-    kind: "dota2-x-template",
-    projectRoot: hostRoot,
-  });
-}
-
-function hasAnyKeyword(input: string, keywords: string[]): boolean {
-  return keywords.some((keyword) => input.includes(keyword));
-}
-
-function createFallbackTypedRequirements(
-  mechanics: IntentSchema["normalizedMechanics"],
-  flags: {
-    hasCandidatePoolLanguage: boolean;
-    hasBridgeSyncLanguage: boolean;
-    hasStatusDisplayLanguage: boolean;
-    inventoryEnabled: boolean;
-  }
-): IntentSchema["requirements"]["typed"] | undefined {
-  const typed: NonNullable<IntentSchema["requirements"]["typed"]> = [];
-
-  if (mechanics.trigger) {
-    typed.push({
-      id: "fallback-trigger",
-      kind: "trigger",
-      summary: "Capture the configured player input and open the supported flow",
-      priority: "must",
-    });
-  }
-
-  if (mechanics.candidatePool || flags.hasCandidatePoolLanguage) {
-    typed.push({
-      id: "fallback-candidate-pool",
-      kind: "state",
-      summary: flags.inventoryEnabled
-        ? "Maintain a candidate pool, current selection state, and session-only selected inventory for the player-facing choice flow"
-        : "Maintain a candidate pool and current selection state for the player-facing choice flow",
-      invariants: ["candidate choices must remain distinct within the active selection set"],
-      priority: "must",
-    });
-  }
-
-  if (mechanics.playerChoice) {
-    typed.push({
-      id: "fallback-selection-flow",
-      kind: "rule",
-      summary: "Resolve a player-confirmed selection from the active candidate set",
-      priority: "must",
-    });
-  }
-
-  if (mechanics.outcomeApplication) {
-    typed.push({
-      id: "fallback-effect-application",
-      kind: "effect",
-      summary: "Apply the selected outcome to the active player state immediately after selection",
-      priority: "must",
-    });
-  }
-
-  if (mechanics.uiModal || flags.hasStatusDisplayLanguage) {
-    typed.push({
-      id: "fallback-ui-surface",
-      kind: "ui",
-      summary: flags.inventoryEnabled
-        ? "Render the current choice surface and the persistent session-only inventory panel"
-        : "Render the current choice surface and any active selection status display",
-      priority: "must",
-    });
-  }
-
-  if (flags.hasBridgeSyncLanguage) {
-    typed.push({
-      id: "fallback-integration-bridge",
-      kind: "integration",
-      summary: "Synchronize supported runtime state across runtime and UI surfaces",
-      priority: "must",
-    });
-  }
-
-  return typed.length > 0 ? typed : undefined;
-}
-
-function createFallbackSelection(
-  mechanics: IntentSchema["normalizedMechanics"],
-  flags: {
-    hasCandidatePoolLanguage: boolean;
-    hasPersistentSelectionLanguage: boolean;
-    inventory?: {
-      enabled: boolean;
-      capacity: number;
-      storeSelectedItems: boolean;
-      blockDrawWhenFull: boolean;
-      fullMessage: string;
-      presentation: "persistent_panel";
-    };
-  }
-): IntentSchema["selection"] | undefined {
-  if (!mechanics.playerChoice && !flags.hasCandidatePoolLanguage) {
-    return undefined;
-  }
-
-  return {
-    mode: "user-chosen",
-    cardinality: "single",
-    repeatability: flags.hasPersistentSelectionLanguage ? "repeatable" : "one-shot",
-    duplicatePolicy: flags.hasCandidatePoolLanguage ? "avoid" : undefined,
-    ...(flags.inventory ? { inventory: flags.inventory } : {}),
-  };
-}
-
-function createFallbackEffects(
-  mechanics: IntentSchema["normalizedMechanics"],
-  hasPersistentSelectionLanguage: boolean
-): IntentSchema["effects"] | undefined {
-  if (!mechanics.outcomeApplication) {
-    return undefined;
-  }
-
-  return {
-    operations: ["apply"],
-    durationSemantics: hasPersistentSelectionLanguage ? "persistent" : "instant",
-  };
-}
-
-function createFallbackIntegrations(
-  mechanics: IntentSchema["normalizedMechanics"],
-  flags: {
-    hasBridgeSyncLanguage: boolean;
-    uiNeeded: boolean;
-  }
-): IntentSchema["integrations"] | undefined {
-  if (!flags.hasBridgeSyncLanguage) {
-    return undefined;
-  }
-
-  const expectedBindings: NonNullable<NonNullable<IntentSchema["integrations"]>["expectedBindings"]> = [];
-
-  if (mechanics.trigger) {
-    expectedBindings.push({
-      id: "fallback-input-binding",
-      kind: "entry-point",
-      summary: "Authoritative input binding for the supported trigger flow",
-      required: true,
-    });
-  }
-
-  expectedBindings.push({
-    id: "fallback-state-sync",
-    kind: "bridge-point",
-    summary: "Synchronize the current supported selection state between runtime and UI",
-    required: true,
-  });
-
-  if (flags.uiNeeded) {
-    expectedBindings.push({
-      id: "fallback-selection-surface",
-      kind: "ui-surface",
-      summary: "Selection UI surface for the active choice flow",
-      required: true,
-    });
-  }
-
-  return expectedBindings.length > 0 ? { expectedBindings } : undefined;
-}
-
-function createFallbackStateModel(
-  mechanics: IntentSchema["normalizedMechanics"],
-  flags: {
-    hasCandidatePoolLanguage: boolean;
-    hasPersistentSelectionLanguage: boolean;
-    uiNeeded: boolean;
-    hasBridgeSyncLanguage: boolean;
-    inventoryEnabled: boolean;
-  }
-): IntentSchema["stateModel"] | undefined {
-  const states: NonNullable<NonNullable<IntentSchema["stateModel"]>["states"]> = [];
-
-  if (mechanics.candidatePool || flags.hasCandidatePoolLanguage) {
-    states.push({
-      id: "candidate-pool",
-      summary: "Current candidate selection pool for the active choice flow",
-      owner: "session",
-      lifetime: "ephemeral",
-      mutationMode: "create",
-    });
-  }
-
-  if (mechanics.outcomeApplication || flags.hasPersistentSelectionLanguage || flags.hasBridgeSyncLanguage) {
-    states.push({
-      id: "active-selection",
-      summary: "Currently active selection state that must remain visible and synchronized",
-      owner: "session",
-      lifetime: flags.hasPersistentSelectionLanguage ? "persistent" : "session",
-      mutationMode: "update",
-    });
-  }
-
-  if (flags.inventoryEnabled) {
-    states.push({
-      id: "selected-inventory",
-      summary: "Session-only stored selections shown in the persistent inventory panel",
-      owner: "session",
-      lifetime: "session",
-      mutationMode: "update",
-    });
-  }
-
-  if (flags.uiNeeded && flags.hasBridgeSyncLanguage) {
-    states.push({
-      id: "ui-surface-state",
-      summary: "UI-visible selection status mirrored from runtime state",
-      owner: "session",
-      lifetime: "ephemeral",
-      mutationMode: "update",
-    });
-  }
-
-  return states.length > 0 ? { states } : undefined;
-}
-
-function applyMechanicHints(
-  mechanics: IntentSchema["normalizedMechanics"],
-  extractedParams: Record<string, unknown>
-): IntentSchema["normalizedMechanics"] {
-  const hasCanonicalSelectionPool = Array.isArray(extractedParams.entries) && extractedParams.entries.length > 0;
-  const hasEffectApplication =
-    typeof extractedParams.effectApplication === "object" &&
-    extractedParams.effectApplication !== null;
-
-  return {
-    ...mechanics,
-    trigger: mechanics.trigger || typeof extractedParams.triggerKey === "string",
-    candidatePool: mechanics.candidatePool || hasCanonicalSelectionPool,
-    weightedSelection:
-      mechanics.weightedSelection ||
-      typeof extractedParams.drawMode === "string" ||
-      typeof extractedParams.duplicatePolicy === "string",
-    playerChoice:
-      mechanics.playerChoice ||
-      typeof extractedParams.selectionPolicy === "string" ||
-      typeof extractedParams.choiceCount === "number",
-    uiModal:
-      mechanics.uiModal ||
-      typeof extractedParams.payloadShape === "string" ||
-      typeof extractedParams.minDisplayCount === "number",
-    outcomeApplication: mechanics.outcomeApplication || hasEffectApplication,
-  };
+  return finalizeCreateIntentSchema(
+    createGenericFallbackIntentSchema(prompt, {
+      kind: "dota2-x-template",
+      projectRoot: hostRoot,
+    }),
+    prompt,
+  );
 }
 
 export function buildBlueprint(
@@ -837,11 +586,16 @@ export function buildBlueprint(
   const result = builder.build(schema);
   const baseBlueprint = result.draftBlueprint || result.blueprint || null;
   const baseFinalBlueprint = result.finalBlueprint || null;
-  const baseStatus = baseFinalBlueprint?.status || getIntentSemanticPosture(schema);
+  const semanticAnalysis = context.semanticAnalysis || analyzeIntentSemanticLayers(schema, context.prompt, {
+    kind: "dota2-x-template",
+    projectRoot: context.hostRoot,
+  });
+  const baseStatus = baseFinalBlueprint?.status || getCreateSemanticPosture(semanticAnalysis);
   const rawBaseIssues = result.issues.map((issue) => `${issue.code}: ${issue.message}`);
   const enrichedBlueprint = baseBlueprint
     ? enrichDota2CreateBlueprint(baseBlueprint, {
         schema,
+        semanticAnalysis,
         prompt: context.prompt,
         hostRoot: context.hostRoot,
         mode: context.mode,
@@ -853,6 +607,7 @@ export function buildBlueprint(
   const enrichedFinalBlueprint = baseFinalBlueprint
     ? enrichDota2CreateBlueprint(baseFinalBlueprint, {
         schema,
+        semanticAnalysis,
         prompt: context.prompt,
         hostRoot: context.hostRoot,
         mode: context.mode,
@@ -872,6 +627,8 @@ export function buildBlueprint(
   const blueprint = stagedBlueprint.blueprint;
   const finalBlueprint = stagedFinalBlueprint.blueprint;
   const admissionDiagnostics = enrichedFinalBlueprint.admissionDiagnostics || enrichedBlueprint.admissionDiagnostics;
+  const createReadinessDecision =
+    enrichedFinalBlueprint.createReadinessDecision || enrichedBlueprint.createReadinessDecision;
   const baseIssues = filterSupersededBlueprintIssues(rawBaseIssues, admissionDiagnostics);
   const status = finalBlueprint?.status || enrichedFinalBlueprint.status || baseStatus;
   const issues = [
@@ -901,6 +658,7 @@ export function buildBlueprint(
       issues,
       moduleNeedsCount,
       admissionDiagnostics,
+      createReadinessDecision,
     };
   }
 
@@ -913,7 +671,7 @@ export function buildBlueprint(
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics };
+    return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics, createReadinessDecision };
   }
 
   if (!result.success) {
@@ -952,7 +710,7 @@ export function buildBlueprint(
     }
   }
 
-  return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics };
+  return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics, createReadinessDecision };
 }
 
 export function buildUpdateBlueprint(
@@ -967,7 +725,7 @@ export function buildUpdateBlueprint(
   const result = builder.buildUpdate(updateIntent);
   const baseBlueprint = result.draftBlueprint || result.blueprint || null;
   const baseFinalBlueprint = result.finalBlueprint || null;
-  const baseStatus = baseFinalBlueprint?.status || getIntentSemanticPosture(updateIntent.requestedChange);
+  const baseStatus = baseFinalBlueprint?.status || getUpdateIntentSemanticPosture(updateIntent);
   const enrichedBlueprint = baseBlueprint
     ? enrichDota2UpdateBlueprint(baseBlueprint, updateIntent)
     : { blueprint: null, status: baseStatus, issues: [] };
@@ -1183,6 +941,11 @@ export function createWritePlan(
       generatorRoutingPlan ?? undefined,
       hostRealizationPlan ?? undefined,
     );
+
+    refreshWeightedPoolWritePlan(writePlan, {
+      hostRoot,
+      existingFeature: existingFeature || null,
+    });
 
     if (existingFeature) {
       const alignment = alignWritePlanWithExistingFeature(writePlan, existingFeature, mode);

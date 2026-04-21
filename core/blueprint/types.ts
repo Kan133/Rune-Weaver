@@ -57,6 +57,11 @@ export interface BlueprintBuildResult {
   issues: ValidationIssue[];
 }
 
+export interface BlueprintNormalizationOutcome {
+  finalBlueprint: FinalBlueprint;
+  report: BlueprintNormalizationReport;
+}
+
 /**
  * Blueprint 统计分析
  */

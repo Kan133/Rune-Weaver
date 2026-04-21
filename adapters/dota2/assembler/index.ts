@@ -11,6 +11,11 @@ import { posix as pathPosix } from "path";
 
 import { AssemblyPlan, GeneratorRoutingPlan, HostRealizationPlan, ModuleSourceKind, SelectedPattern, SynthesizedArtifact } from "../../../core/schema/types";
 import {
+  ABILITY_KV_AGGREGATE_TARGET_PATH,
+  buildAbilityKvFragmentPath,
+  resolveAbilityKvScriptFile,
+} from "../kv/contract.js";
+import {
   calculateHostWriteExecutionOrder,
   type HostWriteOperation,
   type HostWritePlan,
@@ -124,9 +129,8 @@ function getNamespacePath(
   featureId: string,
   contentType: string
 ): string {
-  // T118: Special handling for KV content type
   if (contentType === "kv") {
-    return `game/scripts/npc/npc_abilities_custom.txt`;
+    return buildAbilityKvFragmentPath(featureId, featureId);
   }
 
   // T125-R1: Lua ability/modifier files go to vscripts directory
@@ -309,6 +313,20 @@ function generateEntriesForSynthesizedArtifacts(
       synthesizedContent: artifact.content,
     },
   }));
+}
+
+function resolveKvArtifactAbilityName(entry: WritePlanEntry, fallbackAbilityName: string): string {
+  const metadataAbilityName = entry.metadata?.abilityName;
+  if (typeof metadataAbilityName === "string" && metadataAbilityName.trim().length > 0) {
+    return metadataAbilityName.trim();
+  }
+
+  const parameterAbilityName = entry.parameters?.abilityName;
+  if (typeof parameterAbilityName === "string" && parameterAbilityName.trim().length > 0) {
+    return parameterAbilityName.trim();
+  }
+
+  return fallbackAbilityName;
 }
 
 function appendInputKeyBindingEmitterEntries(entries: WritePlanEntry[]): void {
@@ -1335,6 +1353,24 @@ function generateEntriesForPattern(
           additionalMethods: buildLinearProjectileAdditionalMethods(projectileConfig.abilityName),
         };
       }
+    }
+
+    if (outputType === "kv") {
+      const abilityName = resolveKvArtifactAbilityName(
+        entry,
+        targetId.replace(/[^a-zA-Z0-9_]/g, "_"),
+      );
+      entry.targetPath = buildAbilityKvFragmentPath(featureId, abilityName);
+      entry.metadata = {
+        ...(entry.metadata || {}),
+        abilityName,
+        scriptFile:
+          typeof entry.metadata?.scriptFile === "string" && entry.metadata.scriptFile.trim().length > 0
+            ? entry.metadata.scriptFile
+            : resolveAbilityKvScriptFile(abilityName),
+        kvArtifactKind: "fragment",
+        aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
+      };
     }
 
     // 检查是否需要额外文件

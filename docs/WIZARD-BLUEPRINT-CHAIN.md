@@ -4,20 +4,13 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-18
-> Read when: aligning the accepted Wizard / IntentSchema / Blueprint stage boundaries
-> Do not use for: execution priority, host realization policy, or treating blueprint status as final lifecycle authority
+> Last verified: 2026-04-20
+> Read when: aligning current Wizard, clarification, Blueprint, and final-gate stage boundaries
+> Do not use for: host-specific routing policy or final lifecycle authority by itself
 
 ## Purpose
 
-This document records the accepted chain from Wizard through the blueprint stage in the ratified V2 baseline.
-
-It keeps four things clear:
-
-1. what Wizard is responsible for
-2. what blueprint stage is responsible for
-3. what remains downstream of blueprint
-4. where final lifecycle authority actually lives
+This document records the accepted chain from Wizard through Blueprint and explains where continuation is allowed versus where write must still stop.
 
 ## Accepted Chain
 
@@ -26,21 +19,22 @@ User Request
   -> Wizard
   -> IntentSchema
   -> optional clarification sidecars
+       - questions
+       - staged clarification authority
   -> Blueprint Stage
-       - optional BlueprintProposal
-       - deterministic normalization
        - DesignDraft
        - FeatureContract
        - FeatureDependencyEdges
-       - Strategy Selection
+       - implementation strategy
        - FinalBlueprint
-  -> Pattern Retrieval / Strategy Continuation
+  -> Pattern Resolution / strategy continuation
   -> AssemblyPlan
   -> HostRealizationPlan
   -> GeneratorRoutingPlan
   -> WritePlan
   -> LocalRepair
-  -> Validation / Final CommitDecision
+  -> Validation
+  -> Final CommitDecision
   -> Workspace Lifecycle
 
 Update Request
@@ -55,32 +49,108 @@ Update Request
 
 | Stage | Responsibility | Must not do |
 |------|----------------|-------------|
-| `Wizard` | interpret the request and return best-effort semantics | decide legality, host routing, or write targets |
-| `IntentSchema` | capture demand, constraints, uncertainties, and semantic evidence | carry final readiness or lifecycle truth |
-| clarification sidecars | surface 0-3 structural questions when ambiguity would change ownership or dependency meaning | become execution authority |
-| `Blueprint Stage` | decide feature structure, owned scope, feature contract, dependency edges, and implementation strategy | decide final host routing or write targets |
-| `FinalBlueprint` | expose deterministic downstream planning structure | act as final lifecycle verdict |
+| Wizard | interpret the ask and emit best-effort semantics | decide host routing, write targets, or final legality |
+| clarification sidecars | expose staged blockers and unresolved dependencies | become final execution truth |
+| Blueprint stage | decide structure, owned scope, dependency contract, and implementation strategy | decide concrete write targets |
+| downstream lifecycle | realize, validate, and commit or block the feature | reinterpret semantic ownership from scratch |
 
-## Blueprint Stage In V2
+## Clarification Is Now Staged Authority
 
-Current blueprint stage may internally carry:
+Current clarification questions may carry different impacts.
+
+### `blocksBlueprint`
+
+Use when:
+
+- the structure is too unclear to plan honestly
+- the feature boundary cannot be drawn without another answer
+
+Effect:
+
+- Blueprint should stop
+- write is also blocked
+
+### `blocksWrite`
+
+Use when:
+
+- planning may continue
+- host write still lacks enough authority to close safely
+
+Current canonical example:
+
+- unresolved cross-feature target/provider identity
+
+### `requiresReview`
+
+Use when:
+
+- the chain may continue in a weak/exploratory state
+- review must remain visible
+
+## Current Continuation Rule
+
+The key current change is:
+
+- unresolved cross-feature targets do not automatically hard-stop Blueprint
+- if the local shell is still structurally clear, Blueprint may continue and emit `weak`
+- the unresolved dependency stays attached to later gates and blocks write/final closure
+
+This is why the block belongs to write authority, not to planning authority.
+
+## Blueprint Stage Rules
+
+Blueprint currently owns:
 
 - `DesignDraft`
-- retrieved family candidates
-- retrieved pattern candidates
-- reuse confidence
-- chosen implementation strategy
-- provisional `commitDecision`
+- `FeatureContract`
+- `dependencyEdges`
+- `moduleNeeds`
+- `moduleRecords`
+- `unresolvedModuleNeeds`
+- implementation strategy choice:
+  - `family`
+  - `pattern`
+  - `guided_native`
+  - `exploratory`
 
-Current rules:
+Current chain rule:
 
-- public names stay `Blueprint` / `FinalBlueprint`
-- strategy selection is blueprint authority
-- final lifecycle authority still comes later
+- missing reuse coverage is not, by itself, a lawful reason to stop Blueprint
+- unknown mechanics may continue into guided-native or exploratory planning if owned scope is still bounded
 
-## Honest States
+## Update-Mode Rules
 
-Blueprint-stage status remains:
+Update mode is now explicitly context-backed.
+
+It reads:
+
+- `CurrentFeatureContext`
+- current source-backed truth when present
+
+It emits:
+
+- `requestedChange: IntentSchema`
+- `UpdateIntent`
+
+It must not:
+
+- re-infer ownership from raw prompt text alone
+- push adapter-specific merge authority back into Wizard
+- silently drop existing cross-feature sidecars during unrelated local-only updates
+
+## Persistence Boundary In The Chain
+
+Current interpretation rule:
+
+- generic `persistent` or `long-lived` wording defaults to runtime/session-long semantics
+- only explicit external storage, profile, or cross-match wording should trigger external-persistence governance questions
+
+This boundary is enforced by code-side normalization and clarification logic, not by prompt prose alone.
+
+## Blueprint Status Versus Final Authority
+
+Blueprint status remains:
 
 - `ready`
 - `weak`
@@ -88,45 +158,20 @@ Blueprint-stage status remains:
 
 Current meaning:
 
-- these are planning-time compatibility states
-- they are not the final lifecycle verdict
+- these are planning-time truth values
+- they do not replace the chain-end `CommitDecision`
 
-Current final authority:
+Current final authority remains:
 
-- chain-end `CommitDecision`
-
-## Current Boundary Rules
-
-1. Wizard must always return best-effort semantics, even for unfamiliar asks.
-2. Blueprint stage may choose `family`, `pattern`, `guided_native`, or `exploratory`.
-3. Missing family/pattern hits must not automatically force `blocked`.
-4. `blocked` at blueprint stage should mean planning-time legality or safety issue, not “catalog has not seen this before”.
-5. Artifact synthesis and local repair happen after blueprint stage, not inside Wizard.
-
-## Update-Mode Rules
-
-Update mode reads:
-
-- workspace-backed `CurrentFeatureContext`
-- not an old stored `IntentSchema`
-
-Update mode produces:
-
-- `requestedChange: IntentSchema`
-- `UpdateIntent`
-
-Update mode must not:
-
-- bypass current ownership truth
-- infer undeclared cross-feature writes from prompt text
-- smuggle adapter-specific merge authority into Wizard
+- dependency revalidation
+- host/runtime validation
+- final `CommitDecision`
 
 ## Summary
 
-The current blueprint chain is no longer a grammar-first admission funnel.
-
-It is a governance-first planning seam:
+The current chain is governance-first:
 
 - Wizard captures semantics
-- blueprint decides structure and strategy
-- downstream stages decide realization, validation, and final commit truth
+- clarification stages what blocks planning versus what blocks write
+- Blueprint decides structure and strategy
+- downstream validation and the final gate decide whether the feature may actually land

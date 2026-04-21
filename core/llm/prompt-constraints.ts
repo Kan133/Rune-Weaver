@@ -3,6 +3,7 @@ import type {
   PromptConstraintBundle,
 } from "../schema/types.js";
 import type { WizardClarificationAnswer } from "../wizard/types.js";
+import { extractRequestedTriggerKeyFromPrompt } from "../wizard/trigger-key-extraction.js";
 
 function getPreservedModuleBackbone(currentFeatureContext: CurrentFeatureContext): string[] {
   if ((currentFeatureContext.sourceBackedInvariantRoles || []).length > 0) {
@@ -123,6 +124,14 @@ function collectSourceText(input: PromptConstraintExtractorInput): string {
   return [input.rawText, transcript, workspaceHints].filter(Boolean).join("\n");
 }
 
+function collectScalarSourceText(input: PromptConstraintExtractorInput): string {
+  const transcript = (input.clarificationTranscript || [])
+    .map((item) => `${item.question}: ${item.answer}`)
+    .join("\n");
+
+  return [input.rawText, transcript].filter(Boolean).join("\n");
+}
+
 function extractExactScalars(rawText: string): Record<string, string | number | boolean> {
   const scalars: ScalarMatch[] = [];
   const push = (key: string, value: string | number | boolean | undefined) => {
@@ -190,11 +199,23 @@ function extractExactScalars(rawText: string): Record<string, string | number | 
   }, {});
 }
 
+function extractExactScalarsWithTriggerSupport(
+  rawText: string,
+): Record<string, string | number | boolean> {
+  const scalars = extractExactScalars(rawText);
+  const triggerKey = extractRequestedTriggerKeyFromPrompt(rawText);
+  if (triggerKey) {
+    scalars.triggerKey = triggerKey;
+  }
+  return scalars;
+}
+
 export function extractPromptConstraints(input: PromptConstraintExtractorInput): PromptConstraintBundle {
   const mustPreserve: string[] = [];
   const mustNotAdd: string[] = [];
   const openSemanticGaps: string[] = [];
   const sourceText = collectSourceText(input);
+  const scalarSourceText = collectScalarSourceText(input);
 
   for (const pattern of NEGATIVE_CONSTRAINT_PATTERNS) {
     if (pattern.pattern.test(sourceText)) {
@@ -228,7 +249,7 @@ export function extractPromptConstraints(input: PromptConstraintExtractorInput):
   return {
     mustPreserve,
     mustNotAdd,
-    exactScalars: extractExactScalars(sourceText),
+    exactScalars: extractExactScalarsWithTriggerSupport(scalarSourceText),
     openSemanticGaps,
   };
 }

@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-18
+> Last verified: 2026-04-20
 > Read when: deciding whether a doc is safe to trust, ignore, or archive
 > Do not use for: architecture design by itself; this is a routing/trust registry, not a subsystem spec
 
@@ -97,14 +97,14 @@ Minimum machine-readable header automation scope:
 | [PATTERN-PIPELINE.md](/D:/Rune%20Weaver/docs/PATTERN-PIPELINE.md) | active-reference | current | read-by-task | current pattern pipeline behavior |
 | [PATTERN-MODEL.md](/D:/Rune%20Weaver/docs/PATTERN-MODEL.md) | active-reference | current | read-by-task | current pattern reference model |
 | [PATTERN-SPEC.md](/D:/Rune%20Weaver/docs/PATTERN-SPEC.md) | active-reference | current | read-by-task | current pattern admission baseline for `PatternContract`, `HostBinding`, and `FillSlot` |
-| [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md) | active-reference | current | read-by-task | current schema reference |
+| [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md) | active-reference | current | read-by-task | current Wizard/Blueprint/Assembly contract truth |
 | [RW-MAINLINE-ORCHESTRATION-PLAN.md](/D:/Rune%20Weaver/docs/RW-MAINLINE-ORCHESTRATION-PLAN.md) | active-reference | current | read-by-task | cross-track orchestration guardrail |
 | [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) | active-reference | current | read-by-task | freshest cross-track current state, blockers, and attention split |
 | [SESSION-SYNC-PROTOCOL.md](/D:/Rune%20Weaver/docs/session-sync/SESSION-SYNC-PROTOCOL.md) | active-reference | current | read-by-task | session-sync note shape and shared-plan refresh rules |
 | [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md) | active-reference | needs-refresh | read-by-task | execution checklist for canonical acceptance work; packet-era wording may lag current shared truth, so cross-check same-day state against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [ACCEPTANCE-EVIDENCE-TEMPLATE.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-EVIDENCE-TEMPLATE.md) | active-reference | current | read-by-task | reporting template for acceptance evidence |
-| [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md) | active-reference | current | read-by-task | accepted Wizard / IntentSchema / Blueprint chain and final-authority boundary |
-| [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md) | active-reference | current | read-by-task | provider/client guidance plus current LLM placement for Wizard, synthesis, and repair |
+| [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md) | active-reference | current | read-by-task | current Wizard -> clarification -> Blueprint -> final-gate boundary, including staged `blocksBlueprint / blocksWrite` semantics |
+| [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md) | active-reference | current | read-by-task | current LLM placement and non-authority boundary across Wizard, proposal, synthesis, and repair |
 
 ---
 
@@ -114,8 +114,8 @@ Minimum machine-readable header automation scope:
 |----------|--------|-----------|--------------|-----|
 | [ASSEMBLY-REALIZATION-NOTES.md](/D:/Rune%20Weaver/docs/ASSEMBLY-REALIZATION-NOTES.md) | active-reference | current | read-by-task | assembly-to-host-realization boundary notes |
 | [BLUEPRINT-CLI-USAGE.md](/D:/Rune%20Weaver/docs/BLUEPRINT-CLI-USAGE.md) | active-reference | current | read-by-task | current blueprint CLI entry points and IO expectations |
-| [BLUEPRINT-PATTERN-RESOLUTION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PATTERN-RESOLUTION.md) | active-reference | current | read-by-task | Blueprint-to-pattern resolution behavior |
-| [BLUEPRINT-VALIDATION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-VALIDATION.md) | active-reference | current | read-by-task | blueprint validation and review criteria |
+| [BLUEPRINT-PATTERN-RESOLUTION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PATTERN-RESOLUTION.md) | active-reference | current | read-by-task | current `moduleNeeds` -> selected pattern / unresolved need / synthesis-forward continuation behavior |
+| [BLUEPRINT-VALIDATION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-VALIDATION.md) | active-reference | current | read-by-task | current layered validation chain from blueprint normalization to final commit gate |
 | [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md) | active-reference | needs-refresh | read-by-task | canonical acceptance case definitions; packet-era case framing still helps, but same-day current slice and blocker truth must come from `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [CANONICAL-WALKTHROUGH.md](/D:/Rune%20Weaver/docs/CANONICAL-WALKTHROUGH.md) | active-reference | current | read-by-task | canonical demo / handoff walkthrough |
 | [CLEAN-STATE-PROTOCOL.md](/D:/Rune%20Weaver/docs/CLEAN-STATE-PROTOCOL.md) | active-reference | current | read-by-task | clean-state preparation before verification |
@@ -142,7 +142,7 @@ Minimum machine-readable header automation scope:
 | [DOTA2-TS-GENERATOR-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-GENERATOR-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 TS generator boundary |
 | [DOTA2-TS-LUA-AUTHORING-PATHS.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-LUA-AUTHORING-PATHS.md) | active-reference | current | read-by-task | Dota2 TS/Lua authoring-path reference |
 | [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md) | active-reference | current | read-by-task | Dota2 bounded local repair / muscle-fill boundary |
-| [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md) | active-reference | current | read-by-task | current Dota2-specific V2 implementation reference after baseline ratification |
+| [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md) | active-reference | current | read-by-task | current Dota2-specific source-backed update, cross-feature grant seam, and provider-identity reference |
 | [DOTA-DATA-INGESTION.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA-DATA-INGESTION.md) | active-reference | current | read-by-task | Dota2 reference-data ingestion model |
 | [PATTERN-AUTHORING-GUIDE.md](/D:/Rune%20Weaver/docs/hosts/dota2/PATTERN-AUTHORING-GUIDE.md) | active-reference | needs-refresh | read-by-task | Dota2-oriented pattern authoring guide |
 | [UI-SAFER-PROFILE.md](/D:/Rune%20Weaver/docs/hosts/dota2/UI-SAFER-PROFILE.md) | active-reference | current | read-by-task | Dota2 Panorama safer-generation profile |
@@ -179,17 +179,16 @@ Volatile coordination note:
 |----------|--------|-----------|--------------|-----|
 | [DOC-GOVERNANCE-AUDIT-2026-04-14.md](/D:/Rune%20Weaver/docs/DOC-GOVERNANCE-AUDIT-2026-04-14.md) | planning | current | planning-only | documentation cleanup audit |
 | [CURRENT-STATE-VS-TARGET.md](/D:/Rune%20Weaver/docs/CURRENT-STATE-VS-TARGET.md) | planning | current | planning-only | pure narrative state comparison only; not an execution queue or lifecycle baseline |
-| [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md) | planning | current | planning-only | target intent/blueprint architecture |
-| [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-VNEXT-PROPOSAL.md) | planning | current | planning-only | proposed typed IntentSchema vNext contract |
-| [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md) | planning | current | planning-only | proposed `BlueprintProposal` contract and proposal-side authority boundary |
-| [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-NORMALIZER-PROPOSAL.md) | planning | current | planning-only | proposed deterministic normalization gate and `FinalBlueprint` boundary |
+| [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md) | planning | current | planning-only | residual intent/blueprint planning tracker after baseline ratification |
+| [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-VNEXT-PROPOSAL.md) | planning | current | planning-only | residual typed IntentSchema vNext proposal details |
+| [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md) | planning | current | planning-only | residual `BlueprintProposal` contract planning notes |
+| [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-NORMALIZER-PROPOSAL.md) | planning | current | planning-only | residual deterministic normalization planning details |
 | [PATTERN-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/PATTERN-UPDATE-PLAN.md) | planning | current | planning-only | target pattern architecture |
 | [PATTERN-CONTRACT-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/PATTERN-CONTRACT-VNEXT-PROPOSAL.md) | planning | current | planning-only | proposed semantic `PatternContract` / `HostBinding` contract split |
 | [REALIZATION-FAMILY-PROPOSAL.md](/D:/Rune%20Weaver/docs/REALIZATION-FAMILY-PROPOSAL.md) | planning | current | planning-only | proposed `RealizationFamily` taxonomy and family-first host realization policy |
 | [FILL-SLOT-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/FILL-SLOT-CONTRACT-PROPOSAL.md) | planning | current | planning-only | proposed typed `FillSlot` contract and bounded gap-fill gating |
 | [MODULE-NEED-SEAM-PROPOSAL.md](/D:/Rune%20Weaver/docs/MODULE-NEED-SEAM-PROPOSAL.md) | planning | current | planning-only | canonical cross-lane planning seam for normalized module needs |
 | [ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md](/D:/Rune%20Weaver/docs/ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md) | planning | current | planning-only | main-controller boundary for parallel agent lanes |
-| [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md) | planning | needs-refresh | planning-only | older Blueprint-stage contract; useful only for migration comparison |
 | [BRIDGE-UPDATE-PLANNING.md](/D:/Rune%20Weaver/docs/BRIDGE-UPDATE-PLANNING.md) | planning | current | planning-only | future bridge update planning |
 | [COMPOSITE-BLUEPRINT-BASELINE.md](/D:/Rune%20Weaver/docs/COMPOSITE-BLUEPRINT-BASELINE.md) | planning | current | planning-only | future composite-blueprint baseline |
 | [COMPOSITE-FEATURE-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/COMPOSITE-FEATURE-ARCHITECTURE.md) | planning | current | planning-only | future composite-feature architecture |
@@ -204,7 +203,6 @@ Volatile coordination note:
 | [UI-PATTERN-STRATEGY.md](/D:/Rune%20Weaver/docs/UI-PATTERN-STRATEGY.md) | planning | current | planning-only | future UI pattern strategy |
 | [UI-SPEC-GUIDE.md](/D:/Rune%20Weaver/docs/UI-SPEC-GUIDE.md) | planning | current | planning-only | future UI spec scope guide |
 | [UI-WIZARD-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/UI-WIZARD-GUARDRAILS-ZH.md) | planning | needs-refresh | planning-only | future UI Wizard boundary guide |
-| [WIZARD-INTENT-CONTRACT.md](/D:/Rune%20Weaver/docs/WIZARD-INTENT-CONTRACT.md) | planning | needs-refresh | planning-only | older Wizard/Intent contract; planning comparison only |
 
 ---
 
@@ -227,6 +225,8 @@ Volatile coordination note:
 |----------|--------|-----------|--------------|-----|
 | [MVP-EXECUTION-QUEUE.md](/D:/Rune%20Weaver/docs/MVP-EXECUTION-QUEUE.md) | archive | redirect-stub | ignore-for-execution | historical queue redirect only |
 | [TASK-COMPLETION.md](/D:/Rune%20Weaver/docs/TASK-COMPLETION.md) | archive | redirect-stub | ignore-for-execution | historical tracker redirect only |
+| [WIZARD-INTENT-CONTRACT.md](/D:/Rune%20Weaver/docs/WIZARD-INTENT-CONTRACT.md) | archive | redirect-stub | ignore-for-execution | redirect stub to the archived comparison-era Wizard/Intent contract |
+| [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md) | archive | redirect-stub | ignore-for-execution | redirect stub to the archived comparison-era Blueprint orchestration contract |
 
 ---
 

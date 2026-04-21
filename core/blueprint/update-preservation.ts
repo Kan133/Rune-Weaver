@@ -6,6 +6,7 @@ import type {
   ValidationIssue,
 } from "../schema/types.js";
 import { CORE_PATTERN_IDS } from "../patterns/canonical-patterns.js";
+import { requireGovernedUpdateExecutionView } from "./update-execution-view.js";
 
 export interface UpdatePreservationAuthority {
   sourceBackedInvariantRoles: string[];
@@ -81,7 +82,15 @@ function normalizeTriggerKey(value: unknown): string | undefined {
     : undefined;
 }
 
-function readRequestedTriggerKey(requestedChange: IntentSchema): string | undefined {
+function readRequestedTriggerKey(requestedChange: {
+  parameters?: Record<string, unknown>;
+  interaction?: {
+    activations?: Array<{
+      kind?: string;
+      input?: string;
+    }>;
+  };
+}): string | undefined {
   return normalizeTriggerKey(requestedChange.parameters?.triggerKey)
     || normalizeTriggerKey(
       (requestedChange.interaction?.activations || []).find((item) => item.kind === "key")?.input,
@@ -130,21 +139,23 @@ export function resolveUpdatePreservationAuthority(
 export function collectUpdateRemovalDirectives(
   updateIntent: UpdateIntent,
 ): UpdateRemovalDirectives {
-  const rawPrompt = updateIntent.requestedChange.request.rawPrompt.toLowerCase();
-  const removeItems = updateIntent.delta.remove || [];
-  const removeUi = updateIntent.requestedChange.uiRequirements?.needed === false
+  const executionView = requireGovernedUpdateExecutionView(
+    updateIntent,
+    "Update removal directive resolution",
+  );
+  const removeItems = executionView.semanticAnalysis.governanceDecisions.mutationAuthority.value.remove?.length
+    ? executionView.semanticAnalysis.governanceDecisions.mutationAuthority.value.remove
+    : executionView.delta.remove || [];
+  const removeUi = executionView.governedChange.uiRequirements?.needed === false
     || removeItems.some((item) =>
       item.kind === "ui" || /ui|modal|panel|selection_modal/i.test(`${item.path} ${item.summary}`),
-    )
-    || /(?:remove|drop|without|no)\s+ui|remove\s+modal|without\s+modal|no\s+modal|不要\s*ui|不需要\s*ui|去掉\s*ui|移除\s*ui/u.test(rawPrompt);
+    );
   const removeSelectionFlow = removeItems.some((item) =>
     item.kind === "selection" || /selection|weighted_pool|selection_flow|candidatepool|playerchoice/i.test(`${item.path} ${item.summary}`),
-  )
-    || /remove\s+selection|remove\s+player\s+choice|remove\s+selection\s+flow|skip\s+choice|without\s+choice|without\s+selection|auto-apply|不要选择|取消选择|移除选择/u.test(rawPrompt);
+  );
   const removeTrigger = removeItems.some((item) =>
     item.kind === "trigger" || /trigger|hotkey|input\.triggerkey|key/i.test(`${item.path} ${item.summary}`),
-  )
-    || /remove\s+trigger|remove\s+hotkey|remove\s+key|不要按键|移除触发/u.test(rawPrompt);
+  );
 
   return {
     removeUi,
@@ -186,25 +197,33 @@ export function applyUpdateRemovalDirectives(
 export function resolveAuthoritativeUpdateTriggerKey(
   updateIntent: UpdateIntent,
 ): string | undefined {
+  const executionView = requireGovernedUpdateExecutionView(
+    updateIntent,
+    "Authoritative update trigger resolution",
+  );
   const currentValue = normalizeTriggerKey(updateIntent.currentFeatureContext.boundedFields.triggerKey);
   if (!hasExplicitUpdateDeltaPath(updateIntent, "input.triggerKey")) {
     return currentValue;
   }
 
-  return readRequestedTriggerKey(updateIntent.requestedChange)
+  return readRequestedTriggerKey(executionView.executionSchema)
     || currentValue;
 }
 
 export function resolveAuthoritativeUpdateChoiceCount(
   updateIntent: UpdateIntent,
 ): number | undefined {
+  const executionView = requireGovernedUpdateExecutionView(
+    updateIntent,
+    "Authoritative update choice-count resolution",
+  );
   const currentValue = normalizePositiveInteger(updateIntent.currentFeatureContext.boundedFields.choiceCount);
   if (!hasExplicitUpdateDeltaPath(updateIntent, "selection.choiceCount")) {
     return currentValue;
   }
 
-  return normalizePositiveInteger(updateIntent.requestedChange.selection?.choiceCount)
-    || normalizePositiveInteger(updateIntent.requestedChange.parameters?.choiceCount)
+  return normalizePositiveInteger(executionView.executionSchema.selection?.choiceCount)
+    || normalizePositiveInteger(executionView.executionSchema.parameters?.choiceCount)
     || currentValue;
 }
 
@@ -213,6 +232,10 @@ export function shouldUseAuthoritativeSourceBackedUpdateProjection(
   preservationAuthority: UpdatePreservationAuthority,
   removalDirectives: UpdateRemovalDirectives,
 ): boolean {
+  const executionView = requireGovernedUpdateExecutionView(
+    updateIntent,
+    "Authoritative source-backed update projection",
+  );
   if (!updateIntent.target.sourceBacked) {
     return false;
   }
@@ -227,7 +250,6 @@ export function shouldUseAuthoritativeSourceBackedUpdateProjection(
     return false;
   }
 
-  const requestedChange = updateIntent.requestedChange;
   const deltaKinds = new Set(
     [
       ...(updateIntent.delta.add || []),
@@ -244,12 +266,12 @@ export function shouldUseAuthoritativeSourceBackedUpdateProjection(
   if ((["integration", "composition", "effect"] as const).some((kind) => deltaKinds.has(kind))) {
     return false;
   }
-  if ((requestedChange.composition?.dependencies || []).some((dependency) => dependency.kind !== "same-feature")) {
+  if ((executionView.governedChange.composition?.dependencies || []).some((dependency) => dependency.kind !== "same-feature")) {
     return false;
   }
   if (
     deltaKinds.has("state")
-    && (requestedChange.stateModel?.states || []).some((state) =>
+    && (executionView.governedChange.stateModel?.states || []).some((state) =>
       state.lifetime === "persistent"
       || state.owner === "external"
       || state.owner === "session",
@@ -262,13 +284,13 @@ export function shouldUseAuthoritativeSourceBackedUpdateProjection(
 }
 
 export function buildPreservedUpdateMechanics(
-  requestedChange: IntentSchema,
+  executionSchema: IntentSchema,
   preservedModuleRoles: string[],
   sourceBackedInvariantRoles: string[],
   removalDirectives: UpdateRemovalDirectives,
 ): IntentSchema["normalizedMechanics"] {
   const mechanics = {
-    ...(requestedChange.normalizedMechanics || {}),
+    ...(executionSchema.normalizedMechanics || {}),
   };
   const preserved = new Set(preservedModuleRoles);
   const invariantRoles = new Set(sourceBackedInvariantRoles);
@@ -313,13 +335,13 @@ export function buildPreservedUpdateMechanics(
 }
 
 export function mergeUpdateUISurfaces(
-  requestedChange: IntentSchema,
+  executionSchema: IntentSchema,
   preservedModuleRoles: string[],
   sourceBackedInvariantRoles: string[],
   removalDirectives: Pick<UpdateRemovalDirectives, "removeUi">,
 ): string[] {
   const surfaces = new Set<string>(
-    removalDirectives.removeUi ? [] : (requestedChange.uiRequirements?.surfaces || []),
+    removalDirectives.removeUi ? [] : (executionSchema.uiRequirements?.surfaces || []),
   );
   const preserved = new Set(preservedModuleRoles);
   const invariantRoles = new Set(sourceBackedInvariantRoles);
@@ -330,7 +352,7 @@ export function mergeUpdateUISurfaces(
 }
 
 export function buildPreservedUpdateSelection(
-  requestedChange: IntentSchema,
+  executionSchema: IntentSchema,
   preservedModuleRoles: string[],
   sourceBackedInvariantRoles: string[],
   choiceCount: number | undefined,
@@ -346,31 +368,31 @@ export function buildPreservedUpdateSelection(
     return undefined;
   }
   const hasSelectionSkeleton =
-    requestedChange.selection !== undefined
+    executionSchema.selection !== undefined
     || preserved.has("weighted_pool")
     || preserved.has("selection_flow")
     || (preserved.has("selection_modal") && !removalDirectives.removeUi)
     || invariantRoles.has("selection_modal");
 
   if (!hasSelectionSkeleton) {
-    return requestedChange.selection;
+    return executionSchema.selection;
   }
 
   return {
-    mode: requestedChange.selection?.mode || "user-chosen",
-    ...(preserved.has("weighted_pool") || requestedChange.selection?.source
+    mode: executionSchema.selection?.mode || "user-chosen",
+    ...(preserved.has("weighted_pool") || executionSchema.selection?.source
       ? {
-          source: requestedChange.selection?.source || "weighted-pool",
+          source: executionSchema.selection?.source || "weighted-pool",
         }
       : {}),
-    choiceMode: requestedChange.selection?.choiceMode || "user-chosen",
-    cardinality: requestedChange.selection?.cardinality || "single",
+    choiceMode: executionSchema.selection?.choiceMode || "user-chosen",
+    cardinality: executionSchema.selection?.cardinality || "single",
     ...(typeof choiceCount === "number" ? { choiceCount } : {}),
-    repeatability: requestedChange.selection?.repeatability || "repeatable",
-    duplicatePolicy: requestedChange.selection?.duplicatePolicy || "forbid",
-    commitment: requestedChange.selection?.commitment || "confirm",
-    ...(requestedChange.selection?.inventory
-      ? { inventory: requestedChange.selection.inventory }
+    repeatability: executionSchema.selection?.repeatability || "repeatable",
+    duplicatePolicy: executionSchema.selection?.duplicatePolicy || "forbid",
+    commitment: executionSchema.selection?.commitment || "confirm",
+    ...(executionSchema.selection?.inventory
+      ? { inventory: executionSchema.selection.inventory }
       : {}),
   };
 }

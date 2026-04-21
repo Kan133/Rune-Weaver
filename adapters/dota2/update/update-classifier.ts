@@ -23,6 +23,7 @@
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
 import { isFeatureSourceModelEntry } from "../families/selection-pool/index.js";
+import { resolveFeatureOwnedArtifacts } from "../kv/owned-artifacts.js";
 
 const RW_OWNED_PREFIXES = [
   "game/scripts/src/rune_weaver/",
@@ -110,6 +111,100 @@ function findFeatureSourceModelEntry(entries: Map<string, WritePlanEntry>): Writ
     }
   }
   return undefined;
+}
+
+function inferContentTypeFromPath(path: string): WritePlanEntry["contentType"] {
+  const normalizedPath = normalizePath(path);
+  if (normalizedPath.endsWith(".tsx")) {
+    return "tsx";
+  }
+  if (normalizedPath.endsWith(".less")) {
+    return "less";
+  }
+  if (normalizedPath.endsWith(".css")) {
+    return "css";
+  }
+  if (normalizedPath.endsWith(".json")) {
+    return "json";
+  }
+  if (normalizedPath.endsWith(".lua")) {
+    return "lua";
+  }
+  if (normalizedPath.endsWith(".kv.txt") || normalizedPath.endsWith(".kv")) {
+    return "kv";
+  }
+  return "typescript";
+}
+
+function buildHistoricalOwnedArtifactEntry(
+  feature: RuneWeaverFeatureRecord,
+  artifact: ReturnType<typeof resolveFeatureOwnedArtifacts>[number],
+): WritePlanEntry | undefined {
+  switch (artifact.kind) {
+    case "materialized_aggregate":
+      return undefined;
+    case "rw_source_model":
+      return {
+        operation: "create",
+        targetPath: artifact.path,
+        contentType: "json",
+        contentSummary: "",
+        sourcePattern: "rw.feature_source_model",
+        sourceModule: "feature_source_model",
+        safe: true,
+        metadata: {
+          sourceModelRef: {
+            adapter: artifact.adapter,
+            version: artifact.version,
+            path: artifact.path,
+          },
+        },
+      };
+    case "ability_kv_fragment":
+      return {
+        operation: "create",
+        targetPath: artifact.path,
+        contentType: "kv",
+        contentSummary: "",
+        sourcePattern: "dota2.ability_kv_fragment",
+        sourceModule: feature.featureId,
+        safe: true,
+        metadata: {
+          abilityName: artifact.abilityName,
+          scriptFile: artifact.scriptFile,
+          kvArtifactKind: "fragment",
+          aggregateTargetPath: artifact.aggregateTargetPath,
+        },
+      };
+    case "generated_file":
+    default:
+      return {
+        operation: "create",
+        targetPath: artifact.path,
+        contentType: inferContentTypeFromPath(artifact.path),
+        contentSummary: "",
+        sourcePattern: "",
+        sourceModule: "",
+        safe: true,
+      };
+  }
+}
+
+function isAbilityKvFragmentEntry(entry: WritePlanEntry | undefined): boolean {
+  return Boolean(
+    entry
+    && (
+      entry.metadata?.kvArtifactKind === "fragment"
+      || normalizePath(entry.targetPath).endsWith(".kv.txt")
+    ),
+  );
+}
+
+function resolveAggregateTargetPath(entry: WritePlanEntry | undefined): string | undefined {
+  const aggregateTargetPath = entry?.metadata?.aggregateTargetPath;
+  return typeof aggregateTargetPath === "string" && aggregateTargetPath.trim().length > 0
+    ? aggregateTargetPath
+    : undefined;
 }
 
 function classifyFileChange(
@@ -211,38 +306,17 @@ function classifyFileChange(
 export function classifyUpdateDiff(
   existingFeature: RuneWeaverFeatureRecord,
   newWritePlan: WritePlan,
-  hostRoot: string
+  _hostRoot: string
 ): UpdateDiffResult {
   const oldFiles = new Map<string, WritePlanEntry>();
   const newFiles = new Map<string, WritePlanEntry>();
   
-  for (const file of existingFeature.generatedFiles) {
-    const normalizedRelativePath = normalizePath(file);
-    oldFiles.set(normalizedRelativePath, {
-      operation: "create",
-      targetPath: normalizedRelativePath,
-      contentType: file.endsWith(".tsx") ? "tsx" : file.endsWith(".less") ? "less" : "typescript",
-      contentSummary: "",
-      sourcePattern: "",
-      sourceModule: "",
-      safe: true,
-    });
-  }
-
-  if (existingFeature.sourceModel?.path) {
-    const normalizedSourcePath = normalizePath(existingFeature.sourceModel.path);
-    oldFiles.set(normalizedSourcePath, {
-      operation: "create",
-      targetPath: normalizedSourcePath,
-      contentType: "json",
-      contentSummary: "",
-      sourcePattern: "rw.feature_source_model",
-      sourceModule: "feature_source_model",
-      safe: true,
-      metadata: {
-        sourceModelRef: existingFeature.sourceModel,
-      },
-    });
+  for (const artifact of resolveFeatureOwnedArtifacts(existingFeature)) {
+    const entry = buildHistoricalOwnedArtifactEntry(existingFeature, artifact);
+    if (!entry) {
+      continue;
+    }
+    oldFiles.set(normalizePath(entry.targetPath), entry);
   }
   
   for (const entry of newWritePlan.entries.filter((candidate) => !candidate.deferred)) {
@@ -284,6 +358,32 @@ export function classifyUpdateDiff(
     );
     
     classifications.push(classification);
+  }
+
+  const managedAggregateTargets = new Set<string>();
+  for (const classification of classifications) {
+    if (classification.classification === "unchanged") {
+      continue;
+    }
+    const oldAggregateTarget = resolveAggregateTargetPath(classification.oldEntry);
+    const newAggregateTarget = resolveAggregateTargetPath(classification.newEntry);
+    if (isAbilityKvFragmentEntry(classification.oldEntry) && oldAggregateTarget) {
+      managedAggregateTargets.add(oldAggregateTarget);
+    }
+    if (isAbilityKvFragmentEntry(classification.newEntry) && newAggregateTarget) {
+      managedAggregateTargets.add(newAggregateTarget);
+    }
+  }
+
+  for (const aggregateTarget of managedAggregateTargets) {
+    if (classifications.some((classification) => normalizePath(classification.path) === normalizePath(aggregateTarget))) {
+      continue;
+    }
+    classifications.push({
+      path: aggregateTarget,
+      classification: "refresh-only",
+      reason: "Managed KV fragments changed; aggregate host file will be rematerialized",
+    });
   }
   
   const unchangedFiles = classifications.filter(c => c.classification === "unchanged");

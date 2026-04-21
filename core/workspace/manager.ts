@@ -20,6 +20,7 @@ import {
   FeatureWriteResult,
   DuplicateFeaturePolicy,
   EntryBinding,
+  FeatureOwnedArtifact,
   FeatureSourceModelRef,
   ModuleImplementationRecord,
 } from "./types.js";
@@ -565,6 +566,7 @@ export function addFeatureToWorkspace(
     modules: result.modules || [],
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
+    ownedArtifacts: result.ownedArtifacts,
     entryBindings: result.entryBindings,
     sourceModel: result.sourceModel ?? undefined,
     featureAuthoring: result.featureAuthoring ?? undefined,
@@ -615,6 +617,7 @@ export function updateFeatureInWorkspace(
     modules: nextModules,
     selectedPatterns: result.selectedPatterns,
     generatedFiles: result.generatedFiles,
+    ownedArtifacts: resolveOptionalReplace(result.ownedArtifacts, existing.ownedArtifacts),
     entryBindings: result.entryBindings,
     sourceModel: resolveOptionalReplace(result.sourceModel, existing.sourceModel),
     featureAuthoring: resolveOptionalReplace(result.featureAuthoring, existing.featureAuthoring),
@@ -756,6 +759,7 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
   const raw = rawFeature as Record<string, unknown>;
   const now = new Date().toISOString();
   const generatedFiles = ((raw.generatedFiles as string[]) || []).filter((file): file is string => typeof file === "string");
+  const ownedArtifacts = normalizeOwnedArtifacts(raw.ownedArtifacts);
   const sourceModel = normalizeSourceModelRef(raw.sourceModel);
   const featureAuthoring = normalizeFeatureAuthoring(raw.featureAuthoring);
   const modules = normalizeModuleImplementationRecords(raw.modules, raw);
@@ -767,12 +771,19 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
   return {
     featureId: (raw.featureId as string) || "",
     intentKind: (raw.intentKind as string) || "unknown",
-    status: (raw.status as "active" | "disabled" | "archived") || "active",
+    status:
+      raw.status === "active"
+      || raw.status === "disabled"
+      || raw.status === "archived"
+      || raw.status === "rolled_back"
+        ? raw.status
+        : "active",
     revision: (raw.revision as number) || 1,
     blueprintId: (raw.blueprintId as string) || "",
     modules,
     selectedPatterns: (raw.selectedPatterns as string[]) || [],
     generatedFiles,
+    ownedArtifacts,
     entryBindings: normalizeEntryBindings(raw.entryBindings, generatedFiles),
     sourceModel,
     featureAuthoring,
@@ -1140,6 +1151,74 @@ function normalizeSourceModelRef(rawSourceModel: unknown): FeatureSourceModelRef
   };
 }
 
+function normalizeOwnedArtifacts(rawOwnedArtifacts: unknown): FeatureOwnedArtifact[] | undefined {
+  if (!Array.isArray(rawOwnedArtifacts)) {
+    return undefined;
+  }
+
+  const artifacts = rawOwnedArtifacts
+    .filter((artifact): artifact is Record<string, unknown> => Boolean(artifact) && typeof artifact === "object")
+    .map((artifact) => {
+      const path = typeof artifact.path === "string" && artifact.path.length > 0
+        ? artifact.path
+        : undefined;
+      if (!path) {
+        return undefined;
+      }
+
+      switch (artifact.kind) {
+        case "generated_file":
+          return {
+            kind: "generated_file",
+            path,
+          } satisfies FeatureOwnedArtifact;
+        case "rw_source_model":
+          return {
+            kind: "rw_source_model",
+            path,
+            adapter: typeof artifact.adapter === "string" && artifact.adapter.length > 0
+              ? artifact.adapter
+              : undefined,
+            version: typeof artifact.version === "number" ? artifact.version : undefined,
+          } satisfies FeatureOwnedArtifact;
+        case "ability_kv_fragment":
+          if (
+            typeof artifact.aggregateTargetPath !== "string"
+            || artifact.aggregateTargetPath.length === 0
+            || typeof artifact.abilityName !== "string"
+            || artifact.abilityName.length === 0
+            || typeof artifact.scriptFile !== "string"
+            || artifact.scriptFile.length === 0
+            || artifact.managedBy !== "dota2-ability-kv-aggregate"
+          ) {
+            return undefined;
+          }
+          return {
+            kind: "ability_kv_fragment",
+            path,
+            aggregateTargetPath: artifact.aggregateTargetPath,
+            abilityName: artifact.abilityName,
+            scriptFile: artifact.scriptFile,
+            managedBy: artifact.managedBy,
+          } satisfies FeatureOwnedArtifact;
+        case "materialized_aggregate":
+          if (artifact.managedBy !== "dota2-ability-kv-aggregate") {
+            return undefined;
+          }
+          return {
+            kind: "materialized_aggregate",
+            path,
+            managedBy: artifact.managedBy,
+          } satisfies FeatureOwnedArtifact;
+        default:
+          return undefined;
+      }
+    })
+    .filter((artifact): artifact is FeatureOwnedArtifact => Boolean(artifact));
+
+  return artifacts.length > 0 ? artifacts : undefined;
+}
+
 /**
  * 提取真实的 bridge/entry 绑定
  * 
@@ -1247,6 +1326,7 @@ export function rollbackFeatureInWorkspace(
     ...existing,
     status: "rolled_back",
     generatedFiles: [],
+    ownedArtifacts: [],
     entryBindings: [],
     updatedAt: now,
   };

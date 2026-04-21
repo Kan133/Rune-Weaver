@@ -28,6 +28,11 @@ import {
   sanitizeDotaAbilityName,
   validateAbilityContentIdentity,
 } from "../provider-ability-identity.js";
+import {
+  ABILITY_KV_AGGREGATE_TARGET_PATH,
+  buildAbilityKvFragmentPath,
+  resolveAbilityKvScriptFile,
+} from "../kv/contract.js";
 
 interface LLMArtifactCandidate {
   content?: string;
@@ -1053,13 +1058,20 @@ function buildFallbackUnresolvedModuleNeeds(blueprint: Blueprint): UnresolvedMod
   }));
 }
 
+function hasWritableGameplayShellAuthority(bundleNeeds: UnresolvedModuleNeed[]): boolean {
+  return bundleNeeds.some((need) =>
+    (need.artifactTargets || []).some((target) => target === "server" || target === "config" || target === "lua")
+    || (need.requiredOutputs || []).some((output) =>
+      output === "server.runtime" || output === "host.runtime.lua" || output === "host.config.kv"),
+  );
+}
+
 function synthesizeBundle(
   blueprint: Blueprint,
   featureId: string,
   bundle: SynthesisBundlePlan,
   bundleNeeds: UnresolvedModuleNeed[],
 ): ModuleSynthesisResult {
-  const targets = new Set(bundle.artifactTargets || []);
   const isUiOnly = bundle.kind === "ui_surface";
   const needsBridge = bundle.kind === "supporting_surface";
   const artifacts: SynthesizedArtifact[] = [];
@@ -1072,7 +1084,13 @@ function synthesizeBundle(
     );
   }
 
-  if (!isUiOnly && !needsBridge) {
+  if (!isUiOnly && !needsBridge && !hasWritableGameplayShellAuthority(bundleNeeds)) {
+    blockers.push(
+      `Synthesis bundle '${bundle.bundleId}' did not close writable gameplay authority, so no Lua/KV shell was emitted.`,
+    );
+  }
+
+  if (!isUiOnly && !needsBridge && blockers.length === 0) {
     const resolvedAbility = resolveBundleAbilityName(blueprint, featureId, bundle);
     const abilityName = resolvedAbility.abilityName;
     const behavior = resolveAbilityBehavior(blueprint);
@@ -1113,17 +1131,20 @@ function synthesizeBundle(
         hostTarget: "ability_kv",
         outputKind: "kv",
         contentType: "kv",
-        targetPath: "game/scripts/npc/npc_abilities_custom.txt",
+        targetPath: buildAbilityKvFragmentPath(featureId, abilityName),
         content: buildAbilityKVContent(abilityName, behavior, blueprint),
         summary: `Synthesized KV shell for bundle ${gameplaySummary}`,
         rationale: [
           "artifact synthesis filled unresolved gameplay modules with a shared host-native KV shell",
-          "KV output is aggregated into the owned custom abilities file",
+          "feature owns the KV fragment while the host aggregate writer materializes npc_abilities_custom.txt",
         ],
         metadata: {
           abilityName,
           abilityBehavior: behavior,
           moduleIds: bundle.moduleIds,
+          scriptFile: resolveAbilityKvScriptFile(abilityName),
+          kvArtifactKind: "fragment",
+          aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
         },
       },
     );

@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-18
+> Last verified: 2026-04-20
 > Read when: deciding the minimum doc set for a task
 > Do not use for: subsystem truth by itself; this file routes readers to the right docs
 
@@ -90,8 +90,8 @@ Read baseline first:
 
 1. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
 2. [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
-3. [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
-4. [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+3. [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+4. [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
 
 If the task is Dota2-specific blueprint/synthesis/repair work or is checking whether older grammar-era wording still applies, add these before proposal docs:
 
@@ -102,13 +102,11 @@ If the task is Dota2-specific blueprint/synthesis/repair work or is checking whe
 
 Then read proposal docs only if the task is explicitly planning/proposal work:
 
-- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
+- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
 - [MODULE-NEED-SEAM-PROPOSAL.md](/D:/Rune%20Weaver/docs/MODULE-NEED-SEAM-PROPOSAL.md)
-- [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-VNEXT-PROPOSAL.md)
-- [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md)
-- [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-NORMALIZER-PROPOSAL.md)
-- [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md)
-  - only for migration comparison; do not let it override current proposal/baseline wording
+- [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-VNEXT-PROPOSAL.md)
+- [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md)
+- [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-NORMALIZER-PROPOSAL.md)
 - [ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md](/D:/Rune%20Weaver/docs/ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md)
   - only when checking lane boundaries or proposal merge ownership
 
@@ -117,6 +115,8 @@ Add when relevant:
 - [BLUEPRINT-CLI-USAGE.md](/D:/Rune%20Weaver/docs/BLUEPRINT-CLI-USAGE.md)
 - [BLUEPRINT-PATTERN-RESOLUTION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PATTERN-RESOLUTION.md)
 - [BLUEPRINT-VALIDATION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-VALIDATION.md)
+
+Do not use redirect stubs such as [WIZARD-INTENT-CONTRACT.md](/D:/Rune%20Weaver/docs/WIZARD-INTENT-CONTRACT.md) or [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md) for execution work; they exist only to route archive readers.
 
 Stop when you reach docs tagged `planning` or `needs-refresh`; this route exists to inspect proposal work, not to override the authoritative lifecycle truth specified in §3.
 

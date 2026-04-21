@@ -14,12 +14,7 @@ import {
 } from "../../../../core/wizard/intent-governance-view.js";
 import {
   createAdmissionFinding,
-  createBlockedDiagnostics,
-  createFillIntentCandidates,
-  createNotApplicableDiagnostics,
   dedupeStrings,
-  inferObjectKind,
-  looksLikeSelectionPoolPrompt,
   normalizeFeatureAuthoringParameters,
   parseChoiceCount,
   parseTriggerKey,
@@ -36,6 +31,12 @@ import {
   type SelectionPoolDetectionResult,
   type SelectionPoolProposalBuildResult,
 } from "./shared.js";
+import { detectSelectionPoolFallbackIntent } from "./fallback-detection.js";
+import {
+  createBlockedDiagnostics,
+  createNotApplicableDiagnostics,
+  extractSelectionPoolAdmissionBlockers,
+} from "./diagnostics.js";
 import { applyPromptMerge, createSelectionPoolSeedProposal, resolveSelectionPoolFillIntentCandidates } from "./seeding.js";
 
 const FAMILY_BLOCK_PATTERNS: Array<{ code: string; test: RegExp; reason: string }> = [
@@ -93,40 +94,6 @@ function hasCustomEffectFamilyRequest(schema: IntentSchema): boolean {
 
 function hasMultipleTriggerOwners(schema: IntentSchema): boolean {
   return getGovernanceKeyInputs(schema).length > 1;
-}
-
-function evaluateSelectionPoolDetection(input: ResolveSelectionPoolFamilyInput): SelectionPoolDetectionResult {
-  const promptKind = inferObjectKind(input.prompt, input.existingFeature);
-  const normalized = input.prompt.toLowerCase();
-  const promptShape = looksLikeSelectionPoolPrompt(input.prompt);
-  const updateFamilyCue =
-    input.mode !== "create" &&
-    Boolean(input.featureId?.trim()) &&
-    /(?:selection pool|draw system|draft system|抽取系统|抽卡系统|候选池)/.test(normalized);
-  const matchedBy = dedupeStrings([
-    promptKind ? `object_kind:${promptKind}` : undefined,
-    promptShape ? "prompt_shape" : undefined,
-    updateFamilyCue ? "update_family_cue" : undefined,
-    input.existingFeature?.featureAuthoring?.profile === "selection_pool" ? "existing_feature_authoring" : undefined,
-    input.existingFeature?.sourceModel?.adapter === "selection_pool" ? "existing_source_model" : undefined,
-    input.existingFeature?.sourceModel?.adapter === "talent-draw" ? "legacy_source_model" : undefined,
-  ]);
-  const findings = matchedBy.map((match) =>
-    createAdmissionFinding(
-      "detection",
-      "SELECTION_POOL_DETECTION_MATCH",
-      "info",
-      `selection_pool detection matched via ${match}.`,
-      { metadata: { match } },
-    ),
-  );
-
-  return {
-    handled: matchedBy.length > 0,
-    objectKindHint: promptKind,
-    matchedBy,
-    findings,
-  };
 }
 
 function collectFamilyBlockFindings(prompt: string): Array<{ code: string; reason: string }> {
@@ -461,9 +428,23 @@ function buildSelectionPoolAdmissionDiagnostics(input: {
       createAdmissionFinding("decision", code, "error", `${code} prevented bounded selection_pool admission.`),
     ),
   ];
+  const boundedClosureAuthority = verdict === "admitted_explicit"
+    ? {
+        mode: "explicit_only" as const,
+        closeableSurfaces: [
+          "selection_flow",
+          "candidate_catalog",
+          "ui_presentation",
+          "effect_profile",
+        ],
+        reason:
+          "selection_pool explicit admission may close family-owned bounded blueprint residue inside the admitted local draw shell.",
+      }
+    : undefined;
   return {
     familyId: SELECTION_POOL_FAMILY_ID,
     verdict,
+    ...(boundedClosureAuthority ? { boundedClosureAuthority } : {}),
     detection: {
       handled: input.detection.handled,
       objectKindHint: input.detection.objectKindHint,
@@ -496,7 +477,7 @@ function buildSelectionPoolAdmissionDiagnostics(input: {
 export function resolveSelectionPoolFamily(
   input: ResolveSelectionPoolFamilyInput,
 ): ResolveSelectionPoolFamilyResult {
-  const detection = evaluateSelectionPoolDetection(input);
+  const detection = detectSelectionPoolFallbackIntent(input);
   if (!detection.handled) {
     return {
       handled: false,
@@ -532,11 +513,12 @@ export function resolveSelectionPoolFamily(
     promptMergeActions: promptMerge.mergeActions,
     initialBlockers: [],
   });
+  const admissionBlockers = extractSelectionPoolAdmissionBlockers(admissionDiagnostics);
 
   return {
     handled: true,
-    blocked: false,
-    reasons: [],
+    blocked: admissionBlockers.length > 0,
+    reasons: admissionBlockers,
     proposal,
     fillIntentCandidates: resolveSelectionPoolFillIntentCandidates(input.proposalSource),
     scalarParameters: {
@@ -574,12 +556,11 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
       admissionDiagnostics: buildSelectionPoolAdmissionDiagnostics({
         prompt: schema.request.rawPrompt,
         schema,
-        detection: evaluateSelectionPoolDetection({
+        detection: detectSelectionPoolFallbackIntent({
           prompt: schema.request.rawPrompt,
-          hostRoot: "",
           mode: "create",
-          schema,
-          proposalSource: proposal.proposalSource || "fallback",
+          featureId: undefined,
+          existingFeature: null,
         }),
         proposal,
         promptMergeActions: diagnosticsSeed?.proposal.promptMergeActions || [],
@@ -603,12 +584,11 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
           matchedBy: diagnosticsSeed.detection.matchedBy,
           findings: diagnosticsSeed.detection.findings,
         }
-      : evaluateSelectionPoolDetection({
+      : detectSelectionPoolFallbackIntent({
           prompt: schema.request.rawPrompt,
-          hostRoot: "",
           mode: "create",
-          schema,
-          proposalSource: proposal.proposalSource || "fallback",
+          featureId: undefined,
+          existingFeature: null,
         }),
     proposal,
     promptMergeActions: diagnosticsSeed?.proposal.promptMergeActions || [],
@@ -617,8 +597,9 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
   });
 
   if (diagnostics.verdict === "declined" || diagnostics.verdict === "governance_blocked") {
+    blockers.push(...extractSelectionPoolAdmissionBlockers(diagnostics));
     notes.push(`selection_pool admission verdict: ${diagnostics.verdict}`);
-    return { blockers: [], warnings, notes, admissionDiagnostics: diagnostics };
+    return { blockers: dedupeStrings(blockers), warnings, notes, admissionDiagnostics: diagnostics };
   }
 
   if (!SELECTION_POOL_PARAMETER_SURFACE.triggerKey.allowList.includes(normalized.triggerKey)) {

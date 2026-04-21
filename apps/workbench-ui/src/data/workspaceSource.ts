@@ -16,15 +16,11 @@ export interface WorkspaceSourceConfig {
   description?: string;
 }
 
-// F009: Predefined workspace sources
-// F011: Bridge source now explicitly corresponds to CLI artifact at fixed path
-export const WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
-  {
-    type: "sample",
-    path: "/sample-workspace.json",
-    label: "Sample Workspace",
-    description: "内置示例 workspace 数据",
-  },
+function isExplicitDevOrTestMode(): boolean {
+  return Boolean(import.meta.env.DEV || import.meta.env.MODE === "test");
+}
+
+const PRODUCT_WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
   {
     type: "bridge",
     // F011: Bridge artifact path - CLI exports to apps/workbench-ui/public/bridge-workspace.json
@@ -33,6 +29,20 @@ export const WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
     description: "CLI 导出的 workspace 数据 (npm run cli -- export-bridge --host <path>)",
   },
 ];
+
+const DEV_WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
+  {
+    type: "sample",
+    path: "/sample-workspace.json",
+    label: "Sample Workspace",
+    description: "内置示例 workspace 数据，仅用于显式 dev/test 模式",
+  },
+];
+
+// F009: Predefined workspace sources
+export const WORKSPACE_SOURCES: WorkspaceSourceConfig[] = isExplicitDevOrTestMode()
+  ? [...PRODUCT_WORKSPACE_SOURCES, ...DEV_WORKSPACE_SOURCES]
+  : PRODUCT_WORKSPACE_SOURCES;
 
 // F011: Bridge artifact contract
 // CLI produces: apps/workbench-ui/public/bridge-workspace.json

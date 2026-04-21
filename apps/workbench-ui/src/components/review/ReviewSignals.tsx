@@ -1,11 +1,10 @@
-import React from 'react';
 import { CheckCircle2, AlertTriangle, Info, FileWarning } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import type { Feature } from '@/types/feature';
 import { normalizeFeatureDisplay } from '@/lib/normalizeFeatureDisplay';
 
 interface ReviewSignalsProps {
-  feature: Feature;
+  feature: Feature | null | undefined;
 }
 
 export function ReviewSignals({ feature }: ReviewSignalsProps) {
@@ -16,6 +15,10 @@ export function ReviewSignals({ feature }: ReviewSignalsProps) {
   }
 
   const { reviewSignals } = normalizedFeature;
+  const proposalPercentage = reviewSignals.proposalStatus.percentage ?? 0;
+  const readinessScore = reviewSignals.readiness.score ?? 0;
+  const readinessTone =
+    readinessScore >= 80 ? 'text-[#22c55e]' : readinessScore >= 50 ? 'text-[#f59e0b]' : 'text-[#ef4444]';
 
   return (
     <div className="space-y-4">
@@ -28,13 +31,13 @@ export function ReviewSignals({ feature }: ReviewSignalsProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-white/60">准备度</span>
-            <span className="text-white">{reviewSignals.proposalStatus.percentage}%</span>
+            <span className="text-white">{proposalPercentage}%</span>
           </div>
           <Progress
-            value={reviewSignals.proposalStatus.percentage}
+            value={proposalPercentage}
             className="h-1.5 bg-white/10"
           />
-          <p className="text-xs text-white/50">{reviewSignals.proposalStatus.message}</p>
+          <p className="text-xs text-white/50">{reviewSignals.proposalStatus.message || '暂无明确 proposal 进度信息'}</p>
         </div>
       </div>
 
@@ -116,27 +119,15 @@ export function ReviewSignals({ feature }: ReviewSignalsProps) {
       <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle
-            className={`h-4 w-4 ${
-              reviewSignals.readiness.score >= 80
-                ? 'text-[#22c55e]'
-                : reviewSignals.readiness.score >= 50
-                ? 'text-[#f59e0b]'
-                : 'text-[#ef4444]'
-            }`}
+            className={`h-4 w-4 ${readinessTone}`}
           />
           <h4 className="text-sm font-medium text-white">就绪评分</h4>
         </div>
         <div className="flex items-center gap-3">
           <span
-            className={`text-2xl font-bold ${
-              reviewSignals.readiness.score >= 80
-                ? 'text-[#22c55e]'
-                : reviewSignals.readiness.score >= 50
-                ? 'text-[#f59e0b]'
-                : 'text-[#ef4444]'
-            }`}
+            className={`text-2xl font-bold ${readinessTone}`}
           >
-            {reviewSignals.readiness.score}
+            {reviewSignals.readiness.score ?? '—'}
           </span>
           <span className="text-xs text-white/50">/ 100</span>
         </div>

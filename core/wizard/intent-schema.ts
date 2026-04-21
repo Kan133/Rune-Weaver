@@ -2,6 +2,7 @@ export { INTENT_SCHEMA_REFERENCE } from "./intent-schema/reference.js";
 export { buildWizardMessages, runWizardToIntentSchema } from "./intent-schema/runtime.js";
 export { createFallbackIntentSchema } from "./intent-schema/fallback.js";
 export { normalizeIntentSchema } from "./intent-schema/normalize.js";
+export { finalizeCreateIntentSchema } from "./create-intent-finalization.js";
 export {
   analyzeIntentSemanticLayers,
   extractIntentSchemaGovernanceDecisions,
@@ -32,6 +33,7 @@ export type {
   IntentOpenSemanticResidueItem,
   IntentRawFact,
   IntentRawFacts,
+  IntentSemanticSurface,
   IntentSemanticAnalysis,
 } from "./intent-schema/semantic-analysis.js";
 export type {

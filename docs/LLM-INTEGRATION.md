@@ -4,144 +4,142 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-18
-> Read when: aligning LLM placement, provider boundaries, and current governance limits
-> Do not use for: granting LLM final authority over ownership, dependency, host routing, or write execution
+> Last verified: 2026-04-20
+> Read when: aligning LLM placement, prompt-package scope, and current non-authority boundaries
+> Do not use for: granting LLM ownership over governance, write, or final lifecycle truth
 
 ## Purpose
 
-This document defines the accepted LLM boundary in the ratified V2 baseline.
+Rune Weaver uses LLM as a bounded assistant inside a governed pipeline.
 
-Rune Weaver does not treat LLM as the final authority.
-Rune Weaver uses LLM where semantic exploration helps, while keeping governance deterministic.
+The current question is not “where can LLM speak?”
+The current question is “what may LLM help produce before deterministic authority takes over?”
 
-## Current Accepted LLM Placement
+## Current Accepted Placement
 
 LLM may assist:
 
-1. Wizard / update wizard
-2. optional proposal assistance inside blueprint stage
-3. artifact synthesis for fixed owned targets
+1. Wizard / update wizard interpretation
+2. optional proposal work inside Blueprint stage
+3. artifact synthesis inside fixed owned scope
 4. bounded local repair / muscle fill
 
 LLM may not own:
 
-1. final feature ownership
-2. final dependency contract
-3. final host target selection
-4. final write authority
-5. final commit gate
+1. clarification authority
+2. `IntentGovernanceDecisions`
+3. final `FeatureContract`
+4. final dependency contract
+5. host routing
+6. write authority
+7. final commit gate
 
-## Current Chain
+## Wizard Boundary
 
-Current accepted chain:
+Current Wizard responsibilities that may use LLM:
 
-`Wizard -> IntentSchema -> Blueprint Stage -> ArtifactSynthesis (when selected) -> LocalRepair (when needed) -> Validation / CommitDecision`
+- semantic capture
+- structured section filling
+- clarification question drafting
+- bounded assumption surfacing
 
-Update mode complements it with:
+What remains deterministic:
 
-`CurrentFeatureContext -> Update Wizard -> requestedChange + UpdateIntent -> Blueprint Stage -> downstream lifecycle`
-
-## Wizard And Update Wizard
-
-Wizard responsibility:
-
-- interpret raw request
-- return best-effort `IntentSchema`
-- surface clarification questions when structure is still ambiguous
-
-Update wizard responsibility:
-
-- read workspace-backed `CurrentFeatureContext`
-- return `requestedChange: IntentSchema`
-- return `UpdateIntent`
-
-Current rules:
-
-- Wizard must not reject unfamiliar asks just because current reuse coverage is weak
-- clarification sidecars do not become authority by themselves
-- relation candidates are derived sidecars, not replacements for workspace truth or blueprint authority
-
-## Blueprint Stage
-
-LLM may assist proposal work inside blueprint stage, but current authority remains deterministic.
-
-What blueprint stage decides:
-
-- feature structure
-- owned scope
-- feature contract
-- dependency edges
-- implementation strategy
-
-What LLM proposal must not decide by itself:
-
-- final legality
-- final pattern selection
-- final host routing
-- final write targets
-
-## Artifact Synthesis
-
-LLM may now assist artifact synthesis, but only after target surfaces are fixed upstream.
-
-Current synthesis rules:
-
-- synthesis may emit host-native owned candidate artifacts
-- synthesis may not invent new owned scope
-- synthesis may not invent undeclared bridge ownership
-- synthesis may not change dependency graph or write authority
-
-Current Dota2 synthesized surface:
-
-- server Lua ability shell
-- ability KV definition
-- blueprint-declared UI owned skeleton
-
-## Local Repair / Muscle Fill
-
-Local repair is the current bounded successor to old gap-fill semantics.
-
-LLM may assist repair only when:
-
-- `fillContracts` or equivalent owned repair boundaries exist
-- the failure is boundary-local
-- host target selection and ownership are already fixed
-
-Repair may not change:
-
-- feature contract
-- dependency edges
-- strategy selection
-- write ownership
-- bridge/lifecycle wiring
-
-## Grammar And Risk Labels
-
-LLM should not be restricted by old grammar-v1 admission logic.
+- clarification staging into `blocksBlueprint` / `blocksWrite`
+- governance normalization such as runtime-persistence versus external-persistence boundaries
+- downstream use of `IntentGovernanceDecisions`
 
 Current rule:
 
-- unknown mechanics should still be modeled and may continue into guided-native / exploratory planning
-- grammar/risk labels are advisory or safety-oriented, not broad pre-generation denial
+- prompt packages reduce drift
+- they do not replace code-side governance decisions
 
-## Provider Boundary
+## Prompt Packages And Drift Reduction
 
-Rune Weaver still uses a thin provider model.
+Current create and update prompt packages both carry the same persistence rule:
 
-Application layers depend on internal `LLMClient`, not provider SDK objects directly.
+- unless the ask explicitly requests cross-match retention, account/profile save, external storage, or named external ownership, interpret `persistent` as runtime/session-long existence only
 
-Current provider guidance remains:
+This rule is there to reduce LLM drift.
+It is not the authority seam.
 
-- thin provider layer
-- environment-driven config
-- workflow-specific execution config
-- provider/model constraints validated centrally
+Authority still lives in:
 
-## Current Summary
+- normalization
+- clarification-plan derivation
+- governance-decision derivation
 
-The accepted V2 LLM boundary is:
+## Blueprint Assistance Boundary
 
-- use LLM to improve semantic capture and bounded owned-scope generation
-- keep governance deterministic
-- never let LLM become the final authority over lifecycle truth
+LLM may assist proposal-style Blueprint work when present.
+
+It may suggest:
+
+- modules
+- connections
+- candidate decomposition
+- uncertainties
+- reusable hints
+
+It may not decide by itself:
+
+- final legality
+- final pattern resolution
+- final host target selection
+- final write targets
+
+The deterministic Blueprint stage remains the authority seam.
+
+## Synthesis Boundary
+
+LLM may help generate host-native artifacts only after owned scope is already fixed.
+
+Current synthesis rules:
+
+- synthesized artifacts must stay inside declared owned scope
+- synthesis must not invent new dependency edges or bridge ownership
+- synthesis must not widen host write authority
+
+Current Dota2 examples:
+
+- Lua ability shells
+- KV ability definitions
+- UI skeletons
+
+## Repair Boundary
+
+Current repair is bounded local repair, not freeform regeneration.
+
+LLM may assist only when:
+
+- owned scope is already fixed
+- fill contracts or equivalent local boundaries exist
+- the failure is implementation-local
+
+Repair may not change:
+
+- ownership
+- dependency contract
+- implementation strategy
+- host routing
+- lifecycle truth
+
+## Source-Backed Family Boundary
+
+LLM may contribute to source-backed family interpretation.
+
+It does not own production write truth for those families.
+
+Current examples:
+
+- Dota2 `selection_pool` seeding/update merge is bounded by adapter-owned source truth
+- cross-feature provider export must read authoritative host binding truth, not guess `abilityName` from paths or prompt words
+
+This is why source-backed update merge, provider export, and sidecar preservation remain adapter-owned seams.
+
+## Summary
+
+The accepted LLM boundary is:
+
+- let LLM help capture semantics and generate bounded owned-scope artifacts
+- keep clarification staging, governance decisions, dependency contracts, host routing, write authority, and final commit truth deterministic

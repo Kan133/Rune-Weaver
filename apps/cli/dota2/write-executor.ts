@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync } from "fs";
 import { join } from "path";
 import { executeWritePlan, generateWriteReview, WritePlan as ExecutorWritePlan, WriteAction, WriteExecutorOptions, WriteReviewArtifact, WriteResult } from "../../../adapters/dota2/executor/index.js";
 import { WritePlan, WritePlanEntry } from "../../../adapters/dota2/assembler/index.js";
+import { materializeKvWritePlanEntries } from "../../../adapters/dota2/kv/index.js";
 import { computeAbilityName, generateCodeContent, generateKVContentWithIndex } from "../helpers/index.js";
 import type { Dota2CLIOptions } from "../dota2-cli.js";
 
@@ -11,101 +12,6 @@ function buildEntryIdentity(entry: WritePlanEntry): string {
 
 function buildLuaTargetPath(abilityName: string): string {
   return `game/scripts/vscripts/rune_weaver/abilities/${abilityName}.lua`;
-}
-
-function parseAbilityBlocks(content: string): Map<string, string> {
-  const blocks = new Map<string, string>();
-  const lines = content.split(/\r?\n/);
-
-  let insideRoot = false;
-  let rootDepth = 0;
-  let currentName: string | null = null;
-  let currentLines: string[] = [];
-  let braceDepth = 0;
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-
-    if (!insideRoot) {
-      if (line === "\"DOTAAbilities\"") {
-        insideRoot = true;
-      }
-      continue;
-    }
-
-    if (!currentName) {
-      if (line === "{") {
-        rootDepth += 1;
-        continue;
-      }
-
-      if (line === "}") {
-        rootDepth -= 1;
-        if (rootDepth <= 0) {
-          insideRoot = false;
-        }
-        continue;
-      }
-    }
-
-    if (!currentName) {
-      const nameMatch = line.match(/^"([^"]+)"$/);
-      if (nameMatch && nameMatch[1] !== "DOTAAbilities") {
-        currentName = nameMatch[1];
-        currentLines = [line];
-        braceDepth = 0;
-        continue;
-      }
-      continue;
-    }
-
-    currentLines.push(rawLine);
-    braceDepth += countChar(rawLine, "{");
-    braceDepth -= countChar(rawLine, "}");
-    if (braceDepth === 0) {
-      blocks.set(currentName, currentLines.join("\n"));
-      currentName = null;
-      currentLines = [];
-    }
-  }
-
-  return blocks;
-}
-
-function wrapAbilityBlocks(blocks: string[]): string {
-  const normalizedBlocks = blocks.map((block) =>
-    block
-      .split(/\r?\n/)
-      .map((line) => `\t${line}`)
-      .join("\n")
-  );
-
-  return `"DOTAAbilities"\n{\n${normalizedBlocks.join("\n\n")}\n}\n`;
-}
-
-function countChar(value: string, needle: string): number {
-  return value.split(needle).length - 1;
-}
-
-function mergeKvBlocksWithExisting(hostRoot: string, targetPath: string, kvBlocks: string[]): string {
-  const fullPath = join(hostRoot, targetPath);
-  const mergedBlocks = new Map<string, string>();
-
-  if (existsSync(fullPath)) {
-    const existingContent = readFileSync(fullPath, "utf-8");
-    for (const [name, block] of parseAbilityBlocks(existingContent)) {
-      mergedBlocks.set(name, block);
-    }
-  }
-
-  for (const block of kvBlocks) {
-    const nameMatch = block.match(/^"([^"]+)"/m);
-    if (nameMatch?.[1] && nameMatch[1] !== "DOTAAbilities") {
-      mergedBlocks.set(nameMatch[1], block);
-    }
-  }
-
-  return wrapAbilityBlocks(Array.from(mergedBlocks.values()));
 }
 
 export async function executeWrite(
@@ -133,35 +39,49 @@ export async function executeWrite(
 
   const kvActions: WriteAction[] = [];
   if (kvEntries.length > 0) {
-    const kvEntriesByTarget = new Map<string, WritePlanEntry[]>();
-    for (const entry of kvEntries) {
-      const existing = kvEntriesByTarget.get(entry.targetPath) || [];
-      existing.push(entry);
-      kvEntriesByTarget.set(entry.targetPath, existing);
+    const materializedKv = materializeKvWritePlanEntries({
+      hostRoot: options.hostRoot,
+      entries: kvEntries,
+      buildKvContent: generateKVContentWithIndex,
+    });
+
+    for (const fragment of materializedKv.fragmentEntries) {
+      if (fragment.abilityName) {
+        abilityNameByIdentity.set(buildEntryIdentity(fragment.entry), fragment.abilityName);
+      }
+      console.log(`  [KV] Prepared fragment ${fragment.targetPath}`);
+      kvActions.push({
+        type: fragment.entry.operation === "create" ? "create" : "refresh",
+        targetPath: fragment.targetPath,
+        content: fragment.content,
+        rwOwned: true,
+        description: fragment.entry.contentSummary,
+      });
     }
 
-    for (const [targetPath, entries] of kvEntriesByTarget) {
-      const kvBlocks = entries.map((entry, index) => {
-        const abilityName = computeAbilityName(entry, index);
-        abilityNameByIdentity.set(buildEntryIdentity(entry), abilityName);
-        const entryWithAbilityName: WritePlanEntry = {
-          ...entry,
-          metadata: {
-            ...(entry.metadata || {}),
-            abilityName,
-          },
-        };
-        return generateKVContentWithIndex(entryWithAbilityName, index);
-      });
-      const combinedContent = mergeKvBlocksWithExisting(options.hostRoot, targetPath, kvBlocks);
-      const aggregatedDescription = `KV aggregation: ${entries.length} abilities -> ${targetPath}`;
-      console.log(`  [KV] Aggregated ${entries.length} entries into ${targetPath}`);
+    for (const passthrough of materializedKv.passthroughEntries) {
+      if (passthrough.abilityName) {
+        abilityNameByIdentity.set(buildEntryIdentity(passthrough.entry), passthrough.abilityName);
+      }
       kvActions.push({
-        type: "create",
-        targetPath,
-        content: combinedContent,
+        type: passthrough.entry.operation === "create" ? "create" : "refresh",
+        targetPath: passthrough.targetPath,
+        content: passthrough.content,
         rwOwned: true,
-        description: aggregatedDescription,
+        description: passthrough.entry.contentSummary,
+      });
+    }
+
+    if (materializedKv.aggregate) {
+      const aggregateFullPath = join(options.hostRoot, materializedKv.aggregate.aggregateTargetPath);
+      const aggregateActionType = existsSync(aggregateFullPath) ? "refresh" : "create";
+      console.log(`  [KV] Materialized aggregate ${materializedKv.aggregate.aggregateTargetPath}`);
+      kvActions.push({
+        type: aggregateActionType,
+        targetPath: materializedKv.aggregate.aggregateTargetPath,
+        content: materializedKv.aggregate.content,
+        rwOwned: true,
+        description: `KV aggregate materialization: ${materializedKv.aggregate.abilityNames.join(", ") || "none"}`,
       });
     }
   }

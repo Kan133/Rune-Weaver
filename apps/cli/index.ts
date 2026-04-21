@@ -15,11 +15,11 @@
  */
 
 import { createInterface } from "readline";
-import { existsSync, readFileSync } from "fs";
 import { runWizardCLI, showWizardHelp } from "./wizard-cli.js";
 import { runBlueprintCLI, showBlueprintHelp } from "./blueprint-cli.js";
 import { runAssemblyCLI, showAssemblyHelp } from "./assembly-cli.js";
 import { runDota2CLI, showDota2Help } from "./dota2-cli.js";
+import { resolveDota2CommandSurface } from "./dota2/command-surface.js";
 import { runPatternCLI, showPatternHelp } from "./pattern-cli.js";
 import { readLLMExecutionConfig } from "../../core/llm/factory.js";
 
@@ -456,74 +456,25 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
 
 async function runDota2Command(options: CLIOptions): Promise<boolean> {
   const args = process.argv.slice(2);
-  let prompt: string | undefined;
-  let hostRoot: string | undefined;
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--host") {
-      hostRoot = args[i + 1];
-    }
-    if (
-      !args[i].startsWith("-") &&
-      args[i] !== "dota2" &&
-      args[i] !== "run" &&
-      args[i] !== "dry-run" &&
-      args[i] !== "review" &&
-      args[i] !== "update" &&
-      args[i] !== "regenerate" &&
-      args[i] !== "rollback" &&
-      args[i] !== "init" &&
-      args[i] !== "check-host" &&
-      args[i] !== "validate" &&
-      args[i] !== "repair" &&
-      args[i] !== "doctor" &&
-      args[i] !== "gap-fill" &&
-      args[i] !== "demo" &&
-      args[i] !== "lifecycle" &&
-      args[i] !== "prepare" &&
-      args[i] !== "prove"
-    ) {
-      if (!prompt && !args[i - 1]?.startsWith("-")) {
-        prompt = args[i];
-      }
-    }
+  let surface;
+  try {
+    surface = resolveDota2CommandSurface({
+      rawArgs: args,
+      requestedSubcommand: options.subcommand,
+      input: options.input,
+      inputBase64Env: options.inputBase64Env,
+      host: options.host,
+      env: process.env,
+    });
+  } catch (error) {
+    console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+    return false;
   }
 
-  if (!prompt) {
-    prompt = options.input;
-  }
-
-  if (!prompt && options.inputBase64Env) {
-    const encodedPrompt = process.env[options.inputBase64Env];
-    if (!encodedPrompt) {
-      console.error(`❌ Missing environment variable for --input-base64-env: ${options.inputBase64Env}`);
-      return false;
-    }
-
-    try {
-      prompt = Buffer.from(encodedPrompt, "base64").toString("utf8");
-    } catch (error) {
-      console.error(`❌ Failed to decode base64 prompt from environment variable: ${options.inputBase64Env}`);
-      console.error(error);
-      return false;
-    }
-  }
-
-  if (prompt && existsSync(prompt)) {
-    try {
-      prompt = readFileSync(prompt, "utf8");
-    } catch (error) {
-      console.error(`❌ Failed to read prompt file: ${prompt}`);
-      console.error(error);
-      return false;
-    }
-  }
-
-  if (!hostRoot) {
-    hostRoot = options.host;
-  }
-
-  const subcommand = options.subcommand || "run";
+  const prompt = surface.prompt;
+  const hostRoot = surface.hostRoot;
+  const subcommand = surface.normalizedSubcommand;
+  const inputProvenance = surface.inputProvenance;
   
   // T149: Handle init subcommand
   if (subcommand === "init") {
@@ -579,6 +530,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: subcommand as "validate" | "repair" | "doctor" | "demo" | "lifecycle",
       prompt: "",
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       dryRun: subcommand === "repair"
         ? !options.safe
@@ -634,6 +586,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: "rollback" as const,
       prompt: "",
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       dryRun: options.dryRun || (!options.write && !options.force),
       write: options.write,
@@ -659,6 +612,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
         command: "gap-fill" as const,
         prompt: "",
         hostRoot,
+        inputProvenance,
         approvalFile: options.approve,
         gapFillMode: options.gapFillMode || (options.apply ? "apply" : undefined),
         apply: true,
@@ -687,6 +641,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: "gap-fill" as const,
       prompt: options.instruction,
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       boundaryId: options.boundaryId,
       instruction: options.instruction,
@@ -723,6 +678,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: "update" as const,
       prompt,
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       dryRun: options.dryRun || (!options.write && !options.force),
       write: options.write,
@@ -751,6 +707,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
     command: (subcommand || "run") as "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback" | "gap-fill",
     prompt,
     hostRoot,
+    inputProvenance,
     featureId: options.feature,
     dryRun: options.dryRun || (!options.write && !options.force),
     write: options.write,

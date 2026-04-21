@@ -1,5 +1,4 @@
 import type { FillIntentCandidate } from "../../../../core/schema/types.js";
-import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/types.js";
 import {
   buildGenericSeedParameters,
   coercePositiveInteger,

@@ -3,7 +3,10 @@ import { buildWizardCreatePromptPackage } from "../../llm/prompt-packages.js";
 import { buildDota2RetrievalBundle } from "../../retrieval/index.js";
 import { validateIntentSchema } from "../../validation";
 import { buildWizardClarificationPlan } from "../clarification-plan";
+import { finalizeCreateIntentSchema } from "../create-intent-finalization.js";
 import type { WizardIntentOptions, WizardIntentResult } from "../types";
+import { WIZARD_PROVIDER_TIMEOUT_MS } from "../provider-timeout.js";
+import { analyzeIntentSemanticLayers } from "./semantic-analysis.js";
 import { createFallbackIntentSchema } from "./fallback.js";
 import { normalizeIntentSchema } from "./normalize.js";
 import { INTENT_SCHEMA_REFERENCE } from "./reference.js";
@@ -37,13 +40,20 @@ export async function runWizardToIntentSchema(
       schema: INTENT_SCHEMA_REFERENCE,
       model: options.input.model,
       temperature: options.input.temperature,
+      timeoutMs: WIZARD_PROVIDER_TIMEOUT_MS,
       providerOptions: options.input.providerOptions,
     });
 
     raw = result.raw;
-    schema = normalizeIntentSchema(result.object, options.input.rawText, host);
+    schema = finalizeCreateIntentSchema(
+      normalizeIntentSchema(result.object, options.input.rawText, host),
+      options.input.rawText,
+    );
   } catch (error) {
-    schema = createFallbackIntentSchema(options.input.rawText, host);
+    schema = finalizeCreateIntentSchema(
+      createFallbackIntentSchema(options.input.rawText, host),
+      options.input.rawText,
+    );
     preValidationIssues.push({
       code: "WIZARD_GENERIC_FALLBACK",
       scope: "schema",
@@ -53,9 +63,11 @@ export async function runWizardToIntentSchema(
     });
   }
 
+  const semanticAnalysis = analyzeIntentSemanticLayers(schema, options.input.rawText, host);
   const clarificationPlan = buildWizardClarificationPlan({
     rawText: options.input.rawText,
     schema,
+    semanticAnalysis,
   });
   const issues = [...preValidationIssues, ...validateIntentSchema(schema)];
 

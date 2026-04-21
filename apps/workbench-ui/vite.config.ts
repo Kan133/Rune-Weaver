@@ -2,7 +2,7 @@ import path from "path"
 import fs from "fs"
 import { fileURLToPath } from "url"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin, type ViteDevServer } from "vite"
 import { IncomingMessage, ServerResponse } from "http"
 import { spawn } from "child_process"
 
@@ -13,9 +13,11 @@ import { validatePostGeneration } from "../../adapters/dota2/validator/post-gene
 import { connectWar3Workspace } from "../../adapters/war3/workspace/connector"
 import { buildWar3DerivedWorkspaceView } from "../../adapters/war3/derived/index"
 import { generateMidZoneShopSkeletonModuleDraft } from "../../adapters/war3/generator/index"
+import { buildWar3ShadowDraftBundle } from "../../adapters/war3/generator/index"
 import {
   buildWar3CurrentSliceIntentBridge,
   buildWar3CurrentSliceAssemblySidecarTrial,
+  buildWar3ShadowRealizationPlan,
   buildWar3WritePreviewArtifact,
   createMidZoneShopSkeletonInputFromAssemblySidecar,
   runWar3CurrentSliceBlueprintTrialFromBridge,
@@ -986,16 +988,49 @@ async function selectDirectoryViaDialog(initialPath?: string): Promise<string | 
   })
 }
 
+type JsonObject = Record<string, unknown>
+
+interface HostRootBody extends JsonObject {
+  hostRoot?: string
+}
+
+interface SelectDirectoryBody extends JsonObject {
+  initialPath?: string
+}
+
+interface War3HandoffPreviewBody extends JsonObject {
+  artifact?: Parameters<typeof buildWar3HandoffBundle>[0]
+}
+
+interface War3SkeletonPreviewBody extends JsonObject {
+  artifact?: Parameters<typeof buildWar3CurrentSliceIntentBridge>[0]
+}
+
+interface CliExecuteBody extends JsonObject {
+  command?: string
+  hostRoot?: string
+  prompt?: string
+  write?: boolean
+  force?: boolean
+  featureId?: string
+  boundaryId?: string
+  instruction?: string
+  gapFillMode?: string
+  approvalFile?: string
+  addonName?: string
+  mapName?: string
+}
+
 /**
  * 读取请求体
  */
-async function readRequestBody(req: IncomingMessage): Promise<any> {
+async function readRequestBody<T extends JsonObject = JsonObject>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
     let body = ""
     req.on("data", (chunk) => (body += chunk))
     req.on("end", () => {
       try {
-        resolve(body ? JSON.parse(body) : {})
+        resolve((body ? JSON.parse(body) : {}) as T)
       } catch (e) {
         reject(e)
       }
@@ -1008,16 +1043,16 @@ async function readRequestBody(req: IncomingMessage): Promise<any> {
  * Local API Bridge Plugin
  * 提供 workbench-ui 与 scanner/CLI 的桥接端点
  */
-function localApiBridgePlugin() {
+function localApiBridgePlugin(): Plugin {
   return {
     name: "local-api-bridge",
-    configureServer(server: any) {
+    configureServer(server: ViteDevServer) {
       // POST /api/host/scan - 扫描 Dota2 项目
       server.middlewares.use("/api/host/scan", async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<HostRootBody>(req)
           const { hostRoot } = body
 
           if (!hostRoot) {
@@ -1046,7 +1081,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<HostRootBody>(req)
           const { hostRoot } = body
 
           if (!hostRoot) {
@@ -1075,7 +1110,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<HostRootBody>(req)
           const { hostRoot } = body
 
           if (!hostRoot) {
@@ -1122,7 +1157,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<HostRootBody>(req)
           const { hostRoot } = body
 
           if (!hostRoot) {
@@ -1151,7 +1186,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<SelectDirectoryBody>(req)
           const { initialPath } = body
           const selectedPath = await selectDirectoryViaDialog(initialPath)
 
@@ -1177,7 +1212,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<War3HandoffPreviewBody>(req)
           const { artifact } = body
 
           if (!artifact) {
@@ -1206,7 +1241,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<War3SkeletonPreviewBody>(req)
           const { artifact } = body
 
           if (!artifact) {
@@ -1217,13 +1252,16 @@ function localApiBridgePlugin() {
           }
 
           const bridge = buildWar3CurrentSliceIntentBridge(artifact)
-          const sidecarTrial = buildWar3CurrentSliceAssemblySidecarTrial(
-            runWar3CurrentSliceBlueprintTrialFromBridge(bridge)
-          )
+          const blueprintTrial = runWar3CurrentSliceBlueprintTrialFromBridge(bridge)
+          const sidecarTrial = buildWar3CurrentSliceAssemblySidecarTrial(blueprintTrial)
+          const shadowRealizationPlan = buildWar3ShadowRealizationPlan(sidecarTrial.sidecar)
+          const shadowDraftBundle = buildWar3ShadowDraftBundle(shadowRealizationPlan)
           const generatorInput = createMidZoneShopSkeletonInputFromAssemblySidecar(sidecarTrial.sidecar)
           const content = generateMidZoneShopSkeletonModuleDraft(generatorInput)
           const writePreviewArtifact = buildWar3WritePreviewArtifact({
             sidecar: sidecarTrial.sidecar,
+            shadowRealizationPlan,
+            shadowDraftBundle,
             skeletonContent: content,
             moduleName: generatorInput.moduleName,
           })
@@ -1255,7 +1293,7 @@ function localApiBridgePlugin() {
         if (req.method !== "POST") return next()
 
         try {
-          const body = await readRequestBody(req)
+          const body = await readRequestBody<CliExecuteBody>(req)
           const {
             command,
             hostRoot,
@@ -1345,7 +1383,7 @@ function localApiBridgePlugin() {
               "run", "cli", "--", "dota2", "update",
               "--input-base64-env", "RW_WORKBENCH_PROMPT_B64",
               "--host", normalizedHostRoot,
-              "--feature", featureId,
+              "--feature", featureId!,
             ]
             childEnv.RW_WORKBENCH_PROMPT_B64 = Buffer.from(prompt!, "utf8").toString("base64")
             if (write) {
@@ -1360,7 +1398,7 @@ function localApiBridgePlugin() {
             cliArgs = [
               "run", "cli", "--", "dota2", "delete",
               "--host", normalizedHostRoot,
-              "--feature", featureId,
+              "--feature", featureId!,
             ]
             if (write) {
               cliArgs.push("--write")

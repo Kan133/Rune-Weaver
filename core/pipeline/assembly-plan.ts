@@ -1078,7 +1078,6 @@ function mergeAssemblyPlans(
   templatedPlan: AssemblyPlan,
   synthesizedPlan: AssemblyPlan,
 ): AssemblyPlan {
-  const mergedSelectedPatterns = [...templatedPlan.selectedPatterns];
   const mergedModules = [...(templatedPlan.modules || []), ...(synthesizedPlan.modules || [])];
   const mergedModuleRecords = [
     ...(templatedPlan.moduleRecords || []),

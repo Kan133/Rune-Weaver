@@ -4,13 +4,21 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-17
-> Read when: checking which Lane B items remain residual after baseline wording landed
+> Last verified: 2026-04-20
+> Read when: checking which intent/blueprint items remain planning-only after the baseline/reference surface was rewritten
 > Do not use for: restating accepted baseline architecture or overriding authoritative docs
 > Owner: Lane B
 
-This document is now a residual planning tracker.
-Accepted Blueprint-stage wording lives in [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md), [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md), [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md), and [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md).
+This file now lives under `docs/planning/intent-blueprint/` on purpose.
+It is a residual planning tracker only.
+
+Accepted baseline/reference wording now lives in:
+
+- [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
+
 This file should record only non-baselined Lane B follow-up details.
 
 ## 1. Goal

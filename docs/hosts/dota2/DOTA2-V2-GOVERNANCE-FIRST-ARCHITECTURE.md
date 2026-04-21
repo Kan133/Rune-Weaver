@@ -4,133 +4,231 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-meaningful-implementation-change
-> Last verified: 2026-04-18
-> Read when: doing Dota2 V2 host work, especially synthesis/repair/dependency behavior
-> Do not use for: overriding root baseline docs on cross-host architecture by itself
+> Last verified: 2026-04-20
+> Read when: doing Dota2 planning, source-backed update, cross-feature dependency, synthesis, or runtime grant work
+> Do not use for: overriding the root baseline docs on cross-host architecture by itself
 
 ## Purpose
 
-This document is the current Dota2-specific V2 reference after root baseline ratification.
+This document records the current Dota2-specific implementation truth after the recent source-backed update and cross-feature seam rounds.
 
-Use it together with:
+Read it after:
 
-- [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
-- [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
-- latest Dota2 session-sync
-
-## Dota2-Specific Principle
-
-Dota2 follows the repo-wide V2 principle:
-
-- hard-code feature governance
-- do not hard-code all mechanics they are allowed to attempt
-
-Dota2-specific emphasis:
-
-- stay inside owned host namespaces
-- use explicit bridge points only
-- prefer family/pattern reuse when strong
-- continue into synthesis when reuse is weak but target surfaces are clear
+1. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+2. [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+3. [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+4. [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
 
 ## Current Dota2 Chain
 
-Current Dota2 chain:
+Current Dota2 create/update flow is:
 
-`IntentSchema -> Blueprint Stage -> Strategy Selection -> AssemblyPlan / ArtifactSynthesis -> HostRealizationPlan -> GeneratorRoutingPlan -> WritePlan -> LocalRepair -> Write Executor -> Host / Runtime Validation -> Final CommitDecision -> Workspace Lifecycle`
+`Wizard -> IntentSchema / UpdateIntent -> Dota2 Blueprint enrichment -> Pattern Resolution -> AssemblyPlan -> HostRealizationPlan -> GeneratorRoutingPlan -> WritePlan -> LocalRepair -> Write Executor -> Host / Runtime Validation -> Final CommitDecision -> Workspace Update`
 
-## Current Dota2 Strategy Boundary
+Current Dota2-specific truths:
 
-### `family`
+- CLI is still the authoritative lifecycle executor
+- Workbench is still orchestration/review/evidence, not lifecycle authority
+- Dota2 continues to prefer reuse first, but may still use guided-native or exploratory owned artifacts when reuse coverage is weak
 
-Use when:
+## Planning And Clarification Truth
 
-- a stable Dota2 feature skeleton already exists
-- repeated updates should converge to the same layout
+Dota2 now follows the staged clarification model.
 
-### `pattern`
+Current rule:
 
-Use when:
+- unresolved cross-feature targets do not automatically hard-stop Blueprint
+- Dota2 may still plan the local shell and produce a weak/exploratory Blueprint
+- final write is blocked until the target feature and target surface close truthfully
 
-- mechanism tactics are known
-- structure is still composed from reusable parts
+Current persistence rule:
 
-### `guided_native`
+- runtime-local or session-long persistence is normal Dota2 feature behavior
+- only explicit cross-match, save/profile, or external-system semantics should escalate into external persistence governance
 
-Use when:
+## `selection_pool` Family Boundary
 
-- family/pattern confidence is weak
-- host target surfaces are still clear enough for owned synthesis
+`selection_pool` is now a narrower family than before.
 
-### `exploratory`
+It owns:
 
-Use when:
+- the local draw shell
+- source-backed authoring truth
+- bounded update merge for local pool/inventory/session semantics
+- materialization of source artifact plus module parameters
 
-- reuse is weak or absent
-- the system should still attempt a governed owned artifact candidate
+It does not own:
 
-## Current Synthesis Surface
+- provider feature identity
+- cross-feature grants
+- Dota2 runtime hero attachment logic
 
-Current Dota2 synthesis supports:
+Current local source truth remains:
 
-- server Lua ability shell
-- ability KV definition
-- blueprint-declared UI owned skeleton
+- `game/scripts/src/rune_weaver/features/<featureId>/selection-pool.source.json`
+  - per-feature source artifact under the feature directory
 
-Current restrictions:
+Current bounded family scope includes:
 
-- no new bridge ownership
-- no undeclared cross-feature writes
-- no undeclared host targets
-- no dependency-truth rewrites inside synthesis
+- trigger key
+- pool objects
+- rarity/weights
+- choice count
+- local inventory contract
+- session-local draw tracking
 
-## Current Repair Surface
+## `selection_pool` Authority Cleanup
 
-Dota2 repair is now the bounded local repair layer.
+Current cleanup rules that are now part of live truth:
 
-It can:
+- `authoring.ts` is a thin facade only
+- production family authority is split into:
+  - admission
+  - seeding
+  - update-merge
+  - materialization
+- production family code no longer depends on example/demo ids for update/write truth
+- generic inventory fallback text is `Selection inventory full`
+- `persistent_panel` is the only current inventory presentation
 
-- patch local muscle inside synthesized or templated owned artifacts
-- fill UI body or host-local glue inside declared boundaries
+Current write-path rule:
 
-It cannot:
+- source-backed changes must recompile generator-facing module parameters from current feature authoring
+- sidecar writers must not re-implement `selection_pool` parameter compilation on their own
 
-- change contracts
-- change routing
-- change ownership
-- widen lifecycle scope
+## Cross-Feature Provider / Consumer Seam
 
-## Dependency Revalidation
+Cross-feature reward granting is now a separate Dota2 seam.
 
-Dota2 now uses contract-driven dependency revalidation.
+### Provider Side
 
-Current behavior:
+Provider features may export a Dota2 grant surface through:
 
-- provider updates recheck declared consumers
-- required surface break blocks provider commit
-- optional surface break downgrades consumers to `needs_review`
-- impacted feature status is written back into workspace
+- `dota2-provider-ability-export.json`
 
-## Compatibility Notes
+Current first surface:
 
-Compatibility layers still present:
+- `grantable_primary_hero_ability`
 
-- old `gap-fill` command name
-- old `dota2.exploratory_ability` records for update/regenerate compatibility
-- blueprint `ready | weak | blocked` status for CLI/test compatibility
+Provider export truth is narrow:
 
-These do not change the current Dota2 authority model:
+- `surfaceId`
+- `abilityName`
+- `attachmentMode`
 
-- repair is not the main generator
-- synthetic exploratory pattern is not the primary V2 path
-- final lifecycle truth is the final commit decision
+Current attachment modes:
 
-## Current Next Work
+- `grant_only`
+- `auto_on_activate`
 
-Current Dota2 next work is not more migration naming.
+Critical current rule:
 
-Current next work is evidence:
+- provider export is written only when Dota2 can resolve one authoritative runtime ability identity from the provider's actual host-bearing outputs
+- Dota2 must not guess `abilityName` from feature ids, file paths, or prompt words
 
-- prove templated stability
-- prove exploratory/guided-native review-required path
-- prove dependency revalidation on real cases
-- graduate repeated exploratory outputs into reusable assets when justified
+### Consumer Side
+
+Consumer draw features keep local pool truth in `selection-pool.source.json`.
+
+Cross-feature binding lives separately in:
+
+- `selection-grant-bindings.json`
+
+That sidecar maps:
+
+- local `objectId`
+- `targetFeatureId`
+- `targetSurfaceId`
+- relation/apply behavior
+
+This seam is Dota2-owned host integration, not a new generic family.
+
+## Provider Identity Alignment
+
+The provider ability identity round is now part of current Dota2 truth.
+
+Current requirement:
+
+- Lua
+- KV
+- provider export sidecar
+
+must all close on the same authoritative runtime `abilityName`.
+
+If Dota2 cannot close that identity honestly:
+
+- provider export is not written
+- validator should fail the provider export surface
+- downstream consumers must not treat the provider as resolved
+
+## Runtime Grant Path
+
+The runtime cross-feature grant path is now:
+
+1. player confirms a local selection object
+2. generic selection outcome hook runs
+3. Dota2 binding seam checks whether the object is externally handled
+4. if bound:
+   - resolve provider export
+   - resolve authoritative `abilityName`
+   - add the ability to the current controlled hero
+   - dedupe if already present
+   - set level to 1
+5. if not bound:
+   - fall back to the local placeholder/default effect path
+
+Current scope limits:
+
+- no slot policy
+- no persistence beyond the current match/session
+- no stacking semantics beyond dedupe
+
+## Bridge Behavior
+
+Bridge auto-attachment no longer assumes every generated ability should mount automatically.
+
+Current rule:
+
+- only provider exports with `attachmentMode = auto_on_activate` are auto-attached on activation
+- `grant_only` providers stay loadable but are not mounted until a consumer runtime grants them
+
+## Update Preservation Rule
+
+Current Dota2 update truth now includes preservation of existing cross-feature seams during unrelated local-only updates.
+
+That means:
+
+- local-only `selection_pool` updates must preserve existing `selection-grant-bindings.json`
+- existing dependency edges must remain unless the update explicitly rewires or removes them
+- preserved sidecars must not be classified as safe deletions during local-only refreshes
+
+## Validation And Final Gate
+
+Current Dota2 post-generation truth includes:
+
+- dependency-driven revalidation
+- provider export consistency validation
+- host validation
+- runtime validation
+- final commit gate
+
+Current provider/export validator checks include:
+
+- exported `abilityName` exists in `npc_abilities_custom.txt`
+- `ScriptFile` resolves to a real Lua file when required
+- provider-owned runtime symbol stays aligned with exported ability identity
+
+## Honest Current Claim
+
+Dota2 can now honestly claim:
+
+- source-backed `selection_pool` updates write real host truth
+- cross-feature draw shells may continue planning before provider resolution closes
+- provider/consumer seams are explicit and separate
+- provider ability identity is validated instead of guessed
+- local-only updates preserve existing consumer bindings
+
+It still should not claim:
+
+- review-free exploratory output
+- broad cross-feature mechanic generalization beyond the current narrow provider/consumer seam

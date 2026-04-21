@@ -1,16 +1,16 @@
-export type FeatureStatus = 'draft' | 'active' | 'archived' | 'error';
+export type FeatureStatus = 'draft' | 'active' | 'archived' | 'error' | 'unknown';
 
 export interface HostRealization {
-  host: string;
-  context: string;
-  syncStatus: 'synced' | 'pending' | 'error';
+  host: string | null;
+  context: string | null;
+  syncStatus: 'synced' | 'pending' | 'error' | 'unknown';
 }
 
 export interface ReviewSignals {
   proposalStatus: {
     ready: boolean;
-    percentage: number;
-    message: string;
+    percentage: number | null;
+    message: string | null;
   };
   gapFillSummary: {
     autoFilled: number;
@@ -22,7 +22,7 @@ export interface ReviewSignals {
   };
   invalidPatternIds: string[];
   readiness: {
-    score: number;
+    score: number | null;
     warnings: string[];
   };
 }
@@ -31,12 +31,12 @@ export interface Feature {
   id: string;
   displayName: string;
   systemId: string;
-  group: string;
+  group: string | null;
   parentId: string | null;
   childrenIds: string[];
   status: FeatureStatus;
-  revision: number;
-  updatedAt: Date;
+  revision: number | null;
+  updatedAt: Date | null;
   patterns: string[];
   generatedFiles: string[];
   gapFillBoundaries?: string[];

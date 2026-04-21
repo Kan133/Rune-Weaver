@@ -1,4 +1,6 @@
 import type { Dota2CLIOptions, Dota2ReviewArtifact } from "../dota2-cli.js";
+import { resolveReviewInputProvenance } from "./input-provenance.js";
+import { createPendingSemanticExportStatus } from "./semantic-artifacts.js";
 
 export function createBaseMaintenanceReviewArtifact(
   options: Dota2CLIOptions,
@@ -18,8 +20,9 @@ export function createBaseMaintenanceReviewArtifact(
       "finalCommitDecision",
       "workspaceState",
       "hostValidation",
-      "runtimeValidation",
-    ],
+        "runtimeValidation",
+      ],
+    inputProvenance: resolveReviewInputProvenance(options),
     cliOptions: {
       command: options.command,
       prompt: options.prompt || "",
@@ -33,6 +36,9 @@ export function createBaseMaintenanceReviewArtifact(
       rawPrompt: options.prompt || "",
       goal: params.goal,
     },
+    semanticExportStatus: createPendingSemanticExportStatus(
+      "Semantic artifact export is not part of this maintenance artifact until a command stage writes it.",
+    ),
     intentSchema: {
       usedFallback: true,
       intentKind: params.intentKind,

@@ -15,7 +15,9 @@ import {
 import { LLMRequestError } from "../errors";
 
 export class AnthropicClient implements LLMClient {
-  constructor(private readonly _config: AnthropicConfig) {}
+  constructor(_config: AnthropicConfig) {
+    void _config;
+  }
 
   async generateText(_input: GenerateTextInput): Promise<GenerateTextResult> {
     throw new LLMRequestError(
@@ -24,7 +26,7 @@ export class AnthropicClient implements LLMClient {
   }
 
   async generateObject<T>(
-    _input: GenerateObjectInput<T>
+    _input: GenerateObjectInput
   ): Promise<GenerateObjectResult<T>> {
     throw new LLMRequestError(
       "Anthropic provider is not implemented yet. Use openai-compatible for the current phase."

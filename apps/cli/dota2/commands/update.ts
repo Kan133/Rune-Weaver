@@ -23,10 +23,10 @@ import {
   saveWorkspace,
 } from "../../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/index.js";
-import { LifecycleArtifactBuilder } from "../../../../core/lifecycle/artifact-builder.js";
 import type { PatternResolutionResult } from "../../../../core/patterns/resolver.js";
 import { exportWorkspaceToBridge, refreshBridge } from "../../../../adapters/dota2/bridge/index.js";
 import { classifyUpdateDiff, executeSelectiveUpdate, formatUpdateDiffResult, formatSelectiveUpdateResult } from "../../../../adapters/dota2/update/index.js";
+import { preserveDota2UpdateWritePlanArtifacts } from "../../../../adapters/dota2/update/write-plan-preservation.js";
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
 import { shouldUseArtifactSynthesis } from "../../../../adapters/dota2/synthesis/index.js";
@@ -35,15 +35,35 @@ import {
   resolveSelectionPoolWorkspaceFields,
 } from "../../../../adapters/dota2/families/selection-pool/index.js";
 import { generateKVContentWithIndex, performUpdateHostValidation } from "../../helpers/index.js";
-import { resolveReviewArtifactOutputDir, saveReviewArtifact, saveReviewArtifactToPath } from "../review-artifacts.js";
-import { saveUpdateSemanticArtifacts } from "../semantic-artifacts.js";
+import { resolveReviewArtifactOutputDir } from "../review-artifacts.js";
+import {
+  createPendingSemanticExportStatus,
+  createWrittenSemanticExportStatus,
+  saveUpdateSemanticArtifacts,
+} from "../semantic-artifacts.js";
+import {
+  buildArtifactSynthesisStageFromPlan,
+  buildGeneratorRoutingStage,
+  buildHostRealizationStage,
+} from "../pipeline/assembly-stage-results.js";
+import {
+  createDota2ReviewArtifactBuilder,
+  persistDota2ReviewArtifact,
+} from "../pipeline/review-artifact.js";
+import { runPipelineStage } from "../pipeline/stage-runner.js";
+import { orchestrateValidation } from "../pipeline/validation-orchestration.js";
 import { createUpdateReviewArtifact } from "../update-artifact.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import type { Dota2BlueprintBuildResult, FeatureMode } from "../planning.js";
 import { printHostValidationStage, runDota2RuntimeValidation } from "./lifecycle-runner.js";
 import { normalizeUpdateWritePlanEntries } from "../update-entry-normalizer.js";
 import { runLocalRepairWithLLM } from "../../../../core/local-repair/index.js";
-import { buildFinalValidationStatus, calculateFinalCommitDecision } from "../../../../core/pipeline/final-commit-gate.js";
+import {
+  buildOwnedArtifactsFromWritePlan,
+  buildWritePlanGeneratedFiles,
+  isAbilityKvFragmentPath,
+  materializeKvWritePlanEntries,
+} from "../../../../adapters/dota2/kv/index.js";
 
 export interface UpdateCommandDeps {
   createUpdateIntent: (
@@ -257,9 +277,6 @@ export async function runUpdateCommand(
   options: Dota2CLIOptions,
   deps: UpdateCommandDeps,
 ): Promise<boolean> {
-  const buildArtifact = (artifact: ReturnType<typeof createUpdateReviewArtifact>) =>
-    new LifecycleArtifactBuilder(artifact);
-
   console.log("=".repeat(70));
   console.log("🧙 Rune Weaver - Update Feature (Maintenance Command)");
   console.log("=".repeat(70));
@@ -269,11 +286,8 @@ export async function runUpdateCommand(
   const reviewArtifactOutputDir = resolveReviewArtifactOutputDir(options.output);
 
   const artifact = createUpdateReviewArtifact(options);
-  const persistReviewArtifact = () =>
-    options.output
-      ? saveReviewArtifactToPath(artifact, resolve(process.cwd(), options.output))
-      : saveReviewArtifact(artifact, reviewArtifactOutputDir);
-  const artifactBuilder = buildArtifact(artifact);
+  const persistReviewArtifact = () => persistDota2ReviewArtifact(artifact, options, "dota2-update-review");
+  const artifactBuilder = createDota2ReviewArtifactBuilder(artifact);
 
   if (!options.featureId) {
     console.error("\n❌ Error: --feature <featureId> is required for update");
@@ -380,6 +394,9 @@ export async function runUpdateCommand(
   if (!requestedChange || !updateIntent || !currentFeatureContext) {
     console.error("\n❌ Failed to create UpdateIntent");
     artifact.stages.intentSchema = { success: false, summary: "Failed to create UpdateIntent", issues: ["Failed to create UpdateIntent"] };
+    artifact.semanticExportStatus = createPendingSemanticExportStatus(
+      "Semantic artifacts were not written because update intent generation did not complete.",
+    );
     artifact.finalVerdict.weakestStage = "intentSchema";
     artifact.finalVerdict.remainingRisks.push("Failed to create UpdateIntent");
     persistReviewArtifact();
@@ -424,7 +441,7 @@ export async function runUpdateCommand(
   artifact.relationCandidates = relationCandidates;
   artifact.workspaceSemanticContext = workspaceSemanticContext;
   try {
-    artifact.semanticArtifacts = saveUpdateSemanticArtifacts({
+    const semanticArtifacts = saveUpdateSemanticArtifacts({
       hostRoot: options.hostRoot,
       featureId: currentFeatureContext.featureId,
       dryRun: options.dryRun || !options.write,
@@ -434,8 +451,13 @@ export async function runUpdateCommand(
       commandKind: "update",
       generatedAt: artifact.generatedAt,
     });
+    artifact.semanticArtifacts = semanticArtifacts;
+    artifact.semanticExportStatus = createWrittenSemanticExportStatus(semanticArtifacts);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    artifact.semanticExportStatus = createPendingSemanticExportStatus(
+      `Semantic artifacts failed to export: ${message}`,
+    );
     artifact.finalVerdict.remainingRisks.push(`Failed to export update semantic artifacts: ${message}`);
   }
   artifact.stages.intentSchema = {
@@ -462,10 +484,6 @@ export async function runUpdateCommand(
     persistReviewArtifact();
     return false;
   }
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 2: Blueprint");
-  console.log("=".repeat(70));
 
   const {
     blueprint: blueprintDraft,
@@ -502,7 +520,7 @@ export async function runUpdateCommand(
     issues: blueprintIssues,
   };
   try {
-    artifact.semanticArtifacts = saveUpdateSemanticArtifacts({
+    const semanticArtifacts = saveUpdateSemanticArtifacts({
       hostRoot: options.hostRoot,
       featureId: currentFeatureContext.featureId,
       dryRun: options.dryRun || !options.write,
@@ -514,21 +532,12 @@ export async function runUpdateCommand(
       commandKind: "update",
       generatedAt: artifact.generatedAt,
     });
+    artifact.semanticArtifacts = semanticArtifacts;
+    artifact.semanticExportStatus = createWrittenSemanticExportStatus(semanticArtifacts);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     artifact.finalVerdict.remainingRisks.push(`Failed to export update blueprint semantic artifacts: ${message}`);
   }
-  console.log("  ✅ FinalBlueprint created");
-  console.log(`     ID: ${blueprint.id}`);
-  console.log(`     Status: ${blueprintStatus}`);
-  console.log(`     Modules: ${blueprint.modules.length}`);
-  console.log(`     ModuleNeeds: ${moduleNeedsCount}`);
-  console.log(`     Pattern Hints: ${blueprint.patternHints.length}`);
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 3: Pattern Resolution");
-  console.log("=".repeat(70));
-
   const resolutionResult = deps.resolvePatternsFromBlueprint(blueprint);
   if (resolutionResult.patterns.length === 0 && !shouldUseArtifactSynthesis(blueprint, resolutionResult)) {
     console.error("\n❌ No patterns resolved");
@@ -563,21 +572,6 @@ export async function runUpdateCommand(
     issues: [],
     complete: resolutionResult.complete,
   };
-  console.log(`  Patterns resolved: ${resolutionResult.patterns.length}`);
-  for (const pattern of resolutionResult.patterns) {
-    console.log(`    ✅ ${pattern.patternId}`);
-  }
-  if (resolutionResult.unresolved.length > 0) {
-    console.log(`  Unresolved patterns: ${resolutionResult.unresolved.length}`);
-    for (const unresolved of resolutionResult.unresolved) {
-      console.log(`    ⚠️  ${unresolved.requestedId}`);
-    }
-  }
-  console.log(`  Complete: ${resolutionResult.complete}`);
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4: AssemblyPlan");
-  console.log("=".repeat(70));
 
   const { plan, blockers } = await deps.buildAssemblyPlan(
     blueprint,
@@ -601,97 +595,49 @@ export async function runUpdateCommand(
     readyForHostWrite: plan.readyForHostWrite ?? false,
     blockers,
   };
-  artifact.stages.artifactSynthesis = plan.artifactSynthesisResult
-    ? {
-        success: plan.artifactSynthesisResult.success,
-        triggered: true,
-        strategy: plan.artifactSynthesisResult.strategy,
-        sourceKind: plan.artifactSynthesisResult.sourceKind,
-        promptPackageId: plan.artifactSynthesisResult.promptPackageId,
-        artifacts: plan.artifactSynthesisResult.artifacts.map((item) => ({
-          id: item.id,
-          moduleId: item.moduleId,
-          outputKind: item.outputKind,
-          targetPath: item.targetPath,
-          summary: item.summary,
-        })),
-        bundles: plan.artifactSynthesisResult.bundles?.map((bundle) => ({
-          bundleId: bundle.bundleId,
-          kind: bundle.kind,
-          primaryModuleId: bundle.primaryModuleId,
-          moduleIds: bundle.moduleIds,
-          artifactIds: plan.artifactSynthesisResult!.artifacts
-            .filter((artifactItem) => artifactItem.bundleId === bundle.bundleId)
-            .map((artifactItem) => artifactItem.id),
-        })),
-        moduleBundleMap: (plan.moduleRecords || [])
-          .filter((record) => record.sourceKind === "synthesized" && typeof record.bundleId === "string")
-          .map((record) => ({
-            moduleId: record.moduleId,
-            bundleId: record.bundleId!,
-          })),
-        bundleArtifacts: plan.artifactSynthesisResult.bundles?.map((bundle) => {
-          const artifacts = plan.artifactSynthesisResult!.artifacts.filter(
-            (artifactItem) => artifactItem.bundleId === bundle.bundleId,
-          );
-          return {
-            bundleId: bundle.bundleId,
-            artifactIds: artifacts.map((artifactItem) => artifactItem.id),
-            targetPaths: artifacts.map((artifactItem) => artifactItem.targetPath),
-          };
-        }),
-        warnings: plan.artifactSynthesisResult.warnings,
-        blockers: plan.artifactSynthesisResult.blockers,
-        retrievalSummary: plan.artifactSynthesisResult.retrievalSummary?.tiersUsed.length
-          ? `${plan.artifactSynthesisResult.retrievalSummary.evidenceCount} refs across tiers ${plan.artifactSynthesisResult.retrievalSummary.tiersUsed.join(", ")}`
-          : undefined,
-        evidenceRefs: plan.artifactSynthesisResult.evidenceRefs?.map((item) => ({
-          title: item.title,
-          sourceKind: item.sourceKind,
-          path: item.path,
-        })),
-        mustNotAddViolations: plan.artifactSynthesisResult.moduleResults?.flatMap((item) => item.mustNotAddViolations || []) || [],
-        grounding: plan.artifactSynthesisResult.grounding?.map((item) => ({
-          artifactId: item.artifactId,
-          verifiedSymbols: item.verifiedSymbols,
-          allowlistedSymbols: item.allowlistedSymbols,
-          weakSymbols: item.weakSymbols,
-          unknownSymbols: item.unknownSymbols,
-          warnings: item.warnings,
-        })),
-      }
-    : {
-        success: true,
-        triggered: false,
-        artifacts: [],
-        warnings: [],
-        blockers: [],
-        skipped: true,
-      };
-  console.log("  ✅ AssemblyPlan created");
-  console.log(`     Blueprint ID: ${plan.blueprintId}`);
-  console.log(`     Selected Patterns: ${plan.selectedPatterns.length}`);
-  console.log(`     Ready for Host Write: ${plan.readyForHostWrite ?? false}`);
-
-  const hostRealizationPlan = realizeDota2Host(plan);
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4.5: Host Realization (for update)");
-  console.log("=".repeat(70));
+  artifact.stages.artifactSynthesis = buildArtifactSynthesisStageFromPlan(plan);
+  const hostRealizationStage = await runPipelineStage(
+    { id: "hostRealization", label: "Stage 4.5: Host Realization (for update)", mode: "update" },
+    () => realizeDota2Host(plan),
+  );
+  if (!hostRealizationStage.ok || !hostRealizationStage.value) {
+    const message = hostRealizationStage.error || "Host realization failed";
+    artifact.stages.hostRealization = {
+      success: false,
+      units: [],
+      blockers: [message],
+    };
+    artifactBuilder.setFinalVerdict({ weakestStage: "hostRealization" }).addRemainingRisk(message);
+    persistReviewArtifact();
+    return false;
+  }
+  const hostRealizationPlan = hostRealizationStage.value;
   console.log(summarizeRealization(hostRealizationPlan));
+  artifact.stages.hostRealization = buildHostRealizationStage(hostRealizationPlan);
 
-  const generatorRoutingPlan = generateGeneratorRoutingPlan(hostRealizationPlan);
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4.6: Generator Routing (for update)");
-  console.log("=".repeat(70));
+  const generatorRoutingStage = await runPipelineStage(
+    { id: "generatorRouting", label: "Stage 4.6: Generator Routing (for update)", mode: "update" },
+    () => generateGeneratorRoutingPlan(hostRealizationPlan),
+  );
+  if (!generatorRoutingStage.ok || !generatorRoutingStage.value) {
+    const message = generatorRoutingStage.error || "Generator routing failed";
+    artifact.stages.generatorRouting = {
+      success: false,
+      routes: [],
+      warnings: [],
+      blockers: [message],
+    };
+    artifactBuilder.setFinalVerdict({ weakestStage: "generatorRouting" }).addRemainingRisk(message);
+    persistReviewArtifact();
+    return false;
+  }
+  const generatorRoutingPlan = generatorRoutingStage.value;
   const tsRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "ts");
   const uiRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "ui");
   const kvRoutes = generatorRoutingPlan.routes.filter((route) => route.routeKind === "kv");
   console.log(`  Routes: ${generatorRoutingPlan.routes.length} total`);
   console.log(`    - TS: ${tsRoutes.length}, UI: ${uiRoutes.length}, KV: ${kvRoutes.length} (${kvRoutes.filter((route) => route.blockers?.length).length} blocked)`);
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 5: Generator");
-  console.log("=".repeat(70));
+  artifact.stages.generatorRouting = buildGeneratorRoutingStage(generatorRoutingPlan);
 
   const { writePlan, issues: generatorIssues } = deps.createWritePlan(
     plan,
@@ -722,6 +668,31 @@ export async function runUpdateCommand(
     }
     artifact.stages.assemblyPlan.readyForHostWrite = writePlan.readyForHostWrite;
     artifact.stages.assemblyPlan.blockers = [...new Set([...(artifact.stages.assemblyPlan.blockers || []), ...(writePlan.readinessBlockers || [])])];
+
+    const preservedArtifacts = preserveDota2UpdateWritePlanArtifacts({
+      hostRoot: options.hostRoot,
+      updateIntent,
+      existingFeature,
+      writePlan,
+    });
+    if (preservedArtifacts.preserved.length > 0) {
+      console.log("  ♻ Preserved existing gameplay shell artifacts:");
+      for (const preserved of preservedArtifacts.preserved) {
+        console.log(`     - ${preserved.targetPath} (${preserved.reason})`);
+      }
+    }
+    if (preservedArtifacts.prunedPaths.length > 0) {
+      console.log("  ⛏ Pruned replacement gameplay shell entries:");
+      for (const targetPath of preservedArtifacts.prunedPaths) {
+        console.log(`     - ${targetPath}`);
+      }
+    }
+    if (options.verbose && preservedArtifacts.skippedReasons.length > 0) {
+      console.log("  Preservation notes:");
+      for (const reason of preservedArtifacts.skippedReasons) {
+        console.log(`     - ${reason}`);
+      }
+    }
   }
   if (!writePlan) {
     console.error(`\n❌ Failed to create WritePlan: ${generatorIssues.join(", ")}`);
@@ -759,13 +730,7 @@ export async function runUpdateCommand(
     return false;
   }
 
-  const executableEntries = writePlan.entries.filter((entry: any) => !entry.deferred);
-  const kvEntriesForGen = executableEntries.filter((entry: any) => entry.contentType === "kv");
-  const nonKvEntriesForGen = executableEntries.filter((entry: any) => entry.contentType !== "kv");
-  const kvTargetPathsForGen = new Set(kvEntriesForGen.map((entry: any) => entry.targetPath));
-  const aggregatedKvFilesForGen = Array.from(kvTargetPathsForGen);
-  const nonKvFilesForGen = nonKvEntriesForGen.map((entry: any) => entry.targetPath);
-  const aggregatedGeneratedFiles = [...nonKvFilesForGen, ...aggregatedKvFilesForGen];
+  const aggregatedGeneratedFiles = buildWritePlanGeneratedFiles(writePlan);
 
   artifact.stages.generator = {
     success: true,
@@ -774,34 +739,6 @@ export async function runUpdateCommand(
     realizationContext: writePlan.realizationContext,
     deferredWarnings: writePlan.deferredWarnings,
   };
-  console.log("  ✅ WritePlan created");
-  console.log(`     ID: ${writePlan.id}`);
-  console.log(`     Entries: ${writePlan.entries.length}`);
-
-  if (writePlan.stats.deferred > 0) {
-    console.log(`     ⚠️  Deferred entries: ${writePlan.stats.deferred} (see deferred warnings)`);
-  }
-
-  const familyHints = writePlan.entries.reduce((acc: Record<string, number>, entry: any) => {
-    if (entry.generatorFamilyHint) {
-      acc[entry.generatorFamilyHint] = (acc[entry.generatorFamilyHint] || 0) + 1;
-    }
-    return acc;
-  }, {});
-  if (Object.keys(familyHints).length > 0) {
-    console.log(`     Generator hints: ${Object.entries(familyHints).map(([key, value]) => `${key}:${value}`).join(", ")}`);
-  }
-
-  if (writePlan.deferredWarnings && writePlan.deferredWarnings.length > 0) {
-    console.log("     Deferred warnings:");
-    for (const warning of writePlan.deferredWarnings) {
-      console.log(`       - ${warning}`);
-    }
-  }
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 6: Update Diff Classification");
-  console.log("=".repeat(70));
 
   const diffResult = classifyUpdateDiff(existingFeature, writePlan, options.hostRoot);
   console.log(formatUpdateDiffResult(diffResult));
@@ -912,18 +849,34 @@ export async function runUpdateCommand(
     return false;
   }
 
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 7: Selective Update Execution");
-  console.log("=".repeat(70));
-
   const contentMap = new Map<string, string>();
   const stableFeatureId = existingFeature.featureId;
-  for (const entry of writePlan.entries.filter((candidate: any) => !candidate.deferred)) {
-    const content = entry.contentType === "kv"
-      ? generateKVContentWithIndex(entry, 0)
-      : deps.generateCodeContent(entry, stableFeatureId);
-    const relativePath = entry.targetPath.replace(options.hostRoot.replace(/\\/g, "/"), "").replace(/^\//, "");
-    contentMap.set(relativePath, content);
+  const executableEntriesForUpdate = writePlan.entries.filter((candidate: any) => !candidate.deferred);
+  const kvMaterialization = materializeKvWritePlanEntries({
+    hostRoot: options.hostRoot,
+    entries: executableEntriesForUpdate,
+    buildKvContent: generateKVContentWithIndex,
+    removedFragmentPaths: diffResult.deletedFiles
+      .map((file) => file.path)
+      .filter((filePath) => isAbilityKvFragmentPath(filePath)),
+  });
+  for (const entry of executableEntriesForUpdate) {
+    if (entry.contentType === "kv") {
+      continue;
+    }
+    contentMap.set(entry.targetPath, deps.generateCodeContent(entry, stableFeatureId));
+  }
+  for (const fragment of kvMaterialization.fragmentEntries) {
+    contentMap.set(fragment.targetPath, fragment.content);
+  }
+  for (const passthrough of kvMaterialization.passthroughEntries) {
+    contentMap.set(passthrough.targetPath, passthrough.content);
+  }
+  if (kvMaterialization.aggregate) {
+    contentMap.set(
+      kvMaterialization.aggregate.aggregateTargetPath,
+      kvMaterialization.aggregate.content,
+    );
   }
 
   const updateResult = executeSelectiveUpdate(
@@ -1016,10 +969,10 @@ export async function runUpdateCommand(
   console.log("Stage 10: Final Commit Decision");
   console.log("=".repeat(70));
 
-  const finalCommitDecision = calculateFinalCommitDecision({
+  const validationOrchestration = orchestrateValidation({
     blueprint,
-    hostBlockers: hostRealizationPlan.blockers,
-    routingBlockers: generatorRoutingPlan.blockers,
+    hostRealizationPlan,
+    generatorRoutingPlan,
     localRepair: {
       success: localRepairResult.success,
       blockers: localRepairResult.blockers,
@@ -1029,49 +982,15 @@ export async function runUpdateCommand(
     hostValidation: {
       success: hostValidationResult.success,
       issues: hostValidationResult.issues,
+      checks: hostValidationResult.checks,
+      details: hostValidationResult.details,
+      skipped: hostValidationResult.skipped,
     },
-    runtimeValidation: {
-      success: artifact.stages.runtimeValidation.success,
-      limitations: artifact.stages.runtimeValidation.limitations,
-      skipped: artifact.stages.runtimeValidation.skipped,
-    },
+    runtimeValidation: artifact.stages.runtimeValidation,
     dryRun: options.dryRun,
   });
-  const finalValidationStatus = buildFinalValidationStatus(
-    blueprint,
-    {
-      blueprint,
-      hostBlockers: hostRealizationPlan.blockers,
-      routingBlockers: generatorRoutingPlan.blockers,
-      localRepair: {
-        success: localRepairResult.success,
-        blockers: localRepairResult.blockers,
-        warnings: localRepairResult.warnings,
-      },
-      dependencyRevalidation,
-      hostValidation: {
-        success: hostValidationResult.success,
-        issues: hostValidationResult.issues,
-      },
-      runtimeValidation: {
-        success: artifact.stages.runtimeValidation.success,
-        limitations: artifact.stages.runtimeValidation.limitations,
-        skipped: artifact.stages.runtimeValidation.skipped,
-      },
-      dryRun: options.dryRun,
-    },
-    finalCommitDecision,
-  );
-
-  artifact.stages.finalCommitDecision = {
-    success: finalCommitDecision.outcome !== "blocked",
-    outcome: finalCommitDecision.outcome,
-    requiresReview: finalCommitDecision.requiresReview,
-    reasons: finalCommitDecision.reasons,
-    impactedFeatures: finalCommitDecision.impactedFeatures || [],
-    dependencyBlockers: finalCommitDecision.dependencyBlockers || [],
-    downgradedFeatures: finalCommitDecision.downgradedFeatures || [],
-  };
+  const { finalCommitDecision, finalValidationStatus } = validationOrchestration;
+  artifact.stages.finalCommitDecision = validationOrchestration.stageResult;
   console.log(`  Outcome: ${finalCommitDecision.outcome}`);
   console.log(`  Requires Review: ${finalCommitDecision.requiresReview ? "yes" : "no"}`);
   for (const reason of finalCommitDecision.reasons) {
@@ -1084,20 +1003,20 @@ export async function runUpdateCommand(
 
   if (!options.dryRun && finalCommitDecision.outcome !== "blocked") {
     const deletedFiles = diffResult.deletedFiles.map((file) => file.path);
-    const executableEntriesForUpdate = writePlan.entries.filter((entry: any) => !entry.deferred);
-    const kvEntriesForUpdate = executableEntriesForUpdate.filter((entry: any) => entry.contentType === "kv");
-    const nonKvEntriesForUpdate = executableEntriesForUpdate.filter((entry: any) => entry.contentType !== "kv");
-    const kvTargetPathsForUpdate = new Set(kvEntriesForUpdate.map((entry: any) => entry.targetPath));
-    const aggregatedKvFilesForUpdate = Array.from(kvTargetPathsForUpdate);
-    const nonKvFilesForUpdate = nonKvEntriesForUpdate.map((entry: any) => entry.targetPath);
-    const generatedFilesForUpdate = [...nonKvFilesForUpdate, ...aggregatedKvFilesForUpdate].filter((file) => !deletedFiles.includes(file));
-
     const sourceBackedFields = resolveSelectionPoolWorkspaceFields(
       writePlan,
       existingFeature.featureId,
       "update",
       blueprint.featureAuthoring ?? existingFeature.featureAuthoring,
     );
+    const generatedFilesForUpdate = buildWritePlanGeneratedFiles(writePlan)
+      .filter((file) => !deletedFiles.includes(file));
+    const ownedArtifactsForUpdate = buildOwnedArtifactsFromWritePlan({
+      writePlan,
+      sourceModelPath: sourceBackedFields.sourceModel?.path,
+      sourceModelAdapter: sourceBackedFields.sourceModel?.adapter,
+      sourceModelVersion: sourceBackedFields.sourceModel?.version,
+    });
     const integrationPoints = writePlan.integrationPoints && writePlan.integrationPoints.length > 0
       ? [...new Set(writePlan.integrationPoints)]
       : existingFeature.integrationPoints;
@@ -1113,6 +1032,7 @@ export async function runUpdateCommand(
       blueprintId: blueprint.id,
       entryBindings: extractEntryBindings(plan.bridgeUpdates),
       generatedFiles: generatedFilesForUpdate,
+      ownedArtifacts: ownedArtifactsForUpdate,
       selectedPatterns: resolutionResult.patterns.map((pattern) => pattern.patternId),
       sourceModel: sourceBackedFields.sourceModel ?? existingFeature.sourceModel ?? undefined,
       featureAuthoring: sourceBackedFields.featureAuthoring ?? existingFeature.featureAuthoring ?? undefined,

@@ -6,8 +6,10 @@ import {
   TALENT_DRAW_EXAMPLE_SOURCE_UPDATE_PROMPT,
 } from "./__fixtures__/examples.js";
 import {
+  detectSelectionPoolFallbackIntent,
   compileSelectionPoolModuleParameters,
   deriveSelectionPoolCurrentContextHints,
+  extractSelectionPoolAdmissionBlockers,
   mergeSelectionPoolFeatureAuthoringForUpdate,
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
@@ -23,8 +25,15 @@ const NO_UI_FIREBALL_PROMPT =
 
 const GENERIC_INVENTORY_UPDATE_PROMPT =
   "给当前功能增加一个存储面板，16格，存满了就不能再抽了";
+const STORAGE_PANEL_INVENTORY_UPDATE_PROMPT =
+  "为该抽取系统创建一个16格的存储面板，抽取到的选项会自动出现在面板上。";
 
 function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
+  const detection = detectSelectionPoolFallbackIntent({
+    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    mode: "create",
+    featureId: "talent_draw_demo",
+  });
   const resolution = resolveSelectionPoolFamily({
     prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
     hostRoot: "D:\\test3",
@@ -40,6 +49,7 @@ function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
   assert.equal(resolution.proposal?.parameters.triggerKey, "F4");
   assert.equal(resolution.proposal?.parameters.choiceCount, 3);
   assert.equal(resolution.proposal?.parameters.objects.length, 6);
+  assert.equal(detection.handled, true);
   assert.ok(resolution.admissionDiagnostics);
   assert.deepEqual(
     resolution.admissionDiagnostics?.detection.matchedBy.includes("object_kind:talent"),
@@ -187,6 +197,48 @@ function testInventoryPromptDoesNotDependOnFeatureId(): void {
   const messages = new Set(prompts.map((result) => result.proposal?.parameters.inventory?.fullMessage));
   assert.deepEqual([...capacities], [16]);
   assert.deepEqual([...messages], ["Selection inventory full"]);
+}
+
+function testStoragePanelPromptUsesSameInventoryAuthority(): void {
+  const existingResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "standalone_system_75dh",
+    proposalSource: "fallback",
+  });
+
+  const updateResolution = resolveSelectionPoolFamily({
+    prompt: STORAGE_PANEL_INVENTORY_UPDATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "update",
+    featureId: "standalone_system_75dh",
+    existingFeature: {
+      featureId: "standalone_system_75dh",
+      intentKind: "standalone-system",
+      status: "active",
+      revision: 1,
+      blueprintId: "bp",
+      selectedPatterns: [],
+      generatedFiles: [],
+      entryBindings: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      featureAuthoring: {
+        mode: "source-backed",
+        profile: "selection_pool",
+        objectKind: "talent",
+        parameters: existingResolution.proposal!.parameters,
+        parameterSurface: existingResolution.proposal!.parameterSurface,
+      },
+    },
+    proposalSource: "existing-feature",
+  });
+
+  assert.equal(updateResolution.blocked, false);
+  assert.equal(updateResolution.proposal?.parameters.inventory?.capacity, 16);
+  assert.equal(updateResolution.proposal?.parameters.inventory?.enabled, true);
+  assert.equal(updateResolution.proposal?.parameters.inventory?.blockDrawWhenFull, false);
 }
 
 function testSiblingEquipmentPromptUsesSameFamily(): void {
@@ -355,9 +407,13 @@ function testSelectionPoolCompressionDeclinesWithoutUiSurface(): void {
     resolution.proposal,
     resolution.admissionDiagnostics,
   );
+  const blockers = extractSelectionPoolAdmissionBlockers(normalized.admissionDiagnostics);
 
   assert.equal(normalized.featureAuthoring, undefined);
+  assert.equal(resolution.blocked, true);
   assert.equal(normalized.admissionDiagnostics?.verdict, "declined");
+  assert.equal(normalized.blockers.length > 0, true);
+  assert.equal(blockers.length > 0, true);
   assert.ok(
     normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("current_feature_ui_surface"),
   );
@@ -421,7 +477,9 @@ function testSelectionPoolCompressionDeclinesWithoutUiOrPlayerChoice(): void {
   );
 
   assert.equal(normalized.featureAuthoring, undefined);
+  assert.equal(resolution.blocked, true);
   assert.equal(normalized.admissionDiagnostics?.verdict, "declined");
+  assert.equal(normalized.blockers.length > 0, true);
   assert.ok(
     normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("current_feature_ui_surface"),
   );
@@ -579,7 +637,6 @@ function testUpdateMergeUsesUpdateIntentAuthority(): void {
 
   const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
-    requestedChange,
     updateIntent,
   });
 
@@ -662,7 +719,6 @@ function testUpdateMergePrefersRequestedTargetTriggerKey(): void {
 
   const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
-    requestedChange,
     updateIntent,
   });
 
@@ -742,7 +798,6 @@ function testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit(): void {
 
   const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
-    requestedChange,
     updateIntent,
   });
 
@@ -855,7 +910,6 @@ function testUpdateMergeRestoresInventoryContractFromBoundedAuthority(): void {
 
   const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
     currentFeatureAuthoring,
-    requestedChange,
     updateIntent,
   });
   const compiled = compileSelectionPoolModuleParameters(merged);
@@ -946,7 +1000,6 @@ function testUpdateMergeDoesNotInventInventoryCapacity(): void {
         inventory: undefined,
       },
     },
-    requestedChange,
     updateIntent,
   });
 
@@ -975,6 +1028,7 @@ testCanonicalCreateSeedsSelectionPoolAuthoring();
 testCanonicalUpdateExpandsPoolToTwenty();
 testGenericInventoryUpdateUsesPromptAuthority();
 testInventoryPromptDoesNotDependOnFeatureId();
+testStoragePanelPromptUsesSameInventoryAuthority();
 testSiblingEquipmentPromptUsesSameFamily();
 testOriginalTalentDrawPromptCompressesIntoSelectionPool();
 testNoUiFireballPromptStaysNotApplicable();

@@ -276,10 +276,6 @@ function buildUpdateFewShots(): LLMMessage[] {
           interaction: { activations: [{ kind: "key", input: "G", phase: "press", repeatability: "repeatable" }] },
           uncertainties: [],
         },
-        delta: {
-          preserve: [{ path: "skeleton", kind: "composition", summary: "Preserve the module backbone composition." }],
-          modify: [{ path: "input.triggerKey", kind: "trigger", summary: "Rebind the existing trigger key to G." }],
-        },
         resolvedAssumptions: ["Unspecified existing behavior remains preserved."],
       },
     },
@@ -311,10 +307,6 @@ function buildUpdateFewShots(): LLMMessage[] {
             },
           },
           uncertainties: [],
-        },
-        delta: {
-          preserve: [{ path: "skeleton", kind: "composition", summary: "Preserve the current selection backbone and bounded choice flow." }],
-          modify: [{ path: "selection.inventory.capacity", kind: "ui", summary: "Change inventory capacity to 16." }],
         },
         resolvedAssumptions: [
           "The existing choiceCount remains unchanged unless the user explicitly changes candidate/display count.",
@@ -360,10 +352,6 @@ function buildUpdateFewShots(): LLMMessage[] {
             durationSemantics: "persistent",
           },
           uncertainties: [],
-        },
-        delta: {
-          preserve: [{ path: "skeleton", kind: "composition", summary: "Preserve the existing ability shell backbone." }],
-          modify: [{ path: "timing.duration", kind: "state", summary: "Keep the shell alive during the current match only." }],
         },
         resolvedAssumptions: [
           "Current-match runtime persistence does not imply cross-match save, profile storage, or external ownership.",
@@ -464,18 +452,18 @@ export function buildWizardUpdatePromptPackage(input: UpdateWizardPackageInput):
   const messages: LLMMessage[] = [
     {
       role: "system",
-      content: [
-        "You are Rune Weaver's wizard.update prompt package.",
-        "Do not write code.",
-        "Interpret only the requested change against the current feature context.",
-        "Treat preservedModuleBackbone as the primary context field; admittedSkeleton is a one-round legacy alias and should be interpreted identically when present.",
-        "Prefer preserve semantics over rebuild semantics.",
-        "Do not restate or rebuild the whole existing feature unless the user explicitly asks for a rewrite.",
-        "Keep the requestedChange semantic-only and return compact delta notes.",
-        "Unless the prompt explicitly asks for cross-match retention, account/profile save, external storage, or a named external owner or boundary, interpret persistent wording as runtime or session-long existence only.",
-        'Do not reinterpret "confirm exactly one candidate" or single-confirm invariants as a request to change selection.choiceCount.',
-        "Do not output readiness, blocked/weak labels, or implementation verdicts.",
-        "Represent unknown or change-sensitive gaps with uncertainties in the requestedChange schema instead of pretending the update is blocked.",
+        content: [
+          "You are Rune Weaver's wizard.update prompt package.",
+          "Do not write code.",
+          "Interpret only the requested change against the current feature context.",
+          "Treat preservedModuleBackbone as the primary context field; admittedSkeleton is a one-round legacy alias and should be interpreted identically when present.",
+          "Prefer preserve semantics over rebuild semantics.",
+          "Do not restate or rebuild the whole existing feature unless the user explicitly asks for a rewrite.",
+          "Return only the semantic-only requestedChange candidate and resolved assumptions.",
+          "Unless the prompt explicitly asks for cross-match retention, account/profile save, external storage, or a named external owner or boundary, interpret persistent wording as runtime or session-long existence only.",
+          'Do not reinterpret "confirm exactly one candidate" or single-confirm invariants as a request to change selection.choiceCount.',
+          "Do not output readiness, blocked/weak labels, or implementation verdicts.",
+          "Represent unknown or change-sensitive gaps with uncertainties in the requestedChange schema instead of pretending the update is blocked.",
         renderPromptConstraints(promptConstraints),
         "",
         renderRetrievalBundle(input.retrievalBundle),

@@ -1,17 +1,15 @@
 // F006: Workbench Result Loader
-// Backend-like result loading service for frontend integration
-// Supports multiple source modes: local-bridge, local-backend, shared-fixture, fallback
+// Backend-like result loading service for frontend integration.
 //
 // RESPONSIBILITIES:
-// - Mode routing (decide which source to load from)
-// - Loading orchestration (async loading with delay simulation)
-// - Fallback handling (graceful degradation across sources)
-// - Metadata tracking (source, timing, fallback status)
+// - Route to exactly one concrete source per request
+// - Guard dev/test-only sources from normal product paths
+// - Track which source actually served the result
 //
 // NOT RESPONSIBILITIES:
-// - Data definition (handled by data/ layers)
+// - Cascading fallback across unrelated sources
 // - Type transformation (handled by adapter layer)
-// - UI state management (handled by App.tsx)
+// - UI state management
 
 import type { WorkbenchResult } from "../../../workbench/contract";
 
@@ -27,11 +25,6 @@ import {
   getLocalBridgeScenarios,
 } from "../data/localResultBridge";
 
-// F006: Extended data source modes
-// - mock: Frontend mock scenarios (F001-F003)
-// - local-bridge: Dev-only local bridge (F006) - NEW
-// - shared-fixture: Dynamic import from apps/workbench/fixtures (F004-R2)
-// - local-backend: Load from local backend-like result source (F005)
 export type DataSourceMode = "mock" | "local-bridge" | "shared-fixture" | "local-backend";
 
 // F006: Result metadata to track source
@@ -40,7 +33,6 @@ export interface ResultMetadata {
   loadedAt: string;
   scenario?: string;
   isFallback?: boolean;
-  fallbackChain?: string[];
 }
 
 export interface LoadedResult {
@@ -130,59 +122,60 @@ async function loadFromSharedFixture(scenario: string): Promise<WorkbenchResult 
   }
 }
 
-// F006: Main loader function
-// This is the entry point for loading backend-style results
-// Supports cascading fallback: local-bridge -> local-backend -> shared-fixture
+const DEV_ONLY_SOURCE_MODES: ReadonlySet<DataSourceMode> = new Set([
+  "mock",
+  "local-bridge",
+  "shared-fixture",
+]);
+
+function isExplicitDevOrTestMode(): boolean {
+  return Boolean(import.meta.env.DEV || import.meta.env.MODE === "test");
+}
+
+function isSourceModeAllowed(mode: DataSourceMode): boolean {
+  if (!DEV_ONLY_SOURCE_MODES.has(mode)) {
+    return true;
+  }
+
+  return isExplicitDevOrTestMode();
+}
+
+function buildMetadata(source: DataSourceMode, scenario: string): ResultMetadata {
+  return {
+    source,
+    loadedAt: new Date().toISOString(),
+    scenario,
+  };
+}
+
 export async function loadWorkbenchResult(
   scenario: string,
   mode: DataSourceMode
 ): Promise<LoadedResult | null> {
   console.log(`[F006] Loading workbench result: scenario=${scenario}, mode=${mode}`);
 
-  let result: WorkbenchResult | null = null;
-  let metadata: ResultMetadata = {
-    source: mode,
-    loadedAt: new Date().toISOString(),
-    scenario,
-    fallbackChain: [],
-  };
+  if (!isSourceModeAllowed(mode)) {
+    console.warn(`[F006] Source mode ${mode} is only available in explicit dev/test environments`);
+    return null;
+  }
+
+  const metadata = buildMetadata(mode, scenario);
+  let result: WorkbenchResult | null;
 
   switch (mode) {
+    case "mock":
+      console.warn("[F006] Mock scenarios are adapter-owned and are not served by workbenchResultLoader");
+      return null;
     case "local-bridge":
-      // F006: Try local bridge first (most realistic dev source)
       result = await loadFromLocalBridge(scenario);
-      if (!result) {
-        // Fallback chain: local-bridge -> local-backend -> shared-fixture
-        console.warn(`[F006] Local bridge failed, trying local-backend`);
-        metadata.fallbackChain?.push("local-backend");
-        result = await loadFromLocalBackend(scenario);
-        metadata.isFallback = true;
-      }
-      if (!result) {
-        console.warn(`[F006] Local backend failed, trying shared-fixture`);
-        metadata.fallbackChain?.push("shared-fixture");
-        result = await loadFromSharedFixture(scenario);
-        metadata.isFallback = true;
-      }
       break;
-
     case "local-backend":
       result = await loadFromLocalBackend(scenario);
       break;
-
     case "shared-fixture":
       result = await loadFromSharedFixture(scenario);
-      // F005-R1: Fallback logic - if shared fixture fails, try local backend
-      if (!result) {
-        console.warn(`[F005-R1] Shared fixture failed, trying local-backend fallback`);
-        metadata.fallbackChain?.push("local-backend");
-        result = await loadFromLocalBackend(scenario);
-        metadata.isFallback = true;
-      }
       break;
-
     default:
-      console.warn(`[F006] Unknown mode: ${mode}`);
       return null;
   }
 
@@ -196,6 +189,10 @@ export async function loadWorkbenchResult(
 
 // F006: Get available scenarios for each mode
 export function getAvailableScenarios(mode: DataSourceMode): string[] {
+  if (!isSourceModeAllowed(mode)) {
+    return [];
+  }
+
   switch (mode) {
     case "local-bridge":
       return getLocalBridgeScenarios();

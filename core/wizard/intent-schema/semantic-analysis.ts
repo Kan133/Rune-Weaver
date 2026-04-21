@@ -4,14 +4,12 @@ import type {
   IntentCompositionContract,
   IntentContentModelContract,
   IntentEffectContract,
-  IntentInteractionContract,
   IntentSchema,
   IntentSelectionContract,
   IntentStateContract,
   IntentTimingContract,
   IntentUncertainty,
   NormalizedMechanics,
-  UIRequirementSummary,
 } from "../../schema/types.js";
 import { collectPromptSemanticHints } from "./prompt-hints.js";
 import { buildIntentRawFacts } from "./raw-facts.js";
@@ -123,6 +121,15 @@ export interface IntentGovernanceCompositionContract {
   }>;
 }
 
+export type IntentSemanticSurface =
+  | "activation"
+  | "selection_flow"
+  | "candidate_catalog"
+  | "ui_presentation"
+  | "effect_profile"
+  | "state_scope"
+  | "composition_boundary";
+
 export interface IntentGovernanceDecisions {
   intentKind: IntentGovernanceDecision<IntentClassification["intentKind"]>;
   normalizedMechanics: IntentGovernanceDecision<NormalizedMechanics>;
@@ -143,10 +150,12 @@ export interface IntentGovernanceDecisions {
 export interface IntentOpenSemanticResidueItem {
   id: string;
   summary: string;
+  surface: IntentSemanticSurface;
   class: "governance_relevant" | "blueprint_relevant" | "bounded_detail_only";
   disposition: "open" | "assumed";
   affects: IntentUncertainty["affects"];
   severity: IntentUncertainty["severity"];
+  targetPaths?: string[];
   source:
     | "schema.uncertainty"
     | "legacy.required_clarification"

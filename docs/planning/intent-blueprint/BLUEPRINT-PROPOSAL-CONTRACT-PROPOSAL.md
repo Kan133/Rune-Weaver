@@ -4,13 +4,20 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-14
-> Read when: checking which `BlueprintProposal` details remain residual after baseline wording landed
+> Last verified: 2026-04-20
+> Read when: checking which `BlueprintProposal` details remain planning-only after the baseline/reference surface was rewritten
 > Do not use for: restating accepted blueprint-stage authority boundaries in parallel
 > Owner: Lane B
 
-This draft captures Lane B's proposal-side commitments.
-It is intentionally non-authoritative, scoped to `BlueprintProposal` semantics, and does not redefine pattern taxonomy or host realization families.
+This file now lives under `docs/planning/intent-blueprint/` because it is residual planning only.
+Use the current baseline/reference set first:
+
+- [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
+
+This draft captures Lane B's proposal-side commitments without redefining current execution truth.
 
 ## Purpose
 

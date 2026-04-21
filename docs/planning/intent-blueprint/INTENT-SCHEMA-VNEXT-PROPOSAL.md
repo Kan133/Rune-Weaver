@@ -4,13 +4,18 @@
 > Audience: agents
 > Doc family: planning
 > Update cadence: temporary
-> Last verified: 2026-04-16
-> Read when: checking which IntentSchema vNext details remain residual after baseline wording landed
+> Last verified: 2026-04-20
+> Read when: checking which IntentSchema vNext details remain planning-only after the baseline/reference surface was rewritten
 > Do not use for: restating accepted baseline schema wording in parallel
 > Owner: Lane B
 
-This document is a proposal contract for intent-schema enrichment.
-It now serves mainly as a residual note for details not yet baselined in [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md) and [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md).
+This document now lives under `docs/planning/intent-blueprint/` because it is planning-only.
+It remains a residual note for details not yet baselined in:
+
+- [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
+- [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
+- [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+- [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
 
 ## Purpose
 

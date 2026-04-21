@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-
 import type {
   Blueprint,
   FeatureContract,
@@ -15,51 +12,32 @@ import type {
 import { calculateHostWriteExecutionOrder } from "../../../core/host/write-plan.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import { analyzeDefinitionOnlyProviderSemantics } from "../../../core/wizard/intent-schema/definition-only-provider.js";
-import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
+import type { WritePlan } from "../assembler/index.js";
 import { resolveProviderAbilityBindingFromWritePlan } from "../provider-ability-identity.js";
 import {
   isSelectionPoolFeatureAuthoring,
   refreshSelectionPoolWritePlanEntries,
 } from "../families/selection-pool/authoring.js";
 import {
-  expandObjectPoolToCount,
-  resolveSelectionPoolObjectKind,
   type FeatureAuthoring as SelectionPoolFeatureAuthoring,
 } from "../families/selection-pool/shared.js";
-
-export const GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID = "grantable_primary_hero_ability";
-const DOTA2_PROVIDER_EXPORT_ADAPTER = "dota2_provider_ability_export";
-const DOTA2_SELECTION_GRANT_BINDING_ADAPTER = "dota2_selection_grant_binding";
-
-export type Dota2AbilityExportAttachmentMode = "grant_only" | "auto_on_activate";
-
-export interface Dota2ProviderAbilityExportSurface {
-  surfaceId: typeof GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID;
-  abilityName: string;
-  attachmentMode: Dota2AbilityExportAttachmentMode;
-}
-
-export interface Dota2ProviderAbilityExportArtifactV1 {
-  adapter: typeof DOTA2_PROVIDER_EXPORT_ADAPTER;
-  version: 1;
-  featureId: string;
-  surfaces: Dota2ProviderAbilityExportSurface[];
-}
-
-export interface Dota2SelectionGrantBinding {
-  objectId: string;
-  targetFeatureId: string;
-  targetSurfaceId: typeof GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID;
-  relation: "grants";
-  applyBehavior: "grant_primary_hero_ability";
-}
-
-export interface Dota2SelectionGrantBindingArtifactV1 {
-  adapter: typeof DOTA2_SELECTION_GRANT_BINDING_ADAPTER;
-  version: 1;
-  featureId: string;
-  bindings: Dota2SelectionGrantBinding[];
-}
+import {
+  appendProviderExportEntry,
+  appendSelectionGrantBindingEntry,
+  appendSelectionGrantContractEntry,
+  buildProviderAbilityExportArtifact,
+  buildSelectionGrantBindingArtifact,
+  buildSelectionGrantContractArtifact,
+  ensureConsumesGrantableAbilitySurface,
+  ensureGrantDependencyEdge,
+  ensureGrantableAbilitySurface,
+  GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+  readProviderAbilityExportArtifact,
+  readSelectionGrantBindingArtifact,
+  type Dota2AbilityExportAttachmentMode,
+  type Dota2ProviderAbilityExportSurface,
+  type Dota2SelectionGrantBinding,
+} from "./grant-artifacts.js";
 
 export interface ApplyDota2GrantSeamResult {
   blueprint: Blueprint;
@@ -138,61 +116,6 @@ function mergeDependencyEdges(
   );
 }
 
-function getProviderExportArtifactRelativePath(featureId: string): string {
-  return `game/scripts/src/rune_weaver/features/${featureId}/dota2-provider-ability-export.json`;
-}
-
-function getSelectionGrantBindingArtifactRelativePath(featureId: string): string {
-  return `game/scripts/src/rune_weaver/features/${featureId}/selection-grant-bindings.json`;
-}
-
-function readJsonArtifact<T>(hostRoot: string, relativePath: string): T | undefined {
-  const fullPath = join(hostRoot, relativePath);
-  if (!existsSync(fullPath)) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(readFileSync(fullPath, "utf-8")) as T;
-  } catch {
-    return undefined;
-  }
-}
-
-export function readProviderAbilityExportArtifact(
-  hostRoot: string,
-  featureId: string,
-): Dota2ProviderAbilityExportArtifactV1 | undefined {
-  const artifact = readJsonArtifact<Dota2ProviderAbilityExportArtifactV1>(
-    hostRoot,
-    getProviderExportArtifactRelativePath(featureId),
-  );
-  if (!artifact || artifact.adapter !== DOTA2_PROVIDER_EXPORT_ADAPTER || artifact.version !== 1) {
-    return undefined;
-  }
-  if (!Array.isArray(artifact.surfaces)) {
-    return undefined;
-  }
-  return artifact;
-}
-
-export function readSelectionGrantBindingArtifact(
-  hostRoot: string,
-  featureId: string,
-): Dota2SelectionGrantBindingArtifactV1 | undefined {
-  const artifact = readJsonArtifact<Dota2SelectionGrantBindingArtifactV1>(
-    hostRoot,
-    getSelectionGrantBindingArtifactRelativePath(featureId),
-  );
-  if (!artifact || artifact.adapter !== DOTA2_SELECTION_GRANT_BINDING_ADAPTER || artifact.version !== 1) {
-    return undefined;
-  }
-  if (!Array.isArray(artifact.bindings)) {
-    return undefined;
-  }
-  return artifact;
-}
-
 function isGameplayAbilityRole(role: string | undefined): boolean {
   return role === "gameplay_ability" || role === "gameplay-core";
 }
@@ -233,55 +156,6 @@ function resolveProviderAttachmentMode(blueprint: Blueprint): Dota2AbilityExport
   return hasTriggerModule ? "auto_on_activate" : "grant_only";
 }
 
-function buildProviderAbilityExportArtifact(
-  featureId: string,
-  abilityName: string,
-  attachmentMode: Dota2AbilityExportAttachmentMode,
-): Dota2ProviderAbilityExportArtifactV1 {
-  return {
-    adapter: DOTA2_PROVIDER_EXPORT_ADAPTER,
-    version: 1,
-    featureId,
-    surfaces: [
-      {
-        surfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-        abilityName,
-        attachmentMode,
-      },
-    ],
-  };
-}
-
-function appendJsonEntry(
-  writePlan: WritePlan,
-  targetPath: string,
-  contentSummary: string,
-  parameters: Record<string, unknown>,
-  metadata: Record<string, unknown>,
-): void {
-  const existingIndex = writePlan.entries.findIndex((entry) => entry.targetPath === targetPath);
-  const nextEntry: WritePlanEntry = {
-    operation: existingIndex >= 0 ? writePlan.entries[existingIndex].operation : "create",
-    targetPath,
-    contentType: "json",
-    contentSummary,
-    sourcePattern: metadata.sourcePattern as string,
-    sourceModule: metadata.sourceModule as string,
-    safe: true,
-    parameters,
-    metadata,
-  };
-
-  if (existingIndex >= 0) {
-    writePlan.entries[existingIndex] = nextEntry;
-    refreshWritePlanDerivedFields(writePlan);
-    return;
-  }
-
-  writePlan.entries.push(nextEntry);
-  refreshWritePlanDerivedFields(writePlan);
-}
-
 function refreshWritePlanDerivedFields(writePlan: WritePlan): void {
   writePlan.executionOrder = calculateHostWriteExecutionOrder(writePlan.entries);
   writePlan.stats = {
@@ -290,41 +164,6 @@ function refreshWritePlanDerivedFields(writePlan: WritePlan): void {
     update: writePlan.entries.filter((entry) => entry.operation === "update").length,
     conflicts: writePlan.entries.filter((entry) => !entry.safe || (entry.conflicts && entry.conflicts.length > 0)).length,
     deferred: writePlan.entries.filter((entry) => entry.deferred).length,
-  };
-}
-
-function appendProviderExportEntry(
-  writePlan: WritePlan,
-  featureId: string,
-  artifact: Dota2ProviderAbilityExportArtifactV1,
-): void {
-  appendJsonEntry(
-    writePlan,
-    getProviderExportArtifactRelativePath(featureId),
-    `dota2 provider ability export (${artifact.surfaces[0].attachmentMode})`,
-    artifact as unknown as Record<string, unknown>,
-    {
-      adapter: DOTA2_PROVIDER_EXPORT_ADAPTER,
-      sourcePattern: "rw.dota2_provider_ability_export",
-      sourceModule: "dota2_provider_ability_export",
-    },
-  );
-}
-
-function ensureGrantableAbilitySurface(contract?: FeatureContract): FeatureContract {
-  const normalized = normalizeFeatureContract(contract);
-  const exports = [...normalized.exports];
-  if (!exports.some((item) => item.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID)) {
-    exports.push({
-      id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      kind: "capability",
-      summary: "Can grant one primary hero ability through the Dota2 host ability surface.",
-    });
-  }
-
-  return {
-    ...normalized,
-    exports,
   };
 }
 
@@ -355,6 +194,21 @@ function hasSelectionGrantSemantics(
   },
 ): boolean {
   const { schema, clarificationAuthority, relationCandidates, updateIntent } = input;
+  const governedComposition = updateIntent?.governedChange?.composition?.dependencies || [];
+  const governedOutcomes = updateIntent?.governedChange?.outcomes?.operations || [];
+  const governanceScope = updateIntent?.semanticAnalysis?.governanceDecisions.scope.value;
+
+  if (governedOutcomes.includes("grant-feature")) {
+    return true;
+  }
+
+  if (governanceScope === "cross_feature_mutation") {
+    return true;
+  }
+
+  if (governedComposition.some((dependency) => dependency.kind === "cross-feature")) {
+    return true;
+  }
 
   if ((schema.outcomes?.operations || []).includes("grant-feature")) {
     return true;
@@ -421,12 +275,14 @@ function hasSelectionGrantUpdateDelta(updateIntent: UpdateIntent | undefined): b
     return false;
   }
 
-  const addedOrModifiedItems = [
-    ...(updateIntent.delta.add || []),
-    ...(updateIntent.delta.modify || []),
-  ];
-
-  const hasGrantBindingDelta = addedOrModifiedItems.some((item) => isSelectionGrantDeltaPath(item));
+  const authority = updateIntent.semanticAnalysis?.governanceDecisions.mutationAuthority.value;
+  const addedOrModifiedItems = authority
+    ? [...authority.add, ...authority.modify]
+    : [...updateIntent.delta.add, ...updateIntent.delta.modify];
+  const hasGrantBindingDelta =
+    addedOrModifiedItems.some((item) => isSelectionGrantDeltaPath(item))
+    || (updateIntent.governedChange?.composition?.dependencies || []).some((dependency) => dependency.kind === "cross-feature")
+    || (updateIntent.governedChange?.outcomes?.operations || []).includes("grant-feature");
   const hasLocalObjectDelta = addedOrModifiedItems.some((item) => isSelectionGrantObjectDeltaPath(item));
 
   return hasGrantBindingDelta && hasLocalObjectDelta;
@@ -437,9 +293,10 @@ function hasSelectionGrantRemovalDelta(updateIntent: UpdateIntent | undefined): 
     return false;
   }
 
-  return (updateIntent.delta.remove || []).some(
-    (item) => isSelectionGrantDeltaPath(item) || isSelectionGrantObjectDeltaPath(item),
-  );
+  const authority = updateIntent.semanticAnalysis?.governanceDecisions.mutationAuthority.value;
+  const removeItems = authority ? authority.remove : updateIntent.delta.remove || [];
+
+  return removeItems.some((item) => isSelectionGrantDeltaPath(item) || isSelectionGrantObjectDeltaPath(item));
 }
 
 function hasSelectionGrantMutationRequest(input: {
@@ -485,72 +342,22 @@ function resolveReplacementObjectId(
 function resolveBoundObject(
   featureAuthoring: SelectionPoolFeatureAuthoring,
   prompt: string,
-): { nextFeatureAuthoring: SelectionPoolFeatureAuthoring; objectId: string } | { error: string } {
-  if (promptRequestsReplacement(prompt)) {
-    const replacementObjectId = resolveReplacementObjectId(featureAuthoring, prompt);
-    if (!replacementObjectId) {
-      return {
-        error: "Cross-feature reward replacement requested, but no existing object id or label could be resolved for rewiring.",
-      };
-    }
+): { objectId: string } | { error: string } {
+  const replacementObjectId = resolveReplacementObjectId(featureAuthoring, prompt);
+  if (replacementObjectId) {
+    return { objectId: replacementObjectId };
+  }
 
+  if (promptRequestsReplacement(prompt)) {
     return {
-      nextFeatureAuthoring: featureAuthoring,
-      objectId: replacementObjectId,
+      error: "Cross-feature reward replacement requested, but no existing object id or label could be resolved for rewiring.",
     };
   }
 
-  const objectKind =
-    resolveSelectionPoolObjectKind(featureAuthoring.parameters.objectKind)
-    || resolveSelectionPoolObjectKind(featureAuthoring.objectKind);
-  const nextParameters = expandObjectPoolToCount(
-    featureAuthoring.parameters,
-    featureAuthoring.parameters.objects.length + 1,
-    objectKind,
-  );
-  const appendedObject = nextParameters.objects[nextParameters.objects.length - 1];
-
   return {
-    nextFeatureAuthoring: {
-      ...featureAuthoring,
-      parameters: nextParameters,
-      notes: dedupeStrings([
-        ...(featureAuthoring.notes || []),
-        "Dota2 selection grant seam appended a local placeholder reward object for cross-feature binding.",
-      ]),
-    },
-    objectId: appendedObject.id,
+    error:
+      "Cross-feature grant binding cannot mutate selection_pool local authoring after admission. Update selection_pool authoring locally to choose an existing object slot, then bind that object id or label.",
   };
-}
-
-function buildSelectionGrantBindingArtifact(
-  featureId: string,
-  bindings: Dota2SelectionGrantBinding[],
-): Dota2SelectionGrantBindingArtifactV1 {
-  return {
-    adapter: DOTA2_SELECTION_GRANT_BINDING_ADAPTER,
-    version: 1,
-    featureId,
-    bindings,
-  };
-}
-
-function appendSelectionGrantBindingEntry(
-  writePlan: WritePlan,
-  featureId: string,
-  artifact: Dota2SelectionGrantBindingArtifactV1,
-): void {
-  appendJsonEntry(
-    writePlan,
-    getSelectionGrantBindingArtifactRelativePath(featureId),
-    `dota2 selection grant bindings (${artifact.bindings.length})`,
-    artifact as unknown as Record<string, unknown>,
-    {
-      adapter: DOTA2_SELECTION_GRANT_BINDING_ADAPTER,
-      sourcePattern: "rw.dota2_selection_grant_binding",
-      sourceModule: "dota2_selection_grant_binding",
-    },
-  );
 }
 
 function resolveCurrentFeatureRecord(input: {
@@ -612,6 +419,13 @@ function preserveExistingSelectionGrantState(input: {
     input.writePlan,
     input.featureId,
     buildSelectionGrantBindingArtifact(input.featureId, preservedBindings),
+    refreshWritePlanDerivedFields,
+  );
+  appendSelectionGrantContractEntry(
+    input.writePlan,
+    input.featureId,
+    buildSelectionGrantContractArtifact(input.featureId, input.blueprint.featureAuthoring),
+    refreshWritePlanDerivedFields,
   );
 
   return {
@@ -639,51 +453,6 @@ function resolveProviderSurface(
   }
 
   return artifact.surfaces.find((surface) => surface.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID);
-}
-
-function ensureConsumesGrantableAbilitySurface(contract?: FeatureContract): FeatureContract {
-  const normalized = normalizeFeatureContract(contract);
-  const consumes = [...normalized.consumes];
-  if (!consumes.some((item) => item.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID)) {
-    consumes.push({
-      id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      kind: "capability",
-      summary: "Consumes a provider feature that can grant one primary hero ability.",
-    });
-  }
-
-  return {
-    ...normalized,
-    consumes,
-  };
-}
-
-function ensureGrantDependencyEdge(
-  dependencyEdges: FeatureDependencyEdge[] | undefined,
-  targetFeatureId: string,
-): FeatureDependencyEdge[] {
-  const existing = dependencyEdges || [];
-  if (
-    existing.some(
-      (edge) =>
-        edge.targetFeatureId === targetFeatureId &&
-        edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID &&
-        edge.relation === "grants",
-    )
-  ) {
-    return existing;
-  }
-
-  return [
-    ...existing,
-    {
-      relation: "grants",
-      targetFeatureId,
-      targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      required: true,
-      summary: `cross-feature reward grants:${targetFeatureId}:${GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID}`,
-    },
-  ];
 }
 
 function appendWriteBlockers(writePlan: WritePlan, blockers: string[]): void {
@@ -721,7 +490,7 @@ export function applyDota2GrantSeam(input: {
         providerBinding.binding.abilityName,
         resolveProviderAttachmentMode(blueprint),
       );
-      appendProviderExportEntry(input.writePlan, input.featureId, providerExport);
+      appendProviderExportEntry(input.writePlan, input.featureId, providerExport, refreshWritePlanDerivedFields);
       blueprint = {
         ...blueprint,
         featureContract: ensureGrantableAbilitySurface(blueprint.featureContract),
@@ -789,6 +558,17 @@ export function applyDota2GrantSeam(input: {
     return { blueprint, writeBlockers, notes };
   }
 
+  const grantContractArtifact = buildSelectionGrantContractArtifact(input.featureId, blueprint.featureAuthoring);
+  appendSelectionGrantContractEntry(
+    input.writePlan,
+    input.featureId,
+    grantContractArtifact,
+    refreshWritePlanDerivedFields,
+  );
+  notes.push(
+    `Published Dota2 selection grant contract for ${grantContractArtifact.slots.length} local selection object slot(s).`,
+  );
+
   if (input.clarificationAuthority.unresolvedDependencies.length > 0 && input.clarificationAuthority.blocksWrite) {
     writeBlockers.push(
       ...input.clarificationAuthority.unresolvedDependencies.map(
@@ -844,6 +624,17 @@ export function applyDota2GrantSeam(input: {
     relation: "grants",
     applyBehavior: "grant_primary_hero_ability",
   };
+  if (!grantContractArtifact.slots.some((slot) => slot.objectId === nextBinding.objectId)) {
+    writeBlockers.push(
+      `Selection grant contract for '${input.featureId}' does not expose local object '${nextBinding.objectId}' for cross-feature grants.`,
+    );
+    appendWriteBlockers(input.writePlan, writeBlockers);
+    blueprint = {
+      ...blueprint,
+      status: blueprint.status === "blocked" ? "blocked" : "weak",
+    };
+    return { blueprint, writeBlockers, notes };
+  }
   const existingBindingArtifact = readSelectionGrantBindingArtifact(input.hostRoot, input.featureId);
   const bindingArtifact = buildSelectionGrantBindingArtifact(
     input.featureId,
@@ -853,11 +644,14 @@ export function applyDota2GrantSeam(input: {
     ],
   );
 
-  refreshSelectionPoolWritePlanEntries(input.writePlan, input.featureId, boundObjectResult.nextFeatureAuthoring);
-  appendSelectionGrantBindingEntry(input.writePlan, input.featureId, bindingArtifact);
+  appendSelectionGrantBindingEntry(
+    input.writePlan,
+    input.featureId,
+    bindingArtifact,
+    refreshWritePlanDerivedFields,
+  );
   blueprint = {
     ...blueprint,
-    featureAuthoring: boundObjectResult.nextFeatureAuthoring,
     featureContract: ensureConsumesGrantableAbilitySurface(blueprint.featureContract),
     dependencyEdges: ensureGrantDependencyEdge(blueprint.dependencyEdges, resolvedTarget.targetFeatureId),
   };

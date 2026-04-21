@@ -11,7 +11,7 @@
  * Both repairs are idempotent and safe to re-run.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   RuneWeaverFeatureRecord,
@@ -20,9 +20,8 @@ import {
 } from "../../../core/workspace/index.js";
 import { migrateBaselineAbilities } from "../kv/baseline-migrator.js";
 import {
-  GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+  buildSelectionGrantRuntimePlans,
   readProviderAbilityExportArtifact,
-  readSelectionGrantBindingArtifact,
 } from "../cross-feature/index.js";
 
 export interface BridgeRefreshResult {
@@ -325,12 +324,7 @@ function generateServerIndexContent(
   }> = [];
   const autoAttachAbilityNames = new Set<string>();
   const preloadedAbilityNames = new Set<string>();
-  const selectionGrantPlans: Array<{
-    featureId: string;
-    selectionFlowFile: string;
-    selectionFlowClass: string;
-    bindings: Array<{ objectId: string; targetFeatureId: string; abilityName: string }>;
-  }> = [];
+  const selectionGrantPlans = buildSelectionGrantRuntimePlans(hostRoot, activeFeatures);
 
   for (const feature of activeFeatures) {
     const wiringPlan: {
@@ -431,34 +425,13 @@ function generateServerIndexContent(
       runtimeWiringPlans.push(wiringPlan);
     }
 
-    const bindingArtifact = readSelectionGrantBindingArtifact(hostRoot, feature.featureId);
-    if (bindingArtifact?.bindings?.length && wiringPlan.selectionFlowFile && wiringPlan.selectionFlowClass) {
-      const bindings = bindingArtifact.bindings.flatMap((binding) => {
-        const providerArtifact = readProviderAbilityExportArtifact(hostRoot, binding.targetFeatureId);
-        const providerSurface = providerArtifact?.surfaces.find(
-          (surface) => surface.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-        );
-        if (!providerSurface) {
-          return [];
-        }
-        preloadedAbilityNames.add(providerSurface.abilityName);
-        if (!generatedAbilityNames.includes(providerSurface.abilityName)) {
-          generatedAbilityNames.push(providerSurface.abilityName);
-        }
-        return [{
-          objectId: binding.objectId,
-          targetFeatureId: binding.targetFeatureId,
-          abilityName: providerSurface.abilityName,
-        }];
-      });
+  }
 
-      if (bindings.length > 0) {
-        selectionGrantPlans.push({
-          featureId: feature.featureId,
-          selectionFlowFile: wiringPlan.selectionFlowFile,
-          selectionFlowClass: wiringPlan.selectionFlowClass,
-          bindings,
-        });
+  for (const plan of selectionGrantPlans) {
+    for (const binding of plan.bindings) {
+      preloadedAbilityNames.add(binding.abilityName);
+      if (!generatedAbilityNames.includes(binding.abilityName)) {
+        generatedAbilityNames.push(binding.abilityName);
       }
     }
   }
@@ -709,12 +682,7 @@ export default RuneWeaverGeneratedUIRoot;
 `;
 }
 
-function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeatureRecord[]): void {
-  const hudStylesPath = join(projectPath, BRIDGE_PATHS.hudStyles);
-  if (!existsSync(hudStylesPath)) {
-    return;
-  }
-
+export function collectGeneratedUiLessImports(features: RuneWeaverFeatureRecord[]): string[] {
   const activeFeatures = features.filter((feature) => feature.status === "active");
   const styleImports = new Set<string>();
   for (const feature of activeFeatures) {
@@ -729,7 +697,63 @@ function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeature
     }
   }
 
-  const existingContent = readFileSync(hudStylesPath, "utf-8");
+  return Array.from(styleImports);
+}
+
+function collectGeneratedUiLessImportsFromDisk(projectPath: string): string[] {
+  const generatedUiRoot = join(projectPath, "content/panorama/src/rune_weaver/generated/ui");
+  if (!existsSync(generatedUiRoot)) {
+    return [];
+  }
+
+  const styleImports = new Set<string>();
+  const stack = [generatedUiRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || !existsSync(current)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.name.endsWith(".less")) {
+        continue;
+      }
+      const relativePath = fullPath
+        .slice(generatedUiRoot.length + 1)
+        .replace(/\\/g, "/");
+      styleImports.add(`@import "../rune_weaver/generated/ui/${relativePath}";`);
+    }
+  }
+
+  return Array.from(styleImports);
+}
+
+export function shouldMaintainHudStyles(features: RuneWeaverFeatureRecord[]): boolean {
+  return collectGeneratedUiLessImports(features).length > 0;
+}
+
+function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeatureRecord[]): void {
+  const hudStylesPath = join(projectPath, BRIDGE_PATHS.hudStyles);
+  const styleImports = Array.from(
+    new Set([
+      ...collectGeneratedUiLessImports(features),
+      ...collectGeneratedUiLessImportsFromDisk(projectPath),
+    ]),
+  ).sort();
+  const maintainHudStyles = styleImports.length > 0;
+
+  if (!existsSync(hudStylesPath) && !maintainHudStyles) {
+    return;
+  }
+
+  const existingContent = existsSync(hudStylesPath)
+    ? readFileSync(hudStylesPath, "utf-8")
+    : "";
   const contentWithoutGeneratedImports = existingContent
     .replace(/^@import "\.\.\/rune_weaver\/generated\/ui\/[^"]+\.less";\s*$/gm, "")
     .replace(/^\s+/, "");
@@ -737,17 +761,26 @@ function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeature
     width: 100%;
     height: 100%;
 }`;
-  const styleImportBlock = Array.from(styleImports).join("\n");
-  const missingRootStyle = !contentWithoutGeneratedImports.includes(".rune-weaver-root");
+
+  const hasMeaningfulUserContent = contentWithoutGeneratedImports.trim().length > 0;
+  if (!maintainHudStyles && !hasMeaningfulUserContent) {
+    return;
+  }
+
+  if (!existsSync(hudStylesPath)) {
+    mkdirSync(join(projectPath, "content", "panorama", "src", "hud"), { recursive: true });
+  }
+
+  const missingRootStyle = !/\.rune-weaver-root\s*\{/.test(contentWithoutGeneratedImports);
   const nextContent = [
-    styleImportBlock,
+    styleImports.join("\n"),
     missingRootStyle ? rootStyleBlock : undefined,
     contentWithoutGeneratedImports.trim(),
   ]
     .filter((section): section is string => !!section && section.trim().length > 0)
     .join("\n\n");
 
-  const normalizedNextContent = `${nextContent}\n`;
+  const normalizedNextContent = nextContent.length > 0 ? `${nextContent}\n` : "";
   if (normalizedNextContent === existingContent) {
     return;
   }

@@ -137,6 +137,41 @@ async function runTests(): Promise<void> {
   const emptyWorkspaceBridgeCheck = checkRuntimeBridgeWiring(TEST_ROOT);
   assert.strictEqual(emptyWorkspaceBridgeCheck.status, "pass");
 
+  writeFileSync(
+    join(TEST_ROOT, "game/scripts/src/rune_weaver/rune-weaver.workspace.json"),
+    JSON.stringify(
+      {
+        version: "0.1",
+        hostType: "dota2-x-template",
+        hostRoot: TEST_ROOT,
+        addonName: "test_addon",
+        initializedAt: new Date().toISOString(),
+        features: [
+          {
+            featureId: "feature_a",
+            intentKind: "ability",
+            status: "active",
+            revision: 1,
+            blueprintId: "bp",
+            selectedPatterns: ["rule.selection_flow", "data.weighted_pool"],
+            generatedFiles: [
+              "game/scripts/src/rune_weaver/generated/shared/feature_a_data_weighted_pool.ts",
+            ],
+            entryBindings: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      },
+      null,
+      2
+    ),
+    "utf-8"
+  );
+
+  const noGeneratedLessBridgeCheck = checkRuntimeBridgeWiring(TEST_ROOT);
+  assert.strictEqual(noGeneratedLessBridgeCheck.status, "pass");
+
   const buildArtifactsCheck = checkHostBuildArtifacts(TEST_ROOT);
   assert.strictEqual(buildArtifactsCheck.status, "pass");
 

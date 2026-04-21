@@ -9,7 +9,9 @@ import type {
   WizardUnresolvedDependency,
   WorkspaceSemanticContext,
 } from "../schema/types";
+import { getIntentGovernanceView } from "./intent-governance-view.js";
 import { hasAmbiguousRelationCandidates } from "./relation-resolver";
+import type { IntentSemanticAnalysis, IntentSemanticSurface } from "./intent-schema/semantic-analysis.js";
 
 interface ClarificationPlanInput {
   rawText: string;
@@ -17,6 +19,7 @@ interface ClarificationPlanInput {
   currentFeatureContext?: CurrentFeatureContext;
   workspaceSemanticContext?: WorkspaceSemanticContext;
   relationCandidates?: RelationCandidate[];
+  semanticAnalysis?: IntentSemanticAnalysis;
 }
 
 const EXTERNAL_PERSISTENCE_SIGNAL_PATTERN =
@@ -278,6 +281,128 @@ export function deriveWizardClarificationAuthority(
 export function buildWizardClarificationPlan(
   input: ClarificationPlanInput,
 ): WizardClarificationPlan | undefined {
+  if (input.semanticAnalysis) {
+    return buildSemanticClarificationPlan(input);
+  }
+
+  return buildLegacyClarificationPlan(input);
+}
+
+function buildSemanticClarificationPlan(
+  input: ClarificationPlanInput,
+): WizardClarificationPlan | undefined {
+  const questions: WizardClarificationQuestion[] = [];
+  const maxQuestions = 3;
+  const governance = getIntentGovernanceView(input.schema);
+  const openResidue = input.semanticAnalysis?.openSemanticResidue || [];
+
+  for (const residue of openResidue) {
+    if (residue.disposition !== "open" || residue.class === "bounded_detail_only") {
+      continue;
+    }
+
+    const question = buildSemanticResidueQuestion(residue.surface, residue.summary, residue.targetPaths);
+    if (!question) {
+      continue;
+    }
+
+    questions.push(question);
+  }
+
+  if (
+    !input.currentFeatureContext &&
+    !looksLikeGovernedPassiveRequest(input.schema) &&
+    !governance.activation.interactive
+    && !(governance.activation.kinds || []).includes("passive")
+  ) {
+    questions.push(
+      applyQuestionImpact({
+        id: "clarify-trigger-authority",
+        question: "What exactly triggers this feature, and who owns that trigger?",
+        targetPaths: ["interaction.activations", "flow.triggerSummary", "requirements.typed"],
+        reason: "The governed create semantics still do not expose a reliable trigger or passive ownership boundary.",
+        impact: "blueprint-blocking-structural",
+      }),
+    );
+  }
+
+  if (needsRelationDisambiguation(input)) {
+    const candidates = input.relationCandidates || [];
+    const choiceSummary = candidates
+      .slice(0, 3)
+      .map((candidate) => candidate.featureName || candidate.targetFeatureId)
+      .join(", ");
+    questions.push(
+      applyQuestionImpact({
+        id: "clarify-existing-feature-target",
+        question: `Which existing feature do you mean: ${choiceSummary}?`,
+        targetPaths: ["composition.dependencies"],
+        reason: "The workspace semantic context exposes multiple plausible feature targets for the relation described in the request.",
+        impact: "write-blocking-unresolved-dependency",
+        unresolvedDependencyId: "existing-feature-target",
+      }),
+    );
+  }
+
+  if (
+    requiresGovernedTargetOwnershipQuestion(input.schema) &&
+    !openResidue.some((item) => item.surface === "activation")
+  ) {
+    questions.push(
+      applyQuestionImpact({
+        id: "clarify-targeting-boundary",
+        question: "What is the intended target or direction boundary for this behavior?",
+        targetPaths: ["targeting", "spatial", "effects.targets"],
+        reason: "The governed create semantics imply non-trivial targeting or spatial behavior, but the target boundary is still ambiguous.",
+        impact: "blueprint-blocking-structural",
+      }),
+    );
+  }
+
+  if (hasGovernedContradictorySignals(input.schema)) {
+    questions.push(
+      applyQuestionImpact({
+        id: "clarify-conflicting-semantics",
+        question: "Two parts of the request imply different behavior boundaries. Which one should win?",
+        targetPaths: ["interaction.activations", "selection.repeatability", "timing.duration"],
+        reason: "The governed create semantics still contain contradictory structure that would materially change realization.",
+        impact: "blueprint-blocking-structural",
+      }),
+    );
+  }
+
+  const finalQuestions = dedupeQuestions(questions, maxQuestions);
+  if (finalQuestions.length === 0) {
+    return undefined;
+  }
+
+  const targetPaths = Array.from(
+    new Set(finalQuestions.flatMap((question) => question.targetPaths || [])),
+  );
+
+  const authority = deriveWizardClarificationAuthority({
+    questions: finalQuestions,
+    maxQuestions,
+    requiredForFaithfulInterpretation: true,
+    targetPaths,
+    reason:
+      "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
+  });
+
+  return {
+    questions: finalQuestions,
+    maxQuestions,
+    requiredForFaithfulInterpretation: true,
+    targetPaths,
+    reason:
+      "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
+    authority,
+  };
+}
+
+function buildLegacyClarificationPlan(
+  input: ClarificationPlanInput,
+): WizardClarificationPlan | undefined {
   const questions: WizardClarificationQuestion[] = [];
   const maxQuestions = 3;
 
@@ -398,4 +523,82 @@ export function buildWizardClarificationPlan(
       "The current IntentSchema is missing one or more high-signal structural details that would materially change the semantic interpretation.",
     authority,
   };
+}
+
+function buildSemanticResidueQuestion(
+  surface: IntentSemanticSurface,
+  reason: string,
+  targetPaths?: string[],
+): WizardClarificationQuestion | undefined {
+  switch (surface) {
+    case "activation":
+      return applyQuestionImpact({
+        id: "clarify-trigger-authority",
+        question: "What exactly triggers this feature, and who owns that trigger?",
+        targetPaths: targetPaths || ["interaction.activations", "flow.triggerSummary", "requirements.typed"],
+        reason,
+        impact: "blueprint-blocking-structural",
+      });
+    case "state_scope":
+      return applyQuestionImpact({
+        id: "clarify-persistence-scope",
+        question: "What ownership scope should persist this behavior or state?",
+        targetPaths: targetPaths || ["stateModel.states", "composition.dependencies"],
+        reason,
+        impact: "blueprint-blocking-structural",
+      });
+    case "composition_boundary":
+      return applyQuestionImpact({
+        id: "clarify-cross-feature-target",
+        question: "Which exact feature is being granted, read, or coupled to?",
+        targetPaths: targetPaths || ["composition.dependencies", "integrations.expectedBindings"],
+        reason,
+        impact: "write-blocking-unresolved-dependency",
+        unresolvedDependencyId: "cross-feature-target",
+      });
+    default:
+      return applyQuestionImpact({
+        id: "clarify-conflicting-semantics",
+        question: "Two parts of the request still leave one semantic boundary open. Which one should win?",
+        targetPaths,
+        reason,
+        impact: "blueprint-blocking-structural",
+      });
+  }
+}
+
+function looksLikeGovernedPassiveRequest(schema: IntentSchema): boolean {
+  return (schema.interaction?.activations || []).some((activation) => activation.kind === "passive");
+}
+
+function requiresGovernedTargetOwnershipQuestion(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
+  const hasSpatialTargetingPressure =
+    (governance.outcome.operations || []).includes("move") ||
+    (governance.outcome.operations || []).includes("spawn") ||
+    Boolean(schema.spatial?.motion) ||
+    Boolean(schema.spatial?.emission);
+
+  if (!hasSpatialTargetingPressure) {
+    return false;
+  }
+
+  return !(schema.targeting?.subject || schema.targeting?.selector);
+}
+
+function hasGovernedContradictorySignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
+  const passive = (governance.activation.kinds || []).includes("passive");
+  const interactive = governance.activation.interactive;
+  const hasSelectionSemantics = Boolean(
+    governance.mechanics.candidatePool ||
+      governance.mechanics.weightedSelection ||
+      governance.mechanics.playerChoice ||
+      governance.mechanics.uiModal ||
+      governance.selection.present,
+  );
+  const hasOneShot = hasSelectionSemantics && governance.selection.repeatability === "one-shot";
+  const hasPersistent = schema.timing?.duration?.kind === "persistent";
+
+  return (passive && interactive) || (hasOneShot && hasPersistent);
 }

@@ -7,6 +7,9 @@ import type {
   IntentSchema,
   UpdateIntent,
 } from "../../../core/schema/types.js";
+import type { IntentSemanticAnalysis } from "../../../core/wizard/index.js";
+import type { CreateReadinessDecision } from "../../../adapters/dota2/blueprint/index.js";
+import type { SemanticExportStatus } from "../dota2-cli.js";
 
 export interface SemanticArtifactSummary {
   rootDir: string;
@@ -15,6 +18,24 @@ export interface SemanticArtifactSummary {
   updateIntentPath?: string;
   blueprintPath?: string;
   finalBlueprintPath?: string;
+}
+
+export function createPendingSemanticExportStatus(
+  reason = "Semantic artifacts were not written for this run.",
+): SemanticExportStatus {
+  return {
+    written: false,
+    reason,
+  };
+}
+
+export function createWrittenSemanticExportStatus(
+  summary: SemanticArtifactSummary,
+): SemanticExportStatus {
+  return {
+    written: true,
+    rootDir: summary.rootDir,
+  };
 }
 
 interface SemanticArtifactWriteContext {
@@ -98,6 +119,8 @@ function writeBlueprintArtifacts(
 export function saveCreateSemanticArtifacts(
   context: SemanticArtifactWriteContext & {
     intentSchema: IntentSchema;
+    semanticAnalysis?: IntentSemanticAnalysis;
+    createReadinessDecision?: CreateReadinessDecision;
     blueprint?: Blueprint;
     finalBlueprint?: FinalBlueprint;
     commandKind: "create";
@@ -114,6 +137,8 @@ export function saveCreateSemanticArtifacts(
     commandKind: context.commandKind,
     featureId: context.featureId,
     intentSchema: context.intentSchema,
+    ...(context.semanticAnalysis ? { semanticAnalysis: context.semanticAnalysis } : {}),
+    ...(context.createReadinessDecision ? { createReadinessDecision: context.createReadinessDecision } : {}),
   });
 
   return {

@@ -20,6 +20,7 @@ export interface GenerateTextInput {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  timeoutMs?: number;
   providerOptions?: Record<string, unknown>;
 }
 
@@ -29,7 +30,7 @@ export interface GenerateTextResult {
   usage?: LLMUsage;
 }
 
-export interface GenerateObjectInput<T> {
+export interface GenerateObjectInput {
   messages: LLMMessage[];
   schemaName: string;
   schemaDescription?: string;
@@ -37,6 +38,7 @@ export interface GenerateObjectInput<T> {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  timeoutMs?: number;
   providerOptions?: Record<string, unknown>;
 }
 
@@ -70,7 +72,7 @@ export interface LLMExecutionConfig {
 
 export interface LLMClient {
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
-  generateObject<T>(input: GenerateObjectInput<T>): Promise<GenerateObjectResult<T>>;
+  generateObject<T>(input: GenerateObjectInput): Promise<GenerateObjectResult<T>>;
 }
 
 export type LLMProviderKind = "openai-compatible" | "anthropic";

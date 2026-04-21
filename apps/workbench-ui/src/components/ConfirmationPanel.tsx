@@ -48,7 +48,7 @@ export function ConfirmationPanel({
 
   const handleSubmit = () => {
     Object.entries(localConfirmed)
-      .filter(([_, confirmed]) => confirmed)
+      .filter(([, confirmed]) => confirmed)
       .forEach(([itemId]) => {
         onConfirm(itemId);
       });

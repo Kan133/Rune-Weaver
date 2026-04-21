@@ -366,6 +366,21 @@ export interface CurrentFeatureContextSourceModel {
   artifact?: Record<string, unknown>;
 }
 
+export interface CurrentFeatureBoundedTruth {
+  [key: string]: unknown;
+  triggerKey?: string;
+  choiceCount?: number;
+  objectCount?: number;
+  inventoryEnabled?: boolean;
+  inventoryCapacity?: number;
+  inventoryFullMessage?: string;
+  bundleIds?: string[];
+  abilityName?: string;
+  hasLuaAbilityShell?: boolean;
+  hasAbilityKvParticipation?: boolean;
+  realizationKinds?: string[];
+}
+
 export interface CurrentFeatureContext {
   featureId: string;
   revision: number;
@@ -379,7 +394,24 @@ export interface CurrentFeatureContext {
   preservedModuleBackbone: string[];
   admittedSkeleton?: string[];
   preservedInvariants: string[];
-  boundedFields: Record<string, unknown>;
+  boundedFields: CurrentFeatureBoundedTruth;
+}
+
+export interface CurrentFeatureTruth {
+  featureId: string;
+  revision: number;
+  intentKind: string;
+  sourceBacked: boolean;
+  profile?: SourceBackedFeatureProfile;
+  selectedPatterns: string[];
+  moduleRecords?: ModuleImplementationRecord[];
+  sourceModel?: CurrentFeatureContextSourceModel;
+  featureAuthoring?: FeatureAuthoring;
+  preservedModuleBackbone: string[];
+  preservedInvariants: string[];
+  boundedFields: CurrentFeatureBoundedTruth;
+  realizationParticipation: string[];
+  ownedSemanticContracts: string[];
 }
 
 export type UpdateDeltaKind =
@@ -397,6 +429,135 @@ export interface UpdateDeltaItem {
   path: string;
   kind: UpdateDeltaKind;
   summary: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  reason?: string;
+}
+
+export type UpdateGovernanceScope =
+  | "bounded_update"
+  | "rewrite"
+  | "cross_feature_mutation"
+  | "ambiguous";
+
+export interface UpdateGovernedPreservation {
+  preservedModuleBackbone: string[];
+  preservedInvariants: string[];
+  protectedContracts: string[];
+}
+
+export interface UpdateGovernedMutationBlocker {
+  path: string;
+  kind: UpdateDeltaKind;
+  reason: string;
+  impact: WizardClarificationImpact;
+}
+
+export interface UpdateGovernedMutationAuthority {
+  add: UpdateDeltaItem[];
+  modify: UpdateDeltaItem[];
+  remove: UpdateDeltaItem[];
+  blocked: UpdateGovernedMutationBlocker[];
+}
+
+export interface UpdateEffectiveContracts {
+  activation?: IntentInteractionContract;
+  selection?: IntentSelectionContract;
+  uiRequirements?: UIRequirementSummary;
+  timing?: IntentTimingContract;
+  effects?: IntentEffectContract;
+  outcomes?: IntentOutcomeContract;
+  stateModel?: IntentStateContract;
+  contentModel?: IntentContentModelContract;
+  composition?: IntentCompositionContract;
+  normalizedMechanics?: NormalizedMechanics;
+}
+
+export interface UpdateGovernanceDecision<TValue = unknown> {
+  code: string;
+  value: TValue;
+  confidence: "low" | "medium" | "high";
+  rationaleFactCodes?: string[];
+}
+
+export interface UpdateGovernanceDecisions {
+  scope: UpdateGovernanceDecision<UpdateGovernanceScope>;
+  preservation: UpdateGovernanceDecision<UpdateGovernedPreservation>;
+  mutationAuthority: UpdateGovernanceDecision<UpdateGovernedMutationAuthority>;
+  effectiveContracts: UpdateGovernanceDecision<UpdateEffectiveContracts>;
+}
+
+export interface UpdatePromptRawFact {
+  code: string;
+  value: unknown;
+  source: "prompt_text" | "prompt_hints" | "requested_change" | "schema_candidate";
+  confidence: "low" | "medium" | "high";
+  evidenceText?: string;
+}
+
+export interface UpdateCurrentTruthRawFact {
+  code: string;
+  value: unknown;
+  source:
+    | "current_feature_truth"
+    | "current_feature_context"
+    | "feature_authoring"
+    | "source_artifact"
+    | "module_record"
+    | "workspace_record"
+    | "integration_point"
+    | "owned_artifact";
+  confidence: "low" | "medium" | "high";
+  evidenceText?: string;
+}
+
+export interface UpdateOpenSemanticResidueItem {
+  id: string;
+  summary: string;
+  class: "governance_relevant" | "blueprint_relevant" | "bounded_detail_only";
+  affects: Array<"intent" | "blueprint" | "pattern" | "realization">;
+  severity: "low" | "medium" | "high";
+  disposition: "open" | "assumed";
+  targetPaths?: string[];
+}
+
+export interface UpdateSemanticAnalysis {
+  promptFacts: UpdatePromptRawFact[];
+  currentTruthFacts: UpdateCurrentTruthRawFact[];
+  governanceDecisions: UpdateGovernanceDecisions;
+  openSemanticResidue: UpdateOpenSemanticResidueItem[];
+}
+
+export interface GovernedUpdateSchema {
+  version: string;
+  target: {
+    featureId: string;
+    revision: number;
+    profile?: SourceBackedFeatureProfile;
+    sourceBacked: boolean;
+  };
+  scope: UpdateGovernanceScope;
+  preservation: UpdateGovernedPreservation;
+  request: UserRequestSummary;
+  classification: IntentClassification;
+  requirements: IntentRequirements;
+  constraints: IntentConstraints;
+  interaction?: IntentInteractionContract;
+  targeting?: IntentTargetingContract;
+  timing?: IntentTimingContract;
+  spatial?: IntentSpatialContract;
+  stateModel?: IntentStateContract;
+  flow?: IntentFlowContract;
+  selection?: IntentSelectionContract;
+  effects?: IntentEffectContract;
+  outcomes?: IntentOutcomeContract;
+  contentModel?: IntentContentModelContract;
+  composition?: IntentCompositionContract;
+  integrations?: IntentIntegrationContract;
+  uiRequirements?: UIRequirementSummary;
+  normalizedMechanics: NormalizedMechanics;
+  resolvedAssumptions: string[];
+  parameters?: Record<string, unknown>;
 }
 
 export interface UpdateIntent {
@@ -406,10 +567,13 @@ export interface UpdateIntent {
     featureId: string;
     revision: number;
     profile?: SourceBackedFeatureProfile;
-    sourceBacked: boolean;
-  };
+      sourceBacked: boolean;
+    };
   currentFeatureContext: CurrentFeatureContext;
+  currentFeatureTruth?: CurrentFeatureTruth;
   requestedChange: IntentSchema;
+  governedChange?: GovernedUpdateSchema;
+  semanticAnalysis?: UpdateSemanticAnalysis;
   delta: {
     preserve: UpdateDeltaItem[];
     add: UpdateDeltaItem[];
@@ -417,6 +581,15 @@ export interface UpdateIntent {
     remove: UpdateDeltaItem[];
   };
   resolvedAssumptions: string[];
+}
+
+export interface GovernedUpdateExecutionView {
+  governedChange: GovernedUpdateSchema;
+  semanticAnalysis: UpdateSemanticAnalysis;
+  delta: UpdateIntent["delta"];
+  currentFeatureContext: CurrentFeatureContext;
+  currentFeatureTruth?: CurrentFeatureTruth;
+  executionSchema: IntentSchema;
 }
 
 export interface UpdateWizardInterpretation {
@@ -962,9 +1135,22 @@ export interface SelectionPoolContractAssessment {
   blockerCodes: string[];
 }
 
+export interface BoundedClosureAuthority {
+  mode: "explicit_only";
+  closeableSurfaces: string[];
+  reason: string;
+}
+
 export interface SelectionPoolAdmissionDiagnostics {
   familyId: "selection_pool";
   verdict: SelectionPoolAdmissionVerdict;
+  boundedClosureAuthority?: BoundedClosureAuthority;
+  closure?: {
+    applied: boolean;
+    closedResidueIds: string[];
+    closedSurfaces: string[];
+    reasons: string[];
+  };
   detection: {
     handled: boolean;
     objectKindHint?: SelectionPoolObjectKind;

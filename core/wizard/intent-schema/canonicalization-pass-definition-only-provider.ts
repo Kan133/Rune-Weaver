@@ -23,7 +23,7 @@ export const DEFINITION_ONLY_PROVIDER_CANONICALIZATION_PASS: IntentSchemaCanonic
     const semantics = analyzeDefinitionOnlyProviderSemantics(candidate, context.rawText);
     return semantics.matches && semantics.hasConsumerSideDrift;
   },
-  apply({ candidate, context, semanticAnalysis }) {
+  apply({ candidate, semanticAnalysis }) {
     const normalizedCandidate = canonicalizeDefinitionOnlyProviderCandidate(candidate);
     const openSemanticResidue = appendResolvedAssumptionResidue(
       semanticAnalysis.openSemanticResidue,

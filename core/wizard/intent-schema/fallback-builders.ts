@@ -323,7 +323,7 @@ function buildFallbackUiRequirements(
 }
 
 function buildFallbackStateModel(
-  rawFacts: IntentRawFacts,
+  _rawFacts: IntentRawFacts,
   selection: IntentSelectionContract | undefined,
   composition: IntentCompositionContract | undefined,
 ): IntentStateContract | undefined {

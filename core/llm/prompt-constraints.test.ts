@@ -74,12 +74,42 @@ function testDetectMustNotAddViolationsFindsUiPersistenceAndCrossFeatureLeakage(
   assert.ok(violations.some((item) => item.includes("cross-feature coupling")));
 }
 
+function testExtractPromptConstraintsPrefersExplicitTriggerRebindTarget() {
+  const bundle = extractPromptConstraints({
+    rawText: "Change the trigger key from F5 to F7 and keep everything else the same.",
+    currentFeatureContext: {
+      featureId: "standalone_system_kmme",
+      revision: 1,
+      intentKind: "standalone-system",
+      selectedPatterns: ["input.key_binding"],
+      sourceBacked: false,
+      preservedModuleBackbone: ["gameplay-core"],
+      preservedInvariants: [],
+      boundedFields: {
+        triggerKey: "F5",
+      },
+    },
+  });
+
+  assert.equal(bundle.exactScalars.triggerKey, "F7");
+}
+
+function testExtractPromptConstraintsPrefersChineseTriggerRebindTarget() {
+  const bundle = extractPromptConstraints({
+    rawText: "把当前抽取系统的触发键从 F6 改成 F8，其他机制保持不变。",
+  });
+
+  assert.equal(bundle.exactScalars.triggerKey, "F8");
+}
+
 function runTests() {
   testExtractPromptConstraintsPreservesNegativeRequirements();
   testRuntimePersistenceDoesNotCreateExternalStorageGap();
   testExternalPersistenceStillFlagsStorageGap();
   testNamedExternalBoundaryDoesNotCreateStorageGap();
   testDetectMustNotAddViolationsFindsUiPersistenceAndCrossFeatureLeakage();
+  testExtractPromptConstraintsPrefersExplicitTriggerRebindTarget();
+  testExtractPromptConstraintsPrefersChineseTriggerRebindTarget();
   console.log("core/llm/prompt-constraints.test.ts passed");
 }
 

@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import type { IntentSchema } from "../schema/types.js";
 import {
   buildWizardClarificationPlan,
   buildCurrentFeatureContext,
   buildUpdateWizardMessages,
+  createFallbackIntentSchema,
   createUpdateIntentFromRequestedChange,
   deriveWizardClarificationAuthority,
   runWizardToUpdateIntent,
 } from "./index.js";
+import { WIZARD_PROVIDER_TIMEOUT_MS } from "./provider-timeout.js";
 
 function createSourceBackedFeatureRecord() {
   return {
@@ -166,6 +171,70 @@ function createGenericSourceBackedProjectionRecord() {
   };
 }
 
+function createExploratoryHostBackedFeatureRecord(hostRoot: string) {
+  const weightedPoolPath = "game/scripts/src/rune_weaver/generated/shared/standalone_system_kmme_weighted_pool_data_weighted_pool.ts";
+  const luaPath = "game/scripts/vscripts/rune_weaver/abilities/rw_standalone_system_kmme_gameplay_ability_mod_func_0_1.lua";
+  const kvPath = "game/scripts/npc/npc_abilities_custom.txt";
+
+  mkdirSync(join(hostRoot, "game/scripts/src/rune_weaver/generated/shared"), { recursive: true });
+  mkdirSync(join(hostRoot, "game/scripts/vscripts/rune_weaver/abilities"), { recursive: true });
+  mkdirSync(join(hostRoot, "game/scripts/npc"), { recursive: true });
+
+  writeFileSync(
+    join(hostRoot, weightedPoolPath),
+    [
+      "const entries = [",
+      '  { id: "R", label: "R", description: "Rare", weight: 60, tier: "R" },',
+      '  { id: "SR", label: "SR", description: "Super Rare", weight: 25, tier: "SR" },',
+      '  { id: "SSR", label: "SSR", description: "Super Super Rare", weight: 10, tier: "SSR" },',
+      '  { id: "UR", label: "UR", description: "Ultra Rare", weight: 5, tier: "UR" },',
+      "];",
+      "export function drawForSelection(count: number = 3) {",
+      "  return entries.slice(0, count);",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(join(hostRoot, luaPath), "rw_standalone_system_kmme_gameplay_ability_mod_func_0_1 = class({})\n");
+  writeFileSync(join(hostRoot, kvPath), "\"DOTAAbilities\"\n{\n}\n");
+
+  return {
+    featureId: "standalone_system_kmme",
+    intentKind: "standalone-system",
+    status: "active" as const,
+    revision: 1,
+    blueprintId: "standalone_system_kmme",
+    selectedPatterns: [
+      "input.key_binding",
+      "data.weighted_pool",
+      "rule.selection_flow",
+      "ui.selection_modal",
+      "effect.modifier_applier",
+    ],
+    modules: [
+      {
+        moduleId: "mod_func_0",
+        bundleId: "gameplay_ability_mod_func_0_1",
+        role: "gameplay-core",
+        category: "rule",
+        sourceKind: "synthesized" as const,
+        selectedPatternIds: [],
+        ownedPaths: [luaPath, kvPath],
+        artifactPaths: [luaPath, kvPath],
+      },
+    ],
+    generatedFiles: [
+      weightedPoolPath,
+      luaPath,
+      kvPath,
+    ],
+    entryBindings: [],
+    integrationPoints: ["input.key_binding:F5"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function testBuildCurrentFeatureContextStaysGeneric() {
   const context = buildCurrentFeatureContext(
     createSourceBackedFeatureRecord(),
@@ -287,6 +356,98 @@ function testCreateUpdateIntentStaysGenericForNonSourceBackedFeature() {
   assert.ok(updateIntent.delta.modify.some((item) => item.path === "input.triggerKey"));
 }
 
+function testBuildCurrentFeatureContextRecoversExploratoryBoundedTruthFromWorkspaceArtifacts() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-update-intent-"));
+  const feature = createExploratoryHostBackedFeatureRecord(hostRoot);
+
+  const context = buildCurrentFeatureContext(feature, hostRoot);
+
+  assert.equal(context.sourceBacked, false);
+  assert.equal(context.boundedFields.triggerKey, "F5");
+  assert.equal(context.boundedFields.choiceCount, 3);
+  assert.equal(context.boundedFields.objectCount, 4);
+  assert.deepEqual(context.boundedFields.bundleIds, ["gameplay_ability_mod_func_0_1"]);
+  assert.equal(context.boundedFields.abilityName, "rw_standalone_system_kmme_gameplay_ability_mod_func_0_1");
+  assert.equal(context.boundedFields.hasLuaAbilityShell, true);
+  assert.equal(context.boundedFields.hasAbilityKvParticipation, true);
+  assert.deepEqual(context.boundedFields.realizationKinds, ["shared-ts", "lua", "kv"]);
+}
+
+function testCreateUpdateIntentFallsBackToPromptRebindForExploratoryFeature() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-update-rebind-"));
+  const currentFeatureContext = buildCurrentFeatureContext(
+    createExploratoryHostBackedFeatureRecord(hostRoot),
+    hostRoot,
+  );
+  const requestedChange: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Change the trigger key from F5 to F7 and keep everything else the same.",
+      goal: "Change the trigger key from F5 to F7 and keep everything else the same.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    requirements: {
+      functional: ["Rebind the current trigger key to F7."],
+    },
+    normalizedMechanics: {},
+    resolvedAssumptions: [],
+    constraints: {},
+  };
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+
+  assert.ok(updateIntent.delta.modify.some((item) => item.path === "input.triggerKey" && item.summary.includes("F7")));
+}
+
+function testCreateUpdateIntentNormalizesChineseTriggerRebindAgainstStaleSchemaValues() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-update-rebind-cn-"));
+  const currentFeatureContext = buildCurrentFeatureContext(
+    createExploratoryHostBackedFeatureRecord(hostRoot),
+    hostRoot,
+  );
+  const requestedChange: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "把当前抽取系统的触发键从 F5 改成 F8，其他机制保持不变。",
+      goal: "把当前抽取系统的触发键从 F5 改成 F8，其他机制保持不变。",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    requirements: {
+      functional: ["把当前触发键改成 F8。"],
+    },
+    interaction: {
+      activations: [
+        {
+          kind: "key",
+          input: "F5",
+        },
+      ],
+    },
+    parameters: {
+      triggerKey: "F5",
+    },
+    normalizedMechanics: {
+      trigger: true,
+    },
+    resolvedAssumptions: [],
+    constraints: {},
+  };
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+
+  assert.equal(updateIntent.requestedChange.parameters?.triggerKey, "F8");
+  assert.equal(updateIntent.requestedChange.interaction?.activations?.[0]?.input, "F8");
+  assert.ok(updateIntent.delta.modify.some((item) => item.path === "input.triggerKey" && item.summary.includes("F8")));
+}
+
 function testSourceBackedInvariantBackboneOutranksGenericProjectionRoles() {
   const context = buildCurrentFeatureContext(
     createGenericSourceBackedProjectionRecord(),
@@ -395,6 +556,25 @@ function testInventoryCapacityUpdateDoesNotInventChoiceCountDelta() {
     updateIntent.delta.modify.some((item) => item.path === "selection.choiceCount"),
     false,
   );
+  assert.ok(updateIntent.delta.modify.some((item) => item.path === "selection.inventory.capacity"));
+}
+
+function testStoragePanelUpdatePromptProducesInventoryDelta() {
+  const currentFeatureContext = buildCurrentFeatureContext(
+    createSourceBackedFeatureRecord(),
+    "D:\\rw_test_missing",
+  );
+  const requestedChange = createFallbackIntentSchema(
+    "为该抽取系统创建一个16格的存储面板，抽取到的选项会自动出现在面板上。",
+    { kind: "dota2-x-template" },
+  );
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+
+  assert.equal(requestedChange.selection?.inventory?.enabled, true);
+  assert.equal(requestedChange.selection?.inventory?.capacity, 16);
+  assert.equal(requestedChange.selection?.inventory?.storeSelectedItems, true);
+  assert.ok(updateIntent.delta.add.some((item) => item.path === "selection.inventory"));
   assert.ok(updateIntent.delta.modify.some((item) => item.path === "selection.inventory.capacity"));
 }
 
@@ -572,6 +752,29 @@ async function testRunWizardToUpdateIntentReturnsClarificationSidecar() {
   );
   assert.ok(crossFeatureQuestion);
   assert.equal(crossFeatureQuestion?.impact, "write-blocking-unresolved-dependency");
+}
+
+async function testRunWizardToUpdateIntentUsesBoundedProviderTimeout() {
+  const currentFeatureContext = buildCurrentFeatureContext(
+    createSourceBackedFeatureRecord(),
+    "D:\\rw_test_missing",
+  );
+  let capturedTimeoutMs: number | undefined;
+
+  await runWizardToUpdateIntent({
+    client: {
+      async generateObject(input) {
+        capturedTimeoutMs = input.timeoutMs;
+        throw new Error("provider offline");
+      },
+    },
+    input: {
+      rawText: "Add a 16-slot talent inventory and block further draws when it is full.",
+      currentFeatureContext,
+    },
+  });
+
+  assert.equal(capturedTimeoutMs, WIZARD_PROVIDER_TIMEOUT_MS);
 }
 
 async function testRunWizardToUpdateIntentStripsInferredPersistenceFromInventoryUpdate() {
@@ -762,14 +965,19 @@ async function runTests() {
   testBuildCurrentFeatureContextStaysGeneric();
   testCreateUpdateIntentPreservesSkeletonAndDeltaWithoutReadiness();
   testCreateUpdateIntentStaysGenericForNonSourceBackedFeature();
+  testBuildCurrentFeatureContextRecoversExploratoryBoundedTruthFromWorkspaceArtifacts();
+  testCreateUpdateIntentFallsBackToPromptRebindForExploratoryFeature();
+  testCreateUpdateIntentNormalizesChineseTriggerRebindAgainstStaleSchemaValues();
   testSourceBackedInvariantBackboneOutranksGenericProjectionRoles();
   testCreateUpdateIntentDetectsGenericObjectCountExpansion();
   testInventoryCapacityUpdateDoesNotInventChoiceCountDelta();
+  testStoragePanelUpdatePromptProducesInventoryDelta();
   testExplicitChoiceCountChangeProducesDelta();
   testRestoreThreeChoiceChineseShorthandProducesDeltaAgainstPollutedTruth();
   testUpdateWizardPromptStaysSemanticOnly();
   testClarificationPlanDoesNotTreatRuntimePersistentAbilityShellAsStoragePersistence();
   await testRunWizardToUpdateIntentReturnsClarificationSidecar();
+  await testRunWizardToUpdateIntentUsesBoundedProviderTimeout();
   await testRunWizardToUpdateIntentStripsInferredPersistenceFromInventoryUpdate();
   console.log("core/wizard/update-intent.test.ts passed");
 }

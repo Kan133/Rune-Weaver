@@ -444,6 +444,227 @@ function testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton():
   );
 }
 
+function testBuildBlueprintExplicitSelectionPoolClosurePromotesBoundedResidue(): void {
+  const prompt =
+    "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply the chosen local placeholder immediately, remove the selected reward from future draws, and return unchosen rewards to the pool.";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system" as const,
+      confidence: "high" as const,
+    },
+    requirements: {
+      functional: [
+        "Press F4 to open a local reward draw UI.",
+        "Draw 3 rarity-weighted reward candidates from a local pool.",
+        "Let the player choose exactly 1 candidate.",
+        "Apply the chosen local placeholder immediately.",
+        "Remove the selected reward from future draws and return the unchosen rewards to the pool.",
+      ],
+      typed: [
+        {
+          id: "reward_draw_trigger",
+          kind: "trigger" as const,
+          summary: "F4 activates the local reward draw flow.",
+          parameters: { triggerKey: "F4" },
+          priority: "must" as const,
+        },
+        {
+          id: "reward_draw_rule",
+          kind: "rule" as const,
+          summary: "Draw 3 rarity-weighted reward candidates from the local pool and commit exactly 1.",
+          parameters: { choiceCount: 3, choiceMode: "weighted" },
+          priority: "must" as const,
+        },
+        {
+          id: "reward_draw_ui",
+          kind: "ui" as const,
+          summary: "Present the candidates in one local modal choice surface.",
+          outputs: ["selection_modal"],
+          priority: "must" as const,
+        },
+      ],
+    },
+    constraints: {},
+    interaction: {
+      activations: [
+        {
+          actor: "player",
+          kind: "key" as const,
+          input: "F4",
+          phase: "press" as const,
+          repeatability: "repeatable" as const,
+          confirmation: "implicit" as const,
+        },
+      ],
+    },
+    stateModel: {
+      states: [
+        {
+          id: "reward_pool_state",
+          summary: "Session-local reward draw state.",
+          owner: "feature" as const,
+          lifetime: "session" as const,
+          mutationMode: "update" as const,
+        },
+      ],
+    },
+    selection: {
+      mode: "weighted" as const,
+      source: "weighted-pool" as const,
+      choiceMode: "user-chosen" as const,
+      choiceCount: 3,
+      cardinality: "single" as const,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      commitment: "immediate" as const,
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "instant" as const,
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "reward_pool",
+          role: "candidate-options" as const,
+          ownership: "feature" as const,
+          updateMode: "replace" as const,
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [
+      {
+        id: "unc_local_reward_consequence",
+        summary: "The chosen reward consequence boundary is still unspecified inside the local placeholder profile.",
+        affects: ["blueprint"],
+        severity: "medium" as const,
+      },
+    ],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  } as any;
+
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "reward_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.admissionDiagnostics?.verdict, "admitted_explicit");
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.equal(result.finalBlueprint?.commitDecision?.requiresReview, false);
+  assert.equal(result.admissionDiagnostics?.closure?.applied, true);
+  assert.deepEqual(result.admissionDiagnostics?.closure?.closedResidueIds, ["unc_local_reward_consequence"]);
+  assert.equal(
+    result.admissionDiagnostics?.boundedClosureAuthority?.closeableSurfaces.includes("effect_profile"),
+    true,
+  );
+}
+
+function testBuildBlueprintCompressedSelectionPoolDoesNotPromoteBlueprintResidue(): void {
+  const prompt =
+    "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system" as const,
+      confidence: "high" as const,
+    },
+    requirements: {
+      functional: [
+        "Open the talent selection UI on F4.",
+        "Draw 3 rarity-weighted talents and let the player choose 1.",
+        "Apply the chosen result and keep the remaining pool consistent.",
+      ],
+    },
+    constraints: {},
+    selection: {
+      mode: "weighted" as const,
+      source: "weighted-pool" as const,
+      choiceMode: "user-chosen" as const,
+      choiceCount: 3,
+      cardinality: "single" as const,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      commitment: "immediate" as const,
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "talent_pool",
+          role: "candidate-options" as const,
+          ownership: "feature" as const,
+          updateMode: "replace" as const,
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "instant" as const,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [
+      {
+        id: "unc_compressed_reward_consequence",
+        summary: "The chosen reward consequence boundary is still unspecified inside the local placeholder profile.",
+        affects: ["blueprint"],
+        severity: "medium" as const,
+      },
+    ],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  } as any;
+
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "compressed_reward_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.admissionDiagnostics?.verdict, "admitted_compressed");
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.admissionDiagnostics?.closure?.applied, false);
+  assert.equal(result.admissionDiagnostics?.closure?.closedResidueIds.length, 0);
+}
+
 function testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable(): void {
   const prompt =
     "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply the chosen local placeholder immediately, remove the selected reward from future draws, return unchosen rewards to the pool, and later bind one reward to another feature when its target is resolved.";
@@ -1356,6 +1577,8 @@ function runTests(): void {
   testCreateWritePlanKeepsSynthesizedBundleArtifactsCollapsed();
   testBuildBlueprintAppliesSelectionPoolCreateEnrichment();
   testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton();
+  testBuildBlueprintExplicitSelectionPoolClosurePromotesBoundedResidue();
+  testBuildBlueprintCompressedSelectionPoolDoesNotPromoteBlueprintResidue();
   testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable();
   testBuildBlueprintLetsSelectionPoolFamilyOverrideSupersededCrossFeatureBlockers();
   testBuildBlueprintDoesNotInventInputKeyBindingFromNegativeActivationConstraint();
