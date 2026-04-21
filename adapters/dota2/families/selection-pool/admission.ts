@@ -182,7 +182,7 @@ function assessSelectionPoolContract(
   const noExternalOwnership = !hasExternalOrSharedOwnership(schema);
   const noSecondTrigger = triggerKeyCount <= 1 &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED");
-  const noMultiConfirm = (governance.selection.cardinality ?? "single") === "single" &&
+  const noMultiConfirm =
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_CONFIRM_NOT_SUPPORTED");
   const noArbitraryCustomEffectFamily = !hasCustomEffectFamilyRequest(schema) &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED");

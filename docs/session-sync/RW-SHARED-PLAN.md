@@ -22,7 +22,7 @@ Use these status markers:
 Current step:
 
 - Step 6. Validation / evidence / case generalization
-- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts, the update-side three-layer governance upgrade that makes `CurrentFeatureTruth -> semanticAnalysis -> governedChange` the only intended update authority, and the provider-side ability identity alignment that stops cross-feature provider export from guessing `abilityName` when KV/Lua/export truth does not close. Fresh `rw-test6` dry-run evidence now also shows the bounded inventory wording cluster (`存储面板 / 仓库 / 库存面板`) converging through the same governed update seam, while the active slice has narrowed back to evidence closure on the stricter provider/consumer seam plus create-side exploratory grounding quality.
+- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts, the update-side three-layer governance upgrade that makes `CurrentFeatureTruth -> semanticAnalysis -> governedChange` the only intended update authority, and the provider-side ability identity alignment that stops cross-feature provider export from guessing `abilityName` when KV/Lua/export truth does not close. Fresh `rw-test6` dry-run evidence now also shows the bounded inventory wording cluster (`存储面板 / 仓库 / 库存面板`) converging through the same governed update seam, while fresh `rw-test11` create evidence shows the ambiguous weighted-card prompt has been narrowed to one honest `selection_flow` clarification and the explicit choose-one variant now re-proves the full dry-run create chain through `selection_pool` `admitted_explicit`. The active slice remains evidence closure on the stricter provider/consumer seam plus the remaining reveal-vs-choose create boundary.
 
 Primary blocker:
 
@@ -30,7 +30,7 @@ Primary blocker:
 - The blocker is no longer exploratory bounded trigger-key updates drifting into split `input.key_binding` vs preserved Lua shell truth, and it is no longer Dota2 ability KV ownership drifting back toward aggregate-file ownership.
 - The blocker is now:
   - dependency-driven revalidation needs a fresh provider/consumer proof pass on the converged planning/update surface
-  - create-side synthesis grounding for the weighted-selection / `talent_draw` exploratory cluster still drifts enough that the fresh `rw-test6` create prompt can miss the trigger boundary before host conflict becomes the decisive stop
+  - create-side weighted-card prompts are healthier, but reveal-only vs choose-one semantics are still an honest open boundary; the ambiguous `弹出三张卡片` cluster now stops at one real `selection_flow` clarification and still lacks a proven non-family exploratory realization path when the user does not mean `choose 1`
   - synthesis grounding and deferred evidence warnings still need tighter exact-symbol backing on exploratory cases beyond the provider identity seam that just landed
   - exploratory outputs are still review-required and not yet converged into stabilized reusable assets
 
@@ -55,11 +55,13 @@ Plan items:
 - `[done]` Push `IntentGovernanceDecisions` into downstream Dota2 blueprint / `selection_pool` family-admission / planning consumers so schema-surface wording no longer changes governance branches.
 - `[done]` Align Dota2 provider ability identity so provider export only closes when KV / Lua / export share one authoritative runtime `abilityName`, and validator now rejects mismatched provider exports before host write can claim success.
 - `[doing]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases on top of the cleaner planning/update surface.
+- `[done]` Strip create-side weight-detail clarification noise and family-governance pollution from the ambiguous weighted-card prompt cluster; `rw-test11` now isolates a single honest `selection_flow` clarification and re-proves the explicit choose-one variant end to end in dry-run.
 - `[done]` Close the cross-feature consumer update-preservation hole so unrelated bounded updates keep existing provider bindings without requiring prompt restatement.
 - `[done]` Close the exploratory bounded-update seam so non-source-backed trigger-only updates preserve synthesized Lua+KV gameplay shell identity while rebinding authoritative trigger truth end to end.
 - `[done]` Move Dota2 ability KV ownership to fragment + aggregate-writer contract, including legacy rollback cleanup that removes ability blocks by authoritative identity instead of whole-file ownership.
 - `[done]` Upgrade update intent to the same three-layer governance seam as create, and push governed update authority into the main Dota2 update consumers.
 - `[doing]` Reduce synthesis grounding warnings further on exploratory asks.
+- `[doing]` Decide whether reveal-only weighted-card prompts should remain clarification-only or gain a separate non-`selection_pool` exploratory realization path.
 - `[todo]` Decide which repeated exploratory outputs are ready to graduate into reusable assets.
 
 Mainline rule:
@@ -119,7 +121,7 @@ Plan items:
 
 Latest Dota2 session-sync:
 
-- [dota2-mainline-20260421-0833.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260421-0833.md)
+- [dota2-mainline-20260421-1724.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260421-1724.md)
 
 Latest War3 session-sync:
 

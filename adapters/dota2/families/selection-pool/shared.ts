@@ -259,6 +259,31 @@ export function normalizePrompt(prompt: string): string {
   return prompt.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+function parseCountToken(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(value)) {
+    return Number(value);
+  }
+
+  const map: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+
+  return map[value];
+}
+
 export function dedupeStrings(values: Array<string | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value && value.trim().length > 0))));
 }
@@ -481,9 +506,9 @@ export function looksLikeSelectionPoolPrompt(prompt: string): boolean {
   const normalized = normalizePrompt(prompt);
   const signals = [
     /\b(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i.test(normalized),
-    /choose|选择|抽取|draft|draw/.test(normalized),
+    /choose|选择|抽取|抽卡|draft|draw/.test(normalized),
     /weighted|权重|稀有度|rarity/.test(normalized),
-    /modal|ui|卡牌|界面/.test(normalized),
+    /modal|ui|cards?|卡牌|卡片|界面/.test(normalized),
     /talent|equipment|skill card|天赋|装备|技能卡|reward|blessing|奖励|祝福/.test(normalized),
   ];
   return signals.filter(Boolean).length >= 3;
@@ -518,13 +543,15 @@ export function parseTriggerKey(prompt: string): string | undefined {
 
 export function parseChoiceCount(prompt: string): number | undefined {
   const normalized = normalizePrompt(prompt);
-  const numericMatch = normalized.match(/(?:to|show|draw|抽出|抽取|展示|显示|改成)?\s*(\d)\s*(?:choices?|candidates?|个候选|选项)/i);
+  const numericMatch = normalized.match(
+    /(?:to|show|draw|抽出|抽取|展示|显示|弹出|跳出|改成)?\s*(\d+|[一二两三四五六七八九])\s*(?:choices?|candidates?|cards?|个候选|个选项|选项|张卡片|张卡牌|卡片|卡牌)/i,
+  );
   if (numericMatch) {
-    return Number(numericMatch[1]);
+    return parseCountToken(numericMatch[1]);
   }
-  if (/三选一|3选1|3 选 1|3个候选|三个候选/.test(normalized)) return 3;
-  if (/五选一|5选1|5 选 1|5个候选|五个候选/.test(normalized)) return 5;
-  if (/单选|1选1|1 选 1|一个候选/.test(normalized)) return 1;
+  if (/三选一|3选1|3 选 1|3个候选|三个候选|3张卡片|三张卡片|3张卡牌|三张卡牌/.test(normalized)) return 3;
+  if (/五选一|5选1|5 选 1|5个候选|五个候选|5张卡片|五张卡片|5张卡牌|五张卡牌/.test(normalized)) return 5;
+  if (/单选|1选1|1 选 1|一个候选|1张卡片|一张卡片|1张卡牌|一张卡牌/.test(normalized)) return 1;
   return undefined;
 }
 
@@ -581,7 +608,7 @@ export function promptHasSelectionUiSurface(prompt: string): boolean {
   if (/(?:without\s+(?:showing\s+)?ui|do\s+not\s+show\s+ui|don't\s+show\s+ui|no[\s-]?ui|不显示\s*ui|不要\s*ui|无\s*ui)/i.test(prompt)) {
     return false;
   }
-  return /modal|ui|dialog|cards?|界面|卡牌|窗口|弹窗|面板/i.test(prompt);
+  return /modal|ui|dialog|cards?|界面|卡牌|卡片|窗口|弹窗|面板/i.test(prompt);
 }
 
 export function promptHasSingleSelectionCommit(prompt: string): boolean {

@@ -87,10 +87,6 @@ export function createBlockedDiagnostics(
   };
 }
 
-function formatMissingAtomBlocker(atom: string): string {
-  return `selection_pool admission declined because required contract atom '${atom}' was not satisfied.`;
-}
-
 function collectErrorFindings(findings: SelectionPoolAdmissionFinding[]): string[] {
   return findings
     .filter((finding) => finding.severity === "error")
@@ -100,19 +96,17 @@ function collectErrorFindings(findings: SelectionPoolAdmissionFinding[]): string
 export function extractSelectionPoolAdmissionBlockers(
   diagnostics: SelectionPoolAdmissionDiagnostics | undefined,
 ): string[] {
-  if (!diagnostics || diagnostics.verdict === "not_applicable") {
+  if (
+    !diagnostics
+    || diagnostics.verdict === "not_applicable"
+    || diagnostics.verdict === "declined"
+  ) {
     return [];
   }
 
   const blockers = new Set<string>();
   for (const finding of collectErrorFindings(diagnostics.decision.findings)) {
     blockers.add(finding);
-  }
-
-  if (diagnostics.verdict === "declined") {
-    for (const atom of diagnostics.contract.assessment?.missingAtoms || []) {
-      blockers.add(formatMissingAtomBlocker(atom));
-    }
   }
 
   return [...blockers];

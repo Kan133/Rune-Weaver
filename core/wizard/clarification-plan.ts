@@ -531,6 +531,15 @@ function buildSemanticResidueQuestion(
   targetPaths?: string[],
 ): WizardClarificationQuestion | undefined {
   switch (surface) {
+    case "selection_flow":
+      return applyQuestionImpact({
+        id: "clarify-selection-flow",
+        question:
+          "After the shown candidates appear, should the player choose one to commit, or should the shown results resolve without a follow-up choice?",
+        targetPaths: targetPaths || ["selection", "flow", "requirements.typed"],
+        reason,
+        impact: "blueprint-blocking-structural",
+      });
     case "activation":
       return applyQuestionImpact({
         id: "clarify-trigger-authority",

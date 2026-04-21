@@ -294,6 +294,14 @@ function classifyResidueSurface(
   affects: IntentUncertainty["affects"] | undefined,
 ): IntentSemanticSurface {
   if (typeof summary === "string" && summary.trim()) {
+    if (
+      /(?:是否需要玩家|whether the player|after the shown|展示.*(?:选择|选中)|choose.*display|display.*choose|select.*display|仅作展示|only display|informational only|follow[- ]up choice|从中选择一张|选择一张)/iu.test(
+        summary,
+      )
+    ) {
+      return "selection_flow";
+    }
+
     if (/(?:trigger|activation|hotkey|key binding|按键|触发键|触发方式)/iu.test(summary)) {
       return "activation";
     }
@@ -371,6 +379,19 @@ function isBoundedVariabilityQuestion(value: unknown): boolean {
 
   const question = value.toLowerCase();
   const detailHints = [
+    "exact probability",
+    "exact probability weights",
+    "probability weights",
+    "weight values",
+    "drop rate values",
+    "exact visual treatment",
+    "exact visual treatments",
+    "visual treatment",
+    "visual treatments",
+    "appearance treatment",
+    "appearance details",
+    "rarity visuals",
+    "rarity appearance",
     "specific",
     "specific choices",
     "specific options",
@@ -407,6 +428,13 @@ function isBoundedVariabilityQuestion(value: unknown): boolean {
     "选项",
     "结果",
     "效果",
+    "权重数值",
+    "概率数值",
+    "掉率数值",
+    "视觉方案",
+    "视觉表现细节",
+    "外观细节",
+    "稀有度外观",
   ];
   const architectureHints = [
     "what triggers",

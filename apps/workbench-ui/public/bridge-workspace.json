@@ -2,16 +2,16 @@
   "workspace": {
     "version": "0.1.0",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:\\rw-test9",
-    "addonName": "rw_test9",
-    "initializedAt": "2026-04-21T07:43:56.050Z",
+    "hostRoot": "D:\\rw-test12",
+    "addonName": "rw_test12",
+    "initializedAt": "2026-04-21T09:53:15.294Z",
     "features": [
       {
-        "featureId": "standalone_system_kjki",
+        "featureId": "standalone_system_c0f3",
         "intentKind": "standalone-system",
         "status": "active",
         "revision": 2,
-        "blueprintId": "standalone_system_tqjn",
+        "blueprintId": "standalone_system_ovju",
         "modules": [
           {
             "moduleId": "selection_input",
@@ -112,7 +112,7 @@
               "server"
             ],
             "ownedPaths": [
-              "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts"
+              "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_selection_flow_rule_selection_flow.ts"
             ],
             "fillContractIds": [
               "selection_flow.effect_mapping"
@@ -124,7 +124,7 @@
               "server"
             ],
             "artifactPaths": [
-              "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts"
+              "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_selection_flow_rule_selection_flow.ts"
             ],
             "resolvedFrom": "family",
             "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
@@ -161,8 +161,8 @@
               "ui"
             ],
             "ownedPaths": [
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx",
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less"
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.less"
             ],
             "fillContractIds": [
               "ui.selection_modal.payload_adapter"
@@ -174,8 +174,8 @@
               "ui"
             ],
             "artifactPaths": [
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx",
-              "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less"
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.less"
             ],
             "resolvedFrom": "family",
             "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
@@ -202,47 +202,47 @@
           "ui.selection_modal"
         ],
         "generatedFiles": [
-          "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts",
-          "game/scripts/src/rune_weaver/generated/shared/standalone_system_kjki_weighted_pool_data_weighted_pool.ts",
-          "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding_ability.ts",
-          "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding.ts",
-          "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx",
-          "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less",
-          "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_input_trigger_input_key_binding_emitter.tsx",
-          "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json"
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/generated/shared/standalone_system_c0f3_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_input_trigger_input_key_binding.ts",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.less",
+          "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/standalone_system_c0f3/selection-pool.source.json"
         ],
         "ownedArtifacts": [
           {
             "kind": "generated_file",
-            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_selection_flow_rule_selection_flow.ts"
+            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_selection_flow_rule_selection_flow.ts"
           },
           {
             "kind": "generated_file",
-            "path": "game/scripts/src/rune_weaver/generated/shared/standalone_system_kjki_weighted_pool_data_weighted_pool.ts"
+            "path": "game/scripts/src/rune_weaver/generated/shared/standalone_system_c0f3_weighted_pool_data_weighted_pool.ts"
           },
           {
             "kind": "generated_file",
-            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding_ability.ts"
+            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_input_trigger_input_key_binding_ability.ts"
           },
           {
             "kind": "generated_file",
-            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_kjki_input_trigger_input_key_binding.ts"
+            "path": "game/scripts/src/rune_weaver/generated/server/standalone_system_c0f3_input_trigger_input_key_binding.ts"
           },
           {
             "kind": "generated_file",
-            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.tsx"
+            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.tsx"
           },
           {
             "kind": "generated_file",
-            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_selection_modal_ui_selection_modal.less"
+            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_selection_modal_ui_selection_modal.less"
           },
           {
             "kind": "generated_file",
-            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_kjki_input_trigger_input_key_binding_emitter.tsx"
+            "path": "content/panorama/src/rune_weaver/generated/ui/standalone_system_c0f3_input_trigger_input_key_binding_emitter.tsx"
           },
           {
             "kind": "rw_source_model",
-            "path": "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json",
+            "path": "game/scripts/src/rune_weaver/features/standalone_system_c0f3/selection-pool.source.json",
             "adapter": "selection_pool",
             "version": 1
           }
@@ -262,11 +262,12 @@
         "sourceModel": {
           "adapter": "selection_pool",
           "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json"
+          "path": "game/scripts/src/rune_weaver/features/standalone_system_c0f3/selection-pool.source.json"
         },
         "featureAuthoring": {
           "mode": "source-backed",
           "profile": "selection_pool",
+          "objectKind": "talent",
           "parameters": {
             "triggerKey": "F4",
             "choiceCount": 3,
@@ -362,7 +363,8 @@
                   "value": 10
                 }
               }
-            }
+            },
+            "objectKind": "talent"
           },
           "parameterSurface": {
             "triggerKey": {
@@ -424,7 +426,7 @@
           "sourceArtifactRef": {
             "adapter": "selection_pool",
             "version": 1,
-            "path": "game/scripts/src/rune_weaver/features/standalone_system_kjki/selection-pool.source.json"
+            "path": "game/scripts/src/rune_weaver/features/standalone_system_c0f3/selection-pool.source.json"
           },
           "notes": [
             "selection_pool proposal seeded from generic family defaults.",
@@ -452,7 +454,7 @@
           "status": "passed",
           "warnings": [],
           "blockers": [],
-          "lastValidatedAt": "2026-04-21T07:52:59.942Z",
+          "lastValidatedAt": "2026-04-21T10:09:11.185Z",
           "blueprint": {
             "status": "unvalidated",
             "warnings": [],
@@ -464,35 +466,35 @@
             "warnings": [],
             "blockers": [],
             "summary": "Artifact synthesis",
-            "checkedAt": "2026-04-21T07:52:59.942Z"
+            "checkedAt": "2026-04-21T10:09:11.185Z"
           },
           "repair": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Local repair / muscle fill",
-            "checkedAt": "2026-04-21T07:52:59.942Z"
+            "checkedAt": "2026-04-21T10:09:11.185Z"
           },
           "dependency": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Dependency-driven revalidation",
-            "checkedAt": "2026-04-21T07:52:59.942Z"
+            "checkedAt": "2026-04-21T10:09:11.185Z"
           },
           "host": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Host validation",
-            "checkedAt": "2026-04-21T07:52:59.942Z"
+            "checkedAt": "2026-04-21T10:09:11.185Z"
           },
           "runtime": {
             "status": "passed",
             "warnings": [],
             "blockers": [],
             "summary": "Runtime validation",
-            "checkedAt": "2026-04-21T07:52:59.942Z"
+            "checkedAt": "2026-04-21T10:09:11.185Z"
           }
         },
         "dependencyEdges": [],
@@ -508,15 +510,15 @@
           "downgradedFeatures": [],
           "reviewModules": []
         },
-        "createdAt": "2026-04-21T07:45:51.010Z",
-        "updatedAt": "2026-04-21T07:52:59.943Z"
+        "createdAt": "2026-04-21T09:59:10.959Z",
+        "updatedAt": "2026-04-21T10:09:11.187Z"
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-21T07:52:59.946Z",
+    "exportedAt": "2026-04-21T10:09:11.192Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\rw-test9",
+    "sourceHostRoot": "D:\\rw-test12",
     "version": "0.1"
   }
 }

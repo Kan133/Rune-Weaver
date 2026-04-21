@@ -177,6 +177,18 @@ function testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk() {
           affects: ["intent", "blueprint"],
           severity: "high",
         },
+        {
+          id: "unc_visual",
+          summary: "Please define the exact visual treatments for each rarity tier.",
+          affects: ["intent", "blueprint"],
+          severity: "medium",
+        },
+        {
+          id: "unc_weights",
+          summary: "Please define the exact probability weights for each rarity tier.",
+          affects: ["intent", "blueprint"],
+          severity: "medium",
+        },
       ],
       resolvedAssumptions: ["Selection remains feature-owned and session-local."],
     },
@@ -186,6 +198,8 @@ function testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk() {
 
   const catalogResidue = analysis.openSemanticResidue.find((item) => item.id === "unc_catalog");
   const ownerResidue = analysis.openSemanticResidue.find((item) => item.id === "unc_owner");
+  const visualResidue = analysis.openSemanticResidue.find((item) => item.id === "unc_visual");
+  const weightResidue = analysis.openSemanticResidue.find((item) => item.id === "unc_weights");
   const assumptionResidue = analysis.openSemanticResidue.find((item) =>
     item.summary.includes("feature-owned and session-local"),
   );
@@ -194,6 +208,8 @@ function testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk() {
   assert.equal(catalogResidue?.surface, "candidate_catalog");
   assert.equal(ownerResidue?.class, "governance_relevant");
   assert.equal(ownerResidue?.surface, "state_scope");
+  assert.equal(visualResidue?.class, "bounded_detail_only");
+  assert.equal(weightResidue?.class, "bounded_detail_only");
   assert.equal(assumptionResidue?.disposition, "assumed");
   assert.equal(assumptionResidue?.surface, "state_scope");
 }
@@ -234,6 +250,35 @@ function testFallbackAndStructuredPathShareGovernanceCore() {
     extractIntentSchemaGovernanceCore(fallbackSchema),
     extractIntentSchemaGovernanceCore(structuredSchema),
   );
+}
+
+function testDisplayVsChoiceAmbiguityProjectsToSelectionFlowSurface() {
+  const prompt =
+    "创建一个抽卡系统，玩家按下F4后弹出三张卡片，卡片有R/SR/SSR/UR四个等级，等级影响抽取概率和外观。";
+  const analysis = analyzeIntentSemanticLayers(
+    {
+      requirements: {
+        functional: ["按F4展示三张带稀有度外观的候选卡片。"],
+      },
+      constraints: {},
+      uncertainties: [
+        {
+          id: "unc_choice_behavior",
+          summary: "用户未说明展示三张卡片后是否需要玩家从中选择一张或仅作展示。",
+          affects: ["intent", "blueprint"],
+          severity: "medium",
+        },
+      ],
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  const choiceResidue = analysis.openSemanticResidue.find((item) => item.id === "unc_choice_behavior");
+
+  assert.equal(choiceResidue?.surface, "selection_flow");
+  assert.equal(choiceResidue?.class, "blueprint_relevant");
 }
 
 function testDecisionProjectionIgnoresSchemaSurfaceNoise() {
@@ -327,6 +372,7 @@ async function runTests() {
   testDashPromptDoesNotAccidentallyEnterCandidateDrawDecision();
   testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk();
   testFallbackAndStructuredPathShareGovernanceCore();
+  testDisplayVsChoiceAmbiguityProjectsToSelectionFlowSurface();
   testDecisionProjectionIgnoresSchemaSurfaceNoise();
   await testWordSwapClusterSharesDecisionFingerprint();
   console.log("intent-schema-layers.test.ts: PASS");

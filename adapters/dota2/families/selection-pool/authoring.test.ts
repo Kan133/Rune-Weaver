@@ -14,6 +14,7 @@ import {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "./index.js";
+import { parseChoiceCount, promptHasSelectionUiSurface } from "./shared.js";
 import { createFallbackIntentSchema, createUpdateIntentFromRequestedChange } from "../../../../core/wizard/index.js";
 import type { IntentSchema } from "../../../../core/schema/types.js";
 
@@ -241,6 +242,77 @@ function testStoragePanelPromptUsesSameInventoryAuthority(): void {
   assert.equal(updateResolution.proposal?.parameters.inventory?.blockDrawWhenFull, false);
 }
 
+function testCardDrawPromptShapeDetectionHandlesCardPhrasing(): void {
+  const prompt =
+    "创建一个抽卡系统，玩家按下F4后弹出三张卡片，卡片有R/SR/SSR/UR四个等级，等级影响抽取概率和外观。";
+  const detection = detectSelectionPoolFallbackIntent({
+    prompt,
+    mode: "create",
+    featureId: "card_draw_demo",
+  });
+
+  assert.equal(detection.handled, true);
+  assert.ok(detection.matchedBy.includes("prompt_shape"));
+  assert.equal(parseChoiceCount(prompt), 3);
+  assert.equal(promptHasSelectionUiSurface(prompt), true);
+}
+
+function testAmbiguousCardRevealPromptDeclinesInsteadOfGovernanceBlocking(): void {
+  const prompt =
+    "创建一个抽卡系统，玩家按下F4后弹出三张卡片，卡片有R/SR/SSR/UR四个等级，等级影响抽取概率和外观。";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    readiness: "ready",
+    requirements: {
+      functional: ["按F4展示三张候选卡片，并基于稀有度影响概率和外观。"],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "none",
+      cardinality: "multiple",
+      choiceCount: 3,
+      repeatability: "repeatable",
+      duplicatePolicy: "allow",
+      commitment: "immediate",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["card_popup", "card_list", "rarity_styled_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: false,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    schema,
+    featureId: "card_draw_demo",
+    proposalSource: "llm",
+  });
+
+  assert.equal(resolution.blocked, false);
+  assert.equal(resolution.admissionDiagnostics?.verdict, "declined");
+  assert.ok(
+    resolution.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("choose_exactly_one"),
+  );
+}
+
 function testSiblingEquipmentPromptUsesSameFamily(): void {
   const resolution = resolveSelectionPoolFamily({
     prompt: EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
@@ -410,10 +482,10 @@ function testSelectionPoolCompressionDeclinesWithoutUiSurface(): void {
   const blockers = extractSelectionPoolAdmissionBlockers(normalized.admissionDiagnostics);
 
   assert.equal(normalized.featureAuthoring, undefined);
-  assert.equal(resolution.blocked, true);
+  assert.equal(resolution.blocked, false);
   assert.equal(normalized.admissionDiagnostics?.verdict, "declined");
-  assert.equal(normalized.blockers.length > 0, true);
-  assert.equal(blockers.length > 0, true);
+  assert.equal(normalized.blockers.length, 0);
+  assert.equal(blockers.length, 0);
   assert.ok(
     normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("current_feature_ui_surface"),
   );
@@ -477,9 +549,9 @@ function testSelectionPoolCompressionDeclinesWithoutUiOrPlayerChoice(): void {
   );
 
   assert.equal(normalized.featureAuthoring, undefined);
-  assert.equal(resolution.blocked, true);
+  assert.equal(resolution.blocked, false);
   assert.equal(normalized.admissionDiagnostics?.verdict, "declined");
-  assert.equal(normalized.blockers.length > 0, true);
+  assert.equal(normalized.blockers.length, 0);
   assert.ok(
     normalized.admissionDiagnostics?.contract.assessment?.missingAtoms.includes("current_feature_ui_surface"),
   );
@@ -1029,6 +1101,8 @@ testCanonicalUpdateExpandsPoolToTwenty();
 testGenericInventoryUpdateUsesPromptAuthority();
 testInventoryPromptDoesNotDependOnFeatureId();
 testStoragePanelPromptUsesSameInventoryAuthority();
+testCardDrawPromptShapeDetectionHandlesCardPhrasing();
+testAmbiguousCardRevealPromptDeclinesInsteadOfGovernanceBlocking();
 testSiblingEquipmentPromptUsesSameFamily();
 testOriginalTalentDrawPromptCompressesIntoSelectionPool();
 testNoUiFireballPromptStaysNotApplicable();
