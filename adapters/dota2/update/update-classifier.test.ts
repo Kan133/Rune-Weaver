@@ -74,14 +74,14 @@ const sourceArtifactDiff = classifyUpdateDiff(
         operation: "create",
         targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
         contentType: "json",
-        contentSummary: "feature_source_model/selection_pool (json) objects:20 kind:talent",
+        contentSummary: "feature_source_model/selection_pool (json) entries:20 kind:talent",
         sourcePattern: "rw.feature_source_model",
         sourceModule: "feature_source_model",
         safe: true,
         metadata: {
           sourceModelRef: {
             adapter: "selection_pool",
-            version: 1,
+            version: 2,
             path: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
           },
         },
@@ -116,14 +116,14 @@ const migratedSourceArtifactDiff = classifyUpdateDiff(
         operation: "create",
         targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
         contentType: "json",
-        contentSummary: "feature_source_model/selection_pool (json) objects:20 kind:talent",
+        contentSummary: "feature_source_model/selection_pool (json) entries:20 kind:talent",
         sourcePattern: "rw.feature_source_model",
         sourceModule: "feature_source_model",
         safe: true,
         metadata: {
           sourceModelRef: {
             adapter: "selection_pool",
-            version: 1,
+            version: 2,
             path: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
           },
         },

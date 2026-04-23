@@ -3,6 +3,12 @@ import { calculateHostWriteExecutionOrder } from "../../../../core/host/write-pl
 import type { FeatureSourceModelRef, FeatureWriteResult } from "../../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../../assembler/index.js";
 import {
+  buildFeatureContentCollectionsArtifact,
+} from "../../content-collections/artifact.js";
+import {
+  appendFeatureContentCollectionsEntry,
+} from "../../content-collections/write-plan.js";
+import {
   compileSelectionPoolModuleParameters,
   createSelectionPoolLifecycleState,
 } from "./materialization.js";
@@ -10,11 +16,16 @@ import {
   isSelectionPoolFeatureAuthoring,
   type FeatureAuthoring as SelectionPoolFeatureAuthoring,
 } from "./shared.js";
+import {
+  buildExportedContentCollectionsFromParameters,
+  countSelectionPoolEntries,
+} from "./source-model.js";
 
 const SELECTION_POOL_PATTERN_PARAMETER_KEYS = {
   "input.key_binding": "input_trigger",
   "data.weighted_pool": "weighted_pool",
   "rule.selection_flow": "selection_flow",
+  "effect.outcome_realizer": "selection_outcome",
   "ui.selection_modal": "selection_modal",
 } as const;
 
@@ -46,7 +57,7 @@ export function appendSelectionPoolSourceModelEntry(
     operation: "create",
     targetPath: lifecycleState.sourceArtifactRef.path,
     contentType: "json",
-    contentSummary: `feature_source_model/selection_pool (json) objects:${lifecycleState.sourceArtifact.objects.length}${
+    contentSummary: `feature_source_model/selection_pool (json) entries:${countSelectionPoolEntries(lifecycleState.featureAuthoring.parameters)}${
       lifecycleState.sourceArtifact.objectKind ? ` metadata-kind:${lifecycleState.sourceArtifact.objectKind}` : ""
     }`,
     sourcePattern: "rw.feature_source_model",
@@ -59,6 +70,15 @@ export function appendSelectionPoolSourceModelEntry(
       adapter: "selection_pool",
     },
   });
+  appendFeatureContentCollectionsEntry(
+    writePlan,
+    featureId,
+    buildFeatureContentCollectionsArtifact(
+      featureId,
+      buildExportedContentCollectionsFromParameters(lifecycleState.featureAuthoring.parameters),
+    ),
+    recomputeWritePlanDerivedFields,
+  );
   writePlan.executionOrder = [...writePlan.executionOrder, writePlan.entries.length - 1];
   writePlan.stats = {
     total: writePlan.entries.length,
@@ -101,7 +121,9 @@ export function refreshSelectionPoolWritePlanEntries(
     return;
   }
 
-  const compiledParameters = compileSelectionPoolModuleParameters(lifecycleState.featureAuthoring);
+  const compiledParameters = compileSelectionPoolModuleParameters(lifecycleState.featureAuthoring, {
+    hostRoot: writePlan.targetProject,
+  });
   for (const entry of writePlan.entries) {
     if (!isSelectionPoolPatternSource(entry.sourcePattern)) {
       continue;
@@ -123,7 +145,7 @@ export function refreshSelectionPoolWritePlanEntries(
     operation: existingSourceEntry?.operation || "create",
     targetPath: lifecycleState.sourceArtifactRef.path,
     contentType: "json",
-    contentSummary: `feature_source_model/selection_pool (json) objects:${lifecycleState.sourceArtifact.objects.length}${
+    contentSummary: `feature_source_model/selection_pool (json) entries:${countSelectionPoolEntries(lifecycleState.featureAuthoring.parameters)}${
       lifecycleState.sourceArtifact.objectKind ? ` metadata-kind:${lifecycleState.sourceArtifact.objectKind}` : ""
     }`,
     sourcePattern: "rw.feature_source_model",
@@ -147,6 +169,16 @@ export function refreshSelectionPoolWritePlanEntries(
   } else {
     writePlan.entries.push(nextSourceEntry);
   }
+
+  appendFeatureContentCollectionsEntry(
+    writePlan,
+    featureId,
+    buildFeatureContentCollectionsArtifact(
+      featureId,
+      buildExportedContentCollectionsFromParameters(lifecycleState.featureAuthoring.parameters),
+    ),
+    recomputeWritePlanDerivedFields,
+  );
 
   recomputeWritePlanDerivedFields(writePlan);
 }

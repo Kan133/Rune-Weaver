@@ -44,6 +44,8 @@ function mapPatternIdToModuleRole(patternId: string): string | undefined {
       return "weighted_pool";
     case CORE_PATTERN_IDS.RULE_SELECTION_FLOW:
       return "selection_flow";
+    case CORE_PATTERN_IDS.EFFECT_OUTCOME_REALIZER:
+      return "selection_outcome";
     case CORE_PATTERN_IDS.UI_SELECTION_MODAL:
       return "selection_modal";
     case CORE_PATTERN_IDS.UI_RESOURCE_BAR:
@@ -183,6 +185,7 @@ export function applyUpdateRemovalDirectives(
   if (removalDirectives.removeSelectionFlow) {
     removeRoleIfAllowed("weighted_pool");
     removeRoleIfAllowed("selection_flow");
+    removeRoleIfAllowed("selection_outcome");
     removeRoleIfAllowed("selection_modal");
   }
   if (removalDirectives.removeUi) {
@@ -324,7 +327,7 @@ export function buildPreservedUpdateMechanics(
   if (preserved.has("selection_modal")) {
     mechanics.uiModal = true;
   }
-  if (preserved.has("effect_application") || preserved.has("spawn_emitter")) {
+  if (preserved.has("selection_outcome") || preserved.has("effect_application") || preserved.has("spawn_emitter")) {
     mechanics.outcomeApplication = true;
   }
   if (preserved.has("resource_pool")) {
@@ -438,6 +441,10 @@ export function collectUpdateInvariantConflictIssues(
     pushConflict(
       "selection_flow",
       "This round blocks removing the selection flow backbone from a source-backed family update.",
+    );
+    pushConflict(
+      "selection_outcome",
+      "This round blocks removing the selection outcome realizer from a source-backed family update.",
     );
   }
   if (effectiveRemovalDirectives.removeTrigger) {

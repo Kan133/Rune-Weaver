@@ -13,11 +13,42 @@ import {
   resolveSelectionPoolFamily,
 } from "../../../adapters/dota2/families/selection-pool/index.js";
 import {
-  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
-} from "../../../adapters/dota2/families/selection-pool/__fixtures__/examples.js";
+  TALENT_DRAW_DEMO_CREATE_PROMPT,
+} from "../../../adapters/dota2/cases/selection-demo-registry.js";
 
 const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
   "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
+
+function createCanonicalSelectionPoolParameters(
+  objects: Array<{ id: string; label: string; description: string; weight: number; tier: "R" | "SR" | "SSR" | "UR" }>,
+) {
+  return {
+    triggerKey: "F4",
+    choiceCount: 3,
+    objectKind: "talent" as const,
+    localCollections: [
+      {
+        collectionId: "talent_pool",
+        visibility: "local" as const,
+        objects: objects.map((object) => ({
+          objectId: object.id,
+          label: object.label,
+          description: object.description,
+        })),
+      },
+    ],
+    poolEntries: objects.map((object) => ({
+      entryId: object.id,
+      objectRef: {
+        source: "local_collection" as const,
+        collectionId: "talent_pool",
+        objectId: object.id,
+      },
+      weight: object.weight,
+      tier: object.tier,
+    })),
+  };
+}
 
 function testCreateWritePlanUsesStableFeatureIdForCreate(): void {
   const assemblyPlan = {
@@ -240,8 +271,8 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
     version: "1.0",
     host: { kind: "dota2-x-template" as const },
     request: {
-      rawPrompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
-      goal: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+      rawPrompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
+      goal: TALENT_DRAW_DEMO_CREATE_PROMPT,
     },
     classification: {
       intentKind: "standalone-system" as const,
@@ -327,7 +358,7 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
   } as any;
 
   const result = buildBlueprint(schema, {
-    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
     hostRoot: "D:\\test3",
     mode: "create",
     featureId: "talent_draw_demo",
@@ -343,7 +374,7 @@ function testBuildBlueprintAppliesSelectionPoolCreateEnrichment(): void {
     result.blueprint?.fillContracts?.map((contract) => contract.boundaryId),
     [
       "weighted_pool.selection_policy",
-      "selection_flow.effect_mapping",
+      "selection_outcome.realization",
       "ui.selection_modal.payload_adapter",
     ],
   );
@@ -572,12 +603,12 @@ function testBuildBlueprintExplicitSelectionPoolClosurePromotesBoundedResidue():
 
   assert.ok(result.finalBlueprint);
   assert.equal(result.admissionDiagnostics?.verdict, "admitted_explicit");
-  assert.equal(result.finalBlueprint?.status, "ready");
-  assert.equal(result.finalBlueprint?.commitDecision?.requiresReview, false);
-  assert.equal(result.admissionDiagnostics?.closure?.applied, true);
-  assert.deepEqual(result.admissionDiagnostics?.closure?.closedResidueIds, ["unc_local_reward_consequence"]);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.finalBlueprint?.commitDecision?.requiresReview, true);
+  assert.equal(result.admissionDiagnostics?.closure?.applied, false);
+  assert.deepEqual(result.admissionDiagnostics?.closure?.closedResidueIds, []);
   assert.equal(
-    result.admissionDiagnostics?.boundedClosureAuthority?.closeableSurfaces.includes("effect_profile"),
+    result.admissionDiagnostics?.boundedClosureAuthority?.closeableSurfaces.includes("selection_outcome"),
     true,
   );
 }
@@ -1256,8 +1287,20 @@ function testBuildBlueprintDoesNotInventModifierApplierForDefinitionOnlyProvider
 
   assert.ok(result.finalBlueprint);
   assert.equal(result.finalBlueprint?.modules.length, 1);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.equal(result.finalBlueprint?.modules[0]?.role, "gameplay_ability");
+  assert.equal(result.finalBlueprint?.modules[0]?.backboneKind, "gameplay_ability");
   assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "effect_application"), false);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "resource_pool"), false);
   assert.equal(result.finalBlueprint?.patternHints.some((hint) => hint.category === "effect"), false);
+  assert.equal(
+    result.issues.some((issue) => issue.includes("feature-owned session state")),
+    false,
+  );
+  assert.equal(
+    result.finalBlueprint?.moduleNeeds.some((need) => need.requiredCapabilities.includes("ability.definition.shell")),
+    true,
+  );
 }
 
 function testSelectionPoolContractDoesNotInjectStandaloneInventoryState(): void {
@@ -1278,14 +1321,9 @@ function testSelectionPoolContractDoesNotInjectStandaloneInventoryState(): void 
       mode: "source-backed",
       profile: "selection_pool",
       objectKind: "talent",
-      parameters: {
-        triggerKey: "F4",
-        choiceCount: 3,
-        objectKind: "talent",
-        objects: [
+      parameters: createCanonicalSelectionPoolParameters([
           { id: "TL001", label: "Strength Boost", description: "+10 Strength", weight: 40, tier: "R" },
-        ],
-      },
+        ]),
       parameterSurface: resolutionParameterSurface(),
     },
   } as any;
@@ -1415,25 +1453,22 @@ function testSelectionPoolUpdateExpansionUsesGenericDeltaContract(): void {
     entryBindings: [],
     sourceModel: {
       adapter: "selection_pool",
-      version: 1,
+      version: 2,
       path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
     },
     featureAuthoring: {
       mode: "source-backed" as const,
       profile: "selection_pool" as const,
       objectKind: "talent" as const,
-      parameters: {
-        triggerKey: "F4",
-        choiceCount: 3,
-        objectKind: "talent" as const,
-        objects: Array.from({ length: 6 }, (_, index) => ({
+      parameters: createCanonicalSelectionPoolParameters(
+        Array.from({ length: 6 }, (_, index) => ({
           id: `TL${String(index + 1).padStart(3, "0")}`,
           label: `Talent ${index + 1}`,
           description: `Placeholder talent ${index + 1}`,
           weight: 10,
           tier: "R" as const,
         })),
-      },
+      ),
       parameterSurface: resolutionParameterSurface(),
     },
     createdAt: new Date().toISOString(),
@@ -1490,7 +1525,7 @@ function testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge(): void 
     entryBindings: [],
     sourceModel: {
       adapter: "selection_pool",
-      version: 1,
+      version: 2,
       path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
     },
     featureAuthoring: {
@@ -1561,7 +1596,7 @@ function resolutionParameterSurface() {
     triggerKey: { kind: "single_hotkey", allowList: ["F4"] },
     choiceCount: { minimum: 1, maximum: 5 },
     objectKind: { allowed: ["talent"] },
-    objects: { minItems: 1, seededWhenMissing: true },
+    poolEntries: { minItems: 1, seededWhenMissing: true },
     inventory: {
       supported: true,
       capacityRange: { minimum: 1, maximum: 30 },

@@ -3,6 +3,7 @@ import type { DoctorCheck } from "./doctor-checks.js";
 
 export function buildDoctorActionSummary(checks: DoctorCheck[], hostRoot: string): ActionSummary {
   const byName = new Map(checks.map((check) => [check.name, check]));
+  const postGeneration = byName.get("Post-Generation Validation");
 
   if (byName.get("Addon Config")?.status === "fail" || byName.get("Dota Directories")?.status === "fail") {
     return {
@@ -24,7 +25,26 @@ export function buildDoctorActionSummary(checks: DoctorCheck[], hostRoot: string
     };
   }
 
-  if (byName.get("Post-Generation Validation")?.status === "fail" || byName.get("Runtime Bridge Wiring")?.status === "fail") {
+  if (postGeneration?.status === "fail" && postGeneration.remediationKind === "requires_regenerate") {
+    return {
+      status: "action_required",
+      headline: "Regenerate stale synthesized grounding",
+      reason: "This host predates the canonical grounding contract and repair cannot reconstruct missing raw grounding honestly.",
+      source: "doctor",
+    };
+  }
+
+  if (postGeneration?.status === "fail" && postGeneration.remediationKind === "upgrade_workspace_grounding") {
+    return {
+      status: "action_required",
+      headline: "Upgrade legacy synthesized grounding",
+      reason: "Preserved raw grounding is present and can be upgraded into canonical module and feature assessments.",
+      command: `npm run cli -- dota2 repair --host ${hostRoot} --safe`,
+      source: "doctor",
+    };
+  }
+
+  if (postGeneration?.status === "fail" || byName.get("Runtime Bridge Wiring")?.status === "fail") {
     return {
       status: "action_required",
       headline: "Repair generated/runtime wiring",
@@ -40,6 +60,15 @@ export function buildDoctorActionSummary(checks: DoctorCheck[], hostRoot: string
       headline: "Rebuild host scripts and Panorama assets",
       reason: "The host is missing compiled build artifacts needed at runtime.",
       command: `cd ${hostRoot} && yarn dev`,
+      source: "doctor",
+    };
+  }
+
+  if (postGeneration?.status === "warn" && postGeneration.remediationKind === "review_required") {
+    return {
+      status: "action_required",
+      headline: "Review exploratory grounding warnings",
+      reason: "Fresh synthesized output still has partial or insufficient grounding and remains review-required.",
       source: "doctor",
     };
   }

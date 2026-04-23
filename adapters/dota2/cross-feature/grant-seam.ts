@@ -21,6 +21,7 @@ import {
 import {
   type FeatureAuthoring as SelectionPoolFeatureAuthoring,
 } from "../families/selection-pool/shared.js";
+import { resolveSelectionPoolCompiledObjects } from "../families/selection-pool/source-model.js";
 import {
   appendProviderExportEntry,
   appendSelectionGrantBindingEntry,
@@ -28,6 +29,7 @@ import {
   buildProviderAbilityExportArtifact,
   buildSelectionGrantBindingArtifact,
   buildSelectionGrantContractArtifact,
+  DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
   ensureConsumesGrantableAbilitySurface,
   ensureGrantDependencyEdge,
   ensureGrantableAbilitySurface,
@@ -78,7 +80,7 @@ function mergeFeatureContractSurfaces(
 ): FeatureContractSurface[] {
   return dedupeByKey(
     [...preferred, ...fallback],
-    (surface) => `${surface.kind}:${surface.id}`,
+    (surface) => `${surface.kind}:${surface.contractId || ""}:${surface.id}`,
   );
 }
 
@@ -112,12 +114,53 @@ function mergeDependencyEdges(
 ): FeatureDependencyEdge[] {
   return dedupeByKey(
     [...(preferred || []), ...(fallback || [])],
-    (edge) => `${edge.relation}:${edge.targetFeatureId || ""}:${edge.targetSurfaceId || ""}`,
+    (edge) => `${edge.relation}:${edge.targetFeatureId || ""}:${edge.targetSurfaceId || ""}:${edge.targetContractId || ""}`,
   );
 }
 
 function isGameplayAbilityRole(role: string | undefined): boolean {
   return role === "gameplay_ability" || role === "gameplay-core";
+}
+
+function collectProviderIntentText(schema: IntentSchema): string {
+  const typedRequirements = schema.requirements?.typed || [];
+  return [
+    schema.request?.rawPrompt || "",
+    schema.request?.goal || "",
+    ...(schema.requirements?.functional || []),
+    ...(schema.resolvedAssumptions || []),
+    ...typedRequirements.flatMap((requirement) => [
+      requirement.summary,
+      ...(requirement.outputs || []),
+      ...(requirement.invariants || []),
+    ]),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+}
+
+function hasExplicitGrantableProviderIntent(schema: IntentSchema): boolean {
+  const text = collectProviderIntentText(schema);
+  const providerIntentPattern =
+    /(?:grantable\s+(?:gameplay\s+ability|hero\s+ability)|gameplay\s+ability\s+provider|grantable\s+provider|provider\s+shell|later\s+external\s+grant(?:ing)?|external\s+consumer|grant[- ]only)/iu;
+  const crossFeatureGrantOptOutPattern =
+    /(?:no|without)\s+cross[- ]feature\s+grants?|cross[- ]feature\s+grants?\s+(?:disabled|forbidden|not included)|does\s+not\s+include\s+cross[- ]feature\s+grants?/iu;
+  const parameters = schema.parameters || {};
+  const explicitLaterGrant =
+    parameters.externalGrantLater === true ||
+    parameters.laterExternalGranting === true ||
+    parameters.grantable === true;
+  const hasGrantDependency = (schema.composition?.dependencies || []).some(
+    (dependency) =>
+      (dependency.kind === "cross-feature" || dependency.kind === "external-system")
+      && dependency.relation === "grants",
+  );
+
+  if (crossFeatureGrantOptOutPattern.test(text)) {
+    return false;
+  }
+
+  return explicitLaterGrant || hasGrantDependency || providerIntentPattern.test(text);
 }
 
 function isGrantableAbilityProviderBlueprint(blueprint: Blueprint): boolean {
@@ -147,7 +190,7 @@ function isGrantableAbilityProvider(input: {
 }): boolean {
   return (
     analyzeDefinitionOnlyProviderSemantics(input.schema, input.schema.request.rawPrompt).matches
-    || isGrantableAbilityProviderBlueprint(input.blueprint)
+    || (hasExplicitGrantableProviderIntent(input.schema) && isGrantableAbilityProviderBlueprint(input.blueprint))
   );
 }
 
@@ -233,6 +276,31 @@ function hasResolvedRelationCandidate(relationCandidates: RelationCandidate[] | 
   );
 }
 
+function promptRequestsSelectionGrantBinding(prompt: string): boolean {
+  return /(?:grant(?:s|ed|ing)?|bind(?:s|ing)?|wire(?:s|d|ing)?|reward|on selection|when selected|primary hero ability|provider)/iu.test(
+    prompt,
+  );
+}
+
+function hasExplicitPromptSelectionGrantBinding(input: {
+  prompt: string;
+  relationCandidates?: RelationCandidate[];
+  featureAuthoring?: SelectionPoolFeatureAuthoring;
+}): boolean {
+  if (!input.featureAuthoring || !hasResolvedRelationCandidate(input.relationCandidates)) {
+    return false;
+  }
+
+  if (!promptRequestsSelectionGrantBinding(input.prompt)) {
+    return false;
+  }
+
+  return (
+    promptRequestsReplacement(input.prompt)
+    || Boolean(resolveReplacementObjectId(input.featureAuthoring, input.prompt))
+  );
+}
+
 function isSelectionGrantDeltaPath(item: { kind: string; path: string }): boolean {
   if (
     item.kind === "composition"
@@ -264,7 +332,8 @@ function isSelectionGrantObjectDeltaPath(item: { kind: string; path: string }): 
   }
 
   return (
-    /^(?:featureAuthoring\.parameters|sourceModel\.artifact)\.objects\b/i.test(item.path)
+    /^(?:featureAuthoring\.parameters|sourceModel\.artifact)\.poolEntries\b/i.test(item.path)
+    || /^(?:featureAuthoring\.parameters|sourceModel\.artifact)\.localCollections\b/i.test(item.path)
     || /^contentModel\.collections\b/i.test(item.path)
     || /^data\.weighted_pool\b/i.test(item.path)
   );
@@ -302,9 +371,14 @@ function hasSelectionGrantRemovalDelta(updateIntent: UpdateIntent | undefined): 
 function hasSelectionGrantMutationRequest(input: {
   updateIntent?: UpdateIntent;
   clarificationAuthority: WizardClarificationAuthority;
+  prompt: string;
+  relationCandidates?: RelationCandidate[];
+  featureAuthoring?: SelectionPoolFeatureAuthoring;
 }): boolean {
+  const explicitPromptBindingRequest = hasExplicitPromptSelectionGrantBinding(input);
   return (
-    hasSelectionGrantUpdateDelta(input.updateIntent)
+    explicitPromptBindingRequest
+    || hasSelectionGrantUpdateDelta(input.updateIntent)
     || hasSelectionGrantRemovalDelta(input.updateIntent)
     || input.clarificationAuthority.unresolvedDependencies.some(
       (dependency) => dependency.kind === "cross-feature-target",
@@ -313,10 +387,16 @@ function hasSelectionGrantMutationRequest(input: {
 }
 
 function hasSelectionGrantFallbackAuthority(input: {
+  prompt: string;
   relationCandidates?: RelationCandidate[];
   updateIntent?: UpdateIntent;
+  featureAuthoring?: SelectionPoolFeatureAuthoring;
 }): boolean {
-  return hasResolvedRelationCandidate(input.relationCandidates) && hasSelectionGrantUpdateDelta(input.updateIntent);
+  const explicitPromptBindingRequest = hasExplicitPromptSelectionGrantBinding(input);
+  return explicitPromptBindingRequest || (
+    hasSelectionGrantUpdateDelta(input.updateIntent)
+    && hasResolvedRelationCandidate(input.relationCandidates)
+  );
 }
 
 function promptRequestsReplacement(prompt: string): boolean {
@@ -328,7 +408,9 @@ function resolveReplacementObjectId(
   prompt: string,
 ): string | undefined {
   const normalizedPrompt = prompt.toLowerCase();
-  for (const object of featureAuthoring.parameters.objects) {
+  for (const object of resolveSelectionPoolCompiledObjects(featureAuthoring.parameters, undefined, {
+    allowDeferredFeatureExportResolution: true,
+  }).objects) {
     if (
       normalizedPrompt.includes(object.id.toLowerCase()) ||
       normalizedPrompt.includes(object.label.toLowerCase())
@@ -342,10 +424,10 @@ function resolveReplacementObjectId(
 function resolveBoundObject(
   featureAuthoring: SelectionPoolFeatureAuthoring,
   prompt: string,
-): { objectId: string } | { error: string } {
-  const replacementObjectId = resolveReplacementObjectId(featureAuthoring, prompt);
-  if (replacementObjectId) {
-    return { objectId: replacementObjectId };
+): { entryId: string } | { error: string } {
+  const replacementEntryId = resolveReplacementObjectId(featureAuthoring, prompt);
+  if (replacementEntryId) {
+    return { entryId: replacementEntryId };
   }
 
   if (promptRequestsReplacement(prompt)) {
@@ -355,8 +437,8 @@ function resolveBoundObject(
   }
 
   return {
-    error:
-      "Cross-feature grant binding cannot mutate selection_pool local authoring after admission. Update selection_pool authoring locally to choose an existing object slot, then bind that object id or label.",
+      error:
+      "Cross-feature grant binding cannot mutate selection_pool local authoring after admission. Update selection_pool authoring locally to choose an existing pool entry, then bind that entry id or label.",
   };
 }
 
@@ -397,10 +479,10 @@ function preserveExistingSelectionGrantState(input: {
     };
   }
 
-  const validObjectIds = new Set(
-    input.blueprint.featureAuthoring.parameters.objects.map((object) => object.id),
+  const validEntryIds = new Set(
+    resolveSelectionPoolCompiledObjects(input.blueprint.featureAuthoring.parameters, input.hostRoot).objects.map((object) => object.id),
   );
-  const preservedBindings = existingBindingArtifact.bindings.filter((binding) => validObjectIds.has(binding.objectId));
+  const preservedBindings = existingBindingArtifact.bindings.filter((binding) => validEntryIds.has(binding.entryId));
   if (preservedBindings.length === 0) {
     return {
       blueprint: input.blueprint,
@@ -515,12 +597,21 @@ export function applyDota2GrantSeam(input: {
     updateIntent: input.updateIntent,
   });
   const selectionGrantFallbackAuthority = hasSelectionGrantFallbackAuthority({
+    prompt: input.prompt,
     relationCandidates: input.relationCandidates,
     updateIntent: input.updateIntent,
+    featureAuthoring: isSelectionPoolFeatureAuthoring(blueprint.featureAuthoring)
+      ? blueprint.featureAuthoring
+      : undefined,
   });
   const selectionGrantMutationRequest = hasSelectionGrantMutationRequest({
     updateIntent: input.updateIntent,
     clarificationAuthority: input.clarificationAuthority,
+    prompt: input.prompt,
+    relationCandidates: input.relationCandidates,
+    featureAuthoring: isSelectionPoolFeatureAuthoring(blueprint.featureAuthoring)
+      ? blueprint.featureAuthoring
+      : undefined,
   });
 
   if (
@@ -542,7 +633,7 @@ export function applyDota2GrantSeam(input: {
       );
       if (preservedSelectionGrantState.skippedCount > 0) {
         notes.push(
-          `Skipped ${preservedSelectionGrantState.skippedCount} stale selection grant binding(s) that referenced missing local object ids.`,
+          `Skipped ${preservedSelectionGrantState.skippedCount} stale selection grant binding(s) that referenced missing local pool entry ids.`,
         );
       }
       appendWriteBlockers(input.writePlan, writeBlockers);
@@ -566,7 +657,7 @@ export function applyDota2GrantSeam(input: {
     refreshWritePlanDerivedFields,
   );
   notes.push(
-    `Published Dota2 selection grant contract for ${grantContractArtifact.slots.length} local selection object slot(s).`,
+    `Published Dota2 selection grant contract for ${grantContractArtifact.slots.length} local selection pool slot(s).`,
   );
 
   if (input.clarificationAuthority.unresolvedDependencies.length > 0 && input.clarificationAuthority.blocksWrite) {
@@ -618,15 +709,16 @@ export function applyDota2GrantSeam(input: {
   }
 
   const nextBinding: Dota2SelectionGrantBinding = {
-    objectId: boundObjectResult.objectId,
+    entryId: boundObjectResult.entryId,
     targetFeatureId: resolvedTarget.targetFeatureId,
     targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    targetContractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
     relation: "grants",
     applyBehavior: "grant_primary_hero_ability",
   };
-  if (!grantContractArtifact.slots.some((slot) => slot.objectId === nextBinding.objectId)) {
+  if (!grantContractArtifact.slots.some((slot) => slot.entryId === nextBinding.entryId)) {
     writeBlockers.push(
-      `Selection grant contract for '${input.featureId}' does not expose local object '${nextBinding.objectId}' for cross-feature grants.`,
+      `Selection grant contract for '${input.featureId}' does not expose local pool entry '${nextBinding.entryId}' for cross-feature grants.`,
     );
     appendWriteBlockers(input.writePlan, writeBlockers);
     blueprint = {
@@ -639,7 +731,7 @@ export function applyDota2GrantSeam(input: {
   const bindingArtifact = buildSelectionGrantBindingArtifact(
     input.featureId,
     [
-      ...(existingBindingArtifact?.bindings || []).filter((binding) => binding.objectId !== nextBinding.objectId),
+      ...(existingBindingArtifact?.bindings || []).filter((binding) => binding.entryId !== nextBinding.entryId),
       nextBinding,
     ],
   );
@@ -656,7 +748,7 @@ export function applyDota2GrantSeam(input: {
     dependencyEdges: ensureGrantDependencyEdge(blueprint.dependencyEdges, resolvedTarget.targetFeatureId),
   };
   notes.push(
-    `Bound local selection object '${boundObjectResult.objectId}' to provider '${resolvedTarget.targetFeatureId}:${GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID}'.`,
+    `Bound local selection pool entry '${boundObjectResult.entryId}' to provider '${resolvedTarget.targetFeatureId}:${GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID}'.`,
   );
 
   appendWriteBlockers(input.writePlan, writeBlockers);

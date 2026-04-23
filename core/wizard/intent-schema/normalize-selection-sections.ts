@@ -44,6 +44,9 @@ export function normalizeSelection(
     : promptHints.weightedDraw
       ? "weighted"
       : undefined;
+  const normalizedResolutionMode = isOneOf(selection?.resolutionMode, ["player_confirm_single", "reveal_batch_immediate"])
+    ? selection.resolutionMode
+    : promptHints.selectionResolutionMode;
   const inferredCardinality = promptHints.committedCount === 1
     ? "single"
     : promptHints.committedCount && promptHints.committedCount > 1
@@ -83,13 +86,24 @@ export function normalizeSelection(
         ? selection.source
         : inferredSource,
     choiceMode: isOneOf(selection?.choiceMode, ["none", "user-chosen", "random", "weighted", "hybrid"])
-      ? promptHints.playerChoice
+      ? normalizedResolutionMode === "reveal_batch_immediate"
+        ? "none"
+        : promptHints.playerChoice
         ? "user-chosen"
         : selection.choiceMode
-      : inferredChoiceMode,
+      : normalizedResolutionMode === "reveal_batch_immediate"
+        ? "none"
+        : inferredChoiceMode,
+    resolutionMode: normalizedResolutionMode,
     cardinality: isOneOf(selection?.cardinality, ["single", "multiple"])
       ? selection.cardinality
-      : inferredCardinality,
+      : normalizedResolutionMode === "player_confirm_single"
+        ? "single"
+        : normalizedResolutionMode === "reveal_batch_immediate"
+          ? promptHints.candidateCount && promptHints.candidateCount > 1
+            ? "multiple"
+            : inferredCardinality
+          : inferredCardinality,
     choiceCount: promptHints.candidateCount ?? normalizePositiveInteger(selection?.choiceCount),
     repeatability: isOneOf(selection?.repeatability, ["one-shot", "repeatable", "persistent"])
       ? selection.repeatability
@@ -99,7 +113,9 @@ export function normalizeSelection(
       : isOneOf(selection?.duplicatePolicy, ["allow", "avoid", "forbid"])
         ? selection.duplicatePolicy
         : undefined,
-    commitment: promptHints.immediateOutcome
+    commitment: normalizedResolutionMode === "reveal_batch_immediate"
+      ? "immediate"
+      : promptHints.immediateOutcome
       ? "immediate"
       : isOneOf(selection?.commitment, ["immediate", "confirm", "deferred"])
         ? selection.commitment
@@ -122,6 +138,8 @@ export function normalizeSelection(
     normalizedSelection.choiceMode === "random" ||
     normalizedSelection.choiceMode === "weighted" ||
     normalizedSelection.choiceMode === "hybrid" ||
+    normalizedSelection.resolutionMode === "player_confirm_single" ||
+    normalizedSelection.resolutionMode === "reveal_batch_immediate" ||
     typeof normalizedSelection.choiceCount === "number" ||
     normalizedSelection.inventory?.enabled === true;
 

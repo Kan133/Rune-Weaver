@@ -239,21 +239,22 @@ export const dota2Patterns: Dota2PatternMeta[] = [
     id: "rule.selection_flow",
     category: "rule",
     summary: "多选一选择流程",
-    description: "管理完整的多选一流程：展示候选项、接收选择、应用结果、提交池状态变更，并可在当前切片内承载窄的 session-only 已选库存同步，以及 selection-confirmed local progression 阈值累计。",
+    description: "管理完整的多选一流程：展示候选项、接收选择、发出标准化 outcome request、提交池状态变更，并可在当前切片内承载窄的 session-only 已选库存同步，以及 selection-confirmed local progression 阈值累计。",
     responsibilities: [
       { text: "从数据池获取候选项", core: true },
       { text: "展示选择界面（通过 UI Pattern）", core: true },
       { text: "等待并接收玩家选择", core: true },
-      { text: "应用选择结果", core: true },
+      { text: "发出已确认选择的标准化 outcome request", core: true },
       { text: "提交 selection-confirmed 后的池状态变更", core: true },
     ],
     nonGoals: [
       { text: "不管理数据池本身", alternative: "使用 data.weighted_pool" },
       { text: "不渲染 UI", alternative: "使用 ui.selection_modal" },
+      { text: "不持有 attribute/item/unit 的具体宿主实现", alternative: "使用 effect.outcome_realizer" },
       { text: "不处理跨局持久化", alternative: "MVP 只需单局持久化" },
       { text: "不扩展为通用 reward/progression framework", alternative: "当前仅承载 same-feature session-local threshold progression" },
     ],
-    capabilities: ["selection.flow.player_confirmed", "selection.flow.resolve_choice", "selection.flow.pool_commit", "selection.flow.effect_mapping", "progression.selection.local_threshold", "multi_choice", "player_selection", "result_apply", "pool_state_commit", "effect_mapping"],
+    capabilities: ["selection.flow.player_confirmed", "selection.flow.resolve_choice", "selection.flow.pool_commit", "selection.flow.outcome_request_emit", "progression.selection.local_threshold", "multi_choice", "player_selection", "pool_state_commit"],
     traits: ["requires_runtime", "choice_orchestration", "stateful.session"],
     semanticOutputs: ["server.runtime"],
     stateAffordances: ["selection.commit_state", "progression.round_counter_state", "progression.level_state"],
@@ -273,7 +274,6 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       { name: "applyMode", type: "enum", required: false, description: "应用模式", defaultValue: "immediate" },
       { name: "postSelectionPoolBehavior", type: "enum", required: false, description: "选择后池行为：none/remove_selected_from_remaining/remove_selected_and_keep_unselected_eligible", defaultValue: "none" },
       { name: "trackSelectedItems", type: "boolean", required: false, description: "是否追踪已选项目到 owned 列表", defaultValue: false },
-      { name: "effectApplication", type: "object", required: false, description: "效果应用配置，包含 enabled 和 rarityAttributeBonusMap" },
       {
         name: "inventory",
         type: "object",
@@ -293,6 +293,7 @@ export const dota2Patterns: Dota2PatternMeta[] = [
       "如果 postSelectionPoolBehavior !== none，需要兼容的池状态源",
       "如果 trackSelectedItems = true，已选 id 必须追加到会话 owned 列表",
       "未选中的候选项必须保持 eligible（current selection_pool skeleton）",
+      "具体 outcome realization 必须下沉到 effect.outcome_realizer 或同等的下游宿主层",
       'inventory 当前仅支持 session-only + "persistent_panel" 的窄 selection_pool 扩展，不扩展为通用库存框架',
       "progression 当前仅支持 same-feature + session-local + threshold-based round counter；不承诺 persistence / economy / cross-feature grant",
     ],
@@ -307,30 +308,15 @@ export const dota2Patterns: Dota2PatternMeta[] = [
         message: "池状态变更需要数据池支持会话状态追踪",
         severity: "warning",
       },
-      {
-        stage: "host",
-        rule: "effectApplication.enabled=true 时效果映射必须包含所有稀有度",
-        message: "效果映射必须完整覆盖候选项的稀有度",
-        severity: "error",
-      },
     ],
     examples: [
       {
         name: "三选一天赋",
-        description: "展示3个天赋供玩家选择，选中后从剩余池移除，未选中保持可抽取",
+        description: "展示3个天赋供玩家选择，选中后从剩余池移除，未选中保持可抽取，并将具体 realization 下发给 outcome layer",
         params: { 
           choiceCount: 3, 
           postSelectionPoolBehavior: "remove_selected_and_keep_unselected_eligible", 
           trackSelectedItems: true,
-          effectApplication: {
-            enabled: true,
-            rarityAttributeBonusMap: {
-              R: { attribute: "strength", value: 10 },
-              SR: { attribute: "agility", value: 10 },
-              SSR: { attribute: "intelligence", value: 10 },
-              UR: { attribute: "all", value: 10 },
-            },
-          },
         },
         useCase: "候选抽取系统",
       },
@@ -345,6 +331,81 @@ export const dota2Patterns: Dota2PatternMeta[] = [
   // ============================================================================
   // 效果类
   // ============================================================================
+  createDota2Pattern({
+    id: "effect.outcome_realizer",
+    category: "effect",
+    summary: "选择结果宿主实现器",
+    description: "接收已确认的 selection outcome request，并在当前 feature 边界内把标准化 outcome 兑现成 Dota2 原生效果。当前 admitted slice 仅覆盖 attribute_bonus、native_item_delivery 与 bounded spawn_unit。",
+    responsibilities: [
+      { text: "在确认后查找当前对象绑定的 outcome", core: true },
+      { text: "将 outcome 映射为 Dota2 原生 attribute/item/unit realization", core: true },
+      { text: "通过 selection_flow.registerOutcomeHandler 接缝接管 outcome 实现", core: true },
+    ],
+    nonGoals: [
+      { text: "不重新拥有抽取、确认或池状态提交", alternative: "这些仍由 rule.selection_flow 负责" },
+      { text: "不扩展为通用跨 feature grant framework", alternative: "cross-feature grants 仍走独立 seam" },
+      { text: "不承诺 shop/economy/bench 等更宽宿主语义", alternative: "当前仅承载 bounded native item / unit realization" },
+    ],
+    capabilities: [
+      "selection.outcome.realize",
+      "selection.outcome.attribute_bonus",
+      "selection.outcome.native_item_delivery",
+      "selection.outcome.spawn_unit",
+      "host.native.realization",
+    ],
+    traits: ["requires_runtime", "feature_local_authority", "deterministic_parameterization"],
+    semanticOutputs: ["server.runtime"],
+    integrationHints: ["selection.confirmation", "selection.outcome_handler"],
+    invariants: [
+      "outcome ownership stays inside the current feature boundary",
+      "unknown outcome kinds must fail validation instead of silently degrading",
+      "handled=true must suppress selection_flow placeholder fallback behavior",
+    ],
+    inputs: [
+      { name: "outcomes", type: "array", required: true },
+    ],
+    outputs: [
+      { name: "handled", type: "boolean" },
+    ],
+    parameters: [
+      { name: "outcomes", type: "array", required: true, description: "对象 id 到 outcome spec 的映射列表" },
+    ],
+    constraints: [
+      "当前仅支持 attribute_bonus / native_item_delivery / spawn_unit 三种 outcome kind",
+      'native_item_delivery.positionPolicy 仅支持 "hero_origin" / "hero_forward" / "cursor_point"',
+      'spawn_unit.teamScope 当前仅支持 "player_team"',
+      "不新增跨 feature 写入权限，也不扩大到新的 host target authority",
+    ],
+    validationHints: [
+      {
+        stage: "host",
+        rule: "every configured outcome kind must have a complete required field set",
+        message: "outcome_realizer requires complete per-kind outcome specs",
+        severity: "error",
+      },
+    ],
+    examples: [
+      {
+        name: "天赋属性实现",
+        description: "将 talent object 的 attribute_bonus outcome 兑现为与当前 talent runtime 相同的属性加成",
+        params: {
+          outcomes: [
+            {
+              id: "R001",
+              outcome: { kind: "attribute_bonus", attribute: "strength", value: 10 },
+            },
+          ],
+        },
+        useCase: "selection_pool 当前天赋 case 的 outcome realization",
+      },
+    ],
+    hostTarget: "dota2.server",
+    outputTypes: ["typescript"],
+    allowedFamilies: ["runtime-primary"],
+    preferredFamily: "runtime-primary",
+    dota2Params: { requiresAbility: false, requiresModifier: false, requiresPanel: false },
+  }),
+
   createDota2Pattern({
     id: "effect.dash",
     category: "effect",

@@ -9,11 +9,18 @@ import type {
   NormalizedBlueprintStatus,
   IntentSchema,
   UpdateIntent,
+  FeatureContract,
+  FeatureDependencyEdge,
 } from "../../../core/schema/types.js";
 import { analyzeIntentSemanticLayers } from "../../../core/wizard/index.js";
 import type { IntentSemanticAnalysis } from "../../../core/wizard/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import { requireGovernedUpdateExecutionView } from "../../../core/blueprint/update-execution-view.js";
+import {
+  ensureConsumesContentCollection,
+  ensureContentCollectionReadDependency,
+  ensureExportsContentCollections,
+} from "../content-collections/contracts.js";
 import {
   buildSelectionPoolFillContracts,
   compileSelectionPoolModuleParameters,
@@ -22,6 +29,7 @@ import {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "../families/selection-pool/index.js";
+import { buildExportedContentCollectionsFromParameters } from "../families/selection-pool/source-model.js";
 import { applyGenericWeightedPoolProjection } from "../weighted-pool/index.js";
 import {
   applyCreateClosureToAdmissionDiagnostics,
@@ -41,6 +49,7 @@ const SELECTION_POOL_PATTERN_IDS = {
   input_trigger: "input.key_binding",
   weighted_pool: "data.weighted_pool",
   selection_flow: "rule.selection_flow",
+  selection_outcome: "effect.outcome_realizer",
   selection_modal: "ui.selection_modal",
 } as const;
 
@@ -56,8 +65,9 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
   blueprint: TBlueprint,
   featureAuthoring: SelectionPoolFeatureAuthoring,
   status: NormalizedBlueprintStatus,
+  options: { hostRoot?: string } = {},
 ): TBlueprint {
-  const modules = buildSelectionPoolFamilyModules(featureAuthoring);
+  const modules = buildSelectionPoolFamilyModules(featureAuthoring, options);
   const connections = buildSelectionPoolFamilyConnections();
   const patternHints = buildSelectionPoolFamilyPatternHints();
   const fillContracts = buildSelectionPoolFillContracts(modules);
@@ -77,6 +87,30 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
     }
   }
   const requiresReview = status === "weak";
+  const sourceParameters = featureAuthoring.parameters;
+  let featureContract: FeatureContract | undefined = ensureExportsContentCollections(
+    blueprint.featureContract,
+    buildExportedContentCollectionsFromParameters(sourceParameters),
+  );
+  let dependencyEdges: FeatureDependencyEdge[] | undefined = blueprint.dependencyEdges
+    ? [...blueprint.dependencyEdges]
+    : undefined;
+
+  for (const entry of sourceParameters.poolEntries || []) {
+    if (entry.objectRef.source !== "feature_export") {
+      continue;
+    }
+    featureContract = ensureConsumesContentCollection(
+      featureContract,
+      entry.objectRef.collectionId,
+      entry.objectRef.featureId,
+    );
+    dependencyEdges = ensureContentCollectionReadDependency(
+      dependencyEdges,
+      entry.objectRef.featureId,
+      entry.objectRef.collectionId,
+    );
+  }
 
   return {
     ...blueprint,
@@ -106,6 +140,8 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
       : blueprint.designDraft,
     implementationStrategy: "family",
     maturity: "templated",
+    featureContract,
+    dependencyEdges,
     commitDecision: {
       outcome: requiresReview ? "exploratory" : "committable",
       canAssemble: true,
@@ -120,8 +156,12 @@ function applySelectionPoolModuleParameters<TBlueprint extends Blueprint>(
 
 function buildSelectionPoolFamilyModules(
   featureAuthoring: SelectionPoolFeatureAuthoring,
+  options: { hostRoot?: string } = {},
 ): Blueprint["modules"] {
-  const compiled = compileSelectionPoolModuleParameters(featureAuthoring);
+  const compiled = compileSelectionPoolModuleParameters(featureAuthoring, {
+    hostRoot: options.hostRoot,
+    allowDeferredFeatureExportResolution: !options.hostRoot,
+  });
   return [
     {
       id: "selection_input",
@@ -154,11 +194,25 @@ function buildSelectionPoolFamilyModules(
       patternIds: [SELECTION_POOL_PATTERN_IDS.selection_flow],
       responsibilities: [
         "Draw weighted candidates and enforce single-choice confirmation.",
+        "Emit a normalized confirmed outcome request inside the bounded family contract.",
         "Apply post-selection pool behavior inside the bounded family contract.",
       ],
       inputs: ["selection_open_request", "candidate_options", "selection_confirm"],
-      outputs: ["selection_ui_payload", "selection_commit"],
+      outputs: ["selection_ui_payload", "selection_commit", "selection_outcome_request"],
       parameters: compiled.selection_flow,
+    },
+    {
+      id: "selection_outcome",
+      role: "selection_outcome",
+      category: "effect",
+      patternIds: [SELECTION_POOL_PATTERN_IDS.selection_outcome],
+      responsibilities: [
+        "Realize the confirmed current-feature outcome through the admitted host-native hook.",
+        "Keep concrete attribute, native item, and bounded spawn realization out of selection_flow.",
+      ],
+      inputs: ["selection_commit", "selection_outcome_request"],
+      outputs: ["selection_outcome_realized"],
+      parameters: compiled.selection_outcome,
     },
     {
       id: "selection_modal",
@@ -190,6 +244,11 @@ function buildSelectionPoolFamilyConnections(): Blueprint["connections"] {
     },
     {
       from: "selection_flow",
+      to: "selection_outcome",
+      purpose: "Realize the confirmed current-feature outcome without widening selection_flow ownership.",
+    },
+    {
+      from: "selection_flow",
       to: "selection_modal",
       purpose: "Project draw results into the current-feature selection UI.",
     },
@@ -216,7 +275,12 @@ function buildSelectionPoolFamilyPatternHints(): PatternHint[] {
     {
       category: "rule",
       suggestedPatterns: [SELECTION_POOL_PATTERN_IDS.selection_flow],
-      rationale: "selection_pool commits one confirmed candidate per draw.",
+      rationale: "selection_pool commits one confirmed candidate per draw and emits a normalized outcome request.",
+    },
+    {
+      category: "effect",
+      suggestedPatterns: [SELECTION_POOL_PATTERN_IDS.selection_outcome],
+      rationale: "selection_pool realizes confirmed outcomes through a bounded host-native outcome module.",
     },
     {
       category: "ui",
@@ -230,7 +294,7 @@ function buildSelectionPoolModuleRecords(
   modules: Blueprint["modules"],
   fillContractIdsByModule: Map<string, string[]>,
 ): ModuleImplementationRecord[] {
-  const records: ModuleImplementationRecord[] = modules.map((module) => ({
+  return modules.map((module) => ({
     moduleId: module.id,
     role: module.role,
     category: module.category,
@@ -238,7 +302,7 @@ function buildSelectionPoolModuleRecords(
     familyId: SELECTION_POOL_FAMILY_ID,
     patternId: module.patternIds?.[0],
     selectedPatternIds: module.patternIds || [],
-    artifactTargets: deriveModuleArtifactTargets(module.category),
+    artifactTargets: deriveModuleArtifactTargets(module),
     ownedPaths: [],
     fillContractIds: fillContractIdsByModule.get(module.id) || [],
     reviewRequired: false,
@@ -246,38 +310,19 @@ function buildSelectionPoolModuleRecords(
     reviewReasons: [],
     implementationStrategy: "family",
     maturity: "templated",
-    outputKinds: deriveModuleOutputKinds(module.category),
+    outputKinds: deriveModuleOutputKinds(module),
     resolvedFrom: "family",
     summary: `Selection pool family module '${module.role}' projected from source-backed authoring truth.`,
   }));
-
-  records.push({
-    moduleId: "selection_effect",
-    role: "effect_application",
-    category: "effect",
-    sourceKind: "family",
-    familyId: SELECTION_POOL_FAMILY_ID,
-    selectedPatternIds: [],
-    artifactTargets: ["server"],
-    ownedPaths: [],
-    fillContractIds: [],
-    reviewRequired: false,
-    requiresReview: false,
-    reviewReasons: [],
-    implementationStrategy: "family",
-    maturity: "templated",
-    outputKinds: ["server"],
-    resolvedFrom: "family",
-    summary: "Selection pool keeps chosen-effect application inside the bounded family contract.",
-  });
-
-  return records;
 }
 
 function deriveModuleArtifactTargets(
-  category: NonNullable<Blueprint["modules"][number]>["category"],
+  module: NonNullable<Blueprint["modules"][number]>,
 ): string[] {
-  switch (category) {
+  if ((module.patternIds || []).includes(SELECTION_POOL_PATTERN_IDS.selection_outcome)) {
+    return ["server"];
+  }
+  switch (module.category) {
     case "ui":
       return ["ui"];
     case "integration":
@@ -292,9 +337,12 @@ function deriveModuleArtifactTargets(
 }
 
 function deriveModuleOutputKinds(
-  category: NonNullable<Blueprint["modules"][number]>["category"],
+  module: NonNullable<Blueprint["modules"][number]>,
 ): Array<"server" | "shared" | "ui" | "bridge"> {
-  switch (category) {
+  if ((module.patternIds || []).includes(SELECTION_POOL_PATTERN_IDS.selection_outcome)) {
+    return ["server"];
+  }
+  switch (module.category) {
     case "ui":
       return ["ui"];
     case "integration":
@@ -386,6 +434,7 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     input.schema,
     resolution.proposal,
     resolution.admissionDiagnostics,
+    input.hostRoot,
   );
   if (!normalized.featureAuthoring) {
     const createReadinessDecision = resolveCreateReadinessDecision({
@@ -407,6 +456,7 @@ export function enrichDota2CreateBlueprint<TBlueprint extends Blueprint>(
     blueprint,
     normalized.featureAuthoring,
     "ready",
+    { hostRoot: input.hostRoot },
   );
   const closureDecision = resolveCreateFamilyClosureDecision({
     semanticAnalysis,

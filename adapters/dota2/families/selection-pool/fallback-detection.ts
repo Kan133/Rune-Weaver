@@ -1,3 +1,4 @@
+import type { IntentSchema } from "../../../../core/schema/types.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/types.js";
 import {
   createAdmissionFinding,
@@ -11,12 +12,22 @@ export interface DetectSelectionPoolFallbackIntentInput {
   prompt: string;
   mode: "create" | "update" | "regenerate";
   featureId?: string;
+  schema?: IntentSchema;
   existingFeature?: RuneWeaverFeatureRecord | null;
 }
 
 export function detectSelectionPoolFallbackIntent(
   input: DetectSelectionPoolFallbackIntentInput,
 ): SelectionPoolDetectionResult {
+  if (input.schema?.selection?.resolutionMode === "reveal_batch_immediate") {
+    return {
+      handled: false,
+      objectKindHint: undefined,
+      matchedBy: [],
+      findings: [],
+    };
+  }
+
   const promptKind = inferObjectKind(input.prompt, input.existingFeature);
   const normalized = input.prompt.toLowerCase();
   const promptShape = looksLikeSelectionPoolPrompt(input.prompt);

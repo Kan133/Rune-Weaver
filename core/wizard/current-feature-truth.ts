@@ -5,6 +5,7 @@ import type {
   CurrentFeatureContext,
   CurrentFeatureTruth,
 } from "../schema/types.js";
+import { getSelectionPoolCanonicalModuleRoles } from "../schema/selection-pool-profile.js";
 import type { RuneWeaverFeatureRecord } from "../workspace/types.js";
 import { extractCurrentFeatureBoundedTruth } from "./current-feature-bounded-truth.js";
 
@@ -52,13 +53,7 @@ function extractSourceBackedInvariantRoles(
   const profile = existingFeature.featureAuthoring?.profile;
   const adapter = existingFeature.sourceModel?.adapter;
   if (profile === "selection_pool" || adapter === "selection_pool") {
-    return [
-      "input_trigger",
-      "weighted_pool",
-      "selection_flow",
-      "selection_modal",
-      "effect_application",
-    ];
+    return getSelectionPoolCanonicalModuleRoles();
   }
 
   return [];

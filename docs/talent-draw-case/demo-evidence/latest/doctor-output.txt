@@ -1,13 +1,13 @@
 
 > rune-weaver@0.1.0 cli
-> tsx apps/cli/index.ts dota2 doctor --host D:\test3
+> tsx apps/cli/index.ts dota2 doctor --host D:\rw-test-3
 
 core/validation/schema-validator.test.ts passed
 ======================================================================
 Rune Weaver - Runtime Doctor
 ======================================================================
 
-Host: D:\test3
+Host: D:\rw-test-3
 Mode: Read-only health check (safe)
 
 ----------------------------------------------------------------------
@@ -15,25 +15,25 @@ Check Results
 ----------------------------------------------------------------------
 
 [PASS] Addon Config
-   addon_name: "test3"
+   addon_name: "talent_draw_demo"
 
 [PASS] Dota Directories
-   game/ and content/ outputs exist for "test3"
-      - game -> E:\Steam\steamapps\common\dota 2 beta\game\dota_addons\test3
-      - content -> E:\Steam\steamapps\common\dota 2 beta\content\dota_addons\test3
+   game/ and content/ outputs exist for "talent_draw_demo"
+      - game -> E:\Steam\steamapps\common\dota 2 beta\game\dota_addons\talent_draw_demo
+      - content -> E:\Steam\steamapps\common\dota 2 beta\content\dota_addons\talent_draw_demo
 
 [PASS] Package Scripts
    Found 3/3 key scripts
 
 [PASS] Rune Weaver Workspace
-   Workspace exists (5 features)
-      - workspace.hostRoot: D:\test3
-      - workspace.addonName: test3
-      - active features: 5
-      - gap-fill ready features: 2
+   Workspace exists (1 features)
+      - workspace.hostRoot: D:\rw-test-3
+      - workspace.addonName: talent_draw_demo
+      - active features: 1
+      - gap-fill ready features: 1
 
 [PASS] Post-Generation Validation
-   All 9 checks passed
+   All 10 checks passed
 
 [PASS] Runtime Assets
    Bridge entry files and generated asset roots exist
@@ -41,10 +41,12 @@ Check Results
 [PASS] Runtime Bridge Wiring
    Server and Panorama bridge entry points are wired
 
-[PASS] Host Build Artifacts
-   Panorama build artifacts exist
-      - content/panorama/layout/custom_game/hud/script.js
-      - content/panorama/layout/custom_game/hud/styles.css
+[WARN] Host Build Artifacts
+   2 build artifacts are missing or stale
+      Fix: Run yarn dev in the host so Panorama rebuilds the missing HUD artifacts.
+      - Missing: content/panorama/layout/custom_game/hud/script.js
+      - Missing: content/panorama/layout/custom_game/hud/styles.css
+      - Fix: run yarn dev in the host before launching Dota2.
 
 [PASS] Gap Fill Boundaries
    All 3 Dota2 gap-fill anchor files declare boundary exports and markers
@@ -52,24 +54,24 @@ Check Results
 ----------------------------------------------------------------------
 Overall Status
 ----------------------------------------------------------------------
-PASS
+WARN
 
-Action Summary: Launch the prepared host
-Reason: Doctor did not find any blocking runtime issues.
-Command: cd D:\test3 && yarn launch <addon> <map>
+Action Summary: Rebuild host scripts and Panorama assets
+Reason: The host is missing compiled build artifacts needed at runtime.
+Command: cd D:\rw-test-3 && yarn dev
 
-Next Command: cd D:\test3 && yarn launch <addon> <map>
+Next Command: cd D:\rw-test-3 && yarn dev
 
 ----------------------------------------------------------------------
 Next Steps
 ----------------------------------------------------------------------
-  - All checks passed! Your host is ready.
+  - Compile host assets: cd <host> && yarn dev
 
 Suggested Commands
 ----------------------------------------------------------------------
-  - npm run cli -- dota2 init --host D:\test3 --addon-name test3
-  - npm run cli -- dota2 repair --host D:\test3 --safe
-  - cd D:\test3 && yarn dev
-  - cd D:\test3 && yarn launch test3 temp
+  - npm run cli -- dota2 init --host D:\rw-test-3 --addon-name rw-test-3
+  - npm run cli -- dota2 repair --host D:\rw-test-3 --safe
+  - cd D:\rw-test-3 && yarn dev
+  - cd D:\rw-test-3 && yarn launch rw-test-3 temp
 
 ======================================================================

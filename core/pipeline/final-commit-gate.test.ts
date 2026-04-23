@@ -105,7 +105,41 @@ function testBlockedDecisionStillWinsOverModuleReview(): void {
   assert.ok(validationStatus.warnings.some((warning) => warning.includes("[module:exploratory_runtime]")));
 }
 
+function testGroundingReviewReasonsPropagateToFinalCommit(): void {
+  const decision = calculateFinalCommitDecision({
+    blueprint: baseBlueprint,
+    moduleRecords: [
+      createModule({
+        moduleId: "reveal_runtime",
+        sourceKind: "synthesized",
+        implementationStrategy: "exploratory",
+        maturity: "exploratory",
+        requiresReview: true,
+        groundingAssessment: {
+          status: "partial",
+          reviewRequired: true,
+          verifiedSymbolCount: 1,
+          allowlistedSymbolCount: 0,
+          weakSymbolCount: 1,
+          unknownSymbolCount: 0,
+          warnings: ["weak grounding"],
+          reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+          evidenceRefs: [],
+        },
+        reviewReasons: [],
+      }),
+    ],
+    hostValidation: { success: true, issues: [] },
+    runtimeValidation: { success: true, limitations: [] },
+  });
+
+  assert.equal(decision.outcome, "exploratory");
+  assert.equal(decision.requiresReview, true);
+  assert.ok(decision.reasons.some((reason) => reason.includes("Grounding for module 'reveal_runtime' remained partial")));
+}
+
 testModuleReviewForcesExploratoryDecision();
 testBlockedDecisionStillWinsOverModuleReview();
+testGroundingReviewReasonsPropagateToFinalCommit();
 
 console.log("core/pipeline/final-commit-gate.test.ts passed");

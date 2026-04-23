@@ -148,8 +148,169 @@ function testFeatureLifecycleDerivedFromModules(): void {
   assert.match(lifecycle.commitDecision?.reasons[0] || "", /\[module:synth\]/);
 }
 
+function testWorkspaceRoundTripsTypedContractMetadata(): void {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-workspace-contract-"));
+  try {
+    const workspaceDir = join(hostRoot, "game", "scripts", "src", "rune_weaver");
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(
+      getWorkspaceFilePath(hostRoot),
+      JSON.stringify({
+        version: "0.1",
+        hostType: "dota2-x-template",
+        hostRoot,
+        addonName: "test_addon",
+        initializedAt: new Date().toISOString(),
+        features: [
+          {
+            featureId: "contract_feature",
+            intentKind: "standalone-system",
+            status: "active",
+            revision: 1,
+            blueprintId: "bp_contract",
+            selectedPatterns: ["rule.selection_flow"],
+            generatedFiles: [],
+            entryBindings: [],
+            featureContract: {
+              exports: [
+                {
+                  id: "content_collection:default",
+                  kind: "data",
+                  summary: "Exports reusable content collection 'default'.",
+                  contractId: "selection_pool.object",
+                },
+              ],
+              consumes: [
+                {
+                  id: "grantable_primary_hero_ability",
+                  kind: "capability",
+                  summary: "Consumes a provider feature that can grant one primary hero ability.",
+                  contractId: "dota2.primary_hero_ability.grantable",
+                },
+              ],
+              integrationSurfaces: [],
+              stateScopes: [],
+            },
+            dependencyEdges: [
+              {
+                relation: "grants",
+                targetFeatureId: "skill_provider_demo",
+                targetSurfaceId: "grantable_primary_hero_ability",
+                targetContractId: "dota2.primary_hero_ability.grantable",
+                required: true,
+                summary: "cross-feature reward grants:skill_provider_demo:grantable_primary_hero_ability",
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      }, null, 2),
+      "utf-8",
+    );
+
+    const result = loadWorkspace(hostRoot);
+    assert.equal(result.success, true);
+    const feature = result.workspace!.features[0];
+    assert.equal(feature.featureContract?.exports[0]?.contractId, "selection_pool.object");
+    assert.equal(feature.featureContract?.consumes[0]?.contractId, "dota2.primary_hero_ability.grantable");
+    assert.equal(feature.dependencyEdges?.[0]?.targetContractId, "dota2.primary_hero_ability.grantable");
+  } finally {
+    rmSync(hostRoot, { recursive: true, force: true });
+  }
+}
+
+function testWorkspaceRoundTripsGroundingSummary(): void {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-workspace-grounding-"));
+  try {
+    const workspaceDir = join(hostRoot, "game", "scripts", "src", "rune_weaver");
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(
+      getWorkspaceFilePath(hostRoot),
+      JSON.stringify({
+        version: "0.1",
+        hostType: "dota2-x-template",
+        hostRoot,
+        addonName: "test_addon",
+        initializedAt: new Date().toISOString(),
+        features: [
+          {
+            featureId: "reveal_batch_demo",
+            intentKind: "standalone-system",
+            status: "active",
+            revision: 1,
+            blueprintId: "bp_reveal",
+            modules: [
+              {
+                moduleId: "reveal_runtime",
+                role: "reveal_runtime",
+                sourceKind: "synthesized",
+                selectedPatternIds: [],
+                implementationStrategy: "exploratory",
+                maturity: "exploratory",
+                requiresReview: true,
+                reviewReasons: [],
+                groundingAssessment: {
+                  status: "partial",
+                  reviewRequired: true,
+                  verifiedSymbolCount: 1,
+                  allowlistedSymbolCount: 0,
+                  weakSymbolCount: 1,
+                  unknownSymbolCount: 0,
+                  warnings: ["weak grounding"],
+                  reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+                  evidenceRefs: [],
+                },
+                metadata: {
+                  grounding: [
+                    {
+                      artifactId: "reveal_runtime_lua",
+                      verifiedSymbols: ["ApplyDamage"],
+                      allowlistedSymbols: [],
+                      weakSymbols: ["DealSplash"],
+                      unknownSymbols: [],
+                      warnings: ["weak grounding"],
+                    },
+                  ],
+                },
+              },
+            ],
+            selectedPatterns: [],
+            generatedFiles: [],
+            entryBindings: [],
+            groundingSummary: {
+              status: "partial",
+              reviewRequired: true,
+              verifiedSymbolCount: 1,
+              allowlistedSymbolCount: 0,
+              weakSymbolCount: 1,
+              unknownSymbolCount: 0,
+              warnings: ["weak grounding"],
+              reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+              evidenceRefs: [],
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      }, null, 2),
+      "utf-8",
+    );
+
+    const result = loadWorkspace(hostRoot);
+    assert.equal(result.success, true);
+    const feature = result.workspace!.features[0];
+    assert.equal(feature.groundingSummary?.status, "partial");
+    assert.equal(feature.modules?.[0]?.groundingAssessment?.status, "partial");
+  } finally {
+    rmSync(hostRoot, { recursive: true, force: true });
+  }
+}
+
 testLegacyWorkspaceBackfillsModuleTruth();
 testUpdatePreservesModuleDrivenLifecycleTruth();
 testFeatureLifecycleDerivedFromModules();
+testWorkspaceRoundTripsTypedContractMetadata();
+testWorkspaceRoundTripsGroundingSummary();
 
 console.log("core/workspace/manager.test.ts passed");

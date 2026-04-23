@@ -131,8 +131,10 @@ function testDefinitionOnlyProviderShellStaysLocalAndDoesNotDriftIntoGrantApplic
   assert.equal(analysis.governanceDecisions.intentKind.value, "micro-feature");
   assert.equal(analysis.governanceDecisions.crossSystemComposition.value, false);
   assert.equal(analysis.governanceDecisions.normalizedMechanics.value.outcomeApplication, false);
+  assert.equal(analysis.governanceDecisions.normalizedMechanics.value.resourceConsumption, false);
   assert.deepEqual(analysis.governanceDecisions.outcomeContract.value.operations || [], []);
   assert.deepEqual(analysis.governanceDecisions.compositionContract.value.dependencies || [], []);
+  assert.equal(Boolean(schema.stateModel?.states?.length), false);
 }
 
 function testDashPromptDoesNotAccidentallyEnterCandidateDrawDecision() {
@@ -281,6 +283,51 @@ function testDisplayVsChoiceAmbiguityProjectsToSelectionFlowSurface() {
   assert.equal(choiceResidue?.class, "blueprint_relevant");
 }
 
+function testAmbiguousWeightedCardPromptProducesDerivedSelectionFlowResidue() {
+  const prompt =
+    "创建一个抽卡系统，玩家按下F4后弹出三张卡片，卡片有R/SR/SSR/UR四个等级，等级影响抽取概率和外观。";
+  const schema = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      requirements: {
+        functional: ["按F4展示三张带稀有度外观的候选卡片。"],
+      },
+      constraints: {},
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  const ambiguity = schema.uncertainties?.find((item) => item.id === "clarify_selection_resolution_mode");
+
+  assert.equal(schema.selection?.resolutionMode, undefined);
+  assert.equal(ambiguity?.severity, "high");
+  assert.ok(ambiguity?.summary.includes("player chooses one"));
+}
+
+function testExplicitRevealBatchPromptResolvesWithoutSelectionClarification() {
+  const prompt =
+    "Create a reveal-only weighted card system. Press F4 to reveal 3 weighted cards from a feature-owned pool, show their rarity-styled UI, and resolve all 3 revealed results immediately as one batch without letting the player choose any card. No follow-up selection, no inventory panel, no persistence, no cross-feature grants.";
+  const schema = normalizeIntentSchema(
+    {
+      request: { goal: prompt },
+      requirements: {
+        functional: ["Reveal 3 weighted cards and resolve all shown results immediately as one batch."],
+      },
+      constraints: {},
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  assert.equal(schema.selection?.resolutionMode, "reveal_batch_immediate");
+  assert.equal(schema.selection?.choiceMode, "none");
+  assert.equal(schema.normalizedMechanics?.playerChoice, false);
+  assert.equal(schema.uncertainties?.length ?? 0, 0);
+}
+
 function testDecisionProjectionIgnoresSchemaSurfaceNoise() {
   const prompt =
     "Press F4 to open a local weighted candidate selection UI, draw 3 rarity-weighted options, let the player choose 1, apply it immediately, remove the selected option from future draws, and return unchosen options to the pool.";
@@ -373,6 +420,8 @@ async function runTests() {
   testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk();
   testFallbackAndStructuredPathShareGovernanceCore();
   testDisplayVsChoiceAmbiguityProjectsToSelectionFlowSurface();
+  testAmbiguousWeightedCardPromptProducesDerivedSelectionFlowResidue();
+  testExplicitRevealBatchPromptResolvesWithoutSelectionClarification();
   testDecisionProjectionIgnoresSchemaSurfaceNoise();
   await testWordSwapClusterSharesDecisionFingerprint();
   console.log("intent-schema-layers.test.ts: PASS");

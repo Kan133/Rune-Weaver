@@ -4,6 +4,7 @@ import {
   buildDota2CorpusSourcePlan,
   buildDota2RetrievalBundle,
   DOTA2_CORPUS_REGISTRY,
+  lookupDota2HostSymbolsExact,
 } from "./dota2-bundles.js";
 
 function testWizardCorpusPlanExcludesRawReference(): void {
@@ -55,9 +56,30 @@ async function testSynthesisBundleCanUseRawReferenceTier(): Promise<void> {
   assert.equal(bundle.evidenceRefs.some((ref) => ref.sourceKind === "raw_reference"), true);
 }
 
+function testLuaExactLookupCanGroundVectorType(): void {
+  const refs = lookupDota2HostSymbolsExact(process.cwd(), ["Vector"], { targetProfile: "lua_ability" });
+  assert.ok(refs.some((ref) => ref.symbol === "Vector" || ref.title === "Vector"));
+}
+
+function testPanoramaExactLookupCanGroundStructuredIntrinsicTags(): void {
+  const refs = lookupDota2HostSymbolsExact(
+    process.cwd(),
+    ["Panel", "Label", "TextButton", "Image"],
+    { targetProfile: "panorama_tsx" },
+  );
+  const symbols = new Set(refs.map((ref) => ref.symbol || ref.title));
+
+  assert.equal(symbols.has("Panel"), true);
+  assert.equal(symbols.has("Label"), true);
+  assert.equal(symbols.has("TextButton"), true);
+  assert.equal(symbols.has("Image"), true);
+}
+
 async function runTests() {
   testWizardCorpusPlanExcludesRawReference();
   testSynthesisCorpusPlanIncludesRegistryBackedRawReference();
+  testLuaExactLookupCanGroundVectorType();
+  testPanoramaExactLookupCanGroundStructuredIntrinsicTags();
   await testWizardBundleStaysOffRawReferenceTier();
   await testSynthesisBundleCanUseRawReferenceTier();
   console.log("core/retrieval/dota2-bundles.test.ts passed");

@@ -4,25 +4,16 @@
  * Owns:
  * - active round orchestration
  * - confirm-one flow
- * - effect application hook
+ * - normalized outcome request emission
  * - admitted inventory/progression hooks
  *
  * Does not own:
  * - trigger hotkey capture
  * - weighted pool session state (remaining / owned / currentChoice)
+ * - concrete attribute/item/unit realization
  */
 
 import { WritePlanEntry } from "../../assembler/index.js";
-
-// Dota2 gap-fill boundary anchors.
-// GAP_FILL_BOUNDARY: selection_flow.effect_mapping
-export const SELECTION_FLOW_GAP_FILL_BOUNDARIES = {
-  effectMapping: {
-    id: "selection_flow.effect_mapping",
-    allowed: ["rarity_formula", "case_value_mapping", "option_to_effect_translation"],
-    forbidden: ["event_channel_changes", "session_ownership_changes", "pattern_binding_changes"],
-  },
-} as const;
 
 export interface SelectionFlowParams {
   choiceCount?: number;
@@ -30,10 +21,6 @@ export interface SelectionFlowParams {
   applyMode?: "immediate" | "deferred";
   postSelectionPoolBehavior?: "none" | "remove_selected_from_remaining" | "remove_selected_and_keep_unselected_eligible";
   trackSelectedItems?: boolean;
-  effectApplication?: {
-    enabled: boolean;
-    rarityAttributeBonusMap?: Record<string, { attribute: string; value: number }>;
-  };
   inventory?: {
     enabled: boolean;
     capacity: number;
@@ -69,12 +56,10 @@ export function generateSelectionFlowCode(
   const applyMode = params.applyMode || "immediate";
   const postSelectionPoolBehavior = params.postSelectionPoolBehavior || "none";
   const trackSelectedItems = params.trackSelectedItems !== false;
-  const effectApplication = params.effectApplication;
   const inventory = params.inventory;
   const progression = params.progression;
 
   const hasPoolCommit = postSelectionPoolBehavior !== "none";
-  const hasEffectApplication = effectApplication?.enabled === true;
   const hasInventory = inventory?.enabled === true;
   const inventoryCapacity = hasInventory ? Math.max(1, Math.floor(inventory?.capacity || 15)) : 0;
   const inventoryStoreSelectedItems = hasInventory ? inventory?.storeSelectedItems !== false : false;
@@ -96,19 +81,6 @@ export function generateSelectionFlowCode(
     : 0;
   const progressionStateId = hasProgression ? progression!.progressStateId.trim() : "selection_progress";
   const progressionLevelStateId = hasProgression ? progression!.levelStateId.trim() : "selection_level";
-  const hasValidRarityMap =
-    hasEffectApplication &&
-    effectApplication?.rarityAttributeBonusMap &&
-    Object.keys(effectApplication.rarityAttributeBonusMap).length > 0;
-
-  const rarityAttributeBonusMapCode = hasValidRarityMap
-    ? Object.entries(effectApplication!.rarityAttributeBonusMap!)
-        .map(
-          ([rarity, config]) =>
-            `      "${rarity}": { attribute: "${config.attribute}", value: ${config.value} }`,
-        )
-        .join(",\n")
-    : "";
 
   const inventoryStateDeclaration = hasInventory
     ? `
@@ -232,68 +204,6 @@ export function generateSelectionFlowCode(
 `
     : "";
 
-  const effectApplicationCode = hasEffectApplication
-    ? `
-  private applyEffectByRarity(playerId: number, option: SelectionOption): void {
-    const hero = PlayerResource.GetSelectedHeroEntity(playerId as PlayerID);
-    if (!hero) {
-      print(\`[Rune Weaver] ${className}: no hero found for player \${playerId}\`);
-      return;
-    }
-
-    const rarity = option.tier || "R";
-    const bonusConfig = this.rarityAttributeBonusMap[rarity];
-    if (!bonusConfig) {
-      print(\`[Rune Weaver] ${className}: no bonus config for rarity \${rarity}\`);
-      return;
-    }
-
-    const { attribute, value } = bonusConfig;
-    switch (attribute) {
-      case "strength":
-        hero.ModifyStrength(value);
-        break;
-      case "agility":
-        hero.ModifyAgility(value);
-        break;
-      case "intelligence":
-        hero.ModifyIntellect(value);
-        break;
-      case "all":
-        hero.ModifyStrength(value);
-        hero.ModifyAgility(value);
-        hero.ModifyIntellect(value);
-        break;
-      default:
-        print(\`[Rune Weaver] ${className}: unknown attribute \${attribute}\`);
-    }
-
-    this.fireEffectAppliedEvent(playerId, option, bonusConfig);
-  }
-
-  private fireEffectAppliedEvent(
-    playerId: number,
-    option: SelectionOption,
-    bonusConfig: { attribute: string; value: number }
-  ): void {
-    if (CustomGameEventManager) {
-      (CustomGameEventManager.Send_ServerToPlayer as any)(
-        PlayerResource.GetPlayer(playerId as PlayerID),
-        "rune_weaver_effect_applied",
-        {
-          featureId: "${featureId}",
-          optionId: option.id,
-          optionName: option.name,
-          attribute: bonusConfig.attribute,
-          value: bonusConfig.value,
-          rarity: option.tier || "R",
-        }
-      );
-    }
-  }
-`
-    : "";
-
   const poolCommitLogic = hasPoolCommit
     ? `
     if (selection.poolCommit) {
@@ -325,15 +235,11 @@ ${postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible"
 `
     : "";
 
-  const effectApplicationCall = hasEffectApplication && applyMode === "immediate"
+  const deferredOutcomeLogic = applyMode === "deferred"
     ? `
-    this.applyEffectByRarity(playerId, selectedOption);
-`
-    : hasEffectApplication && applyMode === "deferred"
-      ? `
     selection.deferredEffect = selectedOption;
 `
-      : "";
+    : "";
 
   const inventoryHeader = hasInventory
     ? `
@@ -367,7 +273,7 @@ ${postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible"
  * - applyMode: "${applyMode}"
  * - postSelectionPoolBehavior: "${postSelectionPoolBehavior}"
  * - trackSelectedItems: ${trackSelectedItems}
-${inventoryHeader}${progressionHeader}${hasEffectApplication && applyMode === "immediate" ? " * - Apply effect immediately\n" : ""}${hasEffectApplication && applyMode === "deferred" ? " * - Apply effect on deferred confirmation\n" : ""} */
+${inventoryHeader}${progressionHeader}${applyMode === "deferred" ? " * - Mark deferred outcome compatibility state before emitting the outcome request\n" : ""} */
 
 interface SelectionOption {
   id: string;
@@ -394,6 +300,19 @@ interface SelectionOutcomeHandlerResult {
   handled: boolean;
 }
 
+interface SelectionWorldPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
+interface SelectionOutcomeRequest {
+  featureId: string;
+  playerId: number;
+  option: SelectionOption;
+  cursorPosition?: SelectionWorldPosition;
+}
+
 interface PlayerSelection {
   playerId: number;
   options: SelectionOption[];
@@ -407,13 +326,10 @@ export class ${className} {
   private static instance: ${className};
   private activeSelections: Map<number, PlayerSelection> = new Map();
   private selectionCallbacks: Map<number, (option: SelectionOption) => void> = new Map();
-  private selectionOutcomeHandlers: Array<(context: { playerId: number; option: SelectionOption }) => SelectionOutcomeHandlerResult | void> = [];
-${inventoryStateDeclaration}${progressionStateDeclaration}${hasEffectApplication ? `
-  private rarityAttributeBonusMap: Record<string, { attribute: string; value: number }> = {
-${rarityAttributeBonusMapCode}
-  };
-` : ""}
-
+  private selectionOutcomeHandlers: Array<
+    (context: SelectionOutcomeRequest & { request: SelectionOutcomeRequest }) => SelectionOutcomeHandlerResult | void
+  > = [];
+${inventoryStateDeclaration}${progressionStateDeclaration}
   static getInstance(): ${className} {
     if (!${className}.instance) {
       ${className}.instance = new ${className}();
@@ -444,7 +360,7 @@ ${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    thi
   }
 
   registerOutcomeHandler(
-    handler: (context: { playerId: number; option: SelectionOption }) => SelectionOutcomeHandlerResult | void
+    handler: (context: SelectionOutcomeRequest & { request: SelectionOutcomeRequest }) => SelectionOutcomeHandlerResult | void
   ): void {
     this.selectionOutcomeHandlers.push(handler);
   }
@@ -458,16 +374,20 @@ ${hasInventory ? "    this.sendInventoryStateToClient(playerId);\n" : ""}    thi
     this.fireSelectionEvent(playerId, selection.options[optionIndex]);
   }
 
-  onPlayerConfirm(playerId: number): void {
+  onPlayerConfirm(playerId: number, confirmContext?: { cursorPosition?: SelectionWorldPosition }): void {
     const selection = this.activeSelections.get(playerId);
     if (!selection || selection.selectedIndex === -1) return;
 
     selection.isConfirmed = true;
     const selectedOption = selection.options[selection.selectedIndex];
-${poolCommitLogic}${inventoryCommitLogic}${progressionCommitLogic}    const selectionOutcomeHandled = this.handleSelectionOutcome(playerId, selectedOption);
-${hasEffectApplication ? `    if (!selectionOutcomeHandled) {${effectApplicationCall}
-    }
-` : ""}
+${poolCommitLogic}${inventoryCommitLogic}${progressionCommitLogic}${deferredOutcomeLogic}    const outcomeRequest: SelectionOutcomeRequest = {
+      featureId: "${featureId}",
+      playerId,
+      option: selectedOption,
+      ...(confirmContext?.cursorPosition ? { cursorPosition: confirmContext.cursorPosition } : {}),
+    };
+    this.handleSelectionOutcome(outcomeRequest);
+
     const callback = this.selectionCallbacks.get(playerId);
     if (callback) {
       callback(selectedOption);
@@ -477,7 +397,7 @@ ${hasEffectApplication ? `    if (!selectionOutcomeHandled) {${effectApplication
     this.activeSelections.delete(playerId);
     this.selectionCallbacks.delete(playerId);
   }
-${effectApplicationCode}
+
   private fireSelectionEvent(playerId: number, option: SelectionOption): void {
     if (CustomGameEventManager) {
       (CustomGameEventManager.Send_ServerToPlayer as any)(
@@ -493,9 +413,9 @@ ${effectApplicationCode}
     }
   }
 
-  private handleSelectionOutcome(playerId: number, option: SelectionOption): boolean {
+  private handleSelectionOutcome(request: SelectionOutcomeRequest): boolean {
     for (const handler of this.selectionOutcomeHandlers) {
-      const result = handler({ playerId, option });
+      const result = handler({ ...request, request });
       if (result && result.handled === true) {
         return true;
       }
@@ -638,8 +558,22 @@ export function register${className}(): void {
         return;
       }
       const playerId = Number(event.PlayerID ?? event.playerId ?? -1);
+      const hasCursorPosition =
+        Number.isFinite(Number(event.cursorX)) &&
+        Number.isFinite(Number(event.cursorY));
       if (playerId >= 0) {
-        flow.onPlayerConfirm(playerId);
+        flow.onPlayerConfirm(
+          playerId,
+          hasCursorPosition
+            ? {
+                cursorPosition: {
+                  x: Number(event.cursorX),
+                  y: Number(event.cursorY),
+                  z: Number.isFinite(Number(event.cursorZ)) ? Number(event.cursorZ) : 0,
+                },
+              }
+            : undefined,
+        );
       }
     });
   }

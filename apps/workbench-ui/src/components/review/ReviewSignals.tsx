@@ -19,6 +19,12 @@ export function ReviewSignals({ feature }: ReviewSignalsProps) {
   const readinessScore = reviewSignals.readiness.score ?? 0;
   const readinessTone =
     readinessScore >= 80 ? 'text-[#22c55e]' : readinessScore >= 50 ? 'text-[#f59e0b]' : 'text-[#ef4444]';
+  const groundingTone =
+    reviewSignals.grounding.status === 'exact' || reviewSignals.grounding.status === 'none_required'
+      ? 'text-[#22c55e]'
+      : reviewSignals.grounding.status === 'partial'
+        ? 'text-[#f59e0b]'
+        : 'text-[#ef4444]';
 
   return (
     <div className="space-y-4">
@@ -144,6 +150,30 @@ export function ReviewSignals({ feature }: ReviewSignalsProps) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className={`h-4 w-4 ${groundingTone}`} />
+          <h4 className="text-sm font-medium text-white">Grounding</h4>
+        </div>
+        <div className="space-y-2 text-xs text-white/60">
+          <div className="flex items-center justify-between">
+            <span>Status</span>
+            <span className={`font-medium ${groundingTone}`}>{reviewSignals.grounding.status}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Review Required</span>
+            <span className="text-white">{reviewSignals.grounding.reviewRequired ? 'Yes' : 'No'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <span>Verified: {reviewSignals.grounding.verifiedSymbolCount}</span>
+            <span>Allowlisted: {reviewSignals.grounding.allowlistedSymbolCount}</span>
+            <span>Weak: {reviewSignals.grounding.weakSymbolCount}</span>
+            <span>Unknown: {reviewSignals.grounding.unknownSymbolCount}</span>
+          </div>
+          <div className="text-white/50">Warnings: {reviewSignals.grounding.warningCount}</div>
+        </div>
       </div>
     </div>
   );

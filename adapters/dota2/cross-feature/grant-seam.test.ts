@@ -13,14 +13,16 @@ import type {
 import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
 import {
   applyDota2GrantSeam,
+  DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
   GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
 } from "./index.js";
 import {
   resolveSelectionPoolFamily,
 } from "../families/selection-pool/index.js";
+import { resolveSelectionPoolCompiledObjects } from "../families/selection-pool/source-model.js";
 import {
-  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
-} from "../families/selection-pool/__fixtures__/examples.js";
+  TALENT_DRAW_DEMO_CREATE_PROMPT,
+} from "../cases/selection-demo-registry.js";
 import { classifyUpdateDiff } from "../update/index.js";
 
 function createWritePlan(entries: WritePlanEntry[] = []): WritePlan {
@@ -170,7 +172,7 @@ function createDefinitionOnlyProviderBlueprint(featureId: string): Blueprint {
 
 function createSelectionPoolBlueprint(featureId: string, hostRoot: string): Blueprint {
   const resolution = resolveSelectionPoolFamily({
-    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
     hostRoot,
     mode: "create",
     featureId,
@@ -183,7 +185,7 @@ function createSelectionPoolBlueprint(featureId: string, hostRoot: string): Blue
     version: "1.0",
     summary: "Local selection shell",
     sourceIntent: {
-      goal: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+      goal: TALENT_DRAW_DEMO_CREATE_PROMPT,
       intentKind: "standalone-system",
     },
     modules: [
@@ -198,6 +200,12 @@ function createSelectionPoolBlueprint(featureId: string, hostRoot: string): Blue
         role: "selection_flow",
         category: "rule",
         responsibilities: ["Run the local selection flow."],
+      },
+      {
+        id: "selection_outcome",
+        role: "selection_outcome",
+        category: "effect",
+        responsibilities: ["Realize the local selection outcome."],
       },
       {
         id: "selection_modal",
@@ -324,6 +332,14 @@ function getSelectionPoolFeatureAuthoringParameters(
   return (blueprint.featureAuthoring as any).parameters as SelectionPoolFeatureAuthoringParameters;
 }
 
+function getSelectionPoolCompiledObjects(blueprint: Blueprint) {
+  return resolveSelectionPoolCompiledObjects(
+    getSelectionPoolFeatureAuthoringParameters(blueprint),
+    undefined,
+    { allowDeferredFeatureExportResolution: true },
+  ).objects;
+}
+
 function createCrossFeatureSelectionSchema(prompt: string): IntentSchema {
   return {
     version: "1.0",
@@ -395,6 +411,7 @@ function createSelectionGrantUpdateIntent(featureId: string, requestedChange: In
         "rule.selection_flow",
         "data.weighted_pool",
         "input.key_binding",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       sourceBacked: true,
@@ -402,6 +419,7 @@ function createSelectionGrantUpdateIntent(featureId: string, requestedChange: In
         "input_trigger",
         "weighted_pool",
         "selection_flow",
+        "selection_outcome",
         "selection_modal",
       ],
       preservedInvariants: [
@@ -422,12 +440,12 @@ function createSelectionGrantUpdateIntent(featureId: string, requestedChange: In
           summary: "Append one new reward object entry in the current candidate collection.",
         },
         {
-          path: "sourceModel.artifact.objects[]",
+          path: "sourceModel.artifact.poolEntries[]",
           kind: "content",
           summary: "Append one new reward object bound to an existing provider feature.",
         },
         {
-          path: "selection_flow.effect_mapping.provider_grant",
+          path: "selection_outcome.realization.provider_grant",
           kind: "effect",
           summary: "Selecting the appended reward grants the provider ability to the current controlled hero.",
         },
@@ -493,6 +511,7 @@ function createLocalSelectionUpdateIntent(featureId: string, requestedChange: In
         "rule.selection_flow",
         "data.weighted_pool",
         "input.key_binding",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       sourceBacked: true,
@@ -500,6 +519,7 @@ function createLocalSelectionUpdateIntent(featureId: string, requestedChange: In
         "input_trigger",
         "weighted_pool",
         "selection_flow",
+        "selection_outcome",
         "selection_modal",
       ],
       preservedInvariants: [
@@ -587,7 +607,9 @@ function testGameplayAbilityProviderExportsGrantSurfaceWithoutSelectionPoolLeak(
     );
     assert.equal(
       providerResult.blueprint.featureContract?.exports.some(
-        (surface) => surface.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+        (surface) =>
+          surface.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID
+          && surface.contractId === DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
       ),
       true,
     );
@@ -599,13 +621,13 @@ function testGameplayAbilityProviderExportsGrantSurfaceWithoutSelectionPoolLeak(
     applyDota2GrantSeam({
       hostRoot,
       featureId: "selection_shell_demo",
-      prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+      prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
       schema: {
         version: "1.0",
         host: { kind: "dota2-x-template" },
-        request: { rawPrompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT, goal: TALENT_DRAW_EXAMPLE_CREATE_PROMPT },
+        request: { rawPrompt: TALENT_DRAW_DEMO_CREATE_PROMPT, goal: TALENT_DRAW_DEMO_CREATE_PROMPT },
         classification: { intentKind: "standalone-system", confidence: "high" },
-        requirements: { functional: [TALENT_DRAW_EXAMPLE_CREATE_PROMPT] },
+        requirements: { functional: [TALENT_DRAW_DEMO_CREATE_PROMPT] },
         constraints: {},
         normalizedMechanics: {
           trigger: true,
@@ -701,6 +723,59 @@ function testDefinitionOnlyProviderSchemaStillExportsGrantSurfaceWithoutBackbone
       providerWritePlan.entries.some((entry) => entry.targetPath.endsWith("dota2-provider-ability-export.json")),
       true,
       "definition-only provider schemas should export the provider sidecar even before a gameplay backbone is present",
+    );
+  } finally {
+    rmSync(hostRoot, { recursive: true, force: true });
+  }
+}
+
+function testGameplayAbilityBackboneDoesNotExportGrantSurfaceWhenCrossFeatureGrantsAreForbidden() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
+  try {
+    const blueprint = createGameplayAbilityBlueprint("reveal_batch_demo");
+    const writePlan = createWritePlan([
+      createLuaEntry("game/scripts/vscripts/rune_weaver/abilities/rw_reveal_batch_demo.lua", "rw_reveal_batch_demo"),
+      createKvEntry("game/scripts/npc/npc_abilities_custom.txt", "rw_reveal_batch_demo"),
+    ]);
+
+    applyDota2GrantSeam({
+      hostRoot,
+      featureId: "reveal_batch_demo",
+      prompt: "Create a reveal-only weighted card system with no cross-feature grants.",
+      schema: {
+        version: "1.0",
+        host: { kind: "dota2-x-template" },
+        request: {
+          rawPrompt: "Create a reveal-only weighted card system with no cross-feature grants.",
+          goal: "Create a reveal-only weighted card system with no cross-feature grants.",
+        },
+        classification: { intentKind: "standalone-system", confidence: "high" },
+        requirements: {
+          functional: [
+            "Reveal weighted cards locally.",
+            "Resolve all revealed results immediately.",
+            "No cross-feature grants.",
+          ],
+        },
+        constraints: {},
+        normalizedMechanics: {
+          trigger: true,
+          candidatePool: true,
+          weightedSelection: true,
+          outcomeApplication: true,
+        },
+        resolvedAssumptions: [],
+      } as IntentSchema,
+      blueprint,
+      writePlan,
+      clarificationAuthority: createClarificationAuthority(),
+      workspaceFeatures: [],
+    });
+
+    assert.equal(
+      writePlan.entries.some((entry) => entry.targetPath.endsWith("dota2-provider-ability-export.json")),
+      false,
+      "explicit no-cross-feature-grants prompts must not emit provider export sidecars",
     );
   } finally {
     rmSync(hostRoot, { recursive: true, force: true });
@@ -869,10 +944,10 @@ function testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSele
       },
     );
     const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
-    const originalParameters = getSelectionPoolFeatureAuthoringParameters(blueprint);
-    const originalObjectCount = originalParameters.objects.length;
-    const replacementObjectId = originalParameters.objects[0].id;
-    const replacementObjectLabel = originalParameters.objects[0].label;
+    const originalCompiledObjects = getSelectionPoolCompiledObjects(blueprint);
+    const originalObjectCount = originalCompiledObjects.length;
+    const replacementObjectId = originalCompiledObjects[0].id;
+    const replacementObjectLabel = originalCompiledObjects[0].label;
     writeJson(
       hostRoot,
       "game/scripts/src/rune_weaver/features/consumer_draw_demo/selection-grant-bindings.json",
@@ -882,7 +957,7 @@ function testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSele
         featureId: "consumer_draw_demo",
         bindings: [
           {
-            objectId: originalParameters.objects[1].id,
+            objectId: originalCompiledObjects[1].id,
             targetFeatureId: "existing_provider_demo",
             targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
             relation: "grants",
@@ -934,7 +1009,7 @@ function testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSele
     assert.equal(((contractEntry?.parameters as any).slots || []).length, originalObjectCount);
     assert.equal(((weightedPoolEntry?.parameters as any).entries || []).length, 1);
     assert.equal(
-      getSelectionPoolFeatureAuthoringParameters(result.blueprint).objects.length,
+      getSelectionPoolCompiledObjects(result.blueprint).length,
       originalObjectCount,
     );
     assert.equal(((bindingEntry?.parameters as any).bindings || []).length > 0, true);
@@ -1080,13 +1155,165 @@ function testDriftedSelectionUpdateStopsAtContractInsteadOfAppendingLocalObject(
     }
 }
 
+function testPromptResolvedGrantBindingSurvivesGovernanceDriftWithoutExplicitCrossFeatureDelta() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
+  try {
+    writeJson(
+      hostRoot,
+      "game/scripts/src/rune_weaver/features/skill_provider_demo/dota2-provider-ability-export.json",
+      {
+        adapter: "dota2_provider_ability_export",
+        version: 1,
+        featureId: "skill_provider_demo",
+        surfaces: [
+          {
+            surfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+            abilityName: "rw_skill_provider_demo",
+            attachmentMode: "grant_only",
+          },
+        ],
+      },
+    );
+
+    const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
+    const compiledObjects = getSelectionPoolCompiledObjects(blueprint);
+    const replacementObject = compiledObjects[0];
+    const prompt = `Replace ${replacementObject.label} with the feature skill_provider_demo as one reward that grants its primary hero ability on selection. Keep the current F4 three-choice selection flow and all other behavior unchanged.`;
+    const driftedSchema = createDriftedSelectionRewardSchema(prompt);
+    const writePlan = createWritePlan(createStaleSelectionPoolPatternEntries("consumer_draw_demo"));
+    const updateIntent = {
+      version: "1.0",
+      mode: "update",
+      target: {
+        featureId: "consumer_draw_demo",
+        revision: 1,
+        profile: "selection_pool",
+        sourceBacked: true,
+      },
+      currentFeatureContext: {
+        featureId: "consumer_draw_demo",
+        revision: 1,
+        intentKind: "standalone-system",
+        selectedPatterns: [
+          "rule.selection_flow",
+          "data.weighted_pool",
+          "input.key_binding",
+          "effect.outcome_realizer",
+          "ui.selection_modal",
+        ],
+        sourceBacked: true,
+        sourceBackedInvariantRoles: [
+          "input_trigger",
+          "weighted_pool",
+          "selection_flow",
+          "selection_outcome",
+          "selection_modal",
+        ],
+        preservedInvariants: [
+          "single trigger entry only",
+          "weighted pool candidate source",
+          "confirm exactly one candidate",
+          "no cross-feature grants",
+        ],
+        boundedFields: {},
+        moduleRecords: [],
+      },
+      requestedChange: driftedSchema,
+      governedChange: driftedSchema,
+      semanticAnalysis: {
+        governanceDecisions: {
+          mutationAuthority: {
+            value: {
+              add: [
+                {
+                  path: "selection.inventory",
+                  kind: "ui",
+                  summary: "Add the current feature inventory contract.",
+                },
+              ],
+              modify: [],
+              remove: [],
+              blocked: [],
+            },
+          },
+          scope: {
+            value: "bounded_update",
+          },
+        },
+      },
+      delta: {
+        preserve: [],
+        add: [
+          {
+            path: "selection.inventory",
+            kind: "ui",
+            summary: "Add the current feature inventory contract.",
+          },
+        ],
+        modify: [],
+        remove: [],
+      },
+      resolvedAssumptions: [],
+    } as any as UpdateIntent;
+
+    const result = applyDota2GrantSeam({
+      hostRoot,
+      featureId: "consumer_draw_demo",
+      prompt,
+      schema: driftedSchema,
+      updateIntent,
+      blueprint,
+      writePlan,
+      relationCandidates: [
+        {
+          relation: "grants",
+          targetFeatureId: "skill_provider_demo",
+          matchedAlias: "skill_provider_demo",
+          confidence: "high",
+          score: 0.95,
+          reason: "Prompt references the resolved provider feature directly.",
+        },
+      ],
+      clarificationAuthority: createClarificationAuthority(),
+      workspaceFeatures: [
+        {
+          featureId: "skill_provider_demo",
+        } as any,
+      ],
+    });
+
+    const contractEntry = writePlan.entries.find((entry) =>
+      entry.targetPath.endsWith("selection-grant-contract.json"),
+    );
+    const bindingEntry = writePlan.entries.find((entry) =>
+      entry.targetPath.endsWith("selection-grant-bindings.json"),
+    );
+    assert.ok(contractEntry, "prompt-resolved grant updates should still publish the explicit local grant contract");
+    assert.ok(bindingEntry, "prompt-resolved grant updates should write the selection grant binding sidecar");
+    assert.equal(writePlan.readyForHostWrite, true);
+    assert.equal(((bindingEntry?.parameters as any).bindings || [])[0]?.entryId, replacementObject.id);
+    assert.equal(
+      result.blueprint.dependencyEdges?.some(
+        (edge) =>
+          edge.relation === "grants"
+          && edge.targetFeatureId === "skill_provider_demo"
+          && edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID
+          && edge.targetContractId === DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+      ),
+      true,
+    );
+  } finally {
+    rmSync(hostRoot, { recursive: true, force: true });
+  }
+}
+
 function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() {
   const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
   try {
     const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
     const localSchema = createLocalSelectionUpdateSchema("Increase the displayed candidate option count from 3 to 5.");
     const localUpdateIntent = createLocalSelectionUpdateIntent("consumer_draw_demo", localSchema);
-    const preservedObjectId = getSelectionPoolFeatureAuthoringParameters(blueprint).objects[0].id;
+    const preservedObjectId = getSelectionPoolCompiledObjects(blueprint)[0].id;
 
     writeJson(
       hostRoot,
@@ -1114,7 +1341,7 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
       ],
       sourceModel: {
         adapter: "selection_pool",
-        version: 1,
+        version: 2,
         path: "game/scripts/src/rune_weaver/features/consumer_draw_demo/selection-pool.source.json",
       },
       featureContract: {
@@ -1130,6 +1357,7 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
             id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
             kind: "capability",
             summary: "Consumes a provider feature that can grant one primary hero ability.",
+            contractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
           },
         ],
         integrationSurfaces: ["reward_binding_skill_provider_demo"],
@@ -1140,6 +1368,7 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
           relation: "grants",
           targetFeatureId: "skill_provider_demo",
           targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+          targetContractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
           required: true,
           summary: `cross-feature reward grants:skill_provider_demo:${GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID}`,
         },
@@ -1172,10 +1401,10 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
       );
       assert.ok(contractEntry, "local-only updates should also preserve the explicit local grant contract");
     assert.equal(((bindingEntry?.parameters as any).bindings || []).length, 1);
-    assert.equal(((bindingEntry?.parameters as any).bindings || [])[0]?.objectId, preservedObjectId);
+    assert.equal(((bindingEntry?.parameters as any).bindings || [])[0]?.entryId, preservedObjectId);
     assert.equal(
-      getSelectionPoolFeatureAuthoringParameters(result.blueprint).objects.length,
-      getSelectionPoolFeatureAuthoringParameters(blueprint).objects.length,
+      getSelectionPoolCompiledObjects(result.blueprint).length,
+      getSelectionPoolCompiledObjects(blueprint).length,
       "preserving existing bindings must not append a new placeholder reward object",
     );
     assert.equal(
@@ -1183,7 +1412,8 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
         (edge) =>
           edge.relation === "grants"
           && edge.targetFeatureId === "skill_provider_demo"
-          && edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+          && edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID
+          && edge.targetContractId === DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
       ),
       true,
     );
@@ -1201,7 +1431,7 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
         ],
         sourceModel: {
           adapter: "selection_pool",
-          version: 1,
+          version: 2,
           path: "game/scripts/src/rune_weaver/features/consumer_draw_demo/selection-pool.source.json",
         },
       } as any,
@@ -1218,14 +1448,16 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
   }
 }
 
-testGameplayAbilityProviderExportsGrantSurfaceWithoutSelectionPoolLeak();
-testDefinitionOnlyProviderSchemaStillExportsGrantSurfaceWithoutBackboneRole();
-testProviderExportRequiresClosedLuaAndKvIdentity();
+  testGameplayAbilityProviderExportsGrantSurfaceWithoutSelectionPoolLeak();
+  testDefinitionOnlyProviderSchemaStillExportsGrantSurfaceWithoutBackboneRole();
+  testGameplayAbilityBackboneDoesNotExportGrantSurfaceWhenCrossFeatureGrantsAreForbidden();
+  testProviderExportRequiresClosedLuaAndKvIdentity();
 testProviderExportRejectsDriftedLuaKvIdentity();
 testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell();
 testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSelectionAuthoring();
 testBindingWithoutExplicitLocalObjectBecomesRealBlocker();
 testDriftedSelectionUpdateStopsAtContractInsteadOfAppendingLocalObject();
+testPromptResolvedGrantBindingSurvivesGovernanceDriftWithoutExplicitCrossFeatureDelta();
 testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth();
 
 console.log("adapters/dota2/cross-feature/grant-seam.test.ts passed");

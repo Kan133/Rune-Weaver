@@ -30,14 +30,31 @@ function resolveSourceBackedSnapshot(
     ? existingFeature.featureAuthoring.parameters
     : undefined;
 
-  if (sourceArtifact && authoredParameters) {
-    return {
-      ...authoredParameters,
-      ...sourceArtifact,
-    };
-  }
+  const snapshot: Record<string, unknown> = {};
+  const assignCanonicalFields = (candidate?: Record<string, unknown>): void => {
+    if (!candidate) {
+      return;
+    }
+    if (typeof snapshot.triggerKey !== "string" && typeof candidate.triggerKey === "string") {
+      snapshot.triggerKey = candidate.triggerKey;
+    }
+    if (typeof snapshot.choiceCount !== "number" && typeof candidate.choiceCount === "number") {
+      snapshot.choiceCount = candidate.choiceCount;
+    }
+    if (!Array.isArray(snapshot.poolEntries) && Array.isArray(candidate.poolEntries)) {
+      snapshot.poolEntries = candidate.poolEntries;
+    }
+    if (!isRecord(snapshot.inventory) && isRecord(candidate.inventory)) {
+      snapshot.inventory = candidate.inventory;
+    }
+  };
 
-  return sourceArtifact || authoredParameters;
+  // Source artifacts remain authoritative when present; workspace authoring only
+  // fills missing canonical fields so stale compat projections cannot override them.
+  assignCanonicalFields(sourceArtifact);
+  assignCanonicalFields(authoredParameters);
+
+  return Object.keys(snapshot).length > 0 ? snapshot : undefined;
 }
 
 function applySourceBackedSnapshot(
@@ -52,7 +69,7 @@ function applySourceBackedSnapshot(
 
   const triggerKey = normalizeStringValue(snapshot.triggerKey);
   const choiceCount = normalizePositiveInteger(snapshot.choiceCount);
-  const objects = Array.isArray(snapshot.objects) ? snapshot.objects : undefined;
+  const poolEntries = Array.isArray(snapshot.poolEntries) ? snapshot.poolEntries : undefined;
   const inventory = isRecord(snapshot.inventory) ? snapshot.inventory : undefined;
 
   if (triggerKey) {
@@ -61,8 +78,8 @@ function applySourceBackedSnapshot(
   if (typeof choiceCount === "number") {
     boundedFields.choiceCount = choiceCount;
   }
-  if (Array.isArray(objects)) {
-    boundedFields.objectCount = objects.length;
+  if (Array.isArray(poolEntries)) {
+    boundedFields.objectCount = poolEntries.length;
   }
   if (inventory) {
     if (typeof inventory.enabled === "boolean") {

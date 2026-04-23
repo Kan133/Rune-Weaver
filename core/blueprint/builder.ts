@@ -12,7 +12,11 @@ import type {
   ValidationIssue,
 } from "../schema/types";
 import { CORE_PATTERN_IDS, isCanonicalPatternAvailable } from "../patterns/canonical-patterns";
-import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
+import {
+  getIntentGovernanceView,
+  hasGovernancePlayerConfirmedSelection,
+  hasGovernanceSelectionFlowContract,
+} from "../wizard/intent-governance-view.js";
 import {
   collectProposalBlockers,
   collectProposalIssues,
@@ -215,7 +219,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (governance.mechanics.weightedSelection || governance.mechanics.playerChoice) {
+    if (hasGovernanceSelectionFlowContract(schema)) {
       const patterns = [CORE_PATTERN_IDS.RULE_SELECTION_FLOW].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({
@@ -228,7 +232,7 @@ export class BlueprintBuilder {
       }
     }
 
-    if (governance.mechanics.uiModal) {
+    if (governance.mechanics.uiModal && hasGovernancePlayerConfirmedSelection(schema)) {
       const patterns = [CORE_PATTERN_IDS.UI_SELECTION_MODAL].filter(isPatternAvailable);
       if (patterns.length > 0) {
         hints.push({

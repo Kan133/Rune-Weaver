@@ -31,6 +31,10 @@ import {
   type SelectionPoolDetectionResult,
   type SelectionPoolProposalBuildResult,
 } from "./shared.js";
+import {
+  collectSelectionPoolSourceValidationErrors,
+  countSelectionPoolEntries,
+} from "./source-model.js";
 import { detectSelectionPoolFallbackIntent } from "./fallback-detection.js";
 import {
   createBlockedDiagnostics,
@@ -57,8 +61,8 @@ const FAMILY_BLOCK_PATTERNS: Array<{ code: string; test: RegExp; reason: string 
   },
   {
     code: "SELECTION_POOL_CUSTOM_EFFECT_FAMILY_NOT_SUPPORTED",
-    test: /(?:custom effect|new effect family|新的效果族|自定义效果族|dash|projectile|summon|spawn helper)/i,
-    reason: "selection_pool keeps effect behavior inside the current bounded placeholder effect profile and does not admit arbitrary new effect families.",
+    test: /(?:custom effect|new effect family|新的效果族|自定义效果族|dash|projectile|teleport|blink|knockback)/i,
+    reason: "selection_pool only admits bounded per-object outcomes and does not admit arbitrary movement/projectile effect families.",
   },
 ];
 
@@ -87,7 +91,6 @@ function hasCustomEffectFamilyRequest(schema: IntentSchema): boolean {
   const governance = getIntentGovernanceView(schema);
   return Boolean(
     schema.spatial?.emission?.kind === "projectile" ||
-      (governance.outcome.operations || []).includes("spawn") ||
       (governance.outcome.operations || []).includes("move"),
   );
 }
@@ -435,7 +438,7 @@ function buildSelectionPoolAdmissionDiagnostics(input: {
           "selection_flow",
           "candidate_catalog",
           "ui_presentation",
-          "effect_profile",
+          "selection_outcome",
         ],
         reason:
           "selection_pool explicit admission may close family-owned bounded blueprint residue inside the admitted local draw shell.",
@@ -534,6 +537,7 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
   schema: IntentSchema,
   proposal: FeatureAuthoringProposal | undefined,
   diagnosticsSeed?: SelectionPoolAdmissionDiagnostics,
+  hostRoot?: string,
 ): FeatureAuthoringNormalizationResult {
   const warnings: string[] = [];
   const notes: string[] = [];
@@ -562,6 +566,40 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
           featureId: undefined,
           existingFeature: null,
         }),
+        proposal,
+        promptMergeActions: diagnosticsSeed?.proposal.promptMergeActions || [],
+        proposalBaseSource: diagnosticsSeed?.proposal.baseSource as SelectionPoolProposalBuildResult["baseSource"] | undefined,
+        initialBlockers: blockers,
+      }),
+    };
+  }
+
+  const sourceValidationErrors = collectSelectionPoolSourceValidationErrors(
+    proposal.parameters,
+    hostRoot,
+  );
+  if (sourceValidationErrors.length > 0) {
+    blockers.push(...sourceValidationErrors);
+    return {
+      blockers: dedupeStrings(blockers),
+      warnings,
+      notes,
+      admissionDiagnostics: buildSelectionPoolAdmissionDiagnostics({
+        prompt: schema.request.rawPrompt,
+        schema,
+        detection: diagnosticsSeed
+          ? {
+              handled: diagnosticsSeed.detection.handled,
+              objectKindHint: diagnosticsSeed.detection.objectKindHint,
+              matchedBy: diagnosticsSeed.detection.matchedBy,
+              findings: diagnosticsSeed.detection.findings,
+            }
+          : detectSelectionPoolFallbackIntent({
+              prompt: schema.request.rawPrompt,
+              mode: "create",
+              featureId: undefined,
+              existingFeature: null,
+            }),
         proposal,
         promptMergeActions: diagnosticsSeed?.proposal.promptMergeActions || [],
         proposalBaseSource: diagnosticsSeed?.proposal.baseSource as SelectionPoolProposalBuildResult["baseSource"] | undefined,
@@ -608,8 +646,8 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
   if (normalized.choiceCount < 1 || normalized.choiceCount > 5) {
     warnings.push("selection_pool choiceCount normalized outside the admitted 1..5 bounded field and cannot be trusted for bounded reuse.");
   }
-  if (!Array.isArray(normalized.objects) || normalized.objects.length < 1) {
-    warnings.push("selection_pool proposal requires at least one authored object in the feature-owned collection.");
+  if (countSelectionPoolEntries(normalized) < 1) {
+    warnings.push("selection_pool proposal requires at least one authored pool entry.");
   }
   if (normalized.inventory?.enabled === true) {
     if (normalized.inventory.presentation !== "persistent_panel") {
@@ -632,7 +670,7 @@ export function normalizeSelectionPoolFeatureAuthoringProposal(
     notes: proposal.notes,
   };
 
-  if (featureAuthoring.parameters.objects.length < featureAuthoring.parameters.choiceCount) {
+  if (countSelectionPoolEntries(featureAuthoring.parameters) < featureAuthoring.parameters.choiceCount) {
     warnings.push("selection_pool authored object count is smaller than choiceCount; UI payload adaptation will need placeholder padding.");
   }
   notes.push("Blueprint stage admitted a bounded selection_pool source-backed profile.");

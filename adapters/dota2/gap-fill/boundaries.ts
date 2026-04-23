@@ -2,9 +2,17 @@ import type { GapFillBoundaryInfo, GapFillBoundaryProvider } from "../../../core
 
 const DOTA2_GAP_FILL_BOUNDARIES: GapFillBoundaryInfo[] = [
   {
+    id: "selection_outcome.realization",
+    label: "Selection outcome realization",
+    filePath: "adapters/dota2/generator/server/outcome-realizer.ts",
+    anchor: "GAP_FILL_BOUNDARY: selection_outcome.realization",
+    allowed: ["rarity_formula", "case_value_mapping", "option_to_effect_translation"],
+    forbidden: ["event_channel_changes", "session_ownership_changes", "pattern_binding_changes"],
+  },
+  {
     id: "selection_flow.effect_mapping",
-    label: "Selection flow effect mapping",
-    filePath: "adapters/dota2/generator/server/selection-flow.ts",
+    label: "Selection flow effect mapping (deprecated alias)",
+    filePath: "adapters/dota2/generator/server/outcome-realizer.ts",
     anchor: "GAP_FILL_BOUNDARY: selection_flow.effect_mapping",
     allowed: ["rarity_formula", "case_value_mapping", "option_to_effect_translation"],
     forbidden: ["event_channel_changes", "session_ownership_changes", "pattern_binding_changes"],
@@ -39,7 +47,7 @@ export const dota2GapFillBoundaryProvider: GapFillBoundaryProvider = {
 };
 
 const PATTERN_TO_BOUNDARY_IDS: Record<string, string[]> = {
-  "rule.selection_flow": ["selection_flow.effect_mapping"],
+  "effect.outcome_realizer": ["selection_outcome.realization"],
   "data.weighted_pool": ["weighted_pool.selection_policy"],
   "ui.selection_modal": ["ui.selection_modal.payload_adapter"],
 };

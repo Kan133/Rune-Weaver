@@ -23,6 +23,7 @@ import {
   buildSelectionGrantRuntimePlans,
   readProviderAbilityExportArtifact,
 } from "../cross-feature/index.js";
+import { toGeneratedUiComponentName } from "../ui/component-naming.js";
 
 export interface BridgeRefreshResult {
   success: boolean;
@@ -91,6 +92,10 @@ function isGeneratedWeightedPoolModule(fileName: string): boolean {
 
 function isGeneratedSelectionFlowModule(fileName: string): boolean {
   return fileName.endsWith("_rule_selection_flow");
+}
+
+function isGeneratedSelectionOutcomeModule(fileName: string): boolean {
+  return fileName.endsWith("_effect_outcome_realizer");
 }
 
 export function ensureBridgeFiles(projectPath: string): EnsureBridgeFilesResult {
@@ -335,6 +340,8 @@ function generateServerIndexContent(
       poolClass?: string;
       selectionFlowFile?: string;
       selectionFlowClass?: string;
+      selectionOutcomeFile?: string;
+      selectionOutcomeClass?: string;
     } = { featureId: feature.featureId };
     const featureGeneratedAbilityNames = new Set<string>();
 
@@ -418,6 +425,9 @@ function generateServerIndexContent(
       } else if (isGeneratedSelectionFlowModule(fileName)) {
         wiringPlan.selectionFlowFile = fileName;
         wiringPlan.selectionFlowClass = className;
+      } else if (isGeneratedSelectionOutcomeModule(fileName)) {
+        wiringPlan.selectionOutcomeFile = fileName;
+        wiringPlan.selectionOutcomeClass = className;
       }
     }
 
@@ -559,6 +569,14 @@ function wireRuntimeFeatures(loadedModules: Record<string, any>): void {
       "rune_weaver.generated.server." + plan.selectionFlowFile,
       plan.selectionFlowClass
     );
+    const selectionOutcome =
+      plan.selectionOutcomeFile && plan.selectionOutcomeClass
+        ? getRwSingleton(
+            loadedModules,
+            "rune_weaver.generated.server." + plan.selectionOutcomeFile,
+            plan.selectionOutcomeClass
+          )
+        : undefined;
 
     if (
       keyBinding &&
@@ -566,6 +584,9 @@ function wireRuntimeFeatures(loadedModules: Record<string, any>): void {
       selectionFlow &&
       typeof selectionFlow.triggerSelectionFromPool === "function"
     ) {
+      if (selectionOutcome && typeof selectionOutcome.attachToSelectionFlow === "function") {
+        selectionOutcome.attachToSelectionFlow(selectionFlow);
+      }
       keyBinding.setHandler((playerId: number) => {
         selectionFlow.triggerSelectionFromPool(playerId, pool);
       });
@@ -587,7 +608,7 @@ function registerSelectionGrantHandlers(loadedModules: Record<string, any>): voi
     }
 
     selectionFlow.registerOutcomeHandler((context: { playerId: number; option: { id: string } }) => {
-      const binding = plan.bindings.find((candidate) => candidate.objectId === context.option.id);
+      const binding = plan.bindings.find((candidate) => candidate.entryId === context.option.id);
       if (!binding) {
         return { handled: false };
       }
@@ -657,7 +678,7 @@ function generateUIIndexContent(features: RuneWeaverFeatureRecord[]): string {
         continue;
       }
 
-      const componentName = toPascalCase(fileName);
+      const componentName = toGeneratedUiComponentName(fileName);
       imports.push(`import { ${componentName} } from "./${fileName}";`);
       componentUsages.push(`      <${componentName} />`);
     }

@@ -12,8 +12,12 @@ import type {
 } from "../schema/types.js";
 import { createCuratedMarkdownCorpusSource } from "./markdown-chunker.js";
 import {
+  createHostSymbolLookupOptions,
   createHostSymbolCorpusSource,
+  type HostSymbolDomain,
   type HostSymbolIndex,
+  type HostSymbolKind,
+  type HostSymbolLookupOptions,
   type HostSymbolLookupHit,
   loadDotaHostSymbolIndex,
 } from "./host-symbol-index.js";
@@ -352,18 +356,56 @@ function dedupeEvidenceRefs(refs: EvidenceRef[]): EvidenceRef[] {
 export function lookupDota2HostSymbolsExact(
   projectRoot: string,
   queries: string[],
+  options: {
+    targetProfile?: SynthesisTargetProfile;
+    limit?: number;
+  } = {},
 ): EvidenceRef[] {
   const { hostSymbolIndex } = getDota2RetrievalState(projectRoot);
   if (!hostSymbolIndex) {
     return [];
   }
 
+  const lookupOptions = resolveExactLookupOptions(options.targetProfile, options.limit);
   const refs: EvidenceRef[] = [];
   for (const query of queries) {
-    const hits = hostSymbolIndex.lookupExact(query, { limit: 4 });
+    const hits = hostSymbolIndex.lookupExact(query, lookupOptions);
     refs.push(...hits.map(mapExactHostSymbolHitToEvidenceRef));
   }
   return dedupeEvidenceRefs(refs);
+}
+
+function resolveExactLookupOptions(
+  targetProfile?: SynthesisTargetProfile,
+  limit = 4,
+): HostSymbolLookupOptions {
+  switch (targetProfile) {
+    case "lua_ability":
+      return createHostSymbolLookupOptions({
+        limit,
+        domains: ["vscripts", "engine", "shared"],
+        kinds: ["api-type", "api-function", "api-member", "api-constant", "enum", "enum-member"],
+      });
+    case "ability_kv":
+      return createHostSymbolLookupOptions({
+        limit,
+        domains: ["engine", "shared", "vscripts"],
+        kinds: ["api-constant", "enum", "enum-member"],
+      });
+    case "panorama_tsx":
+      return createHostSymbolLookupOptions({
+        limit,
+        domains: ["panorama", "shared"],
+        kinds: ["api-type"],
+      });
+    case "panorama_less":
+      return createHostSymbolLookupOptions({
+        limit,
+        domains: ["panorama", "shared"],
+      });
+    default:
+      return createHostSymbolLookupOptions({ limit });
+  }
 }
 
 function extractReasonableSymbolQueries(input: BuildDota2RetrievalBundleInput): string[] {

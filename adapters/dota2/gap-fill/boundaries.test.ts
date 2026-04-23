@@ -8,26 +8,26 @@ import {
 const ids = resolveDota2GapFillBoundaryIdsForPatterns([
   "input.key_binding",
   "data.weighted_pool",
-  "rule.selection_flow",
+  "effect.outcome_realizer",
   "ui.selection_modal",
 ]);
 
 assert.deepStrictEqual(ids, [
   "weighted_pool.selection_policy",
-  "selection_flow.effect_mapping",
+  "selection_outcome.realization",
   "ui.selection_modal.payload_adapter",
 ]);
 
 const boundaries = resolveDota2GapFillBoundariesForPatterns([
   "data.weighted_pool",
-  "rule.selection_flow",
+  "effect.outcome_realizer",
 ]);
 
 assert.deepStrictEqual(
   boundaries.map((boundary) => boundary.id),
   [
     "weighted_pool.selection_policy",
-    "selection_flow.effect_mapping",
+    "selection_outcome.realization",
   ],
 );
 

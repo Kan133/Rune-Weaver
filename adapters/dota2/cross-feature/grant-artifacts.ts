@@ -5,11 +5,17 @@ import type {
   FeatureContract,
   FeatureDependencyEdge,
 } from "../../../core/schema/types.js";
+import {
+  ensureFeatureContractSurface,
+  ensureFeatureDependencyEdge,
+} from "../../../core/contracts/feature-contract.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
 import type { FeatureAuthoring as SelectionPoolFeatureAuthoring } from "../families/selection-pool/shared.js";
+import { resolveSelectionPoolCompiledObjects } from "../families/selection-pool/source-model.js";
 
 export const GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID = "grantable_primary_hero_ability";
+export const DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID = "dota2.primary_hero_ability.grantable";
 export const DOTA2_PROVIDER_EXPORT_ADAPTER = "dota2_provider_ability_export";
 export const DOTA2_SELECTION_GRANT_CONTRACT_ADAPTER = "dota2_selection_grant_contract";
 export const DOTA2_SELECTION_GRANT_BINDING_ADAPTER = "dota2_selection_grant_binding";
@@ -18,6 +24,8 @@ export type Dota2AbilityExportAttachmentMode = "grant_only" | "auto_on_activate"
 
 export interface Dota2ProviderAbilityExportSurface {
   surfaceId: typeof GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID;
+  kind: "capability";
+  contractId: typeof DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID;
   abilityName: string;
   attachmentMode: Dota2AbilityExportAttachmentMode;
 }
@@ -30,9 +38,10 @@ export interface Dota2ProviderAbilityExportArtifactV1 {
 }
 
 export interface Dota2SelectionGrantContractSlot {
-  objectId: string;
+  entryId: string;
   objectLabel: string;
   targetSurfaceId: typeof GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID;
+  targetContractId: typeof DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID;
   relation: "grants";
   applyBehavior: "grant_primary_hero_ability";
 }
@@ -45,9 +54,10 @@ export interface Dota2SelectionGrantContractArtifactV1 {
 }
 
 export interface Dota2SelectionGrantBinding {
-  objectId: string;
+  entryId: string;
   targetFeatureId: string;
   targetSurfaceId: typeof GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID;
+  targetContractId: typeof DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID;
   relation: "grants";
   applyBehavior: "grant_primary_hero_ability";
 }
@@ -63,7 +73,7 @@ export interface Dota2SelectionGrantRuntimePlan {
   featureId: string;
   selectionFlowFile: string;
   selectionFlowClass: string;
-  bindings: Array<{ objectId: string; targetFeatureId: string; abilityName: string }>;
+  bindings: Array<{ entryId: string; targetFeatureId: string; abilityName: string }>;
 }
 
 function readJsonArtifact<T>(hostRoot: string, relativePath: string): T | undefined {
@@ -77,6 +87,91 @@ function readJsonArtifact<T>(hostRoot: string, relativePath: string): T | undefi
   } catch {
     return undefined;
   }
+}
+
+function normalizeLegacyGrantEntryId(raw: { entryId?: unknown; objectId?: unknown }): string | undefined {
+  if (typeof raw.entryId === "string" && raw.entryId.trim().length > 0) {
+    return raw.entryId.trim();
+  }
+  if (typeof raw.objectId === "string" && raw.objectId.trim().length > 0) {
+    return raw.objectId.trim();
+  }
+  return undefined;
+}
+
+function normalizeSelectionGrantContractSlot(value: unknown): Dota2SelectionGrantContractSlot | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const entryId = normalizeLegacyGrantEntryId(raw);
+  if (
+    !entryId ||
+    typeof raw.objectLabel !== "string" ||
+    raw.targetSurfaceId !== GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID ||
+    (raw.targetContractId !== undefined && raw.targetContractId !== DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID) ||
+    raw.relation !== "grants" ||
+    raw.applyBehavior !== "grant_primary_hero_ability"
+  ) {
+    return undefined;
+  }
+  return {
+    entryId,
+    objectLabel: raw.objectLabel,
+    targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    targetContractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+    relation: "grants",
+    applyBehavior: "grant_primary_hero_ability",
+  };
+}
+
+function normalizeSelectionGrantBinding(value: unknown): Dota2SelectionGrantBinding | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const entryId = normalizeLegacyGrantEntryId(raw);
+  if (
+    !entryId ||
+    typeof raw.targetFeatureId !== "string" ||
+    raw.targetSurfaceId !== GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID ||
+    (raw.targetContractId !== undefined && raw.targetContractId !== DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID) ||
+    raw.relation !== "grants" ||
+    raw.applyBehavior !== "grant_primary_hero_ability"
+  ) {
+    return undefined;
+  }
+  return {
+    entryId,
+    targetFeatureId: raw.targetFeatureId,
+    targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    targetContractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+    relation: "grants",
+    applyBehavior: "grant_primary_hero_ability",
+  };
+}
+
+function normalizeProviderAbilityExportSurface(value: unknown): Dota2ProviderAbilityExportSurface | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  if (
+    raw.surfaceId !== GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID
+    || (raw.kind !== undefined && raw.kind !== "capability")
+    || (raw.contractId !== undefined && raw.contractId !== DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID)
+    || typeof raw.abilityName !== "string"
+    || (raw.attachmentMode !== "grant_only" && raw.attachmentMode !== "auto_on_activate")
+  ) {
+    return undefined;
+  }
+  return {
+    surfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    kind: "capability",
+    contractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+    abilityName: raw.abilityName,
+    attachmentMode: raw.attachmentMode,
+  };
 }
 
 export function getProviderExportArtifactRelativePath(featureId: string): string {
@@ -105,7 +200,14 @@ export function readProviderAbilityExportArtifact(
   if (!Array.isArray(artifact.surfaces)) {
     return undefined;
   }
-  return artifact;
+  const normalizedSurfaces = artifact.surfaces.map((surface) => normalizeProviderAbilityExportSurface(surface));
+  if (normalizedSurfaces.some((surface) => !surface)) {
+    return undefined;
+  }
+  return {
+    ...artifact,
+    surfaces: normalizedSurfaces as Dota2ProviderAbilityExportSurface[],
+  };
 }
 
 export function readSelectionGrantContractArtifact(
@@ -122,7 +224,14 @@ export function readSelectionGrantContractArtifact(
   if (!Array.isArray(artifact.slots)) {
     return undefined;
   }
-  return artifact;
+  const normalizedSlots = artifact.slots.map((slot) => normalizeSelectionGrantContractSlot(slot));
+  if (normalizedSlots.some((slot) => !slot)) {
+    return undefined;
+  }
+  return {
+    ...artifact,
+    slots: normalizedSlots as Dota2SelectionGrantContractSlot[],
+  };
 }
 
 export function readSelectionGrantBindingArtifact(
@@ -139,7 +248,14 @@ export function readSelectionGrantBindingArtifact(
   if (!Array.isArray(artifact.bindings)) {
     return undefined;
   }
-  return artifact;
+  const normalizedBindings = artifact.bindings.map((binding) => normalizeSelectionGrantBinding(binding));
+  if (normalizedBindings.some((binding) => !binding)) {
+    return undefined;
+  }
+  return {
+    ...artifact,
+    bindings: normalizedBindings as Dota2SelectionGrantBinding[],
+  };
 }
 
 export function buildProviderAbilityExportArtifact(
@@ -154,6 +270,8 @@ export function buildProviderAbilityExportArtifact(
     surfaces: [
       {
         surfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+        kind: "capability",
+        contractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
         abilityName,
         attachmentMode,
       },
@@ -165,14 +283,18 @@ export function buildSelectionGrantContractArtifact(
   featureId: string,
   featureAuthoring: SelectionPoolFeatureAuthoring,
 ): Dota2SelectionGrantContractArtifactV1 {
+  const compiled = resolveSelectionPoolCompiledObjects(featureAuthoring.parameters, undefined, {
+    allowDeferredFeatureExportResolution: true,
+  });
   return {
     adapter: DOTA2_SELECTION_GRANT_CONTRACT_ADAPTER,
     version: 1,
     featureId,
-    slots: featureAuthoring.parameters.objects.map((object) => ({
-      objectId: object.id,
+    slots: compiled.objects.map((object) => ({
+      entryId: object.id,
       objectLabel: object.label,
       targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+      targetContractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
       relation: "grants",
       applyBehavior: "grant_primary_hero_ability",
     })),
@@ -187,7 +309,14 @@ export function buildSelectionGrantBindingArtifact(
     adapter: DOTA2_SELECTION_GRANT_BINDING_ADAPTER,
     version: 1,
     featureId,
-    bindings,
+    bindings: bindings.map((binding) => ({
+      entryId: binding.entryId,
+      targetFeatureId: binding.targetFeatureId,
+      targetSurfaceId: binding.targetSurfaceId,
+      targetContractId: binding.targetContractId,
+      relation: binding.relation,
+      applyBehavior: binding.applyBehavior,
+    })),
   };
 }
 
@@ -283,67 +412,35 @@ export function appendSelectionGrantBindingEntry(
 }
 
 export function ensureGrantableAbilitySurface(contract?: FeatureContract): FeatureContract {
-  const exports = [...(contract?.exports || [])];
-  if (!exports.some((item) => item.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID)) {
-    exports.push({
-      id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      kind: "capability",
-      summary: "Can grant one primary hero ability through the Dota2 host ability surface.",
-    });
-  }
-
-  return {
-    exports,
-    consumes: [...(contract?.consumes || [])],
-    integrationSurfaces: [...(contract?.integrationSurfaces || [])],
-    stateScopes: [...(contract?.stateScopes || [])],
-  };
+  return ensureFeatureContractSurface(contract, "exports", {
+    id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    kind: "capability",
+    summary: "Can grant one primary hero ability through the Dota2 host ability surface.",
+    contractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+  });
 }
 
 export function ensureConsumesGrantableAbilitySurface(contract?: FeatureContract): FeatureContract {
-  const consumes = [...(contract?.consumes || [])];
-  if (!consumes.some((item) => item.id === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID)) {
-    consumes.push({
-      id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      kind: "capability",
-      summary: "Consumes a provider feature that can grant one primary hero ability.",
-    });
-  }
-
-  return {
-    exports: [...(contract?.exports || [])],
-    consumes,
-    integrationSurfaces: [...(contract?.integrationSurfaces || [])],
-    stateScopes: [...(contract?.stateScopes || [])],
-  };
+  return ensureFeatureContractSurface(contract, "consumes", {
+    id: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    kind: "capability",
+    summary: "Consumes a provider feature that can grant one primary hero ability.",
+    contractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+  });
 }
 
 export function ensureGrantDependencyEdge(
   dependencyEdges: FeatureDependencyEdge[] | undefined,
   targetFeatureId: string,
 ): FeatureDependencyEdge[] {
-  const existing = dependencyEdges || [];
-  if (
-    existing.some(
-      (edge) =>
-        edge.targetFeatureId === targetFeatureId
-        && edge.targetSurfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID
-        && edge.relation === "grants",
-    )
-  ) {
-    return existing;
-  }
-
-  return [
-    ...existing,
-    {
-      relation: "grants",
-      targetFeatureId,
-      targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      required: true,
-      summary: `cross-feature reward grants:${targetFeatureId}:${GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID}`,
-    },
-  ];
+  return ensureFeatureDependencyEdge(dependencyEdges, {
+    relation: "grants",
+    targetFeatureId,
+    targetSurfaceId: GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    targetContractId: DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+    required: true,
+    summary: `cross-feature reward grants:${targetFeatureId}:${GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID}`,
+  });
 }
 
 function isGeneratedSelectionFlowModule(fileName: string): boolean {
@@ -379,13 +476,15 @@ export function buildSelectionGrantRuntimePlans(
     const bindings = bindingArtifact.bindings.flatMap((binding) => {
       const providerArtifact = readProviderAbilityExportArtifact(hostRoot, binding.targetFeatureId);
       const providerSurface = providerArtifact?.surfaces.find(
-        (surface) => surface.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+        (surface) =>
+          surface.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID
+          && surface.contractId === binding.targetContractId,
       );
       if (!providerSurface) {
         return [];
       }
       return [{
-        objectId: binding.objectId,
+        entryId: binding.entryId,
         targetFeatureId: binding.targetFeatureId,
         abilityName: providerSurface.abilityName,
       }];

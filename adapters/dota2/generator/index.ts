@@ -10,6 +10,7 @@ import { generateAbilityLuaWrapper, AbilityLuaWrapperConfig, AbilityModifierConf
 import { generateAbilityKV, KVGeneratorInput } from "./kv/index.js";
 import { generateWeightedPoolCode } from "./server/weighted-pool.js";
 import { generateSelectionFlowCode } from "./server/selection-flow.js";
+import { generateOutcomeRealizerCode } from "./server/outcome-realizer.js";
 import { generateKeyBindingCode } from "./server/key-binding.js";
 import { generateDashEffectCode } from "./server/dash-effect.js";
 import { generateResourcePoolCode } from "./server/resource-pool.js";
@@ -166,6 +167,8 @@ function generateServerCode(
     case "rule.selection_flow":
       // GP-2: Use enhanced selection flow generator with commit/events support
       return generateSelectionFlowCode(className, featureId, entry);
+    case "effect.outcome_realizer":
+      return generateOutcomeRealizerCode(className, featureId, entry);
     case "ui.key_hint":
     case "ui.selection_modal":
     case "ui.resource_bar":

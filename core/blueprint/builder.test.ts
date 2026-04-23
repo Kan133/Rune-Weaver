@@ -7,9 +7,11 @@ import {
   resolveSelectionPoolFamily,
 } from "../../adapters/dota2/families/selection-pool/index.js";
 import {
-  buildSelectionPoolExampleParameters,
-  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
-} from "../../adapters/dota2/families/selection-pool/__fixtures__/examples.js";
+  buildSelectionPoolSyntheticParameters,
+} from "../../adapters/dota2/families/selection-pool/__fixtures__/synthetic.js";
+import {
+  TALENT_DRAW_DEMO_CREATE_PROMPT,
+} from "../../adapters/dota2/cases/selection-demo-registry.js";
 import {
   buildCurrentFeatureContext,
   createUpdateIntentFromRequestedChange,
@@ -1447,7 +1449,7 @@ function testSchemaOwnedImplementationCandidatesAreIgnored() {
       mode: "source-backed",
       profile: "selection_pool",
       objectKind: "talent",
-      parameters: buildSelectionPoolExampleParameters("talent"),
+      parameters: buildSelectionPoolSyntheticParameters("talent"),
       parameterSurface: getSelectionPoolParameterSurface(),
       proposalSource: "fallback",
     },
@@ -1518,7 +1520,7 @@ function testContentModelEvidenceSurfacesInNormalizationNotes() {
 
 function testUpdateBlueprintKeepsWorkspaceContextGenericUntilAdapterLayer() {
   const createResolution = resolveSelectionPoolFamily({
-    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
     hostRoot: "D:\\test3",
     mode: "create",
     featureId: "talent_draw_demo",
@@ -1690,7 +1692,7 @@ function testUpdateBlueprintDoesNotRebuildSelectionFromLegacyPatternIds() {
 
 function testUpdateBlueprintBlocksSourceBackedInvariantRemoval() {
   const createResolution = resolveSelectionPoolFamily({
-    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
     hostRoot: "D:\\test3",
     mode: "create",
     featureId: "talent_draw_demo",
@@ -2228,6 +2230,104 @@ function testSingleAbilityPlanningKeepsExplicitUiAsSeparateSurface() {
   assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "selection_modal"), false);
 }
 
+function testRevealBatchImmediatePlanningStaysExploratoryAndAvoidsSelectionPoolModules() {
+  const prompt =
+    "Create a reveal-only weighted card system. Press F4 to reveal 3 weighted cards from a feature-owned pool, show their rarity-styled UI, and resolve all 3 revealed results immediately as one batch without letting the player choose any card. No follow-up selection, no inventory panel, no persistence, no cross-feature grants.";
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    requirements: {
+      functional: [
+        "Press F4 to reveal 3 weighted cards from a feature-owned pool.",
+        "Resolve all revealed results immediately as one batch.",
+        "Show a rarity-styled reveal UI without any follow-up choice.",
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    interaction: {
+      activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "none",
+      resolutionMode: "reveal_batch_immediate",
+      cardinality: "multiple",
+      choiceCount: 3,
+      repeatability: "repeatable",
+      commitment: "immediate",
+    },
+    effects: undefined,
+    outcomes: undefined,
+    stateModel: undefined,
+    integrations: {
+      expectedBindings: [
+        { id: "f4_entry", kind: "entry-point", summary: "Reveal entry point", required: true },
+        { id: "feature_pool_source", kind: "data-source", summary: "Feature-owned weighted pool", required: true },
+        { id: "reveal_surface", kind: "ui-surface", summary: "Reveal-only card surface", required: true },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["card_reveal_surface", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: true,
+      outcomeApplication: false,
+    },
+    parameters: {
+      triggerKey: "F4",
+      choiceCount: 3,
+      resolutionMode: "reveal_batch_immediate",
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  });
+
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+  const patternHints = new Set(
+    (result.finalBlueprint?.patternHints || []).flatMap((hint) => hint.suggestedPatterns || []),
+  );
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const backboneNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "gameplay_ability");
+  const revealUiNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "reveal_surface");
+  const facetRoles = new Set((result.finalBlueprint?.moduleFacets || []).map((facet) => facet.role));
+
+  assert.equal(result.success, true);
+  assert.equal(roles.has("gameplay_ability"), true);
+  assert.equal(roles.has("reveal_surface"), true);
+  assert.equal(backbone?.backboneKind, "gameplay_ability");
+  assert.equal(roles.has("selection_flow"), false);
+  assert.equal(roles.has("selection_modal"), false);
+  assert.equal(patternHints.has("rule.selection_flow"), false);
+  assert.equal(patternHints.has("ui.selection_modal"), false);
+  assert.equal(result.finalBlueprint?.implementationStrategy, "exploratory");
+  assert.equal(result.finalBlueprint?.maturity, "exploratory");
+  assert.equal(result.finalBlueprint?.commitDecision?.outcome, "exploratory");
+  assert.equal(result.finalBlueprint?.commitDecision?.requiresReview, true);
+  assert.equal(backboneNeed?.backboneKind, "gameplay_ability");
+  assert.equal(backboneNeed?.coLocatePreferred, true);
+  assert.equal(backboneNeed?.category, "effect");
+  assert.ok(facetRoles.has("input_trigger"));
+  assert.ok(facetRoles.has("weighted_pool"));
+  assert.ok(facetRoles.has("reveal_batch_runtime"));
+  assert.ok(facetRoles.has("effect_application"));
+  assert.deepEqual(revealUiNeed?.requiredCapabilities, ["ui.reveal.batch_surface"]);
+  assert.equal(revealUiNeed?.category, "ui");
+}
+
 function runTests() {
   testReadyBuildProducesFinalBlueprint();
   testWeakBuildHonorsHonestStatus();
@@ -2269,6 +2369,7 @@ testSelectionLocalProgressionSliceStaysReady();
   testSelectionFamilyBlueprintDoesNotCollapseIntoGameplayBackbone();
   testSingleAbilityExploratoryPlanningBuildsGameplayBackbone();
   testSingleAbilityPlanningKeepsExplicitUiAsSeparateSurface();
+  testRevealBatchImmediatePlanningStaysExploratoryAndAvoidsSelectionPoolModules();
   console.log("builder.test.ts: PASS");
 }
 

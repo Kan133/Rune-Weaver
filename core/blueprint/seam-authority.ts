@@ -11,8 +11,13 @@ import {
   getIntentGovernanceView,
   hasGovernanceExternalOrSharedOwnership,
   hasGovernancePersistentScope,
+  hasGovernanceRevealBatchResolution,
   hasGovernanceSelectionFlowContract,
 } from "../wizard/intent-governance-view.js";
+import {
+  isDefinitionOnlyProviderBoundary,
+  isDefinitionOnlyProviderDerivedState,
+} from "../wizard/intent-schema/definition-only-provider.js";
 
 export type SemanticRiskDisposition =
   | "reusable_fit"
@@ -123,7 +128,11 @@ export function assessSemanticCompleteness(
       warnings.add(`Must requirement '${requirement.id}' does not resolve requiredCapabilities.`);
     }
 
-    if (category === "effect" && (governance.effect.operations || []).length === 0) {
+    if (
+      category === "effect"
+      && matchingNeed.semanticRole !== "gameplay_ability"
+      && (governance.effect.operations || []).length === 0
+    ) {
       warnings.add(`Must effect requirement '${requirement.id}' is underspecified because no effect operations were provided.`);
     }
 
@@ -423,11 +432,33 @@ export function classifyStandaloneSessionStateRisk(
   schema: IntentSchema
 ): SemanticRiskDisposition | undefined {
   const governance = getIntentGovernanceView(schema);
+  const definitionOnlyProvider = isDefinitionOnlyProviderBoundary(schema, schema.request?.rawPrompt);
   const typedStateRequirements = (schema.requirements.typed || []).filter(
     (requirement) => requirement.kind === "state"
   );
-  const states = governance.state.states || [];
-  const rawStates = schema.stateModel?.states || [];
+  const states = (governance.state.states || []).filter((state) => {
+    if (!definitionOnlyProvider) {
+      return true;
+    }
+    const definitionOnlyState = state as {
+      id?: string;
+      stateId?: string;
+      summary?: string;
+      owner?: "feature" | "session" | "external";
+      lifetime?: "ephemeral" | "session" | "persistent";
+      mutationMode?: "create" | "update" | "consume" | "expire" | "remove";
+    };
+    return !isDefinitionOnlyProviderDerivedState({
+      id: definitionOnlyState.id || definitionOnlyState.stateId || "",
+      summary: definitionOnlyState.summary || "",
+      owner: definitionOnlyState.owner,
+      lifetime: definitionOnlyState.lifetime,
+      mutationMode: definitionOnlyState.mutationMode,
+    });
+  });
+  const rawStates = (schema.stateModel?.states || []).filter((state) =>
+    !definitionOnlyProvider || !isDefinitionOnlyProviderDerivedState(state),
+  );
 
   if (typedStateRequirements.length === 0 && rawStates.length === 0) {
     return undefined;
@@ -746,6 +777,10 @@ function hasDisallowedSchedulerOrchestrationText(schema: IntentSchema): boolean 
 }
 
 export function detectSelectionFlowAsk(schema: IntentSchema): boolean {
+  if (hasGovernanceRevealBatchResolution(schema)) {
+    return false;
+  }
+
   if (hasGovernanceSelectionFlowContract(schema)) {
     return true;
   }

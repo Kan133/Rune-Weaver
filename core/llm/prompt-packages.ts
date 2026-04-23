@@ -12,6 +12,7 @@ import type {
 import type { LLMMessage } from "./types.js";
 import type { WizardClarificationAnswer } from "../wizard/types.js";
 import { extractPromptConstraints, renderPromptConstraints } from "./prompt-constraints.js";
+import { getSelectionPoolCanonicalModuleRoles } from "../schema/selection-pool-profile.js";
 
 export interface WorkflowPromptPackage {
   id: PromptPackageId;
@@ -284,8 +285,8 @@ function buildUpdateFewShots(): LLMMessage[] {
         "Current feature context:",
         JSON.stringify({
           featureId: "talent_draw_demo",
-          preservedModuleBackbone: ["input_trigger", "weighted_pool", "selection_flow", "selection_modal", "effect_application"],
-          sourceBackedInvariantRoles: ["input_trigger", "weighted_pool", "selection_flow", "selection_modal", "effect_application"],
+          preservedModuleBackbone: getSelectionPoolCanonicalModuleRoles(),
+          sourceBackedInvariantRoles: getSelectionPoolCanonicalModuleRoles(),
           boundedFields: { triggerKey: "F4", choiceCount: 3, inventoryCapacity: 15 },
         }, null, 2),
         "",
@@ -376,16 +377,18 @@ function renderUpdateFeatureContext(context: CurrentFeatureContext): string {
       ? compatibilityContext.preservedModuleBackbone
       : [...(context.admittedSkeleton || [])];
 
-  // Keep a one-round legacy alias for old fixtures/examples while promoting the new key.
-  return JSON.stringify(
-    {
-      ...context,
-      preservedModuleBackbone,
-      admittedSkeleton: preservedModuleBackbone,
-    },
-    null,
-    2,
-  );
+  const renderedContext: Record<string, unknown> = {
+    ...context,
+    preservedModuleBackbone,
+  };
+  if (
+    (!compatibilityContext.preservedModuleBackbone || compatibilityContext.preservedModuleBackbone.length === 0)
+    && Array.isArray(context.admittedSkeleton)
+    && context.admittedSkeleton.length > 0
+  ) {
+    renderedContext.admittedSkeleton = [...context.admittedSkeleton];
+  }
+  return JSON.stringify(renderedContext, null, 2);
 }
 
 export function buildWizardCreatePromptPackage(input: WizardPackageInput): WorkflowPromptPackage {
@@ -456,7 +459,8 @@ export function buildWizardUpdatePromptPackage(input: UpdateWizardPackageInput):
           "You are Rune Weaver's wizard.update prompt package.",
           "Do not write code.",
           "Interpret only the requested change against the current feature context.",
-          "Treat preservedModuleBackbone as the primary context field; admittedSkeleton is a one-round legacy alias and should be interpreted identically when present.",
+          "Treat preservedModuleBackbone as the canonical context field.",
+          "If a legacy context only provides admittedSkeleton, interpret it identically to preservedModuleBackbone.",
           "Prefer preserve semantics over rebuild semantics.",
           "Do not restate or rebuild the whole existing feature unless the user explicitly asks for a rewrite.",
           "Return only the semantic-only requestedChange candidate and resolved assumptions.",

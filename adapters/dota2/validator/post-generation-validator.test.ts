@@ -274,10 +274,82 @@ async function runTests(): Promise<void> {
     assert(seedCheck.message.includes("missing weighted pool sources"));
     console.log("  PASS");
 
+    const groundingHost = join(process.cwd(), "tmp/test-host-post-gen-grounding");
+    createMockHost(groundingHost);
+    try {
+      console.log("\nTest 10: Partial synthesized grounding stays warning-only when canonical assessment is consistent...");
+      const groundingWorkspacePath = join(groundingHost, "game/scripts/src/rune_weaver/rune-weaver.workspace.json");
+      const groundingWorkspace = JSON.parse(readFileSync(groundingWorkspacePath, "utf-8"));
+      groundingWorkspace.features[0].modules = [
+        {
+          moduleId: "reveal_runtime",
+          role: "reveal_runtime",
+          sourceKind: "synthesized",
+          selectedPatternIds: [],
+          implementationStrategy: "exploratory",
+          maturity: "exploratory",
+          requiresReview: true,
+          reviewReasons: [],
+          groundingAssessment: {
+            status: "partial",
+            reviewRequired: true,
+            verifiedSymbolCount: 1,
+            allowlistedSymbolCount: 0,
+            weakSymbolCount: 1,
+            unknownSymbolCount: 0,
+            warnings: ["weak grounding"],
+            reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+            evidenceRefs: [],
+          },
+          metadata: {
+            grounding: [
+              {
+                artifactId: "reveal_runtime_lua",
+                verifiedSymbols: ["ApplyDamage"],
+                allowlistedSymbols: [],
+                weakSymbols: ["DealSplash"],
+                unknownSymbols: [],
+                warnings: ["weak grounding"],
+              },
+            ],
+          },
+        },
+      ];
+      groundingWorkspace.features[0].groundingSummary = {
+        status: "partial",
+        reviewRequired: true,
+        verifiedSymbolCount: 1,
+        allowlistedSymbolCount: 0,
+        weakSymbolCount: 1,
+        unknownSymbolCount: 0,
+        warnings: ["weak grounding"],
+        reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+        evidenceRefs: [],
+      };
+      writeFileSync(groundingWorkspacePath, JSON.stringify(groundingWorkspace, null, 2), "utf-8");
+
+      const groundingWarningResult = validatePostGeneration(groundingHost);
+      const groundingWarningCheck = groundingWarningResult.checks.find((check) => check.check === "synthesized_grounding_governance");
+      assert(groundingWarningCheck?.passed, groundingWarningCheck?.message);
+      assert(groundingWarningCheck?.details?.some((detail) => detail.includes("remained partial")));
+      console.log("  PASS");
+
+      console.log("\nTest 11: Synthesized grounding fails when canonical assessment drifts from raw checks...");
+      groundingWorkspace.features[0].groundingSummary.weakSymbolCount = 0;
+      writeFileSync(groundingWorkspacePath, JSON.stringify(groundingWorkspace, null, 2), "utf-8");
+      const groundingFailResult = validatePostGeneration(groundingHost);
+      const groundingFailCheck = groundingFailResult.checks.find((check) => check.check === "synthesized_grounding_governance");
+      assert(groundingFailCheck && !groundingFailCheck.passed);
+      assert(groundingFailCheck.details?.some((detail) => detail.includes("does not match raw checks")));
+      console.log("  PASS");
+    } finally {
+      cleanupMockHost(groundingHost);
+    }
+
     const providerHost = join(process.cwd(), "tmp/test-host-post-gen-provider");
     createMockHost(providerHost);
     try {
-      console.log("\nTest 10: Provider export identity passes when export, KV, and Lua agree...");
+      console.log("\nTest 12: Provider export identity passes when export, KV, and Lua agree...");
       writeProviderExportArtifact(providerHost, "provider_feature", "rw_provider_test");
       writeProviderAbilityArtifacts(providerHost);
       const providerPassResult = validatePostGeneration(providerHost);
@@ -285,7 +357,7 @@ async function runTests(): Promise<void> {
       assert(providerPassCheck?.passed, providerPassCheck?.message);
       console.log("  PASS");
 
-      console.log("\nTest 11: Provider export fails when exported ability is missing from KV...");
+      console.log("\nTest 13: Provider export fails when exported ability is missing from KV...");
       writeProviderExportArtifact(providerHost, "provider_feature", "rw_missing_provider");
       writeProviderAbilityArtifacts(providerHost, { abilityName: "rw_provider_test" });
       const missingKvResult = validatePostGeneration(providerHost);
@@ -294,7 +366,7 @@ async function runTests(): Promise<void> {
       assert(missingKvCheck.details?.some((detail) => detail.includes("not found in npc_abilities_custom.txt")));
       console.log("  PASS");
 
-      console.log("\nTest 12: Provider export fails when Lua runtime symbol drifts...");
+      console.log("\nTest 14: Provider export fails when Lua runtime symbol drifts...");
       writeProviderExportArtifact(providerHost, "provider_feature", "rw_provider_test");
       writeProviderAbilityArtifacts(providerHost, {
         abilityName: "rw_provider_test",
@@ -306,7 +378,7 @@ async function runTests(): Promise<void> {
       assert(driftCheck.details?.some((detail) => detail.includes("does not match exported ability")));
       console.log("  PASS");
 
-      console.log("\nTest 13: Provider export fails when ScriptFile target is missing...");
+      console.log("\nTest 15: Provider export fails when ScriptFile target is missing...");
       writeProviderExportArtifact(providerHost, "provider_feature", "rw_provider_test");
       writeProviderAbilityArtifacts(providerHost, {
         abilityName: "rw_provider_test",

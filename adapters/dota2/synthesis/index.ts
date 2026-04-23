@@ -1,3 +1,4 @@
+import ts from "typescript";
 import type {
   ArtifactSynthesisResult,
   AssemblyModule,
@@ -5,6 +6,7 @@ import type {
   Blueprint,
   BridgeUpdate,
   EvidenceRef,
+  GroundingAssessment,
   GroundingCheckResult,
   HostWriteReadiness,
   HostRealizationOutput,
@@ -19,6 +21,10 @@ import type {
   ValidationContract,
   WriteTarget,
 } from "../../../core/schema/types.js";
+import {
+  aggregateGroundingAssessments,
+  buildGroundingAssessment,
+} from "../../../core/governance/grounding.js";
 import { createLLMClientFromEnv, isLLMConfigured, readLLMExecutionConfig } from "../../../core/llm/factory.js";
 import { detectMustNotAddViolations } from "../../../core/llm/prompt-constraints.js";
 import { buildModuleSynthesisPromptPackage } from "../../../core/llm/prompt-packages.js";
@@ -33,6 +39,7 @@ import {
   buildAbilityKvFragmentPath,
   resolveAbilityKvScriptFile,
 } from "../kv/contract.js";
+import { toGeneratedUiComponentName } from "../ui/component-naming.js";
 
 interface LLMArtifactCandidate {
   content?: string;
@@ -259,11 +266,7 @@ function escapePanoramaText(value: string): string {
 }
 
 function toComponentName(featureId: string): string {
-  return sanitizeId(featureId)
-    .split("_")
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join("") || "RuneWeaverSynthPanel";
+  return toGeneratedUiComponentName(sanitizeId(featureId));
 }
 
 function buildBridgeUpdates(hasGameplay: boolean, hasUI: boolean): BridgeUpdate[] {
@@ -512,6 +515,10 @@ export function buildSynthesizedAssemblyPlan(
       continue;
     }
 
+    const groundingState = applyGroundingToModuleResult(moduleSynthesis, process.cwd());
+    grounding.push(...groundingState.grounding);
+    warnings.push(...groundingState.warnings);
+
     synthesizedArtifacts.push(...moduleSynthesis.artifacts);
     synthesizedModuleRecords.push(...moduleSynthesis.moduleRecords);
     synthesizedModules.push(
@@ -551,6 +558,10 @@ export function buildSynthesizedAssemblyPlan(
     bundles: synthesisBundles,
     artifacts: synthesizedArtifacts,
     grounding,
+    groundingAssessment: aggregateGroundingAssessments(
+      synthesizedArtifacts.map((artifact) => artifact.groundingAssessment),
+    ),
+    evidenceRefs: uniqueEvidenceRefs(grounding.flatMap((item) => item.evidenceRefs || [])),
     warnings: uniqueStrings(warnings),
     blockers: uniqueStrings(blockers),
   };
@@ -637,7 +648,6 @@ export async function buildSynthesizedAssemblyPlanWithLLM(
   const aggregatedEvidence = [...(deterministic.synthesis.evidenceRefs || [])];
   const sourceKinds = new Set<string>(deterministic.synthesis.retrievalSummary?.sourceKinds || []);
   const tiersUsed = new Set<number>(deterministic.synthesis.retrievalSummary?.tiersUsed || []);
-  const aggregatedGrounding: GroundingCheckResult[] = [...(deterministic.synthesis.grounding || [])];
 
   for (const moduleResult of deterministic.synthesis.moduleResults || []) {
     const moduleNeeds = (moduleResult.moduleIds || [])
@@ -754,23 +764,6 @@ export async function buildSynthesizedAssemblyPlanWithLLM(
         }
       }
 
-      const grounding = buildGroundingCheckResult({
-        artifact,
-        targetProfile,
-        projectRoot: process.cwd(),
-      });
-      aggregatedGrounding.push(grounding);
-      grounding.evidenceRefs?.forEach((ref) => moduleEvidence.push(ref));
-      grounding.evidenceRefs?.forEach((ref) => aggregatedEvidence.push(ref));
-      sourceKinds.add("raw_reference");
-      grounding.evidenceRefs && grounding.evidenceRefs.length > 0 ? tiersUsed.add(2) : undefined;
-      for (const warning of grounding.warnings) {
-        moduleWarnings.push(warning);
-      }
-      artifact.metadata = {
-        ...(artifact.metadata || {}),
-        grounding,
-      };
     }
 
     moduleResult.promptPackageId = "synthesis.module";
@@ -778,9 +771,6 @@ export async function buildSynthesizedAssemblyPlanWithLLM(
     moduleResult.assumptions = [...moduleAssumptions];
     moduleResult.mustNotAddViolations = uniqueStrings(moduleViolations);
     moduleResult.warnings = uniqueStrings([...moduleResult.warnings, ...moduleWarnings]);
-    moduleResult.grounding = aggregatedGrounding.filter((item) =>
-      moduleResult.artifacts.some((artifact) => artifact.id === item.artifactId),
-    );
 
     for (const record of moduleResult.moduleRecords) {
       record.metadata = {
@@ -801,12 +791,30 @@ export async function buildSynthesizedAssemblyPlanWithLLM(
     evidenceCount: deterministic.synthesis.evidenceRefs.length,
     sourceKinds: [...sourceKinds] as Array<"governance" | "curated_host" | "raw_reference" | "workspace_evidence">,
   };
-  deterministic.synthesis.grounding = aggregatedGrounding;
+  const groundingState = applyGroundingToArtifactSynthesisResult(
+    deterministic.synthesis,
+    process.cwd(),
+  );
+  groundingState.evidenceRefs.forEach((ref) => aggregatedEvidence.push(ref));
+  if (groundingState.evidenceRefs.length > 0) {
+    sourceKinds.add("raw_reference");
+    tiersUsed.add(2);
+  }
+  deterministic.synthesis.evidenceRefs = uniqueEvidenceRefs(aggregatedEvidence);
+  deterministic.synthesis.retrievalSummary = {
+    tiersUsed: [...tiersUsed].sort((left, right) => left - right) as Array<0 | 1 | 2 | 3>,
+    evidenceCount: deterministic.synthesis.evidenceRefs.length,
+    sourceKinds: [...sourceKinds] as Array<"governance" | "curated_host" | "raw_reference" | "workspace_evidence">,
+  };
   deterministic.synthesis.warnings = uniqueStrings([
     ...deterministic.synthesis.warnings,
     ...deterministic.synthesis.moduleResults?.flatMap((item) => item.warnings) || [],
   ]);
   deterministic.plan.synthesizedArtifacts = deterministic.synthesis.artifacts;
+  deterministic.plan.moduleRecords = mergeModuleRecords(
+    basePlan?.moduleRecords || resolutionResult?.moduleRecords || blueprint.moduleRecords || [],
+    deterministic.synthesis.moduleRecords || [],
+  );
   deterministic.plan.artifactSynthesisResult = deterministic.synthesis;
 
   return deterministic;
@@ -882,7 +890,7 @@ const TARGET_PROFILE_ALLOWLIST: Record<
     prefixes: ["DOTA_ABILITY_BEHAVIOR_", "DOTA_ABILITY_TYPE_"],
   },
   panorama_tsx: {
-    exact: ["Panel", "Label"],
+    exact: [],
     prefixes: [],
   },
   panorama_less: {
@@ -895,37 +903,90 @@ function normalizeGroundingSymbol(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function extractArtifactSymbolsForGrounding(
+function collectLuaDefinedSymbols(content: string): Set<string> {
+  const definitions = new Set<string>();
+  const definitionPatterns = [
+    /(?:^|\s)(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/gm,
+    /function\s+[A-Za-z0-9_:.]+[:.]([A-Za-z_][A-Za-z0-9_]*)\s*\(/g,
+    /(?:^|\s)(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(/gm,
+    /(?:^|\s)(?:local\s+)?[A-Za-z0-9_:.]+[:.]([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(/gm,
+  ];
+
+  for (const pattern of definitionPatterns) {
+    for (const match of content.matchAll(pattern)) {
+      if (match[1]) {
+        definitions.add(match[1]);
+      }
+    }
+  }
+
+  return definitions;
+}
+
+function blankOutLuaLexicalNoise(content: string): string {
+  const blank = (match: string): string => " ".repeat(match.length);
+
+  return content
+    .replace(/--\[\[[\s\S]*?\]\]/g, blank)
+    .replace(/--[^\n]*/g, blank)
+    .replace(/\[\[[\s\S]*?\]\]/g, blank)
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, blank);
+}
+
+function extractJsxTagNames(content: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    "grounding.tsx",
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const tags = new Set<string>();
+
+  function recordTagName(tagName: ts.JsxTagNameExpression): void {
+    if (ts.isIdentifier(tagName)) {
+      tags.add(tagName.text);
+      return;
+    }
+
+    if (ts.isPropertyAccessExpression(tagName)) {
+      tags.add(tagName.name.text);
+    }
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      recordTagName(node.tagName);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return [...tags];
+}
+
+export function extractArtifactSymbolsForGrounding(
   content: string,
   targetProfile: SynthesisTargetProfile,
 ): string[] {
   const symbols = new Set<string>();
+  const extractionContent = targetProfile === "lua_ability"
+    ? blankOutLuaLexicalNoise(content)
+    : content;
 
-  const enumMatches = content.match(/DOTA_[A-Z0-9_]+/g) || [];
+  const enumMatches = extractionContent.match(/DOTA_[A-Z0-9_]+/g) || [];
   enumMatches.forEach((item) => symbols.add(item));
 
   if (targetProfile === "lua_ability") {
-    const locallyDefinedFunctions = new Set<string>();
-    for (const match of content.matchAll(/(?:^|\s)(?:local\s+)?function\s+([A-Z][A-Za-z0-9_]*)\s*\(/gm)) {
-      locallyDefinedFunctions.add(match[1]);
-    }
-    for (const match of content.matchAll(/function\s+[A-Za-z0-9_:.]+[:.]([A-Z][A-Za-z0-9_]*)\s*\(/g)) {
-      locallyDefinedFunctions.add(match[1]);
-    }
-    for (const match of content.matchAll(/(?:^|\s)(?:local\s+)?([A-Z][A-Za-z0-9_]*)\s*=\s*function\s*\(/gm)) {
-      locallyDefinedFunctions.add(match[1]);
-    }
-    for (const match of content.matchAll(/(?:^|\s)(?:local\s+)?[A-Za-z0-9_:.]+[:.]([A-Z][A-Za-z0-9_]*)\s*=\s*function\s*\(/gm)) {
-      locallyDefinedFunctions.add(match[1]);
-    }
+    const locallyDefinedFunctions = collectLuaDefinedSymbols(extractionContent);
 
-    for (const match of content.matchAll(/function\s+[A-Za-z0-9_:.]+:([A-Za-z0-9_]+)\s*\(/g)) {
+    for (const match of extractionContent.matchAll(/function\s+[A-Za-z0-9_:.]+:([A-Za-z0-9_]+)\s*\(/g)) {
       symbols.add(match[1]);
     }
-    for (const match of content.matchAll(/[:\.]([A-Z][A-Za-z0-9_]+)\s*\(/g)) {
+    for (const match of extractionContent.matchAll(/[:\.]([A-Z][A-Za-z0-9_]+)\s*\(/g)) {
       symbols.add(match[1]);
     }
-    for (const match of content.matchAll(/\b([A-Z][A-Za-z0-9_]+)\s*\(/g)) {
+    for (const match of extractionContent.matchAll(/\b([A-Z][A-Za-z0-9_]+)\s*\(/g)) {
       symbols.add(match[1]);
     }
     for (const symbol of locallyDefinedFunctions) {
@@ -934,8 +995,8 @@ function extractArtifactSymbolsForGrounding(
   }
 
   if (targetProfile === "panorama_tsx") {
-    for (const match of content.matchAll(/<([A-Z][A-Za-z0-9_]*)/g)) {
-      symbols.add(match[1]);
+    for (const tagName of extractJsxTagNames(content)) {
+      symbols.add(tagName);
     }
   }
 
@@ -959,7 +1020,9 @@ function buildGroundingCheckResult(input: {
   projectRoot: string;
 }): GroundingCheckResult {
   const extractedSymbols = extractArtifactSymbolsForGrounding(input.artifact.content, input.targetProfile);
-  const exactRefs = lookupDota2HostSymbolsExact(input.projectRoot, extractedSymbols);
+  const exactRefs = lookupDota2HostSymbolsExact(input.projectRoot, extractedSymbols, {
+    targetProfile: input.targetProfile,
+  });
   const refsBySymbol = new Map<string, EvidenceRef[]>();
   for (const ref of exactRefs) {
     const symbol = ref.symbol || ref.title;
@@ -1025,6 +1088,135 @@ function buildGroundingCheckResult(input: {
     unknownSymbols: uniqueStrings(unknownSymbols),
     warnings: uniqueStrings(warnings),
     evidenceRefs: exactRefs,
+  };
+}
+
+function applyGroundingToModuleResult(
+  moduleResult: ModuleSynthesisResult,
+  projectRoot: string,
+): {
+  grounding: GroundingCheckResult[];
+  assessment: GroundingAssessment;
+  evidenceRefs: EvidenceRef[];
+  warnings: string[];
+  moduleGroundingById: Map<string, GroundingCheckResult[]>;
+} {
+  const grounding: GroundingCheckResult[] = [];
+  const evidenceRefs: EvidenceRef[] = [];
+  const warnings: string[] = [];
+
+  for (const artifact of moduleResult.artifacts) {
+    const targetProfile = inferTargetProfile(artifact);
+    if (!targetProfile) {
+      artifact.groundingAssessment = buildGroundingAssessment();
+      continue;
+    }
+
+    const rawGrounding = buildGroundingCheckResult({
+      artifact,
+      targetProfile,
+      projectRoot,
+    });
+    const groundingAssessment = buildGroundingAssessment(rawGrounding);
+    artifact.groundingAssessment = groundingAssessment;
+    artifact.metadata = {
+      ...(artifact.metadata || {}),
+      grounding: rawGrounding,
+    };
+    grounding.push(rawGrounding);
+    warnings.push(...rawGrounding.warnings);
+    rawGrounding.evidenceRefs?.forEach((ref) => evidenceRefs.push(ref));
+  }
+
+  const assessment = aggregateGroundingAssessments(
+    moduleResult.artifacts.map((artifact) => artifact.groundingAssessment),
+  );
+  moduleResult.grounding = grounding;
+  moduleResult.groundingAssessment = assessment;
+  moduleResult.evidenceRefs = uniqueEvidenceRefs([
+    ...(moduleResult.evidenceRefs || []),
+    ...evidenceRefs,
+    ...assessment.evidenceRefs,
+  ]);
+  moduleResult.warnings = uniqueStrings([
+    ...moduleResult.warnings,
+    ...warnings,
+  ]);
+
+  const moduleGroundingById = new Map<string, GroundingCheckResult[]>();
+  for (const record of moduleResult.moduleRecords) {
+    record.groundingAssessment = assessment;
+    record.metadata = {
+      ...(record.metadata || {}),
+      grounding,
+    };
+    moduleGroundingById.set(record.moduleId, grounding);
+  }
+
+  return {
+    grounding,
+    assessment,
+    evidenceRefs: uniqueEvidenceRefs([...evidenceRefs, ...assessment.evidenceRefs]),
+    warnings: uniqueStrings(warnings),
+    moduleGroundingById,
+  };
+}
+
+function applyGroundingToArtifactSynthesisResult(
+  synthesis: ArtifactSynthesisResult,
+  projectRoot: string,
+): {
+  grounding: GroundingCheckResult[];
+  assessment: GroundingAssessment;
+  evidenceRefs: EvidenceRef[];
+  warnings: string[];
+} {
+  const grounding: GroundingCheckResult[] = [];
+  const evidenceRefs: EvidenceRef[] = [];
+  const warnings: string[] = [];
+  const moduleAssessmentById = new Map<string, GroundingAssessment>();
+  const moduleGroundingById = new Map<string, GroundingCheckResult[]>();
+
+  for (const moduleResult of synthesis.moduleResults || []) {
+    const state = applyGroundingToModuleResult(moduleResult, projectRoot);
+    grounding.push(...state.grounding);
+    evidenceRefs.push(...state.evidenceRefs);
+    warnings.push(...state.warnings);
+    for (const record of moduleResult.moduleRecords) {
+      moduleAssessmentById.set(record.moduleId, state.assessment);
+      moduleGroundingById.set(record.moduleId, state.grounding);
+    }
+  }
+
+  for (const record of synthesis.moduleRecords || []) {
+    const groundingAssessment = moduleAssessmentById.get(record.moduleId) || buildGroundingAssessment();
+    record.groundingAssessment = groundingAssessment;
+    record.metadata = {
+      ...(record.metadata || {}),
+      grounding: moduleGroundingById.get(record.moduleId) || [],
+    };
+  }
+
+  const assessment = aggregateGroundingAssessments(
+    synthesis.artifacts.map((artifact) => artifact.groundingAssessment),
+  );
+  synthesis.grounding = grounding;
+  synthesis.groundingAssessment = assessment;
+  synthesis.evidenceRefs = uniqueEvidenceRefs([
+    ...(synthesis.evidenceRefs || []),
+    ...evidenceRefs,
+    ...assessment.evidenceRefs,
+  ]);
+  synthesis.warnings = uniqueStrings([
+    ...synthesis.warnings,
+    ...warnings,
+  ]);
+
+  return {
+    grounding,
+    assessment,
+    evidenceRefs: synthesis.evidenceRefs || [],
+    warnings: uniqueStrings(warnings),
   };
 }
 

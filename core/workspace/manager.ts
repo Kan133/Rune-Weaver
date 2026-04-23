@@ -24,6 +24,11 @@ import {
   FeatureSourceModelRef,
   ModuleImplementationRecord,
 } from "./types.js";
+import {
+  aggregateModuleGroundingAssessments,
+  buildGroundingAssessment,
+  buildGroundingReviewReason,
+} from "../governance/grounding.js";
 
 const WORKSPACE_FILE_NAME = "rune-weaver.workspace.json";
 const CURRENT_VERSION = "0.1";
@@ -140,8 +145,12 @@ function normalizeReviewReasons(
   strategy: ModuleImplementationRecord["implementationStrategy"],
   rawReasons: unknown,
   requiresReview: boolean,
+  groundingAssessment?: ModuleImplementationRecord["groundingAssessment"],
 ): string[] {
-  const normalized = normalizeStringArray(rawReasons);
+  const normalized = uniqueStrings([
+    ...normalizeStringArray(rawReasons),
+    buildGroundingReviewReason("module", groundingAssessment) || "",
+  ]);
   if (normalized.length > 0 || !requiresReview) {
     return normalized;
   }
@@ -194,6 +203,7 @@ function normalizeModuleImplementationRecord(
     || normalizeStringArray(raw.reviewReasons).length > 0
     || implementationStrategy === "guided_native"
     || implementationStrategy === "exploratory";
+  const groundingAssessment = normalizeGroundingAssessment(raw.groundingAssessment);
 
   return {
     moduleId,
@@ -225,12 +235,18 @@ function normalizeModuleImplementationRecord(
     integrationHints: normalizeStringArray(raw.integrationHints),
     stateExpectations: normalizeStringArray(raw.stateExpectations),
     synthesizedArtifactIds: normalizeStringArray(raw.synthesizedArtifactIds),
+    groundingAssessment,
     requiresReview,
     metadata:
       raw.metadata && typeof raw.metadata === "object"
         ? raw.metadata as Record<string, unknown>
         : undefined,
-    reviewReasons: normalizeReviewReasons(implementationStrategy, raw.reviewReasons, requiresReview),
+    reviewReasons: normalizeReviewReasons(
+      implementationStrategy,
+      raw.reviewReasons,
+      requiresReview,
+      groundingAssessment,
+    ),
   };
 }
 
@@ -341,7 +357,12 @@ export function deriveFeatureLifecycleFromModules(input: {
   const allFamily = input.modules.every((module) => module.sourceKind === "family");
   const moduleReviewReasons = uniqueStrings(
     input.modules.flatMap((module) =>
-      (module.reviewReasons || []).map((reason) => `[module:${module.moduleId}] ${reason}`),
+      [
+        ...(module.reviewReasons || []),
+        buildGroundingReviewReason(`module '${module.moduleId}'`, module.groundingAssessment) || "",
+      ]
+        .filter((reason) => reason.trim().length > 0)
+        .map((reason) => `[module:${module.moduleId}] ${reason}`),
     ),
   );
   const reviewModules = input.modules.filter(
@@ -577,6 +598,7 @@ export function addFeatureToWorkspace(
     validationStatus: result.validationStatus ?? undefined,
     dependencyEdges: result.dependencyEdges,
     commitDecision: lifecycle.commitDecision ?? undefined,
+    groundingSummary: result.groundingSummary ?? aggregateModuleGroundingAssessments(result.modules || []),
     integrationPoints,
     gapFillBoundaries: result.gapFillBoundaries,
     createdAt: now,
@@ -628,6 +650,10 @@ export function updateFeatureInWorkspace(
     validationStatus: resolveOptionalReplace(result.validationStatus, existing.validationStatus),
     dependencyEdges: resolveOptionalReplace(result.dependencyEdges, existing.dependencyEdges),
     commitDecision: lifecycle.commitDecision ?? undefined,
+    groundingSummary: resolveOptionalReplace(
+      result.groundingSummary ?? aggregateModuleGroundingAssessments(nextModules),
+      existing.groundingSummary,
+    ),
     integrationPoints: integrationPoints || existing.integrationPoints,
     gapFillBoundaries: result.gapFillBoundaries || existing.gapFillBoundaries,
     updatedAt: now,
@@ -796,6 +822,7 @@ function normalizeFeature(rawFeature: unknown): RuneWeaverFeatureRecord {
     validationStatus: normalizeValidationStatus(raw.validationStatus),
     dependencyEdges: normalizeFeatureDependencyEdges(raw.dependencyEdges),
     commitDecision: lifecycle.commitDecision ?? undefined,
+    groundingSummary: normalizeGroundingAssessment(raw.groundingSummary) || aggregateModuleGroundingAssessments(modules),
     createdAt: (raw.createdAt as string) || now,
     updatedAt: (raw.updatedAt as string) || now,
   };
@@ -908,10 +935,65 @@ function normalizeValidationStatus(
         ? raw.lastValidatedAt
         : undefined,
     blueprint: normalizeValidationStageStatus(raw.blueprint),
+    synthesis: normalizeValidationStageStatus(raw.synthesis),
     repair: normalizeValidationStageStatus(raw.repair),
     dependency: normalizeValidationStageStatus(raw.dependency),
     host: normalizeValidationStageStatus(raw.host),
     runtime: normalizeValidationStageStatus(raw.runtime),
+  };
+}
+
+function normalizeGroundingAssessment(
+  rawGroundingAssessment: unknown,
+): RuneWeaverFeatureRecord["groundingSummary"] {
+  if (!rawGroundingAssessment || typeof rawGroundingAssessment !== "object") {
+    return undefined;
+  }
+
+  const raw = rawGroundingAssessment as Record<string, unknown>;
+  const status =
+    raw.status === "none_required"
+    || raw.status === "exact"
+    || raw.status === "partial"
+    || raw.status === "insufficient"
+      ? raw.status
+      : undefined;
+  if (!status) {
+    return undefined;
+  }
+
+  const assessment = buildGroundingAssessment();
+  return {
+    ...assessment,
+    status,
+    reviewRequired:
+      raw.reviewRequired === true
+      || status === "partial"
+      || status === "insufficient",
+    verifiedSymbolCount: Number.isFinite(raw.verifiedSymbolCount) ? Number(raw.verifiedSymbolCount) : 0,
+    allowlistedSymbolCount: Number.isFinite(raw.allowlistedSymbolCount) ? Number(raw.allowlistedSymbolCount) : 0,
+    weakSymbolCount: Number.isFinite(raw.weakSymbolCount) ? Number(raw.weakSymbolCount) : 0,
+    unknownSymbolCount: Number.isFinite(raw.unknownSymbolCount) ? Number(raw.unknownSymbolCount) : 0,
+    warnings: normalizeStringArray(raw.warnings),
+    reasonCodes: normalizeStringArray(raw.reasonCodes).filter(
+      (code): code is NonNullable<typeof assessment.reasonCodes>[number] =>
+        code === "no_symbols_required"
+        || code === "verified_symbols_present"
+        || code === "allowlisted_symbols_present"
+        || code === "weak_symbols_present"
+        || code === "unknown_symbols_present"
+        || code === "missing_exact_or_allowlisted_backing",
+    ),
+    evidenceRefs: Array.isArray(raw.evidenceRefs)
+      ? raw.evidenceRefs.filter(
+        (ref): ref is NonNullable<typeof assessment.evidenceRefs>[number] =>
+          Boolean(ref)
+          && typeof ref === "object"
+          && typeof (ref as Record<string, unknown>).id === "string"
+          && typeof (ref as Record<string, unknown>).title === "string"
+          && typeof (ref as Record<string, unknown>).sourceKind === "string",
+      )
+      : [],
   };
 }
 
@@ -946,6 +1028,10 @@ function normalizeFeatureDependencyEdges(
         targetSurfaceId:
           typeof edge.targetSurfaceId === "string" && edge.targetSurfaceId.length > 0
             ? edge.targetSurfaceId
+            : undefined,
+        targetContractId:
+          typeof edge.targetContractId === "string" && edge.targetContractId.length > 0
+            ? edge.targetContractId
             : undefined,
         required: edge.required === true ? true : undefined,
         summary:
@@ -1032,6 +1118,7 @@ function normalizeContractSurfaces(value: unknown): Array<{
   id: string;
   kind: "event" | "data" | "capability" | "state" | "integration";
   summary: string;
+  contractId?: string;
 }> {
   if (!Array.isArray(value)) {
     return [];
@@ -1042,6 +1129,10 @@ function normalizeContractSurfaces(value: unknown): Array<{
     .map((item) => {
       const id = typeof item.id === "string" ? item.id : "";
       const summary = typeof item.summary === "string" ? item.summary : "";
+      const contractId =
+        typeof item.contractId === "string" && item.contractId.length > 0
+          ? item.contractId
+          : undefined;
       const kind: "event" | "data" | "capability" | "state" | "integration" | undefined =
         item.kind === "event"
         || item.kind === "data"
@@ -1055,7 +1146,7 @@ function normalizeContractSurfaces(value: unknown): Array<{
         return undefined;
       }
 
-      return { id, kind, summary };
+      return { id, kind, summary, ...(contractId ? { contractId } : {}) };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }

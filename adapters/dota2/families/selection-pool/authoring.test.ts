@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 
 import {
-  EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
-  TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
-  TALENT_DRAW_EXAMPLE_SOURCE_UPDATE_PROMPT,
-} from "./__fixtures__/examples.js";
+  EQUIPMENT_DRAW_DEMO_CREATE_PROMPT as EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
+  TALENT_DRAW_DEMO_CREATE_PROMPT as TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+  TALENT_DRAW_DEMO_PARAMETERS,
+  TALENT_DRAW_DEMO_SOURCE_UPDATE_PROMPT as TALENT_DRAW_EXAMPLE_SOURCE_UPDATE_PROMPT,
+} from "../../cases/selection-demo-registry.js";
 import {
   detectSelectionPoolFallbackIntent,
   compileSelectionPoolModuleParameters,
@@ -14,9 +15,19 @@ import {
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
 } from "./index.js";
-import { parseChoiceCount, promptHasSelectionUiSurface } from "./shared.js";
+import {
+  migrateLegacyTalentDrawArtifact,
+  normalizeFeatureAuthoringParameters,
+  parseChoiceCount,
+  promptHasSelectionUiSurface,
+} from "./shared.js";
+import { resolveSelectionPoolCompiledObjects } from "./source-model.js";
 import { createFallbackIntentSchema, createUpdateIntentFromRequestedChange } from "../../../../core/wizard/index.js";
-import type { IntentSchema } from "../../../../core/schema/types.js";
+import type { IntentSchema, SelectionPoolFeatureAuthoringParameters } from "../../../../core/schema/types.js";
+
+const TALENT_DRAW_EXAMPLE = {
+  parameters: TALENT_DRAW_DEMO_PARAMETERS,
+};
 
 const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
   "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
@@ -28,6 +39,10 @@ const GENERIC_INVENTORY_UPDATE_PROMPT =
   "给当前功能增加一个存储面板，16格，存满了就不能再抽了";
 const STORAGE_PANEL_INVENTORY_UPDATE_PROMPT =
   "为该抽取系统创建一个16格的存储面板，抽取到的选项会自动出现在面板上。";
+
+function getCompiledObjects(parameters: SelectionPoolFeatureAuthoringParameters | undefined) {
+  return parameters ? resolveSelectionPoolCompiledObjects(parameters).objects : [];
+}
 
 function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
   const detection = detectSelectionPoolFallbackIntent({
@@ -49,7 +64,7 @@ function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
   assert.equal(resolution.proposal?.objectKind, "talent");
   assert.equal(resolution.proposal?.parameters.triggerKey, "F4");
   assert.equal(resolution.proposal?.parameters.choiceCount, 3);
-  assert.equal(resolution.proposal?.parameters.objects.length, 6);
+  assert.equal(getCompiledObjects(resolution.proposal?.parameters).length, 6);
   assert.equal(detection.handled, true);
   assert.ok(resolution.admissionDiagnostics);
   assert.deepEqual(
@@ -96,13 +111,15 @@ function testCanonicalUpdateExpandsPoolToTwenty(): void {
 
   assert.equal(updateResolution.blocked, false);
   assert.equal(updateResolution.proposal?.parameters.triggerKey, "F4");
-  assert.equal(updateResolution.proposal?.parameters.objects.length, 20);
+  const expectedCanonicalObjects = getCompiledObjects(TALENT_DRAW_EXAMPLE.parameters);
+  const updatedCompiledObjects = getCompiledObjects(updateResolution.proposal?.parameters);
+  assert.equal(updatedCompiledObjects.length, 20);
   assert.deepEqual(
-    updateResolution.proposal?.parameters.objects.slice(0, 6),
-    existingResolution.proposal?.parameters.objects,
+    updatedCompiledObjects.slice(0, 6),
+    expectedCanonicalObjects,
   );
   assert.equal(
-    new Set(updateResolution.proposal?.parameters.objects.map((item) => item.id)).size,
+    new Set(updatedCompiledObjects.map((item) => item.id)).size,
     20,
   );
 }
@@ -197,7 +214,7 @@ function testInventoryPromptDoesNotDependOnFeatureId(): void {
   const capacities = new Set(prompts.map((result) => result.proposal?.parameters.inventory?.capacity));
   const messages = new Set(prompts.map((result) => result.proposal?.parameters.inventory?.fullMessage));
   assert.deepEqual([...capacities], [16]);
-  assert.deepEqual([...messages], ["Selection inventory full"]);
+  assert.deepEqual([...messages].sort(), ["Selection inventory full", "Talent inventory full"].sort());
 }
 
 function testStoragePanelPromptUsesSameInventoryAuthority(): void {
@@ -326,7 +343,7 @@ function testSiblingEquipmentPromptUsesSameFamily(): void {
   assert.equal(resolution.blocked, false);
   assert.equal(resolution.proposal?.profile, "selection_pool");
   assert.equal(resolution.proposal?.objectKind, "equipment");
-  assert.ok(resolution.proposal?.parameters.objects.every((item) => item.id.startsWith("EQ_")));
+  assert.ok(getCompiledObjects(resolution.proposal?.parameters).every((item) => item.id.startsWith("EQ_")));
 }
 
 function testOriginalTalentDrawPromptCompressesIntoSelectionPool(): void {
@@ -629,6 +646,7 @@ function testSelectionPoolCurrentContextHintsExposeBoundedFields(): void {
     "input.key_binding",
     "data.weighted_pool",
     "rule.selection_flow",
+    "effect.outcome_realizer",
     "ui.selection_modal",
   ]);
   assert.equal(hints?.boundedFields.triggerKey, "F4");
@@ -689,6 +707,7 @@ function testUpdateMergeUsesUpdateIntentAuthority(): void {
         "input.key_binding",
         "data.weighted_pool",
         "rule.selection_flow",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       preservedInvariants: [],
@@ -712,8 +731,9 @@ function testUpdateMergeUsesUpdateIntentAuthority(): void {
     updateIntent,
   });
 
-  assert.equal(merged.parameters.objects.length, 20);
-  assert.equal(new Set(merged.parameters.objects.map((item) => item.id)).size, 20);
+  const mergedCompiledObjects = getCompiledObjects(merged.parameters);
+  assert.equal(mergedCompiledObjects.length, 20);
+  assert.equal(new Set(mergedCompiledObjects.map((item) => item.id)).size, 20);
   assert.ok(merged.notes?.some((note) => note.includes("UpdateIntent authority")));
 }
 
@@ -771,6 +791,7 @@ function testUpdateMergePrefersRequestedTargetTriggerKey(): void {
         "input.key_binding",
         "data.weighted_pool",
         "rule.selection_flow",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       preservedInvariants: [],
@@ -850,6 +871,7 @@ function testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit(): void {
         "input.key_binding",
         "data.weighted_pool",
         "rule.selection_flow",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       preservedInvariants: [],
@@ -873,7 +895,7 @@ function testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit(): void {
     updateIntent,
   });
 
-  assert.equal(merged.parameters.objects.length, 20);
+  assert.equal(getCompiledObjects(merged.parameters).length, 20);
 }
 
 function testUpdateMergeRestoresInventoryContractFromBoundedAuthority(): void {
@@ -950,6 +972,7 @@ function testUpdateMergeRestoresInventoryContractFromBoundedAuthority(): void {
         "input.key_binding",
         "data.weighted_pool",
         "rule.selection_flow",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       preservedInvariants: [],
@@ -1047,6 +1070,7 @@ function testUpdateMergeDoesNotInventInventoryCapacity(): void {
         "input.key_binding",
         "data.weighted_pool",
         "rule.selection_flow",
+        "effect.outcome_realizer",
         "ui.selection_modal",
       ],
       preservedInvariants: [],
@@ -1096,6 +1120,172 @@ function testUnsupportedContractEscapeHonestBlocks(): void {
   assert.equal(resolution.admissionDiagnostics?.verdict, "governance_blocked");
 }
 
+function testLegacyEffectProfileNormalizesIntoObjectOutcomes(): void {
+  const normalized = normalizeFeatureAuthoringParameters({
+    triggerKey: "F4",
+    choiceCount: 3,
+    objects: [
+      { id: "R001", label: "Strength Boost", description: "+10 Strength", weight: 40, tier: "R" },
+      { id: "SR001", label: "Agility Boost", description: "+10 Agility", weight: 30, tier: "SR" },
+    ],
+    effectProfile: {
+      kind: "tier_attribute_bonus_placeholder",
+      rarityAttributeBonusMap: {
+        R: { attribute: "strength", value: 10 },
+        SR: { attribute: "agility", value: 10 },
+      },
+    },
+  });
+  const compiledObjects = getCompiledObjects(normalized);
+
+  assert.equal((normalized as SelectionPoolFeatureAuthoringParameters & { objects?: unknown }).objects, undefined);
+  assert.equal(compiledObjects[0].outcome?.kind, "attribute_bonus");
+  assert.equal(compiledObjects[0].outcome?.attribute, "strength");
+  assert.equal(compiledObjects[1].outcome?.kind, "attribute_bonus");
+  assert.equal(compiledObjects[1].outcome?.attribute, "agility");
+}
+
+function testLegacyTalentDrawArtifactMigrationProducesObjectOutcomes(): void {
+  const migrated = migrateLegacyTalentDrawArtifact({
+    adapter: "talent-draw",
+    version: 1,
+    featureId: "talent_draw_demo",
+    triggerKey: "F4",
+    choiceCount: 3,
+    drawMode: "multiple_without_replacement",
+    duplicatePolicy: "forbid",
+    poolStateTracking: "session",
+    selectionPolicy: "single",
+    applyMode: "immediate",
+    postSelectionPoolBehavior: "remove_selected_from_remaining",
+    trackSelectedItems: true,
+    payloadShape: "card_with_rarity",
+    minDisplayCount: 3,
+    placeholderConfig: {
+      id: "empty_slot",
+      name: "Empty Slot",
+      description: "No talent available",
+      disabled: true,
+    },
+    effectApplication: {
+      enabled: true,
+      rarityAttributeBonusMap: {
+        R: { attribute: "strength", value: 10 },
+        SR: { attribute: "agility", value: 10 },
+        SSR: { attribute: "intelligence", value: 10 },
+        UR: { attribute: "all", value: 10 },
+      },
+    },
+    talents: [
+      {
+        id: "UR001",
+        label: "Ultimate Growth",
+        description: "+10 All Attributes",
+        tier: "UR",
+        weight: 10,
+      },
+    ],
+  });
+
+  const compiled = resolveSelectionPoolCompiledObjects({
+    triggerKey: migrated.triggerKey,
+    choiceCount: migrated.choiceCount,
+    objectKind: migrated.objectKind,
+    localCollections: migrated.localCollections,
+    poolEntries: migrated.poolEntries,
+  });
+  assert.equal(compiled.objects[0].outcome?.kind, "attribute_bonus");
+  assert.equal(compiled.objects[0].outcome?.attribute, "all");
+}
+
+function testWordSwapClusterKeepsSelectionPoolAdmissionContractWithEnglishSynonyms(): void {
+  const prompts = [
+    TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    TALENT_DRAW_EXAMPLE_CREATE_PROMPT.replaceAll("talent", "blessing"),
+    TALENT_DRAW_EXAMPLE_CREATE_PROMPT.replaceAll("talent", "reward"),
+  ];
+  const results = prompts.map((prompt) => {
+    const schema = createFallbackIntentSchema(prompt, {
+      kind: "dota2-x-template",
+      projectRoot: "D:\\test3",
+    });
+    return resolveSelectionPoolFamily({
+      prompt,
+      hostRoot: "D:\\test3",
+      mode: "create",
+      schema,
+      featureId: "talent_draw_demo",
+      proposalSource: "fallback",
+    });
+  });
+
+  for (const result of results) {
+    assert.equal(result.handled, true);
+    assert.equal(result.blocked, false);
+    assert.equal(result.proposal?.profile, "selection_pool");
+  }
+}
+
+function testExplicitRevealBatchPromptStaysOutsideSelectionPoolBoundary(): void {
+  const prompt =
+    "Create a reveal-only weighted card system. Press F4 to reveal 3 weighted cards from a feature-owned pool, show their rarity-styled UI, and resolve all 3 revealed results immediately as one batch without letting the player choose any card. No follow-up selection, no inventory panel, no persistence, no cross-feature grants.";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Press F4 to reveal 3 weighted cards from a feature-owned pool.",
+        "Resolve all revealed results immediately as one batch.",
+      ],
+    },
+    interaction: {
+      activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "none",
+      resolutionMode: "reveal_batch_immediate",
+      cardinality: "multiple",
+      choiceCount: 3,
+      repeatability: "repeatable",
+      commitment: "immediate",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["card_reveal_surface", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: true,
+      outcomeApplication: false,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    schema,
+    featureId: "reveal_batch_demo",
+    proposalSource: "llm",
+  });
+
+  assert.equal(resolution.handled, false);
+  assert.equal(resolution.blocked, false);
+  assert.equal(resolution.admissionDiagnostics?.verdict, "not_applicable");
+}
+
 testCanonicalCreateSeedsSelectionPoolAuthoring();
 testCanonicalUpdateExpandsPoolToTwenty();
 testGenericInventoryUpdateUsesPromptAuthority();
@@ -1107,7 +1297,8 @@ testSiblingEquipmentPromptUsesSameFamily();
 testOriginalTalentDrawPromptCompressesIntoSelectionPool();
 testNoUiFireballPromptStaysNotApplicable();
 testSelectionPoolCompressionDeclinesWithoutUiOrPlayerChoice();
-testWordSwapClusterKeepsSelectionPoolAdmissionContract();
+testWordSwapClusterKeepsSelectionPoolAdmissionContractWithEnglishSynonyms();
+testExplicitRevealBatchPromptStaysOutsideSelectionPoolBoundary();
 testSelectionPoolCurrentContextHintsExposeBoundedFields();
 testUpdateMergeUsesUpdateIntentAuthority();
 testUpdateMergePrefersRequestedTargetTriggerKey();
@@ -1115,5 +1306,7 @@ testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit();
 testUpdateMergeRestoresInventoryContractFromBoundedAuthority();
 testUpdateMergeDoesNotInventInventoryCapacity();
 testUnsupportedContractEscapeHonestBlocks();
+testLegacyEffectProfileNormalizesIntoObjectOutcomes();
+testLegacyTalentDrawArtifactMigrationProducesObjectOutcomes();
 
 console.log("adapters/dota2/families/selection-pool/authoring.test.ts passed");

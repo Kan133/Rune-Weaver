@@ -38,6 +38,15 @@ export interface NormalizedFeatureDisplay {
       score: number | null;
       warnings: string[];
     };
+    grounding: {
+      status: 'none_required' | 'exact' | 'partial' | 'insufficient';
+      reviewRequired: boolean;
+      verifiedSymbolCount: number;
+      allowlistedSymbolCount: number;
+      weakSymbolCount: number;
+      unknownSymbolCount: number;
+      warningCount: number;
+    };
   };
 }
 
@@ -122,6 +131,31 @@ export function normalizeFeatureDisplay(feature: Feature | null | undefined): No
       readiness: {
         score: typeof reviewSignals?.readiness?.score === 'number' ? reviewSignals.readiness.score : null,
         warnings: asStringArray(reviewSignals?.readiness?.warnings),
+      },
+      grounding: {
+        status:
+          reviewSignals?.grounding?.status === 'exact'
+          || reviewSignals?.grounding?.status === 'partial'
+          || reviewSignals?.grounding?.status === 'insufficient'
+          || reviewSignals?.grounding?.status === 'none_required'
+            ? reviewSignals.grounding.status
+            : 'none_required',
+        reviewRequired: reviewSignals?.grounding?.reviewRequired ?? false,
+        verifiedSymbolCount: typeof reviewSignals?.grounding?.verifiedSymbolCount === 'number'
+          ? reviewSignals.grounding.verifiedSymbolCount
+          : 0,
+        allowlistedSymbolCount: typeof reviewSignals?.grounding?.allowlistedSymbolCount === 'number'
+          ? reviewSignals.grounding.allowlistedSymbolCount
+          : 0,
+        weakSymbolCount: typeof reviewSignals?.grounding?.weakSymbolCount === 'number'
+          ? reviewSignals.grounding.weakSymbolCount
+          : 0,
+        unknownSymbolCount: typeof reviewSignals?.grounding?.unknownSymbolCount === 'number'
+          ? reviewSignals.grounding.unknownSymbolCount
+          : 0,
+        warningCount: typeof reviewSignals?.grounding?.warningCount === 'number'
+          ? reviewSignals.grounding.warningCount
+          : 0,
       },
     },
   };

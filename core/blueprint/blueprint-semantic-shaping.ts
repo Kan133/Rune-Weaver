@@ -22,6 +22,38 @@ import {
 } from "./seam-authority";
 import { stripNegativeConstraintFragments } from "./semantic-lexical";
 import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
+import {
+  isDefinitionOnlyProviderBoundary,
+  isDefinitionOnlyProviderDerivedState,
+  isDefinitionOnlyProviderShellRequirement,
+} from "../wizard/intent-schema/definition-only-provider.js";
+
+function isDefinitionOnlyProviderShellBlueprintRequirement(
+  req: IntentRequirement,
+  schema: IntentSchema,
+): boolean {
+  return isDefinitionOnlyProviderBoundary(schema, schema.request?.rawPrompt)
+    && isDefinitionOnlyProviderShellRequirement(req);
+}
+
+function toDefinitionOnlyProviderStateRecord(
+  state: {
+    id?: string;
+    stateId?: string;
+    summary?: string;
+    owner?: string;
+    lifetime?: string;
+    mutationMode?: string;
+  },
+): Pick<NonNullable<IntentSchema["stateModel"]>["states"][number], "id" | "summary" | "owner" | "lifetime" | "mutationMode"> {
+  return {
+    id: state.id || state.stateId || "",
+    summary: state.summary || "",
+    owner: state.owner as NonNullable<IntentSchema["stateModel"]>["states"][number]["owner"],
+    lifetime: state.lifetime as NonNullable<IntentSchema["stateModel"]>["states"][number]["lifetime"],
+    mutationMode: state.mutationMode as NonNullable<IntentSchema["stateModel"]>["states"][number]["mutationMode"],
+  };
+}
 
 export function inferCategoriesFromMechanics(
   schema: IntentSchema
@@ -59,6 +91,9 @@ export function resolveRequirementCategory(
   req: IntentRequirement,
   schema: IntentSchema
 ): BlueprintModule["category"] {
+  if (isDefinitionOnlyProviderShellBlueprintRequirement(req, schema)) {
+    return "effect";
+  }
   if (detectSelectionLocalProgressionStateRequirement(req, schema)) {
     return "rule";
   }
@@ -75,6 +110,9 @@ export function resolveRequirementRole(
   schema: IntentSchema,
   contextSignals: string[]
 ): string {
+  if (isDefinitionOnlyProviderShellBlueprintRequirement(req, schema)) {
+    return "gameplay_ability";
+  }
   const governance = getIntentGovernanceView(schema);
   if (req.kind === "state") {
     if (category === "rule" && detectSelectionLocalProgressionStateRequirement(req, schema)) {
@@ -253,6 +291,9 @@ export function getCanonicalPatternIds(
     case "rule":
       return role === "selection_flow" ? [CORE_PATTERN_IDS.RULE_SELECTION_FLOW] : [];
     case "ui":
+      if (role === "reveal_surface") {
+        return [];
+      }
       if (role === "resource_bar") {
         return [CORE_PATTERN_IDS.UI_RESOURCE_BAR];
       }
@@ -289,6 +330,7 @@ export function buildModuleNeeds(
       return {
         moduleId: module.id,
         semanticRole: module.role,
+        category: module.category,
         backboneKind: module.backboneKind,
         facetIds: facets.map((facet) => facet.facetId),
         coLocatePreferred: true,
@@ -307,6 +349,7 @@ export function buildModuleNeeds(
     return {
       moduleId: module.id,
       semanticRole: module.role,
+      category: module.category,
       backboneKind: module.backboneKind,
       facetIds: module.facetIds,
       coLocatePreferred: module.planningKind === "backbone",
@@ -516,6 +559,9 @@ function extractSelectionParams(params: Record<string, unknown>): Record<string,
   if (params.choiceCount) {
     result.choiceCount = params.choiceCount;
   }
+  if (params.resolutionMode) {
+    result.resolutionMode = params.resolutionMode;
+  }
   if (params.selectionPolicy) {
     result.selectionPolicy = params.selectionPolicy;
   }
@@ -645,7 +691,9 @@ export function inferRequiredCapabilities(
       }
       break;
     case "rule":
-      if (module.role === "selection_flow" && (
+      if (module.role === "reveal_batch_runtime") {
+        capabilities.add("selection.reveal.batch_immediate");
+      } else if (module.role === "selection_flow" && (
         governance.mechanics.playerChoice ||
         governance.selection.choiceMode === "user-chosen" ||
         governance.selection.choiceMode === "hybrid" ||
@@ -681,6 +729,10 @@ export function inferRequiredCapabilities(
       }
       break;
     case "effect":
+      if (module.role === "gameplay_ability") {
+        capabilities.add("ability.definition.shell");
+        break;
+      }
       if (module.role === "spawn_emitter") {
         capabilities.add("emission.spawn.feature_owned");
         break;
@@ -708,6 +760,8 @@ export function inferRequiredCapabilities(
         capabilities.add("ui.resource.bar");
       } else if (module.role === "key_hint") {
         capabilities.add("ui.input.key_hint");
+      } else if (module.role === "reveal_surface") {
+        capabilities.add("ui.reveal.batch_surface");
       } else {
         capabilities.add("ui.selection.modal");
       }
@@ -739,6 +793,7 @@ export function inferOptionalCapabilities(
   }
   if (
     module.category === "rule" &&
+    module.role !== "reveal_batch_runtime" &&
     (
       governance.selection.source === "weighted-pool" ||
       governance.selection.choiceMode === "weighted" ||
@@ -800,6 +855,19 @@ export function inferRequiredOutputs(
     outputs.add("server.runtime");
   }
   if (module.category === "effect") {
+    if (module.role === "gameplay_ability") {
+      outputs.add("server.runtime");
+      outputs.add("host.runtime.lua");
+      outputs.add("host.config.kv");
+      for (const requirement of schema.requirements.typed || []) {
+        if (isDefinitionOnlyProviderShellBlueprintRequirement(requirement, schema)) {
+          for (const output of requirement.outputs || []) {
+            outputs.add(output);
+          }
+        }
+      }
+      return outputs.size > 0 ? [...outputs] : undefined;
+    }
     outputs.add("server.runtime");
     outputs.add("host.config.kv");
     if (
@@ -834,8 +902,13 @@ export function inferStateExpectations(
   schema: IntentSchema
 ): string[] | undefined {
   const governance = getIntentGovernanceView(schema);
-  const rawStates = schema.stateModel?.states || [];
-  const governanceStates = governance.state.states || [];
+  const definitionOnlyProvider = isDefinitionOnlyProviderBoundary(schema, schema.request?.rawPrompt);
+  const rawStates = (schema.stateModel?.states || []).filter((state) =>
+    !definitionOnlyProvider || !isDefinitionOnlyProviderDerivedState(state),
+  );
+  const governanceStates = (governance.state.states || []).filter((state) =>
+    !definitionOnlyProvider || !isDefinitionOnlyProviderDerivedState(toDefinitionOnlyProviderStateRecord(state)),
+  );
 
   if (rawStates.length === 0 && governanceStates.length === 0) {
     return undefined;
@@ -857,6 +930,7 @@ export function inferStateExpectations(
 
   const hasCommittedSelectionState =
     governance.selection.present &&
+    governance.selection.resolutionMode !== "reveal_batch_immediate" &&
     (
       governance.mechanics.playerChoice ||
       governance.mechanics.outcomeApplication ||
@@ -909,6 +983,8 @@ export function inferIntegrationHints(
       hints.add("resource.ui_surface");
     } else if (module.role === "key_hint") {
       hints.add("input.binding");
+    } else if (module.role === "reveal_surface") {
+      hints.add("ui.reveal_surface");
     }
   }
 
@@ -919,6 +995,8 @@ export function inferIntegrationHints(
           hints.add("resource.ui_surface");
         } else if (module.role === "key_hint") {
           hints.add("input.binding");
+        } else if (module.role === "reveal_surface") {
+          hints.add("ui.reveal_surface");
         } else {
           hints.add("selection.ui_surface");
         }

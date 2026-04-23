@@ -5,6 +5,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { validatePostGeneration } from "../../../../adapters/dota2/validator/post-generation-validator.js";
+import { planPostGenerationRepairs } from "../../../../adapters/dota2/validator/post-generation-repair.js";
 import type { DoctorCheck } from "./doctor-checks.js";
 
 function readAddonName(hostRoot: string): string | null {
@@ -162,6 +163,18 @@ function findGeneratedUiLessFiles(hostRoot: string): string[] {
 
 export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
   const result = validatePostGeneration(hostRoot);
+  const groundingCheck = result.checks.find((check) => check.check === "synthesized_grounding_governance");
+
+  if (result.valid && groundingCheck?.details?.length) {
+    return {
+      name: "Post-Generation Validation",
+      status: "warn",
+      remediationKind: "review_required",
+      message: `All ${result.summary.total} checks passed, but ${groundingCheck.details.length} synthesized grounding warning(s) still require review`,
+      details: groundingCheck.details.slice(0, 5),
+      suggestion: "Review synthesized modules with partial or insufficient grounding before promotion.",
+    };
+  }
 
   if (result.valid) {
     return { name: "Post-Generation Validation", status: "pass", message: `All ${result.summary.total} checks passed` };
@@ -170,14 +183,70 @@ export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
   const details = result.issues.slice(0, 5);
   if (result.issues.length > 5) details.push(`... and ${result.issues.length - 5} more`);
   const failedCheck = result.checks.find((check) => !check.passed);
+  const repairPlan = planPostGenerationRepairs(result, hostRoot);
+  const remediationKind = resolvePostGenerationRemediationKind(repairPlan);
+  if (remediationKind === "requires_regenerate") {
+    repairPlan.actions
+      .filter((action) => action.kind === "requires_regenerate")
+      .slice(0, 3)
+      .forEach((action) => details.push(`Repair path: ${action.title}`));
+  } else if (remediationKind === "upgrade_workspace_grounding") {
+    repairPlan.actions
+      .filter((action) => action.kind === "upgrade_workspace_grounding")
+      .slice(0, 3)
+      .forEach((action) => details.push(`Repair path: ${action.title}`));
+  }
 
   return {
     name: "Post-Generation Validation",
     status: "fail",
-    message: `${result.summary.failed}/${result.summary.total} checks failed`,
+    remediationKind,
+    message: buildPostGenerationFailureMessage(result.summary.failed, result.summary.total, remediationKind),
     details,
-    suggestion: failedCheck?.suggestion,
+    suggestion: resolvePostGenerationSuggestion(hostRoot, remediationKind, failedCheck?.suggestion),
   };
+}
+
+function resolvePostGenerationRemediationKind(
+  repairPlan: ReturnType<typeof planPostGenerationRepairs>,
+): DoctorCheck["remediationKind"] {
+  if (repairPlan.summary.requiresRegenerate > 0 && repairPlan.executableActions.length === 0) {
+    return "requires_regenerate";
+  }
+  if (repairPlan.summary.upgradeWorkspaceGrounding > 0) {
+    return "upgrade_workspace_grounding";
+  }
+  return "repair_safe";
+}
+
+function buildPostGenerationFailureMessage(
+  failedCount: number,
+  totalCount: number,
+  remediationKind: DoctorCheck["remediationKind"],
+): string {
+  switch (remediationKind) {
+    case "upgrade_workspace_grounding":
+      return `${failedCount}/${totalCount} checks failed (upgradeable legacy grounding state detected)`;
+    case "requires_regenerate":
+      return `${failedCount}/${totalCount} checks failed (stale synthesized grounding requires regenerate)`;
+    default:
+      return `${failedCount}/${totalCount} checks failed`;
+  }
+}
+
+function resolvePostGenerationSuggestion(
+  hostRoot: string,
+  remediationKind: DoctorCheck["remediationKind"],
+  fallback?: string,
+): string | undefined {
+  switch (remediationKind) {
+    case "upgrade_workspace_grounding":
+      return `Run npm run cli -- dota2 repair --host ${hostRoot} --safe to upgrade canonical workspace grounding from preserved raw metadata.`;
+    case "requires_regenerate":
+      return "Regenerate the affected synthesized feature with the current pipeline; this host predates the canonical grounding contract and preserved raw grounding is missing.";
+    default:
+      return fallback;
+  }
 }
 
 export function checkProjectStructure(hostRoot: string): DoctorCheck {
@@ -243,9 +312,9 @@ export function checkProjectStructure(hostRoot: string): DoctorCheck {
 export function checkGapFillBoundaryAnchors(): DoctorCheck {
   const requiredAnchors = [
     {
-      filePath: join(process.cwd(), "adapters/dota2/generator/server/selection-flow.ts"),
-      exportName: "SELECTION_FLOW_GAP_FILL_BOUNDARIES",
-      marker: "GAP_FILL_BOUNDARY: selection_flow.effect_mapping",
+      filePath: join(process.cwd(), "adapters/dota2/generator/server/outcome-realizer.ts"),
+      exportName: "SELECTION_OUTCOME_GAP_FILL_BOUNDARIES",
+      marker: "GAP_FILL_BOUNDARY: selection_outcome.realization",
     },
     {
       filePath: join(process.cwd(), "adapters/dota2/generator/server/weighted-pool.ts"),
@@ -417,7 +486,16 @@ export function generateRecommendations(checks: DoctorCheck[]): string[] {
   }
   if (dirs?.status === "fail") recs.push("Install host links: rename addon.config first, then run yarn install");
   if (workspace?.status !== "pass") recs.push("Repair workspace metadata: npm run cli -- dota2 init --host <path>");
-  if (postGen?.status === "fail") recs.push("Fix issues: npm run cli -- dota2 repair --host <path> --safe");
+  if (postGen?.status === "fail" && postGen.remediationKind === "requires_regenerate") {
+    recs.push("Regenerate stale synthesized features; repair cannot reconstruct missing raw grounding.");
+  } else if (postGen?.status === "fail" && postGen.remediationKind === "upgrade_workspace_grounding") {
+    recs.push("Upgrade legacy synthesized grounding: npm run cli -- dota2 repair --host <path> --safe");
+  } else if (postGen?.status === "fail") {
+    recs.push("Fix issues: npm run cli -- dota2 repair --host <path> --safe");
+  }
+  if (postGen?.status === "warn" && postGen.remediationKind === "review_required") {
+    recs.push("Review synthesized grounding warnings before promotion.");
+  }
   if (pkg?.status === "warn") recs.push("Install deps: yarn install");
   if (structure?.status === "warn") recs.push("Refresh Rune Weaver bridge or generated outputs if this host should contain a feature");
   if (bridge?.status === "fail") recs.push("Repair bridge wiring: npm run cli -- dota2 repair --host <path> --safe");

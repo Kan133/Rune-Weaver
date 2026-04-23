@@ -1,5 +1,6 @@
 import type { IntentSchema } from "../../schema/types.js";
 import { analyzeIntentSemanticLayers } from "./semantic-analysis.js";
+import { buildIntentRawFacts } from "./raw-facts.js";
 import { CANDIDATE_DRAW_CANONICALIZATION_PASS } from "./canonicalization-pass-candidate-draw.js";
 import { DEFINITION_ONLY_PROVIDER_CANONICALIZATION_PASS } from "./canonicalization-pass-definition-only-provider.js";
 import type {
@@ -38,13 +39,19 @@ export function runIntentSchemaCanonicalizationPasses(input: {
       semanticAnalysis: currentSemanticAnalysis,
     });
     currentCandidate = result.candidate;
+    const nextRawFacts = buildIntentRawFacts({
+      candidate: currentCandidate,
+      rawText: input.context.rawText,
+      host: input.context.host,
+      promptHints: input.context.promptHints,
+    });
     currentSemanticAnalysis = analyzeIntentSemanticLayers(
       currentCandidate,
       input.context.rawText,
       input.context.host,
       {
         promptHints: input.context.promptHints,
-        rawFacts: currentSemanticAnalysis.rawFacts,
+        rawFacts: nextRawFacts,
         openSemanticResidue: result.openSemanticResidue,
       },
     );

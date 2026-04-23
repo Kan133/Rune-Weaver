@@ -612,10 +612,98 @@ function testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShell() {
   assert.equal(schema.classification.intentKind, "micro-feature");
   assert.equal(schema.normalizedMechanics?.outcomeApplication, false);
   assert.equal(schema.selection, undefined);
+  assert.equal(schema.stateModel, undefined);
   assert.equal(schema.outcomes, undefined);
   assert.equal(schema.composition, undefined);
   assert.equal(schema.integrations, undefined);
   assert.equal(schema.uiRequirements?.needed || false, false);
+  assert.equal(schema.requirements.typed?.[0]?.kind, "generic");
+}
+
+function testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShellWithoutConsumerDrift() {
+  const prompt =
+    "Create one gameplay ability shell only. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It only defines one primary hero ability named placeholder fire ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: {
+        rawPrompt: prompt,
+        goal: "Define one gameplay ability shell only for later external granting.",
+      },
+      classification: {
+        intentKind: "micro-feature",
+        confidence: "high",
+      },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "The feature includes no grant logic.",
+          "The feature includes no modifier application.",
+          "The shell exists only as a definition for later external granting.",
+        ],
+        typed: [
+          {
+            id: "ability_shell_definition",
+            kind: "resource",
+            summary: "Define one primary hero ability shell named placeholder fire ability for later external granting.",
+            outputs: ["ability shell definition"],
+            priority: "must",
+          },
+        ],
+      },
+      constraints: {
+        nonFunctional: ["Keep the feature limited to shell definition only."],
+      },
+      selection: {
+        mode: "deterministic",
+        source: "none",
+        choiceMode: "none",
+        cardinality: "single",
+        choiceCount: 1,
+      },
+      timing: {
+        duration: { kind: "persistent" },
+      },
+      stateModel: {
+        states: [
+          {
+            id: "ability_shell_definition_state",
+            summary: "The defined ability shell resource exists for later external granting.",
+            owner: "feature",
+            lifetime: "session",
+            mutationMode: "create",
+          },
+        ],
+      },
+      normalizedMechanics: {
+        candidatePool: true,
+        playerChoice: true,
+        uiModal: true,
+      },
+      uiRequirements: {
+        needed: false,
+      },
+      resolvedAssumptions: [],
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+      },
+    },
+    prompt,
+    host,
+  );
+
+  assert.equal(schema.classification.intentKind, "micro-feature");
+  assert.equal(schema.selection, undefined);
+  assert.equal(schema.stateModel, undefined);
+  assert.equal(schema.timing, undefined);
+  assert.equal(schema.normalizedMechanics?.candidatePool, false);
+  assert.equal(schema.normalizedMechanics?.playerChoice, false);
+  assert.equal(schema.normalizedMechanics?.uiModal, false);
+  assert.equal(schema.requirements.typed?.[0]?.kind, "generic");
 }
 
 function testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency() {
@@ -701,7 +789,9 @@ async function testRunWizardToIntentSchemaUsesBoundedProviderTimeout() {
 }
 
 async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
-  const schemaObject: Partial<IntentSchema> = {
+  const schemaObject: Partial<IntentSchema> & {
+    requiredClarifications?: Array<{ id?: string; question?: string; blocksFinalization?: boolean }>;
+  } = {
     request: {
       goal: "After drawing one option, grant another feature and persist it across matches.",
     },
@@ -724,6 +814,18 @@ async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
         { kind: "external-system", relation: "writes", required: true },
       ],
     },
+    requiredClarifications: [
+      {
+        id: "legacy_cross_feature_target",
+        question: "Which exact feature is being granted, read, or coupled to?",
+        blocksFinalization: true,
+      },
+      {
+        id: "legacy_persistence_scope",
+        question: "What ownership scope should persist this behavior or state?",
+        blocksFinalization: true,
+      },
+    ],
     resolvedAssumptions: [],
   };
 
@@ -752,6 +854,150 @@ async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
   assert.equal(persistenceQuestion?.impact, "blueprint-blocking-structural");
 }
 
+async function testRunWizardToIntentSchemaDoesNotClarifyDefinitionOnlyProviderShell() {
+  const prompt =
+    "Create one gameplay ability shell only. No activation key, no trigger key, no player input, no auto-attach, no grant logic, no modifier application, and no selection UI. It exists only as a feature-owned definition for later external consumers. Define one primary hero ability shell for later external granting.";
+  const schemaObject: Partial<IntentSchema> & {
+    requiredClarifications?: Array<{ id?: string; question?: string; blocksFinalization?: boolean }>;
+    openQuestions?: string[];
+  } = {
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "cross-system-composition",
+      confidence: "high",
+    },
+    requirements: {
+      functional: [
+        "Define exactly one gameplay ability shell only.",
+        "The feature includes no grant logic.",
+        "The feature includes no modifier application.",
+        "The shell exists only as a definition for later external granting.",
+      ],
+      typed: [
+        {
+          id: "ability_shell_definition",
+          kind: "resource",
+          summary: "Define one primary hero ability shell for later external granting.",
+          outputs: ["ability shell definition"],
+          priority: "must",
+        },
+      ],
+    },
+    selection: {
+      mode: "deterministic",
+      source: "none",
+      choiceMode: "none",
+      cardinality: "single",
+      choiceCount: 1,
+    },
+    timing: {
+      duration: { kind: "persistent" },
+    },
+    stateModel: {
+      states: [
+        {
+          id: "ability_shell_definition_state",
+          summary: "Store the shell definition for the current match.",
+          owner: "feature",
+          lifetime: "session",
+          mutationMode: "create",
+        },
+      ],
+    },
+    normalizedMechanics: {
+      candidatePool: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    uiRequirements: {
+      needed: false,
+    },
+    resolvedAssumptions: [],
+    parameters: {
+      shellOnly: true,
+      playerInput: false,
+      autoAttach: false,
+      grantLogicIncluded: false,
+      modifierApplicationIncluded: false,
+      externalGrantLater: true,
+    },
+    requiredClarifications: [
+      {
+        id: "legacy_trigger",
+        question: "What exactly triggers this feature, and who owns that trigger?",
+        blocksFinalization: true,
+      },
+      {
+        id: "legacy_consumer",
+        question: "Which exact feature will consume this provider later?",
+        blocksFinalization: true,
+      },
+    ],
+    openQuestions: [
+      "Should the player choose from a follow-up selection UI?",
+    ],
+  };
+
+  const result = await runWizardToIntentSchema({
+    client: {
+      async generateObject() {
+        return { object: schemaObject, raw: schemaObject };
+      },
+    },
+    input: {
+      rawText: prompt,
+    },
+  });
+
+  assert.equal(result.clarificationPlan?.questions.length ?? 0, 0);
+  assert.equal(result.schema.selection, undefined);
+  assert.equal(result.schema.timing, undefined);
+  assert.equal(result.schema.uncertainties?.length ?? 0, 0);
+  assert.equal(result.schema.normalizedMechanics?.candidatePool, false);
+  assert.equal(result.schema.normalizedMechanics?.playerChoice, false);
+  assert.equal(result.schema.normalizedMechanics?.uiModal, false);
+}
+
+function testFinalizeCreateIntentSchemaKeepsRevealBatchImmediateNonInteractive() {
+  const prompt =
+    "Create a reveal-only weighted card system. Press F4 to reveal 3 weighted cards from a feature-owned pool, show their rarity-styled UI, and resolve all 3 revealed results immediately as one batch without letting the player choose any card.";
+  const finalized = finalizeCreateIntentSchema(
+    {
+      version: "1.0",
+      host,
+      request: { rawPrompt: prompt, goal: prompt },
+      classification: { intentKind: "standalone-system", confidence: "high" },
+      requirements: { functional: ["Reveal 3 weighted cards and resolve them immediately as one batch."] },
+      constraints: {},
+      selection: {
+        mode: "weighted",
+        source: "weighted-pool",
+        choiceMode: "none",
+        resolutionMode: "reveal_batch_immediate",
+        cardinality: "multiple",
+        choiceCount: 3,
+        commitment: "immediate",
+      },
+      uiRequirements: { needed: true, surfaces: ["card_reveal_surface"] },
+      normalizedMechanics: {
+        trigger: true,
+        candidatePool: true,
+        weightedSelection: true,
+        playerChoice: false,
+        uiModal: true,
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+  );
+
+  assert.equal(finalized.normalizedMechanics?.playerChoice, false);
+}
+
 async function runTests() {
   testNormalizeIntentSchemaStaysSemanticOnly();
   testBuildWizardMessagesExplicitlyBanImplementationAuthority();
@@ -769,10 +1015,13 @@ async function runTests() {
   testGovernanceDecisionFingerprintIgnoresNonGovernanceActivationNoise();
   testGovernanceDecisionsDoNotInventInputTriggerForSystemGrantActivation();
   testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShell();
+  testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShellWithoutConsumerDrift();
   testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency();
+  testFinalizeCreateIntentSchemaKeepsRevealBatchImmediateNonInteractive();
   await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
   await testRunWizardToIntentSchemaUsesBoundedProviderTimeout();
   await testRunWizardToIntentSchemaProducesClarificationSidecar();
+  await testRunWizardToIntentSchemaDoesNotClarifyDefinitionOnlyProviderShell();
   console.log("core/wizard/intent-schema.test.ts passed");
 }
 

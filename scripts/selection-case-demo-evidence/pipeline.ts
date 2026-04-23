@@ -1,99 +1,107 @@
 import { existsSync } from "fs";
-import { extractNumericParameters } from "../../core/wizard/index.js";
-import { buildBlueprint } from "../../core/blueprint/builder.js";
-import { createAssemblyPlan } from "../../core/pipeline/assembly-plan.js";
-import { resolvePatterns } from "../../core/patterns/resolver.js";
+
 import { createWritePlan } from "../../adapters/dota2/assembler/index.js";
 import { generateCode } from "../../adapters/dota2/generator/index.js";
 import { realizeDota2Host } from "../../adapters/dota2/realization/index.js";
 import { generateGeneratorRoutingPlan } from "../../adapters/dota2/routing/index.js";
+import type { Dota2CLIOptions } from "../../apps/cli/dota2-cli.js";
+import {
+  buildBlueprint as buildDota2Blueprint,
+  createIntentSchema as createDota2IntentSchema,
+} from "../../apps/cli/dota2/planning.js";
 import { executeWrite } from "../../apps/cli/dota2/write-executor.js";
 import { updateWorkspaceState } from "../../apps/cli/helpers/workspace-integration.js";
+import { createAssemblyPlan } from "../../core/pipeline/assembly-plan.js";
+import { resolvePatterns } from "../../core/patterns/resolver.js";
+import type { IntentSchema, ValidationIssue, WizardClarificationAuthority } from "../../core/schema/types.js";
 import { findFeatureById, initializeWorkspace } from "../../core/workspace/index.js";
-import type { Dota2CLIOptions } from "../../apps/cli/dota2-cli.js";
-import type { IntentSchema, ValidationIssue } from "../../core/schema/types.js";
-import { enrichDota2CreateBlueprint } from "../../adapters/dota2/blueprint/index.js";
-import {
-  getTalentDrawParameters,
-  type TalentDrawFixture,
-} from "../../apps/workbench/fixtures/talent-draw.fixture.js";
-import { REQUIRED_PATTERNS, TALENT_DRAW_FEATURE_ID } from "./config.js";
+import type { IntentSemanticAnalysis } from "../../core/wizard/index.js";
+import { extractNumericParameters } from "../../core/wizard/index.js";
+import type { SelectionCaseSpec } from "../../adapters/dota2/cases/selection-demo-registry.js";
 import type { CLIOptions, FullPipelineResult, WriteExecutionResult, WriteModeConfig } from "./types.js";
 
-function createIntentSchemaWithFixture(fixture: TalentDrawFixture): IntentSchema {
+async function createIntentSchemaWithCaseSpec(
+  caseSpec: SelectionCaseSpec,
+  options: CLIOptions,
+): Promise<{
+  schema: IntentSchema;
+  usedFallback: boolean;
+  semanticAnalysis: IntentSemanticAnalysis | null;
+  clarificationAuthority: WizardClarificationAuthority;
+}> {
+  const result = await createDota2IntentSchema(caseSpec.prompt, options.host, {
+    mode: "create",
+    featureId: caseSpec.featureId,
+    interactive: false,
+  });
+
+  if (!result.schema) {
+    throw new Error(`Failed to create IntentSchema for ${caseSpec.caseId}.`);
+  }
+
+  if (result.clarificationAuthority.blocksBlueprint || result.requiresClarification) {
+    throw new Error(
+      `${caseSpec.caseId} unexpectedly requires clarification: ${result.clarificationAuthority.reasons.join("; ")}`,
+    );
+  }
+
   return {
-    version: "1.0",
-    host: { kind: "dota2-x-template" },
-    request: {
-      rawPrompt: fixture.prompt,
-      goal: "三选一天赋抽取系统",
-      nameHint: "talent_draw",
+    schema: {
+      ...result.schema,
+      request: {
+        ...result.schema.request,
+        nameHint: caseSpec.featureId,
+      },
+      constraints: {
+        ...(result.schema.constraints || {}),
+        requiredPatterns: caseSpec.smokeExpectations.requiredPatternIds,
+      },
+      parameters: JSON.parse(JSON.stringify(caseSpec.authoringParameters)) as Record<string, unknown>,
     },
-    classification: {
-      intentKind: "standalone-system",
-      confidence: "high",
-    },
-    requirements: {
-      functional: [],
-      interactions: ["F4 按键输入", "卡牌点击选择"],
-      dataNeeds: ["加权天赋池", "会话状态追踪"],
-      outputs: ["属性加成效果", "UI 状态更新"],
-    },
-    constraints: {
-      requiredPatterns: REQUIRED_PATTERNS,
-    },
-    uiRequirements: {
-      needed: true,
-      surfaces: ["天赋选择弹窗"],
-      feedbackNeeds: ["选择确认", "属性变化反馈"],
-    },
-    normalizedMechanics: {
-      trigger: true,
-      candidatePool: true,
-      weightedSelection: true,
-      playerChoice: true,
-      uiModal: true,
-      outcomeApplication: true,
-    },
-    parameters: getTalentDrawParameters(),
-    openQuestions: [],
-    resolvedAssumptions: [
-      "Session-scoped pool state",
-      "F4 as dedicated talent draw key",
-      "R/SR/SSR/UR rarity tiers",
-    ],
-    isReadyForBlueprint: true,
+    usedFallback: result.usedFallback,
+    semanticAnalysis: result.semanticAnalysis,
+    clarificationAuthority: result.clarificationAuthority,
   };
 }
 
-export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions): FullPipelineResult {
+export async function runFullPipeline(
+  caseSpec: SelectionCaseSpec,
+  options: CLIOptions,
+): Promise<FullPipelineResult> {
   console.log("[Pipeline] Pre-check: Extracting parameters from prompt via Wizard...");
-  const wizardExtractedParams = extractNumericParameters(fixture.prompt);
+  const wizardExtractedParams = extractNumericParameters(caseSpec.prompt);
   console.log(`  ✓ Wizard extracted: ${Object.keys(wizardExtractedParams).join(", ") || "(none)"}`);
 
-  console.log("[Pipeline] Step 1: Creating IntentSchema with fixture parameters...");
-  const schema = createIntentSchemaWithFixture(fixture);
+  console.log("[Pipeline] Step 1: Creating IntentSchema with CLI planning flow plus case authoring parameters...");
+  const {
+    schema,
+    usedFallback,
+    semanticAnalysis,
+    clarificationAuthority,
+  } = await createIntentSchemaWithCaseSpec(caseSpec, options);
   console.log(`  ✓ Schema created with parameters: ${Object.keys(schema.parameters || {}).join(", ")}`);
 
-  console.log("[Pipeline] Step 2: Building Blueprint...");
-  const blueprintResult = buildBlueprint(schema);
-  const baseBlueprint = blueprintResult.finalBlueprint || blueprintResult.blueprint || null;
-  const enrichedBlueprint = baseBlueprint
-    ? enrichDota2CreateBlueprint(baseBlueprint, {
-        schema,
-        prompt: fixture.prompt,
-        hostRoot: options.host,
-        mode: "create",
-        featureId: TALENT_DRAW_FEATURE_ID,
-        proposalSource: "fallback",
-      })
-    : null;
-  const blueprint = enrichedBlueprint?.blueprint || baseBlueprint;
-  if (!blueprintResult.success || !blueprint) {
+  console.log("[Pipeline] Step 2: Building Blueprint via Dota2 planning...");
+  const blueprintResult = buildDota2Blueprint(
+    schema,
+    {
+      prompt: caseSpec.prompt,
+      hostRoot: options.host,
+      semanticAnalysis: semanticAnalysis || undefined,
+      mode: "create",
+      featureId: caseSpec.featureId,
+      proposalSource: usedFallback ? "fallback" : "llm",
+    },
+    clarificationAuthority,
+  );
+  const blueprint = blueprintResult.finalBlueprint || blueprintResult.blueprint || null;
+  if (!blueprint || blueprintResult.status === "blocked" || blueprintResult.status === "error") {
     throw new Error(`Blueprint build failed: ${JSON.stringify(blueprintResult.issues)}`);
   }
   console.log(`  ✓ Blueprint created: ${blueprint.id}`);
-  console.log(`    - Modules: ${blueprint.modules.length} (${blueprint.modules.map((m) => m.category).join(", ")})`);
+  console.log(
+    `    - Modules: ${blueprint.modules.length} (${blueprint.modules.map((module) => module.category).join(", ")})`,
+  );
   if (blueprint.featureAuthoring?.profile === "selection_pool") {
     console.log("    - Enriched with selection_pool source-backed authoring");
   }
@@ -101,7 +109,7 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
   console.log("[Pipeline] Step 3: Resolving Patterns...");
   const resolution = resolvePatterns(blueprint);
   console.log(`  ✓ Patterns resolved: ${resolution.patterns.length}`);
-  console.log(`    - Selected: ${resolution.patterns.map((p) => p.patternId).join(", ")}`);
+  console.log(`    - Selected: ${resolution.patterns.map((pattern) => pattern.patternId).join(", ")}`);
 
   console.log("[Pipeline] Step 4: Creating AssemblyPlan...");
   const assemblyResult = createAssemblyPlan(blueprint, {
@@ -110,13 +118,12 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
   });
 
   const allIssues: ValidationIssue[] = [
-    ...(blueprintResult.issues || []),
-    ...((enrichedBlueprint?.issues || []).map((message) => ({
+    ...(blueprintResult.issues || []).map((message) => ({
       code: "DOTA2_BLUEPRINT_ENRICHMENT",
       scope: "blueprint" as const,
       severity: "warning" as const,
       message,
-    }))),
+    })),
     ...resolution.issues.map((issue) => ({ ...issue, scope: issue.scope as ValidationIssue["scope"] })),
     ...(assemblyResult.issues || []),
   ];
@@ -144,9 +151,9 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
     writePlan = createWritePlan(
       assemblyPlan,
       options.host,
-      TALENT_DRAW_FEATURE_ID,
+      caseSpec.featureId,
       generatorRoutingPlan ?? undefined,
-      hostRealizationPlan ?? undefined
+      hostRealizationPlan ?? undefined,
     );
     console.log(`  ✓ WritePlan created: ${writePlan.id}`);
     console.log(`    - Target: ${writePlan.targetProject}`);
@@ -157,7 +164,7 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
   if (writePlan) {
     console.log("[Pipeline] Step 8: Generating Code...");
     for (const entry of writePlan.entries) {
-      generatedFiles.push({ entry, code: generateCode(entry, TALENT_DRAW_FEATURE_ID) });
+      generatedFiles.push({ entry, code: generateCode(entry, caseSpec.featureId) });
     }
     console.log(`  ✓ Generated ${generatedFiles.length} files`);
   }
@@ -178,7 +185,7 @@ export function runFullPipeline(fixture: TalentDrawFixture, options: CLIOptions)
 
 export async function executeWriteToHost(
   result: FullPipelineResult,
-  writeConfig: WriteModeConfig
+  writeConfig: WriteModeConfig,
 ): Promise<WriteExecutionResult> {
   if (!result.writePlan) {
     return {
@@ -207,7 +214,7 @@ export async function executeWriteToHost(
   const { result: writeResult, review } = await executeWrite(
     result.writePlan,
     cliOptions,
-    writeConfig.stableFeatureId
+    writeConfig.stableFeatureId,
   );
 
   if (writeConfig.mode === "write" && writeResult?.success && result.assemblyPlan) {
@@ -223,7 +230,7 @@ export async function executeWriteToHost(
       existingFeature ? "update" : "create",
       writeConfig.stableFeatureId,
       existingFeature,
-      writeResult
+      writeResult,
     );
 
     if (!workspaceUpdate.success) {
@@ -249,17 +256,17 @@ export async function executeWriteToHost(
 }
 
 export async function runCompletePipeline(
-  fixture: TalentDrawFixture,
-  options: CLIOptions
+  caseSpec: SelectionCaseSpec,
+  options: CLIOptions,
 ): Promise<{
   pipelineResult: FullPipelineResult;
   writeExecution: WriteExecutionResult | null;
 }> {
-  const pipelineResult = runFullPipeline(fixture, options);
+  const pipelineResult = await runFullPipeline(caseSpec, options);
   const writeExecution = await executeWriteToHost(pipelineResult, {
     mode: options.write ? "write" : "dry-run",
     hostRoot: options.host,
-    stableFeatureId: TALENT_DRAW_FEATURE_ID,
+    stableFeatureId: caseSpec.featureId,
     force: options.force,
   });
 

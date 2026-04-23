@@ -1,5 +1,5 @@
-import { talentDrawFixture } from "../../apps/workbench/fixtures/talent-draw.fixture.js";
-import { TALENT_DRAW_FEATURE_ID, TALENT_DRAW_SPECIFIC_PARAMS } from "./config.js";
+import type { SelectionCaseSpec } from "../../adapters/dota2/cases/selection-demo-registry.js";
+import { KNOWN_LIMITATIONS } from "./config.js";
 import type {
   CLIOptions,
   EvidenceArtifact,
@@ -9,6 +9,7 @@ import type {
 } from "./types.js";
 
 export interface ArtifactInput {
+  caseSpec: SelectionCaseSpec;
   result: FullPipelineResult;
   smoke: SmokeResult;
   writeExecution: WriteExecutionResult | null;
@@ -16,7 +17,7 @@ export interface ArtifactInput {
 }
 
 export function generateArtifact(input: ArtifactInput): EvidenceArtifact {
-  const { result, smoke, writeExecution, options } = input;
+  const { caseSpec, result, smoke, writeExecution, options } = input;
   const {
     schema,
     blueprint,
@@ -29,27 +30,31 @@ export function generateArtifact(input: ArtifactInput): EvidenceArtifact {
     wizardExtractedParams,
   } = result;
 
-  const wizardInjectedTDParams = TALENT_DRAW_SPECIFIC_PARAMS.some((param) => param in wizardExtractedParams);
+  const injectedKeys = caseSpec.smokeExpectations.wizardSpecificParams.filter((param) => param in wizardExtractedParams);
 
   return {
     meta: {
       generatedAt: new Date().toISOString(),
       fixtureVersion: "1.0",
-      pipelineVersion: "3.0",
+      pipelineVersion: "4.0",
+      caseId: caseSpec.caseId,
       hostRoot: options.host,
+      evidenceDir: caseSpec.evidenceDir,
       writeMode: options.write ? "write" : "dry-run",
-      stableFeatureId: TALENT_DRAW_FEATURE_ID,
+      stableFeatureId: caseSpec.featureId,
     },
     fixture: {
-      prompt: talentDrawFixture.prompt,
-      parameters: talentDrawFixture.parameters as Record<string, unknown>,
+      prompt: caseSpec.prompt,
+      objectKind: caseSpec.authoringParameters.objectKind,
+      parameters: caseSpec.authoringParameters as Record<string, unknown>,
     },
     wizardExtraction: {
       params: wizardExtractedParams,
-      talentDrawParamsInjected: wizardInjectedTDParams,
+      caseSpecificParamsInjected: injectedKeys.length > 0,
+      injectedKeys,
     },
     schema: {
-      id: `${schema.request.nameHint || "talent_draw"}_schema`,
+      id: `${schema.request.nameHint || caseSpec.featureId}_schema`,
       intentKind: schema.classification.intentKind,
       isReadyForBlueprint: schema.isReadyForBlueprint,
       normalizedMechanics: schema.normalizedMechanics,
@@ -141,7 +146,7 @@ export function generateArtifact(input: ArtifactInput): EvidenceArtifact {
       exports: code.exports,
       contentPreview: code.content.substring(0, 200).replace(/\n/g, " "),
       hasDrawForSelection: code.content.includes("drawForSelection"),
-      hasRarityBonus: code.content.includes("rarity") && code.content.includes("bonus"),
+      hasOutcomeEvidence: caseSpec.smokeExpectations.generatedContentIndicators.some((token) => code.content.includes(token)),
       hasPlaceholderEvidence:
         code.content.includes("placeholder") ||
         code.content.includes("empty_slot") ||
@@ -155,11 +160,6 @@ export function generateArtifact(input: ArtifactInput): EvidenceArtifact {
       failed: smoke.assertions.filter((assertion) => !assertion.passed).map((assertion) => assertion.name),
       details: smoke.assertions,
     },
-    knownLimitations: [
-      "Generator produces real content but may need refinement for production use",
-      "KV generation for talents produces basic structure - custom implementation may be needed",
-      "UI card interaction logic is generated but may need manual tuning",
-      "Pool state persistence is session-scoped only",
-    ],
+    knownLimitations: [...KNOWN_LIMITATIONS],
   };
 }

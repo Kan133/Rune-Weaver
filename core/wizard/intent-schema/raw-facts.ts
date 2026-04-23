@@ -122,6 +122,13 @@ export function buildIntentRawFacts(input: BuildIntentRawFactsInput): IntentRawF
   pushRawFact(facts, "prompt.selection.candidate_pool", promptHints.candidatePool || undefined, "prompt_hints", "medium");
   pushRawFact(facts, "prompt.selection.weighted_draw", promptHints.weightedDraw || undefined, "prompt_hints", "medium");
   pushRawFact(facts, "prompt.selection.player_choice", promptHints.playerChoice || undefined, "prompt_hints", "medium");
+  pushRawFact(
+    facts,
+    "prompt.selection.resolution_mode",
+    promptHints.selectionResolutionMode,
+    "prompt_hints",
+    "high",
+  );
   pushRawFact(facts, "prompt.selection.candidate_count", promptHints.candidateCount, "prompt_hints", "high");
   pushRawFact(facts, "prompt.selection.committed_count", promptHints.committedCount, "prompt_hints", "high");
   pushRawFact(facts, "prompt.selection.rarity_display", promptHints.rarityDisplay || undefined, "prompt_hints", "medium");
@@ -243,6 +250,7 @@ export function buildIntentRawFacts(input: BuildIntentRawFactsInput): IntentRawF
   pushRawFact(facts, "schema.selection.mode", candidate.selection?.mode, "schema_candidate", "high");
   pushRawFact(facts, "schema.selection.source", candidate.selection?.source, "schema_candidate", "high");
   pushRawFact(facts, "schema.selection.choice_mode", candidate.selection?.choiceMode, "schema_candidate", "high");
+  pushRawFact(facts, "schema.selection.resolution_mode", candidate.selection?.resolutionMode, "schema_candidate", "high");
   pushRawFact(facts, "schema.selection.cardinality", candidate.selection?.cardinality, "schema_candidate", "high");
   pushRawFact(facts, "schema.selection.choice_count", candidate.selection?.choiceCount, "schema_candidate", "high");
   pushRawFact(facts, "schema.selection.repeatability", candidate.selection?.repeatability, "schema_candidate", "medium");

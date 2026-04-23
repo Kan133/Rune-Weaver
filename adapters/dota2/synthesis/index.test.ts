@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import type { Blueprint } from "../../../core/schema/types.js";
+import { lookupDota2HostSymbolsExact } from "../../../core/retrieval/index.js";
 import {
   ABILITY_KV_AGGREGATE_TARGET_PATH,
   buildAbilityKvFragmentPath,
@@ -9,6 +10,7 @@ import {
 import {
   buildSynthesizedAssemblyPlan,
   buildSynthesizedAssemblyPlanWithLLM,
+  extractArtifactSymbolsForGrounding,
 } from "./index.js";
 
 function makeExploratoryBlueprint(): Blueprint {
@@ -248,6 +250,131 @@ function makeBackboneExploratoryBlueprint(): Blueprint {
   } as Blueprint;
 }
 
+function makeRevealBatchBackboneBlueprint(): Blueprint {
+  return {
+    id: "reveal_batch_demo",
+    version: "1.0",
+    summary: "A reveal-only weighted card demo.",
+    sourceIntent: {
+      intentKind: "standalone-system",
+      goal: "Reveal 3 weighted cards and resolve them immediately as one batch.",
+      normalizedMechanics: {
+        trigger: true,
+        candidatePool: true,
+        weightedSelection: true,
+        playerChoice: false,
+        uiModal: false,
+        outcomeApplication: true,
+      },
+    },
+    modules: [
+      {
+        id: "mod_gameplay_backbone_0",
+        role: "gameplay_ability",
+        category: "effect",
+        planningKind: "backbone",
+        backboneKind: "gameplay_ability",
+        facetIds: [
+          "facet_trigger",
+          "facet_pool",
+          "facet_reveal_runtime",
+          "facet_resolve",
+        ],
+        responsibilities: ["Reveal 3 weighted cards and resolve them immediately."],
+      },
+      {
+        id: "mod_reveal_surface_0",
+        role: "reveal_surface",
+        category: "ui",
+        responsibilities: ["Show the revealed cards with rarity styling and no choice controls."],
+      },
+    ],
+    moduleFacets: [
+      {
+        facetId: "facet_trigger",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "trigger",
+        role: "input_trigger",
+        category: "trigger",
+        requiredCapabilities: ["input.trigger.capture"],
+        requiredOutputs: ["server.runtime"],
+      },
+      {
+        facetId: "facet_pool",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "state",
+        role: "weighted_pool",
+        category: "data",
+        requiredCapabilities: ["selection.pool.weighted_candidates"],
+        requiredOutputs: ["shared.runtime"],
+      },
+      {
+        facetId: "facet_reveal_runtime",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "effect",
+        role: "reveal_batch_runtime",
+        category: "rule",
+        requiredCapabilities: ["selection.reveal.batch_immediate"],
+        requiredOutputs: ["server.runtime"],
+      },
+      {
+        facetId: "facet_resolve",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "effect",
+        role: "effect_application",
+        category: "effect",
+        requiredCapabilities: ["effect.modifier.apply"],
+        requiredOutputs: ["server.runtime", "host.config.kv"],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: false,
+    implementationStrategy: "exploratory",
+    unresolvedModuleNeeds: [
+      {
+        moduleId: "mod_gameplay_backbone_0",
+        semanticRole: "gameplay_ability",
+        category: "effect",
+        reason: "Reveal runtime stays exploratory and synthesizes through one gameplay backbone.",
+        backboneKind: "gameplay_ability",
+        facetIds: [
+          "facet_trigger",
+          "facet_pool",
+          "facet_reveal_runtime",
+          "facet_resolve",
+        ],
+        coLocatePreferred: true,
+        requiredCapabilities: [
+          "input.trigger.capture",
+          "selection.pool.weighted_candidates",
+          "selection.reveal.batch_immediate",
+          "effect.modifier.apply",
+        ],
+        requiredOutputs: ["server.runtime", "host.config.kv"],
+        artifactTargets: ["server", "config", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+      {
+        moduleId: "mod_reveal_surface_0",
+        semanticRole: "reveal_surface",
+        category: "ui",
+        reason: "Reveal UI stays exploratory and synthesizes through one UI shell.",
+        requiredCapabilities: ["ui.reveal.batch_surface"],
+        requiredOutputs: ["card reveal presentation", "ui.surface"],
+        artifactTargets: ["ui"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+    ],
+  } as Blueprint;
+}
+
 function makeNamedShellBlueprint(): Blueprint {
   const blueprint = makeExploratoryBlueprint();
   blueprint.modules = blueprint.modules.map((module) =>
@@ -261,6 +388,71 @@ function makeNamedShellBlueprint(): Blueprint {
       : module,
   );
   return blueprint;
+}
+
+function makeDefinitionOnlyProviderShellBlueprint(): Blueprint {
+  return {
+    id: "skill_provider_demo",
+    version: "1.0",
+    summary: "A definition-only provider shell.",
+    sourceIntent: {
+      intentKind: "micro-feature",
+      goal: "Define one feature-owned primary hero ability shell for later external granting.",
+      normalizedMechanics: {
+        trigger: false,
+        outcomeApplication: false,
+      },
+    },
+    modules: [
+      {
+        id: "mod_gameplay_backbone_0",
+        role: "gameplay_ability",
+        category: "effect",
+        planningKind: "backbone",
+        backboneKind: "gameplay_ability",
+        facetIds: ["facet_shell_definition"],
+        responsibilities: ["Define one feature-owned grant-only provider shell."],
+        outputs: ["ability shell definition"],
+        parameters: {
+          abilityName: "Skill Provider Demo",
+        },
+      },
+    ],
+    moduleFacets: [
+      {
+        facetId: "facet_shell_definition",
+        backboneModuleId: "mod_gameplay_backbone_0",
+        kind: "effect",
+        role: "gameplay_ability",
+        category: "effect",
+        requiredCapabilities: ["ability.definition.shell"],
+        requiredOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+      },
+    ],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: false,
+    implementationStrategy: "exploratory",
+    unresolvedModuleNeeds: [
+      {
+        moduleId: "mod_gameplay_backbone_0",
+        semanticRole: "gameplay_ability",
+        category: "effect",
+        reason: "No reusable implementation matched the definition-only provider shell.",
+        backboneKind: "gameplay_ability",
+        facetIds: ["facet_shell_definition"],
+        coLocatePreferred: true,
+        requiredCapabilities: ["ability.definition.shell"],
+        requiredOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+        artifactTargets: ["server", "config", "lua"],
+        ownedScopeHints: [],
+        strategy: "exploratory",
+        source: "test",
+      },
+    ],
+  } as Blueprint;
 }
 
 function makeNonWritableSupportBlueprint(): Blueprint {
@@ -362,6 +554,8 @@ async function testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPl
   assert.equal(kvArtifact!.metadata?.scriptFile, resolveAbilityKvScriptFile("rw_rw_fire_dash_gameplay_ability_fire_dash_core_1"));
   assert.equal(kvArtifact!.metadata?.aggregateTargetPath, ABILITY_KV_AGGREGATE_TARGET_PATH);
   assert.equal(kvArtifact!.metadata?.kvArtifactKind, "fragment");
+  assert.equal(withFallback.synthesis.groundingAssessment?.status, "exact");
+  assert.equal(withFallback.synthesis.moduleRecords?.[0]?.groundingAssessment?.status, "exact");
   assert.ok((withFallback.synthesis.grounding || []).length >= 2);
   assert.equal(
     (withFallback.synthesis.grounding || []).every((item) => item.unknownSymbols.length === 0),
@@ -390,6 +584,140 @@ async function testGroundingIgnoresLocallyDefinedLuaHelpers(): Promise<void> {
   );
 }
 
+function testLuaGroundingIgnoresLocallyDefinedMethodAndPrivateHelpers(): void {
+  const symbols = extractArtifactSymbolsForGrounding(
+    [
+      "if reveal_batch_demo == nil then",
+      "  reveal_batch_demo = class({})",
+      "end",
+      "",
+      "function reveal_batch_demo:OnSpellStart()",
+      "  self:_ResolveRevealBatch()",
+      "  self:DealSplash()",
+      "  EmitSoundOn(\"Hero_OgreMagi.Bloodlust.Target\", self:GetCaster())",
+      "end",
+      "",
+      "function reveal_batch_demo:_ResolveRevealBatch()",
+      "  return nil",
+      "end",
+      "",
+      "function reveal_batch_demo:DealSplash()",
+      "  return nil",
+      "end",
+      "",
+      "local function _BuildCardPayload()",
+      "  return {}",
+      "end",
+      "",
+      "local helper = function()",
+      "  return _BuildCardPayload()",
+      "end",
+      "",
+      "helper()",
+    ].join("\n"),
+    "lua_ability",
+  );
+
+  assert.equal(symbols.includes("_ResolveRevealBatch"), false);
+  assert.equal(symbols.includes("DealSplash"), false);
+  assert.equal(symbols.includes("_BuildCardPayload"), false);
+  assert.equal(symbols.includes("GetCaster"), true);
+  assert.equal(symbols.includes("EmitSoundOn"), true);
+}
+
+function testLuaGroundingIgnoresQuotedEnumNoiseAndKeepsVectorCalls(): void {
+  const symbols = extractArtifactSymbolsForGrounding(
+    [
+      "function reveal_batch_demo:CreateRevealParticle(caster, index)",
+      "  EmitSoundOn(\"DOTA_Item.ArcaneBoots.Activate\", caster)",
+      "  local offset = Vector((index - 2) * 90, 0, 120)",
+      "  return offset",
+      "end",
+    ].join("\n"),
+    "lua_ability",
+  );
+
+  assert.equal(symbols.includes("DOTA_I"), false);
+  assert.equal(symbols.includes("Vector"), true);
+  assert.equal(symbols.includes("EmitSoundOn"), true);
+}
+
+function testPanoramaGroundingOnlyUsesRealJsxTags(): void {
+  const symbols = extractArtifactSymbolsForGrounding(
+    [
+      "import React from \"react\";",
+      "",
+      "type RevealBatchCardProps = { rarity: string };",
+      "interface RevealBatchCardState<TCard> {",
+      "  card: TCard;",
+      "}",
+      "",
+      "function useRevealBatchCard<TCard extends RevealBatchCardProps>(card: TCard): TCard {",
+      "  return card;",
+      "}",
+      "",
+      "export function RevealBatchView(): JSX.Element {",
+      "  const card = useRevealBatchCard<RevealBatchCardProps>({ rarity: \"rare\" });",
+      "  return (",
+      "    <Panel>",
+      "      <Label text={card.rarity} />",
+      "      <TextButton text=\"Confirm\" />",
+      "      <Image src=\"file://{images}/heroes/test_png.vtex\" />",
+      "    </Panel>",
+      "  );",
+      "}",
+    ].join("\n"),
+    "panorama_tsx",
+  );
+
+  assert.deepEqual(symbols.sort(), ["Image", "Label", "Panel", "TextButton"]);
+}
+
+function testPanoramaIntrinsicTagsCanResolveToExactStructuredRefs(): void {
+  const symbols = extractArtifactSymbolsForGrounding(
+    [
+      "import React from \"react\";",
+      "",
+      "type RevealActionProps = { icon?: string };",
+      "interface RevealActionState<TAction> {",
+      "  action: TAction;",
+      "}",
+      "",
+      "export function RevealActionPanel<TAction extends RevealActionProps>(props: TAction): JSX.Element {",
+      "  return (",
+      "    <Panel>",
+      "      <Label text=\"Ready\" />",
+      "      <TextButton text=\"Confirm\" />",
+      "      {props.icon && <Image src={props.icon} />}",
+      "    </Panel>",
+      "  );",
+      "}",
+    ].join("\n"),
+    "panorama_tsx",
+  );
+  const refs = lookupDota2HostSymbolsExact(process.cwd(), symbols, { targetProfile: "panorama_tsx" });
+  const exactSymbols = new Set(refs.map((ref) => ref.symbol || ref.title));
+
+  assert.equal(exactSymbols.has("Panel"), true);
+  assert.equal(exactSymbols.has("Label"), true);
+  assert.equal(exactSymbols.has("TextButton"), true);
+  assert.equal(exactSymbols.has("Image"), true);
+}
+
+function testRevealBatchUiGroundingUsesExactPanoramaBacking(): void {
+  const blueprint = makeRevealBatchBackboneBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+  const panoramaGrounding = (result.synthesis.grounding || []).find((item) =>
+    item.targetProfile === "panorama_tsx"
+  );
+
+  assert.ok(panoramaGrounding);
+  assert.equal(panoramaGrounding!.allowlistedSymbols.length, 0);
+  assert.equal(panoramaGrounding!.unknownSymbols.length, 0);
+  assert.equal(panoramaGrounding!.verifiedSymbols.includes("Panel"), true);
+  assert.equal(panoramaGrounding!.verifiedSymbols.includes("Label"), true);
+}
+
 function testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility(): void {
   const blueprint = makeBundledExploratoryBlueprint();
   const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
@@ -411,6 +739,8 @@ function testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility
     result.synthesis.artifacts.some((artifact) => artifact.outputKind === "ui"),
     false,
   );
+  assert.equal(result.synthesis.groundingAssessment?.status, "exact");
+  assert.equal(result.synthesis.artifacts.every((artifact) => Boolean(artifact.groundingAssessment)), true);
 }
 
 function testBuildSynthesizedAssemblyPlanPreservesBackboneTruth(): void {
@@ -424,6 +754,27 @@ function testBuildSynthesizedAssemblyPlanPreservesBackboneTruth(): void {
   assert.deepEqual(
     result.synthesis.moduleRecords?.[0]?.facetIds,
     blueprint.modules[0]?.facetIds,
+  );
+}
+
+function testBuildSynthesizedAssemblyPlanKeepsRevealUiAsSeparateUiBundle(): void {
+  const blueprint = makeRevealBatchBackboneBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+
+  const uiBundle = result.synthesis.bundles?.find((bundle) => bundle.kind === "ui_surface");
+  const gameplayBundle = result.synthesis.bundles?.find((bundle) => bundle.kind === "gameplay_ability");
+
+  assert.equal(result.synthesis.bundles?.length, 2);
+  assert.ok(gameplayBundle);
+  assert.ok(uiBundle);
+  assert.equal(result.synthesis.artifacts.filter((artifact) => artifact.outputKind === "ui").length, 2);
+  assert.equal(
+    result.synthesis.artifacts.filter((artifact) => artifact.bundleId === gameplayBundle?.bundleId).length,
+    2,
+  );
+  assert.equal(
+    result.synthesis.artifacts.filter((artifact) => artifact.bundleId === uiBundle?.bundleId).length,
+    2,
   );
 }
 
@@ -443,6 +794,21 @@ function testBuildSynthesizedAssemblyPlanUsesSanitizedExplicitAbilityName(): voi
   assert.ok(kvArtifact?.content.includes('"ScriptFile"               "rune_weaver/abilities/placeholder_fire_ability"'));
 }
 
+function testBuildSynthesizedAssemblyPlanSupportsDefinitionOnlyProviderShell(): void {
+  const blueprint = makeDefinitionOnlyProviderShellBlueprint();
+  const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
+
+  const luaArtifact = result.synthesis.artifacts.find((artifact) => artifact.contentType === "lua");
+  const kvArtifact = result.synthesis.artifacts.find((artifact) => artifact.contentType === "kv");
+  assert.equal(result.synthesis.bundles?.length, 1);
+  assert.equal(result.synthesis.moduleRecords?.[0]?.backboneKind, "gameplay_ability");
+  assert.equal(result.synthesis.unresolvedModuleNeeds.length, 0);
+  assert.equal(luaArtifact?.metadata?.abilityName, "skill_provider_demo");
+  assert.equal(kvArtifact?.metadata?.abilityName, "skill_provider_demo");
+  assert.ok(luaArtifact?.targetPath.endsWith("skill_provider_demo.lua"));
+  assert.ok(kvArtifact?.targetPath.endsWith("skill_provider_demo.kv.txt"));
+}
+
 function testBuildSynthesizedAssemblyPlanDoesNotInventWritableShellsForContractOnlyNeeds(): void {
   const blueprint = makeNonWritableSupportBlueprint();
   const result = buildSynthesizedAssemblyPlan(blueprint, blueprint.id);
@@ -457,9 +823,16 @@ function testBuildSynthesizedAssemblyPlanDoesNotInventWritableShellsForContractO
 }
 
 async function runTests() {
+  testLuaGroundingIgnoresLocallyDefinedMethodAndPrivateHelpers();
+  testLuaGroundingIgnoresQuotedEnumNoiseAndKeepsVectorCalls();
+  testPanoramaGroundingOnlyUsesRealJsxTags();
+  testPanoramaIntrinsicTagsCanResolveToExactStructuredRefs();
   testBuildSynthesizedAssemblyPlanBundlesGameplayModulesIntoSingleAbility();
   testBuildSynthesizedAssemblyPlanPreservesBackboneTruth();
+  testBuildSynthesizedAssemblyPlanKeepsRevealUiAsSeparateUiBundle();
+  testRevealBatchUiGroundingUsesExactPanoramaBacking();
   testBuildSynthesizedAssemblyPlanUsesSanitizedExplicitAbilityName();
+  testBuildSynthesizedAssemblyPlanSupportsDefinitionOnlyProviderShell();
   testBuildSynthesizedAssemblyPlanDoesNotInventWritableShellsForContractOnlyNeeds();
   await testBuildSynthesizedAssemblyPlanWithLLMFallsBackToDeterministicPlan();
   await testGroundingIgnoresLocallyDefinedLuaHelpers();

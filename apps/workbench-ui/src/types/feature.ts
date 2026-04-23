@@ -25,6 +25,15 @@ export interface ReviewSignals {
     score: number | null;
     warnings: string[];
   };
+  grounding?: {
+    status: 'none_required' | 'exact' | 'partial' | 'insufficient';
+    reviewRequired: boolean;
+    verifiedSymbolCount: number;
+    allowlistedSymbolCount: number;
+    weakSymbolCount: number;
+    unknownSymbolCount: number;
+    warningCount: number;
+  };
 }
 
 export interface Feature {

@@ -203,6 +203,7 @@ function buildSelectionContract(
     present: Boolean(selection),
     source: selection?.source,
     choiceMode: selection?.choiceMode,
+    resolutionMode: selection?.resolutionMode,
     cardinality: selection?.cardinality,
     choiceCount: selection?.choiceCount,
     repeatability: selection?.repeatability,
@@ -348,6 +349,7 @@ function normalizeNormalizedMechanics(
     selection?.mode === "hybrid" ||
     promptHints.weightedDraw;
   const hasPlayerChoice =
+    selection?.resolutionMode === "player_confirm_single" ||
     selection?.choiceMode === "user-chosen" ||
     selection?.choiceMode === "hybrid" ||
     selection?.mode === "user-chosen" ||
@@ -400,12 +402,17 @@ function isCanonicalCandidateDrawGovernanceCore(
   input: DeriveIntentGovernanceDecisionsInput,
 ): boolean {
   const { candidate, promptHints, rawFacts, rawText } = input;
+  const selectionResolutionMode = candidate.selection?.resolutionMode ?? promptHints.selectionResolutionMode;
   const choiceCount =
     promptHints.candidateCount ??
     normalizePositiveInteger(candidate.selection?.choiceCount) ??
     readRawFactValue<number>(rawFacts, "schema.parameters.choice_count");
   const cardinality =
     candidate.selection?.cardinality || (promptHints.committedCount === 1 ? "single" : undefined);
+
+  if (selectionResolutionMode === "reveal_batch_immediate") {
+    return false;
+  }
 
   if (!choiceCount || cardinality !== "single") {
     return false;

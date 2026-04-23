@@ -124,8 +124,7 @@ export function applyCreateClosureToAdmissionDiagnostics(
 
 function countOutstandingBlueprintNeeds(blueprint: Blueprint): number {
   const unresolved = (blueprint as Blueprint & { unresolvedModuleNeeds?: unknown[] }).unresolvedModuleNeeds;
-  const needs = (blueprint as Blueprint & { moduleNeeds?: unknown[] }).moduleNeeds;
-  return (Array.isArray(unresolved) ? unresolved.length : 0) + (Array.isArray(needs) ? needs.length : 0);
+  return Array.isArray(unresolved) ? unresolved.length : 0;
 }
 
 export function resolveCreateReadinessDecision(input: {

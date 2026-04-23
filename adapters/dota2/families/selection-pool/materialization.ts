@@ -1,4 +1,9 @@
-import type { BlueprintModule, FeatureAuthoring as CoreFeatureAuthoring, FillContract } from "../../../../core/schema/types.js";
+import type {
+  BlueprintModule,
+  FeatureAuthoring as CoreFeatureAuthoring,
+  FillContract,
+  SelectionPoolAuthoredObject,
+} from "../../../../core/schema/types.js";
 import { dota2GapFillBoundaryProvider } from "../../gap-fill/boundaries.js";
 import {
   createSourceModelRef,
@@ -9,30 +14,40 @@ import {
   normalizeFeatureAuthoringParameters,
   resolveSelectionPoolObjectKind,
   type FeatureAuthoring,
+  type SelectionPoolFeatureSourceArtifactV2,
   type SelectionPoolCompiledModuleParameters,
-  type SelectionPoolFeatureSourceArtifactV1,
   type SelectionPoolLifecycleState,
 } from "./shared.js";
+import { resolveSelectionPoolCompiledObjects } from "./source-model.js";
 
-function compileEffectApplication(
-  effectProfile: FeatureAuthoring["parameters"]["effectProfile"],
-): Record<string, unknown> | undefined {
-  return effectProfile
-    ? {
-        enabled: true,
-        rarityAttributeBonusMap: deepClone(effectProfile.rarityAttributeBonusMap),
-      }
-    : undefined;
+function compileSelectionOutcome(
+  objects: SelectionPoolAuthoredObject[],
+): Record<string, unknown> {
+  return {
+    outcomes: objects
+      .filter((object) => object.outcome)
+      .map((object) => ({
+        id: object.id,
+        outcome: deepClone(object.outcome),
+      })),
+  };
 }
 
 export function compileSelectionPoolModuleParameters(
   featureAuthoring: FeatureAuthoring,
+  options: { hostRoot?: string; allowDeferredFeatureExportResolution?: boolean } = {},
 ): SelectionPoolCompiledModuleParameters {
   const params = normalizeFeatureAuthoringParameters(
     featureAuthoring.parameters,
     resolveSelectionPoolObjectKind(featureAuthoring.parameters.objectKind)
       || resolveSelectionPoolObjectKind(featureAuthoring.objectKind),
   );
+  const compiledObjects = resolveSelectionPoolCompiledObjects(params, options.hostRoot, {
+    allowDeferredFeatureExportResolution: options.allowDeferredFeatureExportResolution === true,
+  });
+  if (compiledObjects.errors.length > 0) {
+    throw new Error(`Failed to compile selection_pool objects: ${compiledObjects.errors.join(" | ")}`);
+  }
   const display = params.display || getDisplayDefaults();
   return {
     input_trigger: {
@@ -41,7 +56,7 @@ export function compileSelectionPoolModuleParameters(
       eventName: "rune_weaver_selection_pool_triggered",
     },
     weighted_pool: {
-      entries: params.objects.map((object) => ({
+      entries: compiledObjects.objects.map((object) => ({
         id: object.id,
         label: object.label,
         description: object.description,
@@ -59,11 +74,9 @@ export function compileSelectionPoolModuleParameters(
       applyMode: params.applyMode || "immediate",
       postSelectionPoolBehavior: params.postSelectionPoolBehavior || "remove_selected_from_remaining",
       trackSelectedItems: params.trackSelectedItems !== false,
-      ...(compileEffectApplication(params.effectProfile)
-        ? { effectApplication: compileEffectApplication(params.effectProfile) }
-        : {}),
       ...(params.inventory ? { inventory: deepClone(params.inventory) } : {}),
     },
+    selection_outcome: compileSelectionOutcome(compiledObjects.objects),
     selection_modal: {
       choiceCount: params.choiceCount,
       title: display.title,
@@ -81,7 +94,7 @@ export function compileSelectionPoolModuleParameters(
 }
 
 function createFillContract(
-  boundaryId: "weighted_pool.selection_policy" | "selection_flow.effect_mapping" | "ui.selection_modal.payload_adapter",
+  boundaryId: "weighted_pool.selection_policy" | "selection_outcome.realization" | "ui.selection_modal.payload_adapter",
   targetModuleId: string,
   targetPatternId: string,
   sourceBindings: string[],
@@ -106,7 +119,7 @@ function createFillContract(
 export function buildSelectionPoolFillContracts(modules: BlueprintModule[]): FillContract[] {
   const moduleByRole = new Map(modules.map((module) => [module.role, module] as const));
   const weightedPoolModule = moduleByRole.get("weighted_pool");
-  const selectionFlowModule = moduleByRole.get("selection_flow");
+  const selectionOutcomeModule = moduleByRole.get("selection_outcome");
   const selectionModalModule = moduleByRole.get("selection_modal");
   const contracts: FillContract[] = [];
   if (weightedPoolModule) {
@@ -116,7 +129,7 @@ export function buildSelectionPoolFillContracts(modules: BlueprintModule[]): Fil
         weightedPoolModule.id,
         "data.weighted_pool",
         [
-          "featureAuthoring.parameters.objects",
+          "featureAuthoring.parameters.poolEntries",
           "featureAuthoring.parameters.choiceCount",
           "featureAuthoring.parameters.drawMode",
           "featureAuthoring.parameters.duplicatePolicy",
@@ -130,22 +143,21 @@ export function buildSelectionPoolFillContracts(modules: BlueprintModule[]): Fil
       ),
     );
   }
-  if (selectionFlowModule) {
+  if (selectionOutcomeModule) {
     contracts.push(
       createFillContract(
-        "selection_flow.effect_mapping",
-        selectionFlowModule.id,
-        "rule.selection_flow",
+        "selection_outcome.realization",
+        selectionOutcomeModule.id,
+        "effect.outcome_realizer",
         [
-          "featureAuthoring.parameters.objects",
-          "featureAuthoring.parameters.effectProfile",
-          "featureAuthoring.parameters.inventory",
+          "featureAuthoring.parameters.localCollections",
+          "featureAuthoring.parameters.poolEntries",
         ],
         [
-          "do not move session ownership out of data.weighted_pool",
-          "do not invent new event channels or cross-feature grants",
+          "keep realized effects inside the current feature boundary",
+          "do not invent cross-feature writes or new host target authority",
         ],
-        "Translate the authored object/effect profile into the admitted selection confirmation and immediate-apply hook.",
+        "Realize authored per-object outcomes through the admitted host-native outcome hook.",
       ),
     );
   }
@@ -156,7 +168,7 @@ export function buildSelectionPoolFillContracts(modules: BlueprintModule[]): Fil
         selectionModalModule.id,
         "ui.selection_modal",
         [
-          "featureAuthoring.parameters.objects",
+          "featureAuthoring.parameters.poolEntries",
           "featureAuthoring.parameters.display",
           "featureAuthoring.parameters.placeholderConfig",
           "featureAuthoring.parameters.inventory",
@@ -182,9 +194,9 @@ export function materializeSelectionPoolSourceArtifact(
       || resolveSelectionPoolObjectKind(featureAuthoring.objectKind),
   );
   const sourceArtifactRef = createSourceModelRef(featureId);
-  const sourceArtifact: SelectionPoolFeatureSourceArtifactV1 = {
+  const sourceArtifact: SelectionPoolFeatureSourceArtifactV2 = {
     adapter: "selection_pool",
-    version: 1,
+    version: 2,
     featureId,
     ...(params.objectKind ? { objectKind: params.objectKind } : {}),
     triggerKey: params.triggerKey,
@@ -199,8 +211,8 @@ export function materializeSelectionPoolSourceArtifact(
     display: deepClone(params.display),
     placeholderConfig: deepClone(params.placeholderConfig),
     inventory: params.inventory ? deepClone(params.inventory) : undefined,
-    effectProfile: params.effectProfile ? deepClone(params.effectProfile) : undefined,
-    objects: params.objects.map((object) => ({ ...object })),
+    localCollections: params.localCollections ? deepClone(params.localCollections) : undefined,
+    poolEntries: params.poolEntries ? deepClone(params.poolEntries) : [],
   };
   return {
     featureAuthoring: {

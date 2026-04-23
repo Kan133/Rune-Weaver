@@ -167,6 +167,7 @@ export const CORE_PATTERN_IDS = {
   DATA_WEIGHTED_POOL: "data.weighted_pool",
   RULE_SELECTION_FLOW: "rule.selection_flow",
   EFFECT_DASH: "effect.dash",
+  EFFECT_OUTCOME_REALIZER: "effect.outcome_realizer",
   EFFECT_MODIFIER_APPLIER: "effect.modifier_applier",
   EFFECT_RESOURCE_CONSUME: "effect.resource_consume",
   RESOURCE_BASIC_POOL: "resource.basic_pool",

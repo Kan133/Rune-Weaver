@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-04-19T12:40:35.536Z",
-  "commandKind": "maintenance",
+  "generatedAt": "2026-04-22T16:44:27.153Z",
+  "commandKind": "creation",
   "applicableStages": [
     "intentSchema",
     "blueprint",
@@ -9,109 +9,80 @@
     "artifactSynthesis",
     "assemblyPlan",
     "hostRealization",
+    "generatorRouting",
     "generator",
     "localRepair",
     "dependencyRevalidation",
     "finalCommitDecision",
-    "updateDiff",
     "writeExecutor",
     "hostValidation",
     "runtimeValidation",
     "workspaceState"
   ],
+  "inputProvenance": {
+    "requestedSubcommand": "run",
+    "normalizedCommand": "run",
+    "promptSource": "positional",
+    "promptHash": "d69583a673d1dcad4cdf15c49ac04bf9f82505833b31c589f042d6d55eeb1c6b"
+  },
   "cliOptions": {
-    "command": "update",
-    "prompt": "把天赋抽取的触发键从 F4 改成 F5",
-    "hostRoot": "D:\\test3",
-    "featureId": "talent_draw_demo",
-    "dryRun": false,
-    "write": true,
+    "command": "run",
+    "prompt": "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.",
+    "hostRoot": "D:\\rw-test-3",
+    "featureId": "skill_provider_demo",
+    "dryRun": true,
+    "write": false,
     "force": false
   },
   "input": {
-    "rawPrompt": "把天赋抽取的触发键从 F4 改成 F5",
-    "goal": "Update feature: talent_draw_demo"
+    "rawPrompt": "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.",
+    "goal": "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting."
+  },
+  "semanticExportStatus": {
+    "written": false,
+    "reason": "Semantic artifacts were not written because clarification blocked blueprint generation."
   },
   "intentSchema": {
     "usedFallback": false,
     "intentKind": "micro-feature",
-    "uiNeeded": true,
-    "mechanics": [
-      "trigger",
-      "candidatePool",
-      "weightedSelection",
-      "playerChoice",
-      "uiModal",
-      "outcomeApplication"
-    ],
-    "promptPackageId": "wizard.update",
+    "uiNeeded": false,
+    "readiness": "ready",
+    "mechanics": [],
+    "promptPackageId": "wizard.create",
     "promptConstraints": {
-      "mustPreserve": [
-        "Preserve unspecified existing behavior for feature 'talent_draw_demo'.",
-        "single trigger entry only",
-        "weighted pool candidate source",
-        "confirm exactly one candidate",
-        "same-feature owned object collection only",
-        "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
-        "no persistence",
-        "no cross-feature grants",
-        "no arbitrary custom effect family",
-        "Keep the preserved module backbone stable unless the user explicitly asks for a rewrite: input_trigger, weighted_pool, selection_flow, selection_modal, effect_application"
-      ],
-      "mustNotAdd": [
-        "Do not add persistence or cross-match storage unless explicitly required.",
-        "Do not add cross-feature coupling unless explicitly required."
-      ],
-      "exactScalars": {
-        "persistent": false
-      },
+      "mustPreserve": [],
+      "mustNotAdd": [],
+      "exactScalars": {},
       "openSemanticGaps": []
     },
     "retrieval": {
-      "summary": "Collected 1 evidence refs for wizard.update.",
-      "tiersUsed": [
-        3
-      ],
-      "evidenceRefs": [
-        {
-          "title": "Current feature context: talent_draw_demo",
-          "sourceKind": "workspace_evidence"
-        }
-      ]
+      "summary": "Collected 0 evidence refs for wizard.create.",
+      "tiersUsed": [],
+      "evidenceRefs": []
     }
   },
   "stages": {
     "intentSchema": {
       "success": true,
-      "summary": "UpdateIntent created (LLM, uncertainties: 0)",
-      "issues": [],
+      "summary": "Define a single primary hero gameplay ability shell that exists only as a grantable feature artifact for later external granting, with no activation input, no auto-attach behavior, no embedded grant logic, and no modifier application. [ready]",
+      "issues": [
+        "IntentSchema uncertainties: 0"
+      ],
       "usedFallback": false
     },
     "blueprint": {
-      "success": true,
-      "summary": "FinalBlueprint ready (moduleNeeds: 5)",
-      "moduleCount": 5,
-      "patternHints": [
-        "input.key_binding",
-        "data.weighted_pool",
-        "rule.selection_flow",
-        "rule.selection_flow",
-        "ui.selection_modal"
-      ],
+      "success": false,
+      "summary": "",
+      "moduleCount": 0,
+      "patternHints": [],
       "issues": []
     },
     "patternResolution": {
-      "success": true,
-      "resolvedPatterns": [
-        "effect.modifier_applier",
-        "ui.selection_modal",
-        "data.weighted_pool",
-        "input.key_binding",
-        "rule.selection_flow"
-      ],
+      "success": false,
+      "resolvedPatterns": [],
       "unresolvedPatterns": [],
       "issues": [],
-      "complete": true
+      "complete": false
     },
     "artifactSynthesis": {
       "success": true,
@@ -122,21 +93,10 @@
       "skipped": true
     },
     "assemblyPlan": {
-      "success": true,
-      "selectedPatterns": [
-        "effect.modifier_applier",
-        "ui.selection_modal",
-        "data.weighted_pool",
-        "input.key_binding",
-        "rule.selection_flow"
-      ],
-      "writeTargets": [
-        "server/micro_feature_968a.ts",
-        "shared/micro_feature_968a.ts",
-        "ui/micro_feature_968a.tsx",
-        "config/micro_feature_968a.txt"
-      ],
-      "readyForHostWrite": true,
+      "success": false,
+      "selectedPatterns": [],
+      "writeTargets": [],
+      "readyForHostWrite": false,
       "blockers": []
     },
     "hostRealization": {
@@ -144,23 +104,16 @@
       "units": [],
       "blockers": []
     },
+    "generatorRouting": {
+      "success": false,
+      "routes": [],
+      "warnings": [],
+      "blockers": []
+    },
     "generator": {
-      "success": true,
-      "generatedFiles": [
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-        "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
-        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-      ],
-      "issues": [],
-      "deferredWarnings": [
-        "[effect.modifier_applier] effect.modifier_applier remains deferred: current lua/kv modifier generation is only honest for specialized same-file ability modifier slices such as dota2.short_time_buff, not broad generic modifier application.",
-        "[effect.modifier_applier] effect.modifier_applier remains deferred: current lua/kv modifier generation is only honest for specialized same-file ability modifier slices such as dota2.short_time_buff, not broad generic modifier application."
-      ]
+      "success": false,
+      "generatedFiles": [],
+      "issues": []
     },
     "localRepair": {
       "success": true,
@@ -169,9 +122,6 @@
       "repairedTargets": [],
       "warnings": [],
       "blockers": [],
-      "evidenceRefs": [],
-      "boundaryHonored": true,
-      "revalidationPassed": true,
       "skipped": true
     },
     "dependencyRevalidation": {
@@ -183,39 +133,27 @@
       "skipped": true
     },
     "finalCommitDecision": {
-      "success": true,
-      "outcome": "committable",
-      "requiresReview": false,
+      "success": false,
+      "outcome": "blocked",
+      "requiresReview": true,
       "reasons": [],
+      "reviewModules": [],
       "impactedFeatures": [],
       "dependencyBlockers": [],
-      "downgradedFeatures": []
+      "downgradedFeatures": [],
+      "skipped": true
     },
     "writeExecutor": {
-      "success": true,
-      "executedActions": 8,
+      "success": false,
+      "executedActions": 0,
       "skippedActions": 0,
       "failedActions": 0,
       "createdFiles": [],
-      "modifiedFiles": [
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-        "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
-        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-      ]
+      "modifiedFiles": []
     },
     "hostValidation": {
-      "success": true,
-      "checks": [
-        "✅ Server namespace exists",
-        "✅ UI namespace exists",
-        "✅ Refreshed 8 files",
-        "✅ Bridge indexes refreshed"
-      ],
+      "success": false,
+      "checks": [],
       "issues": [],
       "details": {}
     },
@@ -229,1878 +167,68 @@
     },
     "workspaceState": {
       "success": true,
-      "featureId": "talent_draw_demo",
-      "totalFeatures": 5
-    },
-    "updateDiff": {
-      "totalFiles": 8,
-      "unchanged": 0,
-      "refreshed": 8,
-      "created": 0,
-      "deleted": 0,
-      "unchangedFiles": [],
-      "refreshedFiles": [
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-        "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
-        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-      ],
-      "createdFiles": [],
-      "deletedFiles": [],
-      "requiresRegenerate": false,
-      "regenerateReasons": [],
-      "canUpdate": true
+      "featureId": "",
+      "totalFeatures": 0,
+      "skipped": true
     }
   },
   "finalVerdict": {
-    "pipelineComplete": true,
-    "completionKind": "default-safe",
-    "weakestStage": "",
-    "sufficientForDemo": true,
+    "pipelineComplete": false,
+    "completionKind": "partial",
+    "weakestStage": "intentSchema",
+    "sufficientForDemo": false,
     "hasUnresolvedPatterns": false,
     "wasForceOverride": false,
-    "remainingRisks": [],
+    "remainingRisks": [
+      "The governed create semantics still do not expose a reliable trigger or passive ownership boundary."
+    ],
     "nextSteps": [
-      "Update completed successfully"
+      "Answer the clarification questions and rerun the command."
     ]
   },
-  "updateContext": {
-    "currentFeatureContext": {
-      "featureId": "talent_draw_demo",
-      "revision": 3,
-      "intentKind": "standalone-system",
-      "selectedPatterns": [
-        "effect.modifier_applier",
-        "ui.selection_modal",
-        "data.weighted_pool",
-        "input.key_binding",
-        "rule.selection_flow"
-      ],
-      "moduleRecords": [
-        {
-          "moduleId": "mod_trigger_0",
-          "role": "gameplay-core",
-          "category": "trigger",
-          "sourceKind": "family",
-          "familyId": "selection_pool",
-          "patternId": "input.key_binding",
-          "selectedPatternIds": [
-            "input.key_binding"
-          ],
-          "artifactTargets": [
-            "server"
-          ],
-          "ownedPaths": [],
-          "fillContractIds": [],
-          "reviewRequired": false,
-          "implementationStrategy": "family",
-          "maturity": "templated",
-          "outputKinds": [
-            "server"
-          ],
-          "artifactPaths": [],
-          "resolvedFrom": "family",
-          "summary": "Family-backed module 'input_trigger' resolved to reusable pattern 'input.key_binding'",
-          "requiredOutputs": [
-            "server.runtime"
-          ],
-          "integrationHints": [],
-          "stateExpectations": [],
-          "synthesizedArtifactIds": [],
-          "requiresReview": false,
-          "metadata": {
-            "resolutionSource": "need",
-            "score": 4
-          },
-          "reviewReasons": []
-        },
-        {
-          "moduleId": "mod_data_1",
-          "role": "shared-support",
-          "category": "data",
-          "sourceKind": "family",
-          "familyId": "selection_pool",
-          "patternId": "data.weighted_pool",
-          "selectedPatternIds": [
-            "data.weighted_pool"
-          ],
-          "artifactTargets": [
-            "server",
-            "shared"
-          ],
-          "ownedPaths": [],
-          "fillContractIds": [
-            "weighted_pool.selection_policy"
-          ],
-          "reviewRequired": false,
-          "implementationStrategy": "family",
-          "maturity": "templated",
-          "outputKinds": [
-            "server",
-            "shared"
-          ],
-          "artifactPaths": [],
-          "resolvedFrom": "family",
-          "summary": "Family-backed module 'weighted_pool' resolved to reusable pattern 'data.weighted_pool'",
-          "requiredOutputs": [
-            "shared.runtime"
-          ],
-          "integrationHints": [],
-          "stateExpectations": [],
-          "synthesizedArtifactIds": [],
-          "requiresReview": false,
-          "metadata": {
-            "resolutionSource": "need",
-            "score": 4
-          },
-          "reviewReasons": []
-        },
-        {
-          "moduleId": "mod_rule_2",
-          "role": "gameplay-core",
-          "category": "rule",
-          "sourceKind": "family",
-          "familyId": "selection_pool",
-          "patternId": "rule.selection_flow",
-          "selectedPatternIds": [
-            "rule.selection_flow"
-          ],
-          "artifactTargets": [
-            "server"
-          ],
-          "ownedPaths": [],
-          "fillContractIds": [
-            "selection_flow.effect_mapping"
-          ],
-          "reviewRequired": false,
-          "implementationStrategy": "family",
-          "maturity": "templated",
-          "outputKinds": [
-            "server"
-          ],
-          "artifactPaths": [],
-          "resolvedFrom": "family",
-          "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
-          "requiredOutputs": [
-            "server.runtime"
-          ],
-          "integrationHints": [],
-          "stateExpectations": [],
-          "synthesizedArtifactIds": [],
-          "requiresReview": false,
-          "metadata": {
-            "resolutionSource": "need",
-            "score": 4
-          },
-          "reviewReasons": []
-        },
-        {
-          "moduleId": "mod_ui_3",
-          "role": "ui-surface",
-          "category": "ui",
-          "sourceKind": "family",
-          "familyId": "selection_pool",
-          "patternId": "ui.selection_modal",
-          "selectedPatternIds": [
-            "ui.selection_modal"
-          ],
-          "artifactTargets": [
-            "ui"
-          ],
-          "ownedPaths": [],
-          "fillContractIds": [
-            "ui.selection_modal.payload_adapter"
-          ],
-          "reviewRequired": false,
-          "implementationStrategy": "family",
-          "maturity": "templated",
-          "outputKinds": [
-            "ui"
-          ],
-          "artifactPaths": [],
-          "resolvedFrom": "family",
-          "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
-          "requiredOutputs": [
-            "ui.surface"
-          ],
-          "integrationHints": [
-            "ui.surface"
-          ],
-          "stateExpectations": [],
-          "synthesizedArtifactIds": [],
-          "requiresReview": false,
-          "metadata": {
-            "resolutionSource": "need",
-            "score": 6
-          },
-          "reviewReasons": []
-        },
-        {
-          "moduleId": "mod_effect_4",
-          "role": "gameplay-core",
-          "category": "effect",
-          "sourceKind": "family",
-          "familyId": "selection_pool",
-          "patternId": "effect.modifier_applier",
-          "selectedPatternIds": [
-            "effect.modifier_applier"
-          ],
-          "artifactTargets": [
-            "server",
-            "config",
-            "lua"
-          ],
-          "ownedPaths": [],
-          "fillContractIds": [],
-          "reviewRequired": false,
-          "implementationStrategy": "family",
-          "maturity": "templated",
-          "outputKinds": [
-            "server"
-          ],
-          "artifactPaths": [],
-          "resolvedFrom": "family",
-          "summary": "Family-backed module 'effect_application' resolved to reusable pattern 'effect.modifier_applier'",
-          "requiredOutputs": [
-            "server.runtime",
-            "host.config.kv",
-            "属性加成效果",
-            "UI 状态更新"
-          ],
-          "integrationHints": [],
-          "stateExpectations": [],
-          "synthesizedArtifactIds": [],
-          "requiresReview": false,
-          "metadata": {
-            "resolutionSource": "need",
-            "score": 8
-          },
-          "reviewReasons": []
-        }
-      ],
-      "sourceBacked": true,
-      "sourceModel": {
-        "ref": {
-          "adapter": "selection_pool",
-          "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-        },
-        "artifact": {
-          "adapter": "selection_pool",
-          "version": 1,
-          "featureId": "talent_draw_demo",
-          "objectKind": "talent",
-          "triggerKey": "F4",
-          "choiceCount": 3,
-          "drawMode": "multiple_without_replacement",
-          "duplicatePolicy": "forbid",
-          "poolStateTracking": "session",
-          "selectionPolicy": "single",
-          "applyMode": "immediate",
-          "postSelectionPoolBehavior": "remove_selected_from_remaining",
-          "trackSelectedItems": true,
-          "display": {
-            "title": "Choose Your Talent",
-            "description": "Select one of the following talents",
-            "inventoryTitle": "Talent Inventory",
-            "payloadShape": "card_with_rarity",
-            "minDisplayCount": 3
-          },
-          "placeholderConfig": {
-            "id": "empty_talent_slot",
-            "name": "Empty Slot",
-            "description": "No talent available",
-            "disabled": true
-          },
-          "effectProfile": {
-            "kind": "tier_attribute_bonus_placeholder",
-            "rarityAttributeBonusMap": {
-              "R": {
-                "attribute": "strength",
-                "value": 10
-              },
-              "SR": {
-                "attribute": "agility",
-                "value": 10
-              },
-              "SSR": {
-                "attribute": "intelligence",
-                "value": 10
-              },
-              "UR": {
-                "attribute": "all",
-                "value": 10
-              }
-            }
-          },
-          "objects": [
-            {
-              "id": "R001",
-              "label": "Strength Boost",
-              "description": "+10 Strength",
-              "weight": 40,
-              "tier": "R"
-            },
-            {
-              "id": "R002",
-              "label": "Fortitude",
-              "description": "+10 Strength",
-              "weight": 40,
-              "tier": "R"
-            },
-            {
-              "id": "SR001",
-              "label": "Agility Boost",
-              "description": "+10 Agility",
-              "weight": 30,
-              "tier": "SR"
-            },
-            {
-              "id": "SR002",
-              "label": "Swift Reflexes",
-              "description": "+10 Agility",
-              "weight": 30,
-              "tier": "SR"
-            },
-            {
-              "id": "SSR001",
-              "label": "Intelligence Boost",
-              "description": "+10 Intelligence",
-              "weight": 20,
-              "tier": "SSR"
-            },
-            {
-              "id": "UR001",
-              "label": "Ultimate Growth",
-              "description": "+10 All Attributes",
-              "weight": 10,
-              "tier": "UR"
-            }
-          ]
-        }
-      },
-      "featureAuthoring": {
-        "mode": "source-backed",
-        "profile": "selection_pool",
-        "objectKind": "talent",
-        "parameters": {
-          "triggerKey": "F4",
-          "choiceCount": 3,
-          "objects": [
-            {
-              "id": "R001",
-              "label": "Strength Boost",
-              "description": "+10 Strength",
-              "weight": 40,
-              "tier": "R"
-            },
-            {
-              "id": "R002",
-              "label": "Fortitude",
-              "description": "+10 Strength",
-              "weight": 40,
-              "tier": "R"
-            },
-            {
-              "id": "SR001",
-              "label": "Agility Boost",
-              "description": "+10 Agility",
-              "weight": 30,
-              "tier": "SR"
-            },
-            {
-              "id": "SR002",
-              "label": "Swift Reflexes",
-              "description": "+10 Agility",
-              "weight": 30,
-              "tier": "SR"
-            },
-            {
-              "id": "SSR001",
-              "label": "Intelligence Boost",
-              "description": "+10 Intelligence",
-              "weight": 20,
-              "tier": "SSR"
-            },
-            {
-              "id": "UR001",
-              "label": "Ultimate Growth",
-              "description": "+10 All Attributes",
-              "weight": 10,
-              "tier": "UR"
-            }
-          ],
-          "drawMode": "multiple_without_replacement",
-          "duplicatePolicy": "forbid",
-          "poolStateTracking": "session",
-          "selectionPolicy": "single",
-          "applyMode": "immediate",
-          "postSelectionPoolBehavior": "remove_selected_from_remaining",
-          "trackSelectedItems": true,
-          "display": {
-            "title": "Choose Your Talent",
-            "description": "Select one of the following talents",
-            "inventoryTitle": "Talent Inventory",
-            "payloadShape": "card_with_rarity",
-            "minDisplayCount": 3
-          },
-          "placeholderConfig": {
-            "id": "empty_talent_slot",
-            "name": "Empty Slot",
-            "description": "No talent available",
-            "disabled": true
-          },
-          "effectProfile": {
-            "kind": "tier_attribute_bonus_placeholder",
-            "rarityAttributeBonusMap": {
-              "R": {
-                "attribute": "strength",
-                "value": 10
-              },
-              "SR": {
-                "attribute": "agility",
-                "value": 10
-              },
-              "SSR": {
-                "attribute": "intelligence",
-                "value": 10
-              },
-              "UR": {
-                "attribute": "all",
-                "value": 10
-              }
-            }
-          },
-          "objectKind": "talent"
-        },
-        "parameterSurface": {
-          "triggerKey": {
-            "kind": "single_hotkey",
-            "allowList": [
-              "Q",
-              "W",
-              "E",
-              "R",
-              "D",
-              "F",
-              "1",
-              "2",
-              "3",
-              "4",
-              "5",
-              "6",
-              "F1",
-              "F2",
-              "F3",
-              "F4",
-              "F5",
-              "F6",
-              "F7",
-              "F8",
-              "F9",
-              "F10",
-              "F11",
-              "F12"
-            ]
-          },
-          "choiceCount": {
-            "minimum": 1,
-            "maximum": 5
-          },
-          "objects": {
-            "minItems": 1,
-            "seededWhenMissing": true
-          },
-          "inventory": {
-            "supported": true,
-            "capacityRange": {
-              "minimum": 1,
-              "maximum": 30
-            },
-            "fixedPresentation": "persistent_panel"
-          },
-          "invariants": [
-            "single trigger entry only",
-            "weighted pool candidate source",
-            "confirm exactly one candidate",
-            "same-feature owned object collection only",
-            "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
-            "no persistence",
-            "no cross-feature grants",
-            "no arbitrary custom effect family"
-          ]
-        },
-        "sourceArtifactRef": {
-          "adapter": "selection_pool",
-          "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-        },
-        "notes": [
-          "selection_pool proposal seeded from example catalog for example replay."
-        ]
-      },
-      "sourceBackedInvariantRoles": [
-        "input_trigger",
-        "weighted_pool",
-        "selection_flow",
-        "selection_modal",
-        "effect_application"
-      ],
-      "preservedModuleBackbone": [
-        "input_trigger",
-        "weighted_pool",
-        "selection_flow",
-        "selection_modal",
-        "effect_application"
-      ],
-      "preservedInvariants": [
-        "single trigger entry only",
-        "weighted pool candidate source",
-        "confirm exactly one candidate",
-        "same-feature owned object collection only",
-        "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
-        "no persistence",
-        "no cross-feature grants",
-        "no arbitrary custom effect family"
-      ],
-      "boundedFields": {
-        "triggerKey": "F4",
-        "choiceCount": 3,
-        "objectCount": 6
+  "clarificationPlan": {
+    "questions": [
+      {
+        "id": "clarify-trigger-authority",
+        "question": "What exactly triggers this feature, and who owns that trigger?",
+        "targetPaths": [
+          "interaction.activations",
+          "flow.triggerSummary",
+          "requirements.typed"
+        ],
+        "reason": "The governed create semantics still do not expose a reliable trigger or passive ownership boundary.",
+        "impact": "blueprint-blocking-structural"
       }
-    },
-    "requestedChangeIntentSchema": {
-      "version": "1",
-      "host": {
-        "kind": "workspace-feature-context",
-        "capabilities": [
-          "source-backed-update",
-          "selection-pool-profile"
-        ]
-      },
-      "request": {
-        "rawPrompt": "把天赋抽取的触发键从 F4 改成 F5",
-        "goal": "Change the talent draw trigger key from F4 to F5 while preserving all existing behavior.",
-        "nameHint": "talent_draw_demo_trigger_key_rebind"
-      },
-      "classification": {
-        "intentKind": "micro-feature",
-        "confidence": "high"
-      },
-      "actors": [
-        {
-          "id": "player",
-          "role": "user",
-          "label": "Player"
-        }
-      ],
-      "requirements": {
-        "functional": [
-          "Rebind the existing talent draw activation key from F4 to F5.",
-          "Keep the existing weighted draw, modal selection, and effect application behavior unchanged.",
-          "Preserve the existing one-trigger-entry interaction model."
-        ],
-        "typed": [
-          {
-            "id": "req_trigger_rebind",
-            "kind": "trigger",
-            "summary": "Replace the current hotkey binding F4 with F5 for the existing talent draw trigger.",
-            "actors": [
-              "player"
-            ],
-            "inputs": [
-              "F5 key press"
-            ],
-            "outputs": [
-              "Existing talent draw flow activation"
-            ],
-            "invariants": [
-              "Single trigger entry only",
-              "No other gameplay logic changes"
-            ],
-            "parameters": {
-              "from": "F4",
-              "to": "F5"
-            },
-            "priority": "must"
-          },
-          {
-            "id": "req_preserve_flow",
-            "kind": "rule",
-            "summary": "Preserve the current weighted-pool candidate generation, single confirmed choice, modal UI, and same-feature effect application.",
-            "actors": [
-              "player"
-            ],
-            "inputs": [
-              "Existing weighted pool contents"
-            ],
-            "outputs": [
-              "Unchanged selection and application flow"
-            ],
-            "invariants": [
-              "Weighted pool candidate source remains unchanged",
-              "Exactly one candidate is confirmed",
-              "Same selection skeleton remains in place",
-              "No persistence",
-              "No cross-feature grants",
-              "No arbitrary custom effect family"
-            ],
-            "priority": "must"
-          }
-        ],
-        "interactions": [
-          "Player presses F5 to invoke the existing talent selection flow."
-        ],
-        "dataNeeds": [
-          "Existing source-backed triggerKey parameter",
-          "Existing weighted talent object pool"
-        ],
-        "outputs": [
-          "Updated trigger binding parameter set to F5"
-        ]
-      },
-      "constraints": {
-        "hostConstraints": [
-          "Must preserve unspecified existing behavior for feature 'talent_draw_demo'.",
-          "Keep source-backed selection_pool profile semantics unchanged except triggerKey.",
-          "Use a single trigger entry only.",
-          "Keep weighted pool candidate source and single-confirm selection behavior."
-        ],
-        "nonFunctional": [
-          "Change should be configuration-level only.",
-          "Preserve existing runtime/UI behavior except for the activation key."
-        ]
-      },
-      "interaction": {
-        "activations": [
-          {
-            "actor": "player",
-            "kind": "key",
-            "input": "F5",
-            "phase": "press",
-            "repeatability": "repeatable",
-            "confirmation": "implicit"
-          }
-        ]
-      },
-      "targeting": {
-        "subject": "self",
-        "selector": "none",
-        "teamScope": "self"
-      },
-      "timing": {
-        "duration": {
-          "kind": "instant"
-        }
-      },
-      "flow": {
-        "triggerSummary": "Press F5 to start the unchanged talent draw and selection flow.",
-        "sequence": [
-          "Player presses F5",
-          "Existing weighted pool draw logic runs unchanged",
-          "Existing selection modal displays candidates unchanged",
-          "Player confirms exactly one talent",
-          "Existing effect application runs unchanged"
-        ],
-        "supportsCancel": false,
-        "supportsRetry": false,
-        "requiresConfirmation": false
-      },
-      "selection": {
-        "mode": "hybrid",
-        "source": "weighted-pool",
-        "choiceMode": "user-chosen",
-        "cardinality": "single",
-        "choiceCount": 1,
-        "repeatability": "repeatable",
-        "duplicatePolicy": "forbid",
-        "commitment": "confirm"
-      },
-      "effects": {
-        "operations": [
-          "apply"
-        ],
-        "targets": [
-          "selected talent effect on self"
-        ],
-        "durationSemantics": "instant"
-      },
-      "outcomes": {
-        "operations": [
-          "apply-effect",
-          "update-state"
-        ]
-      },
-      "contentModel": {
-        "collections": [
-          {
-            "id": "talent_objects",
-            "role": "candidate-options",
-            "ownership": "feature",
-            "updateMode": "merge",
-            "itemSchema": [
-              {
-                "name": "id",
-                "type": "string",
-                "required": true,
-                "semanticRole": "object-id"
-              },
-              {
-                "name": "label",
-                "type": "string",
-                "required": true,
-                "semanticRole": "display-name"
-              },
-              {
-                "name": "weight",
-                "type": "number",
-                "required": true,
-                "semanticRole": "selection-weight"
-              },
-              {
-                "name": "tier",
-                "type": "enum",
-                "required": true,
-                "semanticRole": "rarity"
-              }
-            ]
-          }
-        ]
-      },
-      "composition": {
-        "dependencies": [
-          {
-            "kind": "same-feature",
-            "relation": "reads",
-            "target": "weighted_pool",
-            "required": true
-          },
-          {
-            "kind": "same-feature",
-            "relation": "triggers",
-            "target": "selection_flow",
-            "required": true
-          },
-          {
-            "kind": "same-feature",
-            "relation": "syncs-with",
-            "target": "selection_modal",
-            "required": true
-          },
-          {
-            "kind": "same-feature",
-            "relation": "triggers",
-            "target": "effect_application",
-            "required": true
-          }
-        ]
-      },
-      "integrations": {
-        "expectedBindings": [
-          {
-            "id": "binding_trigger_key",
-            "kind": "entry-point",
-            "summary": "Existing key-binding entry point updates its configured hotkey from F4 to F5.",
-            "required": true
-          },
-          {
-            "id": "binding_selection_modal",
-            "kind": "ui-surface",
-            "summary": "Existing selection modal remains bound to the unchanged selection flow.",
-            "required": true
-          }
-        ]
-      },
-      "uiRequirements": {
-        "needed": true,
-        "surfaces": [
-          "selection_modal"
-        ],
-        "feedbackNeeds": [
-          "Existing modal opens from F5 instead of F4"
-        ]
-      },
-      "normalizedMechanics": {
-        "trigger": true,
-        "candidatePool": true,
-        "weightedSelection": true,
-        "playerChoice": true,
-        "uiModal": true,
-        "outcomeApplication": true,
-        "resourceConsumption": false
-      },
-      "acceptanceInvariants": [
-        {
-          "id": "inv_only_trigger_key_changes",
-          "summary": "The only behavioral change is the activation key changing from F4 to F5.",
-          "severity": "error"
-        },
-        {
-          "id": "inv_backbone_preserved",
-          "summary": "The preserved module backbone remains input_trigger, weighted_pool, selection_flow, selection_modal, and effect_application.",
-          "severity": "error"
-        },
-        {
-          "id": "inv_selection_semantics_preserved",
-          "summary": "Weighted pool sourcing, three displayed candidates, and exactly one confirmed selection remain unchanged.",
-          "severity": "error"
-        }
-      ],
-      "resolvedAssumptions": [
-        "F5 is an allowed triggerKey value in the current parameter surface.",
-        "The request intends a minimal update to the existing source-backed feature only.",
-        "All unspecified behavior remains preserved."
-      ],
-      "parameters": {
-        "triggerKey": "F5",
-        "previousTriggerKey": "F4",
-        "preserveAllOtherParameters": true
-      }
-    },
-    "updateIntent": {
-      "version": "1.0",
-      "mode": "update",
-      "target": {
-        "featureId": "talent_draw_demo",
-        "revision": 3,
-        "profile": "selection_pool",
-        "sourceBacked": true
-      },
-      "currentFeatureContext": {
-        "featureId": "talent_draw_demo",
-        "revision": 3,
-        "intentKind": "standalone-system",
-        "selectedPatterns": [
-          "effect.modifier_applier",
-          "ui.selection_modal",
-          "data.weighted_pool",
-          "input.key_binding",
-          "rule.selection_flow"
-        ],
-        "moduleRecords": [
-          {
-            "moduleId": "mod_trigger_0",
-            "role": "gameplay-core",
-            "category": "trigger",
-            "sourceKind": "family",
-            "familyId": "selection_pool",
-            "patternId": "input.key_binding",
-            "selectedPatternIds": [
-              "input.key_binding"
-            ],
-            "artifactTargets": [
-              "server"
-            ],
-            "ownedPaths": [],
-            "fillContractIds": [],
-            "reviewRequired": false,
-            "implementationStrategy": "family",
-            "maturity": "templated",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [],
-            "resolvedFrom": "family",
-            "summary": "Family-backed module 'input_trigger' resolved to reusable pattern 'input.key_binding'",
-            "requiredOutputs": [
-              "server.runtime"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [],
-            "requiresReview": false,
-            "metadata": {
-              "resolutionSource": "need",
-              "score": 4
-            },
-            "reviewReasons": []
-          },
-          {
-            "moduleId": "mod_data_1",
-            "role": "shared-support",
-            "category": "data",
-            "sourceKind": "family",
-            "familyId": "selection_pool",
-            "patternId": "data.weighted_pool",
-            "selectedPatternIds": [
-              "data.weighted_pool"
-            ],
-            "artifactTargets": [
-              "server",
-              "shared"
-            ],
-            "ownedPaths": [],
-            "fillContractIds": [
-              "weighted_pool.selection_policy"
-            ],
-            "reviewRequired": false,
-            "implementationStrategy": "family",
-            "maturity": "templated",
-            "outputKinds": [
-              "server",
-              "shared"
-            ],
-            "artifactPaths": [],
-            "resolvedFrom": "family",
-            "summary": "Family-backed module 'weighted_pool' resolved to reusable pattern 'data.weighted_pool'",
-            "requiredOutputs": [
-              "shared.runtime"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [],
-            "requiresReview": false,
-            "metadata": {
-              "resolutionSource": "need",
-              "score": 4
-            },
-            "reviewReasons": []
-          },
-          {
-            "moduleId": "mod_rule_2",
-            "role": "gameplay-core",
-            "category": "rule",
-            "sourceKind": "family",
-            "familyId": "selection_pool",
-            "patternId": "rule.selection_flow",
-            "selectedPatternIds": [
-              "rule.selection_flow"
-            ],
-            "artifactTargets": [
-              "server"
-            ],
-            "ownedPaths": [],
-            "fillContractIds": [
-              "selection_flow.effect_mapping"
-            ],
-            "reviewRequired": false,
-            "implementationStrategy": "family",
-            "maturity": "templated",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [],
-            "resolvedFrom": "family",
-            "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
-            "requiredOutputs": [
-              "server.runtime"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [],
-            "requiresReview": false,
-            "metadata": {
-              "resolutionSource": "need",
-              "score": 4
-            },
-            "reviewReasons": []
-          },
-          {
-            "moduleId": "mod_ui_3",
-            "role": "ui-surface",
-            "category": "ui",
-            "sourceKind": "family",
-            "familyId": "selection_pool",
-            "patternId": "ui.selection_modal",
-            "selectedPatternIds": [
-              "ui.selection_modal"
-            ],
-            "artifactTargets": [
-              "ui"
-            ],
-            "ownedPaths": [],
-            "fillContractIds": [
-              "ui.selection_modal.payload_adapter"
-            ],
-            "reviewRequired": false,
-            "implementationStrategy": "family",
-            "maturity": "templated",
-            "outputKinds": [
-              "ui"
-            ],
-            "artifactPaths": [],
-            "resolvedFrom": "family",
-            "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
-            "requiredOutputs": [
-              "ui.surface"
-            ],
-            "integrationHints": [
-              "ui.surface"
-            ],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [],
-            "requiresReview": false,
-            "metadata": {
-              "resolutionSource": "need",
-              "score": 6
-            },
-            "reviewReasons": []
-          },
-          {
-            "moduleId": "mod_effect_4",
-            "role": "gameplay-core",
-            "category": "effect",
-            "sourceKind": "family",
-            "familyId": "selection_pool",
-            "patternId": "effect.modifier_applier",
-            "selectedPatternIds": [
-              "effect.modifier_applier"
-            ],
-            "artifactTargets": [
-              "server",
-              "config",
-              "lua"
-            ],
-            "ownedPaths": [],
-            "fillContractIds": [],
-            "reviewRequired": false,
-            "implementationStrategy": "family",
-            "maturity": "templated",
-            "outputKinds": [
-              "server"
-            ],
-            "artifactPaths": [],
-            "resolvedFrom": "family",
-            "summary": "Family-backed module 'effect_application' resolved to reusable pattern 'effect.modifier_applier'",
-            "requiredOutputs": [
-              "server.runtime",
-              "host.config.kv",
-              "属性加成效果",
-              "UI 状态更新"
-            ],
-            "integrationHints": [],
-            "stateExpectations": [],
-            "synthesizedArtifactIds": [],
-            "requiresReview": false,
-            "metadata": {
-              "resolutionSource": "need",
-              "score": 8
-            },
-            "reviewReasons": []
-          }
-        ],
-        "sourceBacked": true,
-        "sourceModel": {
-          "ref": {
-            "adapter": "selection_pool",
-            "version": 1,
-            "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-          },
-          "artifact": {
-            "adapter": "selection_pool",
-            "version": 1,
-            "featureId": "talent_draw_demo",
-            "objectKind": "talent",
-            "triggerKey": "F4",
-            "choiceCount": 3,
-            "drawMode": "multiple_without_replacement",
-            "duplicatePolicy": "forbid",
-            "poolStateTracking": "session",
-            "selectionPolicy": "single",
-            "applyMode": "immediate",
-            "postSelectionPoolBehavior": "remove_selected_from_remaining",
-            "trackSelectedItems": true,
-            "display": {
-              "title": "Choose Your Talent",
-              "description": "Select one of the following talents",
-              "inventoryTitle": "Talent Inventory",
-              "payloadShape": "card_with_rarity",
-              "minDisplayCount": 3
-            },
-            "placeholderConfig": {
-              "id": "empty_talent_slot",
-              "name": "Empty Slot",
-              "description": "No talent available",
-              "disabled": true
-            },
-            "effectProfile": {
-              "kind": "tier_attribute_bonus_placeholder",
-              "rarityAttributeBonusMap": {
-                "R": {
-                  "attribute": "strength",
-                  "value": 10
-                },
-                "SR": {
-                  "attribute": "agility",
-                  "value": 10
-                },
-                "SSR": {
-                  "attribute": "intelligence",
-                  "value": 10
-                },
-                "UR": {
-                  "attribute": "all",
-                  "value": 10
-                }
-              }
-            },
-            "objects": [
-              {
-                "id": "R001",
-                "label": "Strength Boost",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "R002",
-                "label": "Fortitude",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "SR001",
-                "label": "Agility Boost",
-                "description": "+10 Agility",
-                "weight": 30,
-                "tier": "SR"
-              },
-              {
-                "id": "SR002",
-                "label": "Swift Reflexes",
-                "description": "+10 Agility",
-                "weight": 30,
-                "tier": "SR"
-              },
-              {
-                "id": "SSR001",
-                "label": "Intelligence Boost",
-                "description": "+10 Intelligence",
-                "weight": 20,
-                "tier": "SSR"
-              },
-              {
-                "id": "UR001",
-                "label": "Ultimate Growth",
-                "description": "+10 All Attributes",
-                "weight": 10,
-                "tier": "UR"
-              }
-            ]
-          }
-        },
-        "featureAuthoring": {
-          "mode": "source-backed",
-          "profile": "selection_pool",
-          "objectKind": "talent",
-          "parameters": {
-            "triggerKey": "F4",
-            "choiceCount": 3,
-            "objects": [
-              {
-                "id": "R001",
-                "label": "Strength Boost",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "R002",
-                "label": "Fortitude",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "SR001",
-                "label": "Agility Boost",
-                "description": "+10 Agility",
-                "weight": 30,
-                "tier": "SR"
-              },
-              {
-                "id": "SR002",
-                "label": "Swift Reflexes",
-                "description": "+10 Agility",
-                "weight": 30,
-                "tier": "SR"
-              },
-              {
-                "id": "SSR001",
-                "label": "Intelligence Boost",
-                "description": "+10 Intelligence",
-                "weight": 20,
-                "tier": "SSR"
-              },
-              {
-                "id": "UR001",
-                "label": "Ultimate Growth",
-                "description": "+10 All Attributes",
-                "weight": 10,
-                "tier": "UR"
-              }
-            ],
-            "drawMode": "multiple_without_replacement",
-            "duplicatePolicy": "forbid",
-            "poolStateTracking": "session",
-            "selectionPolicy": "single",
-            "applyMode": "immediate",
-            "postSelectionPoolBehavior": "remove_selected_from_remaining",
-            "trackSelectedItems": true,
-            "display": {
-              "title": "Choose Your Talent",
-              "description": "Select one of the following talents",
-              "inventoryTitle": "Talent Inventory",
-              "payloadShape": "card_with_rarity",
-              "minDisplayCount": 3
-            },
-            "placeholderConfig": {
-              "id": "empty_talent_slot",
-              "name": "Empty Slot",
-              "description": "No talent available",
-              "disabled": true
-            },
-            "effectProfile": {
-              "kind": "tier_attribute_bonus_placeholder",
-              "rarityAttributeBonusMap": {
-                "R": {
-                  "attribute": "strength",
-                  "value": 10
-                },
-                "SR": {
-                  "attribute": "agility",
-                  "value": 10
-                },
-                "SSR": {
-                  "attribute": "intelligence",
-                  "value": 10
-                },
-                "UR": {
-                  "attribute": "all",
-                  "value": 10
-                }
-              }
-            },
-            "objectKind": "talent"
-          },
-          "parameterSurface": {
-            "triggerKey": {
-              "kind": "single_hotkey",
-              "allowList": [
-                "Q",
-                "W",
-                "E",
-                "R",
-                "D",
-                "F",
-                "1",
-                "2",
-                "3",
-                "4",
-                "5",
-                "6",
-                "F1",
-                "F2",
-                "F3",
-                "F4",
-                "F5",
-                "F6",
-                "F7",
-                "F8",
-                "F9",
-                "F10",
-                "F11",
-                "F12"
-              ]
-            },
-            "choiceCount": {
-              "minimum": 1,
-              "maximum": 5
-            },
-            "objects": {
-              "minItems": 1,
-              "seededWhenMissing": true
-            },
-            "inventory": {
-              "supported": true,
-              "capacityRange": {
-                "minimum": 1,
-                "maximum": 30
-              },
-              "fixedPresentation": "persistent_panel"
-            },
-            "invariants": [
-              "single trigger entry only",
-              "weighted pool candidate source",
-              "confirm exactly one candidate",
-              "same-feature owned object collection only",
-              "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
-              "no persistence",
-              "no cross-feature grants",
-              "no arbitrary custom effect family"
-            ]
-          },
-          "sourceArtifactRef": {
-            "adapter": "selection_pool",
-            "version": 1,
-            "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-          },
-          "notes": [
-            "selection_pool proposal seeded from example catalog for example replay."
-          ]
-        },
-        "sourceBackedInvariantRoles": [
-          "input_trigger",
-          "weighted_pool",
-          "selection_flow",
-          "selection_modal",
-          "effect_application"
-        ],
-        "preservedModuleBackbone": [
-          "input_trigger",
-          "weighted_pool",
-          "selection_flow",
-          "selection_modal",
-          "effect_application"
-        ],
-        "preservedInvariants": [
-          "single trigger entry only",
-          "weighted pool candidate source",
-          "confirm exactly one candidate",
-          "same-feature owned object collection only",
-          "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
-          "no persistence",
-          "no cross-feature grants",
-          "no arbitrary custom effect family"
-        ],
-        "boundedFields": {
-          "triggerKey": "F4",
-          "choiceCount": 3,
-          "objectCount": 6
-        }
-      },
-      "requestedChange": {
-        "version": "1",
-        "host": {
-          "kind": "workspace-feature-context",
-          "capabilities": [
-            "source-backed-update",
-            "selection-pool-profile"
-          ]
-        },
-        "request": {
-          "rawPrompt": "把天赋抽取的触发键从 F4 改成 F5",
-          "goal": "Change the talent draw trigger key from F4 to F5 while preserving all existing behavior.",
-          "nameHint": "talent_draw_demo_trigger_key_rebind"
-        },
-        "classification": {
-          "intentKind": "micro-feature",
-          "confidence": "high"
-        },
-        "actors": [
-          {
-            "id": "player",
-            "role": "user",
-            "label": "Player"
-          }
-        ],
-        "requirements": {
-          "functional": [
-            "Rebind the existing talent draw activation key from F4 to F5.",
-            "Keep the existing weighted draw, modal selection, and effect application behavior unchanged.",
-            "Preserve the existing one-trigger-entry interaction model."
-          ],
-          "typed": [
-            {
-              "id": "req_trigger_rebind",
-              "kind": "trigger",
-              "summary": "Replace the current hotkey binding F4 with F5 for the existing talent draw trigger.",
-              "actors": [
-                "player"
-              ],
-              "inputs": [
-                "F5 key press"
-              ],
-              "outputs": [
-                "Existing talent draw flow activation"
-              ],
-              "invariants": [
-                "Single trigger entry only",
-                "No other gameplay logic changes"
-              ],
-              "parameters": {
-                "from": "F4",
-                "to": "F5"
-              },
-              "priority": "must"
-            },
-            {
-              "id": "req_preserve_flow",
-              "kind": "rule",
-              "summary": "Preserve the current weighted-pool candidate generation, single confirmed choice, modal UI, and same-feature effect application.",
-              "actors": [
-                "player"
-              ],
-              "inputs": [
-                "Existing weighted pool contents"
-              ],
-              "outputs": [
-                "Unchanged selection and application flow"
-              ],
-              "invariants": [
-                "Weighted pool candidate source remains unchanged",
-                "Exactly one candidate is confirmed",
-                "Same selection skeleton remains in place",
-                "No persistence",
-                "No cross-feature grants",
-                "No arbitrary custom effect family"
-              ],
-              "priority": "must"
-            }
-          ],
-          "interactions": [
-            "Player presses F5 to invoke the existing talent selection flow."
-          ],
-          "dataNeeds": [
-            "Existing source-backed triggerKey parameter",
-            "Existing weighted talent object pool"
-          ],
-          "outputs": [
-            "Updated trigger binding parameter set to F5"
-          ]
-        },
-        "constraints": {
-          "hostConstraints": [
-            "Must preserve unspecified existing behavior for feature 'talent_draw_demo'.",
-            "Keep source-backed selection_pool profile semantics unchanged except triggerKey.",
-            "Use a single trigger entry only.",
-            "Keep weighted pool candidate source and single-confirm selection behavior."
-          ],
-          "nonFunctional": [
-            "Change should be configuration-level only.",
-            "Preserve existing runtime/UI behavior except for the activation key."
-          ]
-        },
-        "interaction": {
-          "activations": [
-            {
-              "actor": "player",
-              "kind": "key",
-              "input": "F5",
-              "phase": "press",
-              "repeatability": "repeatable",
-              "confirmation": "implicit"
-            }
-          ]
-        },
-        "targeting": {
-          "subject": "self",
-          "selector": "none",
-          "teamScope": "self"
-        },
-        "timing": {
-          "duration": {
-            "kind": "instant"
-          }
-        },
-        "flow": {
-          "triggerSummary": "Press F5 to start the unchanged talent draw and selection flow.",
-          "sequence": [
-            "Player presses F5",
-            "Existing weighted pool draw logic runs unchanged",
-            "Existing selection modal displays candidates unchanged",
-            "Player confirms exactly one talent",
-            "Existing effect application runs unchanged"
-          ],
-          "supportsCancel": false,
-          "supportsRetry": false,
-          "requiresConfirmation": false
-        },
-        "selection": {
-          "mode": "hybrid",
-          "source": "weighted-pool",
-          "choiceMode": "user-chosen",
-          "cardinality": "single",
-          "choiceCount": 1,
-          "repeatability": "repeatable",
-          "duplicatePolicy": "forbid",
-          "commitment": "confirm"
-        },
-        "effects": {
-          "operations": [
-            "apply"
-          ],
-          "targets": [
-            "selected talent effect on self"
-          ],
-          "durationSemantics": "instant"
-        },
-        "outcomes": {
-          "operations": [
-            "apply-effect",
-            "update-state"
-          ]
-        },
-        "contentModel": {
-          "collections": [
-            {
-              "id": "talent_objects",
-              "role": "candidate-options",
-              "ownership": "feature",
-              "updateMode": "merge",
-              "itemSchema": [
-                {
-                  "name": "id",
-                  "type": "string",
-                  "required": true,
-                  "semanticRole": "object-id"
-                },
-                {
-                  "name": "label",
-                  "type": "string",
-                  "required": true,
-                  "semanticRole": "display-name"
-                },
-                {
-                  "name": "weight",
-                  "type": "number",
-                  "required": true,
-                  "semanticRole": "selection-weight"
-                },
-                {
-                  "name": "tier",
-                  "type": "enum",
-                  "required": true,
-                  "semanticRole": "rarity"
-                }
-              ]
-            }
-          ]
-        },
-        "composition": {
-          "dependencies": [
-            {
-              "kind": "same-feature",
-              "relation": "reads",
-              "target": "weighted_pool",
-              "required": true
-            },
-            {
-              "kind": "same-feature",
-              "relation": "triggers",
-              "target": "selection_flow",
-              "required": true
-            },
-            {
-              "kind": "same-feature",
-              "relation": "syncs-with",
-              "target": "selection_modal",
-              "required": true
-            },
-            {
-              "kind": "same-feature",
-              "relation": "triggers",
-              "target": "effect_application",
-              "required": true
-            }
-          ]
-        },
-        "integrations": {
-          "expectedBindings": [
-            {
-              "id": "binding_trigger_key",
-              "kind": "entry-point",
-              "summary": "Existing key-binding entry point updates its configured hotkey from F4 to F5.",
-              "required": true
-            },
-            {
-              "id": "binding_selection_modal",
-              "kind": "ui-surface",
-              "summary": "Existing selection modal remains bound to the unchanged selection flow.",
-              "required": true
-            }
-          ]
-        },
-        "uiRequirements": {
-          "needed": true,
-          "surfaces": [
-            "selection_modal"
-          ],
-          "feedbackNeeds": [
-            "Existing modal opens from F5 instead of F4"
-          ]
-        },
-        "normalizedMechanics": {
-          "trigger": true,
-          "candidatePool": true,
-          "weightedSelection": true,
-          "playerChoice": true,
-          "uiModal": true,
-          "outcomeApplication": true,
-          "resourceConsumption": false
-        },
-        "acceptanceInvariants": [
-          {
-            "id": "inv_only_trigger_key_changes",
-            "summary": "The only behavioral change is the activation key changing from F4 to F5.",
-            "severity": "error"
-          },
-          {
-            "id": "inv_backbone_preserved",
-            "summary": "The preserved module backbone remains input_trigger, weighted_pool, selection_flow, selection_modal, and effect_application.",
-            "severity": "error"
-          },
-          {
-            "id": "inv_selection_semantics_preserved",
-            "summary": "Weighted pool sourcing, three displayed candidates, and exactly one confirmed selection remain unchanged.",
-            "severity": "error"
-          }
-        ],
-        "resolvedAssumptions": [
-          "F5 is an allowed triggerKey value in the current parameter surface.",
-          "The request intends a minimal update to the existing source-backed feature only.",
-          "All unspecified behavior remains preserved."
-        ],
-        "parameters": {
-          "triggerKey": "F5",
-          "previousTriggerKey": "F4",
-          "preserveAllOtherParameters": true
-        }
-      },
-      "delta": {
-        "preserve": [
-          {
-            "path": "backbone.input_trigger",
-            "kind": "composition",
-            "summary": "Preserve module backbone input_trigger."
-          },
-          {
-            "path": "backbone.weighted_pool",
-            "kind": "composition",
-            "summary": "Preserve module backbone weighted_pool."
-          },
-          {
-            "path": "backbone.selection_flow",
-            "kind": "composition",
-            "summary": "Preserve module backbone selection_flow."
-          },
-          {
-            "path": "backbone.selection_modal",
-            "kind": "composition",
-            "summary": "Preserve module backbone selection_modal."
-          },
-          {
-            "path": "backbone.effect_application",
-            "kind": "composition",
-            "summary": "Preserve module backbone effect_application."
-          },
-          {
-            "path": "invariant.1",
-            "kind": "generic",
-            "summary": "Preserve invariant: single trigger entry only"
-          },
-          {
-            "path": "invariant.2",
-            "kind": "generic",
-            "summary": "Preserve invariant: weighted pool candidate source"
-          },
-          {
-            "path": "invariant.3",
-            "kind": "generic",
-            "summary": "Preserve invariant: confirm exactly one candidate"
-          },
-          {
-            "path": "invariant.4",
-            "kind": "generic",
-            "summary": "Preserve invariant: same-feature owned object collection only"
-          },
-          {
-            "path": "invariant.5",
-            "kind": "generic",
-            "summary": "Preserve invariant: same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal"
-          },
-          {
-            "path": "invariant.6",
-            "kind": "generic",
-            "summary": "Preserve invariant: no persistence"
-          },
-          {
-            "path": "invariant.7",
-            "kind": "generic",
-            "summary": "Preserve invariant: no cross-feature grants"
-          },
-          {
-            "path": "invariant.8",
-            "kind": "generic",
-            "summary": "Preserve invariant: no arbitrary custom effect family"
-          },
-          {
-            "path": "preservedModuleBackbone",
-            "kind": "composition",
-            "summary": "Keep input_trigger, weighted_pool, selection_flow, selection_modal, and effect_application unchanged."
-          },
-          {
-            "path": "featureAuthoring.parameters.choiceCount",
-            "kind": "selection",
-            "summary": "Keep displayed candidate count at 3."
-          },
-          {
-            "path": "featureAuthoring.parameters.objects",
-            "kind": "content",
-            "summary": "Keep the same-feature owned talent object collection unchanged."
-          },
-          {
-            "path": "featureAuthoring.parameters.selectionPolicy",
-            "kind": "selection",
-            "summary": "Keep exactly one confirmed selection."
-          },
-          {
-            "path": "featureAuthoring.parameters.effectProfile",
-            "kind": "effect",
-            "summary": "Keep the existing modifier application behavior unchanged."
-          },
-          {
-            "path": "selectedPatterns",
-            "kind": "composition",
-            "summary": "Keep the same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal."
-          }
-        ],
-        "add": [],
-        "modify": [
-          {
-            "path": "featureAuthoring.parameters.triggerKey",
-            "kind": "trigger",
-            "summary": "Change triggerKey from F4 to F5."
-          },
-          {
-            "path": "sourceModel.artifact.triggerKey",
-            "kind": "trigger",
-            "summary": "Update the source-backed artifact trigger key from F4 to F5."
-          },
-          {
-            "path": "boundedFields.triggerKey",
-            "kind": "trigger",
-            "summary": "Update bounded triggerKey value to F5."
-          },
-          {
-            "path": "input.triggerKey",
-            "kind": "trigger",
-            "summary": "Rebind the current trigger key to F5."
-          },
-          {
-            "path": "selection.choiceCount",
-            "kind": "selection",
-            "summary": "Change the current selection choiceCount to 1."
-          }
-        ],
-        "remove": []
-      },
-      "resolvedAssumptions": [
-        "This is a preserve-first update of feature 'talent_draw_demo', not a rewrite.",
-        "Only the trigger key should change; all other logic and content remain intact.",
-        "F5 is valid within the host's allowed hotkey list.",
-        "F5 is an allowed triggerKey value in the current parameter surface.",
-        "The request intends a minimal update to the existing source-backed feature only.",
-        "All unspecified behavior remains preserved.",
-        "Update preserves unspecified existing behavior from the current workspace feature context."
+    ],
+    "maxQuestions": 3,
+    "requiredForFaithfulInterpretation": true,
+    "targetPaths": [
+      "interaction.activations",
+      "flow.triggerSummary",
+      "requirements.typed"
+    ],
+    "reason": "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
+    "authority": {
+      "blocksBlueprint": true,
+      "blocksWrite": true,
+      "requiresReview": true,
+      "unresolvedDependencies": [],
+      "reasons": [
+        "The governed create semantics still do not expose a reliable trigger or passive ownership boundary."
       ]
     }
   },
-  "workspaceSemanticContext": {
-    "featureCount": 5,
-    "features": [
-      {
-        "featureId": "micro_feature_m056",
-        "aliases": [
-          "micro_feature_m056",
-          "micro feature m056"
-        ],
-        "intentKind": "micro-feature",
-        "selectedPatterns": [
-          "ui.selection_modal"
-        ],
-        "sourceBacked": false,
-        "integrationPoints": [],
-        "semanticHints": [
-          "micro-feature",
-          "ui.selection_modal"
-        ]
-      },
-      {
-        "featureId": "micro_feature_sewp",
-        "aliases": [
-          "micro_feature_sewp",
-          "micro feature sewp"
-        ],
-        "intentKind": "micro-feature",
-        "selectedPatterns": [],
-        "sourceBacked": false,
-        "integrationPoints": [],
-        "semanticHints": [
-          "micro-feature"
-        ]
-      },
-      {
-        "featureId": "micro_feature_pzyb",
-        "aliases": [
-          "micro_feature_pzyb",
-          "micro feature pzyb"
-        ],
-        "intentKind": "micro-feature",
-        "selectedPatterns": [],
-        "sourceBacked": false,
-        "integrationPoints": [],
-        "semanticHints": [
-          "micro-feature"
-        ]
-      },
-      {
-        "featureId": "micro_feature_3kde",
-        "aliases": [
-          "micro_feature_3kde",
-          "micro feature 3kde"
-        ],
-        "intentKind": "micro-feature",
-        "selectedPatterns": [],
-        "sourceBacked": false,
-        "integrationPoints": [],
-        "semanticHints": [
-          "micro-feature"
-        ]
-      },
-      {
-        "featureId": "talent_draw_demo",
-        "aliases": [
-          "talent_draw_demo",
-          "talent draw demo",
-          "Choose Your Talent",
-          "Talent Inventory",
-          "Select one of the following talents",
-          "input.key_binding:F4"
-        ],
-        "intentKind": "standalone-system",
-        "selectedPatterns": [
-          "effect.modifier_applier",
-          "ui.selection_modal",
-          "data.weighted_pool",
-          "input.key_binding",
-          "rule.selection_flow"
-        ],
-        "sourceBacked": true,
-        "integrationPoints": [
-          "input.key_binding:F4"
-        ],
-        "semanticHints": [
-          "standalone-system",
-          "effect.modifier_applier",
-          "ui.selection_modal",
-          "data.weighted_pool",
-          "input.key_binding",
-          "rule.selection_flow",
-          "input.key_binding:F4",
-          "selection_pool"
-        ]
-      }
+  "clarificationAuthority": {
+    "blocksBlueprint": true,
+    "blocksWrite": true,
+    "requiresReview": true,
+    "unresolvedDependencies": [],
+    "reasons": [
+      "The governed create semantics still do not expose a reliable trigger or passive ownership boundary."
     ]
   },
-  "semanticArtifacts": {
-    "rootDir": "D:\\test3\\game\\scripts\\src\\rune_weaver\\features\\talent_draw_demo\\artifacts\\semantic",
-    "requestedChangeIntentSchemaPath": "D:\\test3\\game\\scripts\\src\\rune_weaver\\features\\talent_draw_demo\\artifacts\\semantic\\intent-schema.update.json",
-    "updateIntentPath": "D:\\test3\\game\\scripts\\src\\rune_weaver\\features\\talent_draw_demo\\artifacts\\semantic\\update-intent.json"
+  "workspaceSemanticContext": {
+    "featureCount": 0,
+    "features": []
   }
 }

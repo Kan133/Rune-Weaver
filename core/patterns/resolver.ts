@@ -66,6 +66,7 @@ export interface ResolutionIssue {
 interface RuntimeModuleNeed {
   moduleId: string;
   semanticRole: string;
+  category?: BlueprintModule["category"];
   backboneKind?: UnresolvedModuleNeed["backboneKind"];
   facetIds?: string[];
   coLocatePreferred?: boolean;
@@ -219,6 +220,7 @@ function resolveFromNeed(
   const scored = candidates.map((pattern) => scoreCandidate(pattern, need));
   const bestScore = Math.max(...scored.map((candidate) => candidate.score));
   const bestCandidates = scored.filter((candidate) => candidate.score === bestScore);
+  const hintedCandidates = scored.filter((candidate) => need.explicitPatternHints.includes(candidate.meta.id));
 
   if (
     bestScore === 0 &&
@@ -227,6 +229,22 @@ function resolveFromNeed(
       need.integrationHints.length > 0 ||
       need.invariants.length > 0)
   ) {
+    if (hintedCandidates.length > 0) {
+      const hintedSelection = applyHintTieBreak(hintedCandidates, need.explicitPatternHints);
+      return {
+        resolved: {
+          patternId: hintedSelection.meta.id,
+          role: need.semanticRole,
+          parameters: extractParametersForNeed(need, blueprint, hintedSelection.meta.id),
+          priority: "required",
+          source: "hint-tiebreak",
+          moduleId: need.moduleId,
+          score: hintedSelection.score,
+        },
+        unresolved: null,
+      };
+    }
+
     return {
       resolved: null,
       unresolved: {
@@ -280,7 +298,7 @@ function buildResolvedModuleRecord(
   return {
     moduleId: need.moduleId,
     role: need.semanticRole,
-    category: existingRecord?.category || need.sourceModule?.category,
+    category: existingRecord?.category || need.category || need.sourceModule?.category,
     sourceKind,
     planningKind: existingRecord?.planningKind || need.sourceModule?.planningKind,
     backboneKind: existingRecord?.backboneKind || need.sourceModule?.backboneKind,
@@ -330,7 +348,7 @@ function buildUnresolvedModuleNeed(
   return {
     moduleId: need.moduleId,
     semanticRole: need.semanticRole,
-    category: existingRecord?.category || need.sourceModule?.category,
+    category: existingRecord?.category || need.category || need.sourceModule?.category,
     reason: unresolved.reason,
     backboneKind: existingRecord?.backboneKind || need.backboneKind || need.sourceModule?.backboneKind,
     facetIds: existingRecord?.facetIds || need.facetIds || need.sourceModule?.facetIds,
@@ -459,6 +477,7 @@ function extractExplicitModuleNeeds(
       const normalized: RuntimeModuleNeed = {
         moduleId: readString(runtimeNeed.moduleId) || `module_need_${index}`,
         semanticRole: readString(runtimeNeed.semanticRole) || `module_need_${index}`,
+        category: readString(runtimeNeed.category) as BlueprintModule["category"] | undefined,
         backboneKind:
           readString(runtimeNeed.backboneKind) as UnresolvedModuleNeed["backboneKind"] | undefined,
         facetIds: normalizeStringArray(runtimeNeed.facetIds),
@@ -622,6 +641,16 @@ function deriveRequiredCapabilities(
   mechanics: NormalizedMechanics,
   context: string
 ): string[] {
+  if (
+    module.role === "selection_outcome" ||
+    (
+      module.category === "effect" &&
+      includesAny(context, ["selection_outcome", "selection outcome request", "selection_outcome_request"])
+    )
+  ) {
+    return ["selection.outcome.realize"];
+  }
+
   switch (module.category) {
     case "trigger":
       return ["input.trigger.capture"];
@@ -752,6 +781,12 @@ function deriveIntegrationHints(module: BlueprintModule, context: string): strin
         ? ["resource.ui_surface"]
         : ["selection.ui_surface"];
     case "effect":
+      if (
+        module.role === "selection_outcome" ||
+        includesAny(context, ["selection_outcome", "selection outcome request", "selection_outcome_request"])
+      ) {
+        return ["selection.confirmation", "selection.outcome_handler"];
+      }
       return includesAny(context, ["modifier", "buff", "ability"])
         ? ["ability.execution", "modifier.runtime"]
         : ["ability.execution"];

@@ -27,10 +27,14 @@ import {
 } from "./builder-graph-assembly";
 
 function determineImplementationStrategy(
+  schema: IntentSchema,
   status: NormalizedBlueprintStatus,
   families: string[],
   patterns: string[],
 ): ImplementationStrategy {
+  if (schema.selection?.resolutionMode === "reveal_batch_immediate") {
+    return "exploratory";
+  }
   if (families.length > 0 && status === "ready") {
     return "family";
   }
@@ -72,6 +76,7 @@ function deriveArtifactTargets(candidate: Blueprint): string[] {
 }
 
 function buildDesignDraft(
+  schema: IntentSchema,
   candidate: Blueprint,
   proposal: BlueprintProposal,
   assessment: SemanticAssessment,
@@ -85,6 +90,7 @@ function buildDesignDraft(
   );
   const retrievedFamilyCandidates = Array.from(new Set(proposal.candidatePatternFamilies || []));
   const chosenImplementationStrategy = determineImplementationStrategy(
+    schema,
     status,
     retrievedFamilyCandidates,
     retrievedPatternCandidates,
@@ -375,7 +381,7 @@ export function normalizeBlueprintProposal(
   const blockers = issues
     .filter((issue) => issue.severity === "error")
     .map((issue) => issue.message);
-  const designDraft = buildDesignDraft(candidate, proposal, assessment, status);
+  const designDraft = buildDesignDraft(schema, candidate, proposal, assessment, status);
   const implementationStrategy = designDraft.chosenImplementationStrategy;
   const commitDecision = buildCommitDecision(status, implementationStrategy, issues, assessment);
 

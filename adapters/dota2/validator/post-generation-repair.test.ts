@@ -122,6 +122,78 @@ function createValidAbilitiesFile(): void {
   writeFileSync(join(TEST_HOST, "game/scripts/vscripts/rune_weaver/abilities/ability_test_1.lua"), "-- Ability 1\n", "utf-8");
 }
 
+function writeSynthesizedGroundingWorkspace(options?: {
+  includeRawGrounding?: boolean;
+  includeModuleAssessment?: boolean;
+  includeFeatureSummary?: boolean;
+}): void {
+  const workspacePath = join(TEST_HOST, "game/scripts/src/rune_weaver/rune-weaver.workspace.json");
+  const workspace = JSON.parse(readFileSync(workspacePath, "utf-8"));
+  const includeRawGrounding = options?.includeRawGrounding ?? true;
+  const includeModuleAssessment = options?.includeModuleAssessment ?? false;
+  const includeFeatureSummary = options?.includeFeatureSummary ?? false;
+
+  const rawGrounding = includeRawGrounding
+    ? [
+        {
+          artifactId: "reveal_runtime_lua",
+          verifiedSymbols: ["ApplyDamage"],
+          allowlistedSymbols: [],
+          weakSymbols: ["DealSplash"],
+          unknownSymbols: [],
+          warnings: ["weak grounding"],
+        },
+      ]
+    : undefined;
+
+  workspace.features[0].modules = [
+    {
+      moduleId: "reveal_runtime",
+      role: "reveal_runtime",
+      sourceKind: "synthesized",
+      selectedPatternIds: [],
+      implementationStrategy: "exploratory",
+      maturity: "exploratory",
+      requiresReview: true,
+      reviewReasons: [],
+      ...(includeModuleAssessment
+        ? {
+            groundingAssessment: {
+              status: "partial",
+              reviewRequired: true,
+              verifiedSymbolCount: 1,
+              allowlistedSymbolCount: 0,
+              weakSymbolCount: 1,
+              unknownSymbolCount: 0,
+              warnings: ["weak grounding"],
+              reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+              evidenceRefs: [],
+            },
+          }
+        : {}),
+      metadata: includeRawGrounding ? { grounding: rawGrounding } : {},
+    },
+  ];
+
+  if (includeFeatureSummary) {
+    workspace.features[0].groundingSummary = {
+      status: "partial",
+      reviewRequired: true,
+      verifiedSymbolCount: 1,
+      allowlistedSymbolCount: 0,
+      weakSymbolCount: 1,
+      unknownSymbolCount: 0,
+      warnings: ["weak grounding"],
+      reasonCodes: ["verified_symbols_present", "weak_symbols_present"],
+      evidenceRefs: [],
+    };
+  } else {
+    delete workspace.features[0].groundingSummary;
+  }
+
+  writeFileSync(workspacePath, JSON.stringify(workspace, null, 2), "utf-8");
+}
+
 function cleanupMockHost(): void {
   if (existsSync(TEST_HOST)) {
     rmSync(TEST_HOST, { recursive: true, force: true });
@@ -311,8 +383,75 @@ async function runTests(): Promise<void> {
   console.log("  PASS");
   cleanupMockHost();
 
-  // Test 10: createRepairAction helper function
-  console.log("\nTest 10: createRepairAction helper function...");
+  // Test 10: Synthesized grounding missing canonical truth becomes upgrade_workspace_grounding
+  console.log("\nTest 10: Synthesized grounding missing canonical truth becomes upgrade_workspace_grounding...");
+  createMockHost();
+  createValidAbilitiesFile();
+  writeSynthesizedGroundingWorkspace({
+    includeRawGrounding: true,
+    includeModuleAssessment: false,
+    includeFeatureSummary: false,
+  });
+  const result10 = validatePostGeneration(TEST_HOST);
+  const groundingCheck10 = result10.checks.find((c) => c.check === "synthesized_grounding_governance");
+  assert(groundingCheck10 && !groundingCheck10.passed, "synthesized_grounding_governance should fail");
+  const plan10 = planPostGenerationRepairs(result10, TEST_HOST);
+  const groundingUpgradeAction = plan10.actions.find((a) => a.kind === "upgrade_workspace_grounding");
+  assert(groundingUpgradeAction, "Should create upgrade_workspace_grounding action");
+  assert(groundingUpgradeAction?.executable === true, "upgrade_workspace_grounding should be executable");
+  assert(plan10.summary.upgradeWorkspaceGrounding === 1, "Should count one workspace grounding upgrade");
+  console.log("  PASS");
+  cleanupMockHost();
+
+  // Test 11: Synthesized grounding upgrade execution writes canonical module and feature truth
+  console.log("\nTest 11: Synthesized grounding upgrade execution writes canonical module and feature truth...");
+  createMockHost();
+  createValidAbilitiesFile();
+  writeSynthesizedGroundingWorkspace({
+    includeRawGrounding: true,
+    includeModuleAssessment: false,
+    includeFeatureSummary: false,
+  });
+  const result11 = validatePostGeneration(TEST_HOST);
+  const plan11 = planPostGenerationRepairs(result11, TEST_HOST);
+  const execResult11 = await executeSafePostGenerationRepairs(plan11, TEST_HOST);
+  assert(execResult11.summary.succeeded > 0, "Should execute workspace grounding upgrade");
+  const upgradedWorkspace = JSON.parse(
+    readFileSync(join(TEST_HOST, "game/scripts/src/rune_weaver/rune-weaver.workspace.json"), "utf-8"),
+  );
+  assert(upgradedWorkspace.features[0].modules[0].groundingAssessment, "Module groundingAssessment should be written");
+  assert(upgradedWorkspace.features[0].groundingSummary, "Feature groundingSummary should be written");
+  const postRepairValidation = validatePostGeneration(TEST_HOST);
+  const postRepairGroundingCheck = postRepairValidation.checks.find((c) => c.check === "synthesized_grounding_governance");
+  assert(postRepairGroundingCheck?.passed, postRepairGroundingCheck?.message);
+  console.log("  PASS");
+  cleanupMockHost();
+
+  // Test 12: Synthesized grounding without raw metadata stays requires_regenerate
+  console.log("\nTest 12: Synthesized grounding without raw metadata stays requires_regenerate...");
+  createMockHost();
+  createValidAbilitiesFile();
+  writeSynthesizedGroundingWorkspace({
+    includeRawGrounding: false,
+    includeModuleAssessment: false,
+    includeFeatureSummary: false,
+  });
+  const result12 = validatePostGeneration(TEST_HOST);
+  const plan12 = planPostGenerationRepairs(result12, TEST_HOST);
+  const groundingRegenerateAction = plan12.actions.find(
+    (a) => a.sourceCheck === "synthesized_grounding_governance",
+  );
+  assert(groundingRegenerateAction, "Should have synthesized grounding action");
+  assert(groundingRegenerateAction?.kind === "requires_regenerate", "Should remain requires_regenerate");
+  assert(
+    groundingRegenerateAction?.description.includes("cannot be reconstructed honestly"),
+    "Regenerate description should be honest about missing raw grounding",
+  );
+  console.log("  PASS");
+  cleanupMockHost();
+
+  // Test 13: createRepairAction helper function
+  console.log("\nTest 13: createRepairAction helper function...");
   const mockCheck: PostGenerationCheck = {
     check: "less_imports",
     passed: false,
@@ -326,8 +465,8 @@ async function runTests(): Promise<void> {
   assert(action.executable === true, "Should be executable");
   console.log("  PASS");
 
-  // Test 11: Non-executable actions are skipped during execution
-  console.log("\nTest 11: Non-executable actions are skipped during execution...");
+  // Test 14: Non-executable actions are skipped during execution
+  console.log("\nTest 14: Non-executable actions are skipped during execution...");
   createMockHost();
   // Create a plan with a non-executable action
   const manualAction: PostGenerationRepairAction = {
@@ -350,17 +489,18 @@ async function runTests(): Promise<void> {
     },
     actions: [manualAction],
     executableActions: [],
+    nonExecutableActions: [manualAction],
     manualActions: [manualAction],
-    summary: { total: 1, executable: 0, requiresRegenerate: 0, manual: 1 },
+    summary: { total: 1, executable: 0, upgradeWorkspaceGrounding: 0, requiresRegenerate: 0, manual: 1 },
   };
-  const execResult11 = await executeSafePostGenerationRepairs(testPlan, TEST_HOST);
-  assert(execResult11.summary.skipped === 1, "Should have skipped 1 action");
-  assert(execResult11.summary.attempted === 0, "Should have attempted 0 actions");
+  const execResult14 = await executeSafePostGenerationRepairs(testPlan, TEST_HOST);
+  assert(execResult14.summary.skipped === 1, "Should have skipped 1 action");
+  assert(execResult14.summary.attempted === 0, "Should have attempted 0 actions");
   console.log("  PASS");
   cleanupMockHost();
 
-  // Test 12: Plan summary counts are correct
-  console.log("\nTest 12: Plan summary counts are correct...");
+  // Test 15: Plan summary counts are correct
+  console.log("\nTest 15: Plan summary counts are correct...");
   createMockHost();
   createValidAbilitiesFile();
   writeFileSync(
@@ -374,13 +514,17 @@ async function runTests(): Promise<void> {
     `"DOTAAbilities" { "ability" { "ScriptFile" "rune_weaver/abilities/missing" } }\n`,
     "utf-8"
   );
-  const result12 = validatePostGeneration(TEST_HOST);
-  const plan12 = planPostGenerationRepairs(result12, TEST_HOST);
-  assert(plan12.summary.total === plan12.actions.length, "Total should match actions count");
-  assert(plan12.summary.executable === plan12.executableActions.length, "Executable should match");
-  assert(plan12.summary.manual === plan12.manualActions.length, "Manual should match");
-  assert(plan12.executableActions.every((a) => a.executable), "All executableActions should be executable");
-  assert(plan12.manualActions.every((a) => !a.executable), "All manualActions should not be executable");
+  const result15 = validatePostGeneration(TEST_HOST);
+  const plan15 = planPostGenerationRepairs(result15, TEST_HOST);
+  assert(plan15.summary.total === plan15.actions.length, "Total should match actions count");
+  assert(plan15.summary.executable === plan15.executableActions.length, "Executable should match");
+  assert(plan15.summary.manual === plan15.manualActions.length, "Manual should match");
+  assert(
+    plan15.nonExecutableActions.length === plan15.actions.filter((action) => !action.executable).length,
+    "Non-executable should match actions that cannot be auto-run",
+  );
+  assert(plan15.executableActions.every((a) => a.executable), "All executableActions should be executable");
+  assert(plan15.manualActions.every((a) => a.kind === "manual"), "All manualActions should be manual-only");
   console.log("  PASS");
   cleanupMockHost();
 

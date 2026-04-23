@@ -14,6 +14,7 @@ import type {
   FeatureContract,
   FeatureDependencyEdge,
   FeatureMaturity,
+  GroundingAssessment,
   ImplementationStrategy,
   ModuleImplementationRecord,
   ValidationStatus,
@@ -82,6 +83,7 @@ export interface RuneWeaverFeatureRecord {
   validationStatus?: ValidationStatus;
   dependencyEdges?: FeatureDependencyEdge[];
   commitDecision?: CommitDecision;
+  groundingSummary?: GroundingAssessment;
   integrationPoints?: string[];  // 存储集成点标识，如 ["input.key_binding:Q"]
   gapFillBoundaries?: string[];
   createdAt: string;
@@ -133,6 +135,7 @@ export interface FeatureWriteResult {
   validationStatus?: ValidationStatus | null;
   dependencyEdges?: FeatureDependencyEdge[];
   commitDecision?: CommitDecision | null;
+  groundingSummary?: GroundingAssessment | null;
   gapFillBoundaries?: string[];
 }
 

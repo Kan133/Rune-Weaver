@@ -27,7 +27,7 @@ function createFeatureRecord(): RuneWeaverFeatureRecord {
       "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
       "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
       "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-      "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
+      "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_selection_outcome_effect_outcome_realizer.lua",
       ABILITY_KV_AGGREGATE_TARGET_PATH,
     ],
     ownedArtifacts: [
@@ -49,17 +49,17 @@ function createFeatureRecord(): RuneWeaverFeatureRecord {
       },
       {
         kind: "generated_file",
-        path: "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
+        path: "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_selection_outcome_effect_outcome_realizer.lua",
       },
       {
         kind: "ability_kv_fragment",
         path: buildAbilityKvFragmentPath(
           "talent_draw_demo",
-          "talent_draw_demo_effect_application_effect_modifier_applier",
+          "talent_draw_demo_selection_outcome_effect_outcome_realizer",
         ),
         aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
-        abilityName: "talent_draw_demo_effect_application_effect_modifier_applier",
-        scriptFile: resolveAbilityKvScriptFile("talent_draw_demo_effect_application_effect_modifier_applier"),
+        abilityName: "talent_draw_demo_selection_outcome_effect_outcome_realizer",
+        scriptFile: resolveAbilityKvScriptFile("talent_draw_demo_selection_outcome_effect_outcome_realizer"),
         managedBy: "dota2-ability-kv-aggregate",
       },
       {
@@ -117,7 +117,7 @@ function testRollbackPlanIncludesGeneratedCompanionArtifacts(): void {
     plan.filesToDelete.includes(
       buildAbilityKvFragmentPath(
         "talent_draw_demo",
-        "talent_draw_demo_effect_application_effect_modifier_applier",
+        "talent_draw_demo_selection_outcome_effect_outcome_realizer",
       ),
     ),
     true,

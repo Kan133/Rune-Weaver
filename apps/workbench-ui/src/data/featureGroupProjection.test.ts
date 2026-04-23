@@ -17,6 +17,28 @@ function buildWorkspaceRecord(intentKind: string): RuneWeaverFeatureRecord {
     selectedPatterns: [],
     generatedFiles: [],
     entryBindings: [],
+    validationStatus: {
+      status: 'needs_review',
+      warnings: [],
+      blockers: [],
+    },
+    commitDecision: {
+      outcome: 'exploratory',
+      canAssemble: true,
+      canWriteHost: true,
+      requiresReview: true,
+      reasons: [],
+    },
+    groundingSummary: {
+      status: 'partial',
+      reviewRequired: true,
+      verifiedSymbolCount: 1,
+      allowlistedSymbolCount: 0,
+      weakSymbolCount: 1,
+      unknownSymbolCount: 0,
+      warnings: ['weak grounding'],
+      reasonCodes: ['verified_symbols_present', 'weak_symbols_present'],
+    },
     createdAt: '2026-04-21T12:00:00.000Z',
     updatedAt: '2026-04-21T12:00:00.000Z',
   };
@@ -116,7 +138,10 @@ function runTests(): void {
 
   const workspaceRecord = buildWorkspaceRecord('standalone-system');
   assert.equal(deriveFeatureGroupFromWorkspaceRecord(workspaceRecord), 'system');
-  assert.equal(adaptWorkspaceRecordToFeature(workspaceRecord, 'dota2-x-template').group, 'system');
+  const adaptedWorkspaceFeature = adaptWorkspaceRecordToFeature(workspaceRecord, 'dota2-x-template');
+  assert.equal(adaptedWorkspaceFeature.group, 'system');
+  assert.equal(adaptedWorkspaceFeature.reviewSignals.grounding?.status, 'partial');
+  assert.equal(adaptedWorkspaceFeature.reviewSignals.readiness.score, 65);
 
   const workbenchResult = buildWorkbenchResult('standalone-system');
   assert.equal(deriveFeatureGroupFromWorkbenchResult(workbenchResult), 'system');

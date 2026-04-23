@@ -85,6 +85,90 @@ function withSyntheticPatterns<T>(run: () => T): T {
 {
   const result = resolvePatterns({
     ...baseBlueprint,
+    sourceIntent: {
+      intentKind: "standalone-system",
+      goal: "selection flow family regression",
+      normalizedMechanics: {
+        trigger: true,
+        candidatePool: true,
+        weightedSelection: true,
+        playerChoice: true,
+        uiModal: true,
+        outcomeApplication: true,
+      },
+    },
+    modules: [
+      {
+        id: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        patternIds: ["rule.selection_flow"],
+        responsibilities: [
+          "Draw weighted candidates and enforce single-choice confirmation.",
+          "Emit a normalized confirmed outcome request inside the bounded family contract.",
+          "Apply post-selection pool behavior inside the bounded family contract.",
+        ],
+        inputs: [
+          "selection_open_request",
+          "candidate_options",
+          "selection_confirm",
+        ],
+        outputs: [
+          "selection_ui_payload",
+          "selection_commit",
+          "selection_outcome_request",
+        ],
+        parameters: {
+          choiceCount: 3,
+          selectionPolicy: "single",
+          applyMode: "immediate",
+          postSelectionPoolBehavior: "remove_selected_from_remaining",
+          trackSelectedItems: true,
+        },
+      },
+    ],
+    moduleRecords: [
+      {
+        moduleId: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        sourceKind: "family",
+        familyId: "selection_pool",
+        patternId: "rule.selection_flow",
+        selectedPatternIds: ["rule.selection_flow"],
+        artifactTargets: ["server"],
+        ownedPaths: [],
+        fillContractIds: [],
+        reviewRequired: false,
+        requiresReview: false,
+        reviewReasons: [],
+        implementationStrategy: "family",
+        maturity: "templated",
+        outputKinds: ["server"],
+        resolvedFrom: "family",
+        summary: "Selection pool family module 'selection_flow' projected from source-backed authoring truth.",
+      },
+    ],
+    patternHints: [
+      {
+        category: "rule",
+        suggestedPatterns: ["rule.selection_flow"],
+        rationale: "selection_pool keeps selection_flow as a family-projected module.",
+      },
+    ],
+  });
+
+  assert.equal(result.unresolved.length, 0);
+  assert.equal(result.patterns.length, 1);
+  assert.equal(result.patterns[0]?.patternId, "rule.selection_flow");
+  assert.equal(result.patterns[0]?.moduleId, "selection_flow");
+  assert.equal(result.moduleRecords.length, 1);
+  assert.equal(result.moduleRecords[0]?.patternId, "rule.selection_flow");
+}
+
+{
+  const result = resolvePatterns({
+    ...baseBlueprint,
     moduleNeeds: [
       {
         moduleId: "catalog_miss_case",
@@ -107,6 +191,24 @@ function withSyntheticPatterns<T>(run: () => T): T {
   assert.ok(
     result.issues.some((issue) => issue.code === "NO_PATTERNS_RESOLVED" && issue.severity === "warning"),
   );
+}
+
+{
+  const result = resolvePatterns({
+    ...baseBlueprint,
+    moduleNeeds: [
+      {
+        moduleId: "reveal_surface_case",
+        semanticRole: "reveal_surface",
+        category: "ui",
+        requiredCapabilities: ["ui.reveal.batch_surface"],
+        requiredOutputs: ["card reveal presentation", "ui.surface"],
+      },
+    ],
+  });
+
+  assert.equal(result.unresolvedModuleNeeds.length, 1);
+  assert.equal(result.unresolvedModuleNeeds[0]?.category, "ui");
 }
 
 {

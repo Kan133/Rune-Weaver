@@ -119,6 +119,14 @@ export class HostSymbolIndex {
   }
 }
 
+export function createHostSymbolLookupOptions(options: HostSymbolLookupOptions = {}): HostSymbolLookupOptions {
+  return {
+    ...(options.limit !== undefined ? { limit: options.limit } : {}),
+    ...(options.kinds ? { kinds: [...options.kinds] } : {}),
+    ...(options.domains ? { domains: [...options.domains] } : {}),
+  };
+}
+
 export function loadDotaHostSymbolIndex(
   options: DotaHostSymbolIndexLoadOptions,
 ): HostSymbolIndex {

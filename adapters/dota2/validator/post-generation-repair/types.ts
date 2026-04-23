@@ -9,7 +9,12 @@ import type {
   PostGenerationCheck,
 } from "../post-generation-validator.js";
 
-export type RepairActionKind = "safe_fix" | "refresh_bridge" | "requires_regenerate" | "manual";
+export type RepairActionKind =
+  | "safe_fix"
+  | "refresh_bridge"
+  | "upgrade_workspace_grounding"
+  | "requires_regenerate"
+  | "manual";
 export type RepairRiskLevel = "none" | "low" | "medium" | "high";
 
 export interface PostGenerationRepairAction {
@@ -24,6 +29,10 @@ export interface PostGenerationRepairAction {
     missingImports?: string[];
     cssAction?: "create" | "patch";
     targetFile?: string;
+    groundingUpgrade?: {
+      featureIds: string[];
+      modulesByFeature: Record<string, string[]>;
+    };
     context?: Record<string, unknown>;
   };
 }
@@ -33,10 +42,12 @@ export interface PostGenerationRepairPlan {
   sourceValidation: PostGenerationValidationResult;
   actions: PostGenerationRepairAction[];
   executableActions: PostGenerationRepairAction[];
+  nonExecutableActions: PostGenerationRepairAction[];
   manualActions: PostGenerationRepairAction[];
   summary: {
     total: number;
     executable: number;
+    upgradeWorkspaceGrounding: number;
     requiresRegenerate: number;
     manual: number;
   };

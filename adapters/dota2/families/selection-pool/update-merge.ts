@@ -1,11 +1,16 @@
 import type { UpdateIntent } from "../../../../core/schema/types.js";
 import { requireGovernedUpdateExecutionView } from "../../../../core/blueprint/update-execution-view.js";
 import {
+  SELECTION_POOL_CANONICAL_BACKBONE_SUMMARY,
+  getSelectionPoolCanonicalPatternIds,
+} from "../../../../core/schema/selection-pool-profile.js";
+import {
   coercePositiveInteger,
   dedupeStrings,
   expandObjectPoolToCount,
   getInventoryDefaults,
   normalizeFeatureAuthoringParameters,
+  parseRequestedObjectCount,
   resolveSelectionPoolObjectKind,
   resolveSelectionPoolParametersFromFeature,
   type FeatureAuthoring,
@@ -14,6 +19,7 @@ import {
   type SelectionPoolRequestedUpdate,
 } from "./shared.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/types.js";
+import { countSelectionPoolEntries } from "./source-model.js";
 
 function getUpdateDeltaRecords(updateIntent: UpdateIntent) {
   return [
@@ -51,6 +57,17 @@ function extractRequestedObjectCountFromUpdateIntent(updateIntent: UpdateIntent)
   );
   if (typeof explicitObjectCount === "number") {
     return explicitObjectCount;
+  }
+
+  const promptObjectCount = parseRequestedObjectCount(
+    String(
+      updateIntent.governedChange?.request?.goal
+      || updateIntent.governedChange?.request?.rawPrompt
+      || "",
+    ),
+  );
+  if (typeof promptObjectCount === "number") {
+    return promptObjectCount;
   }
 
   return coercePositiveInteger(updateIntent.governedChange?.parameters?.objectCount);
@@ -158,17 +175,12 @@ export function deriveSelectionPoolCurrentContextHints(
   }
 
   return {
-    admittedSkeleton: [
-      "input.key_binding",
-      "data.weighted_pool",
-      "rule.selection_flow",
-      "ui.selection_modal",
-    ],
+    admittedSkeleton: getSelectionPoolCanonicalPatternIds(),
     preservedInvariants: [...currentSelectionPoolInvariants()],
     boundedFields: {
       triggerKey: parameters.triggerKey,
       choiceCount: parameters.choiceCount,
-      objectCount: parameters.objects.length,
+      objectCount: countSelectionPoolEntries(parameters),
       inventoryEnabled: parameters.inventory?.enabled === true,
       inventoryCapacity: parameters.inventory?.capacity,
       inventoryFullMessage: parameters.inventory?.fullMessage,
@@ -182,11 +194,11 @@ function currentSelectionPoolInvariants(): string[] {
     "single trigger entry only",
     "weighted pool candidate source",
     "confirm exactly one candidate",
-    "same-feature owned object collection only",
-    "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
+    "current feature owns pool membership only; object truth may come from local collections, feature exports, or external catalogs",
+    SELECTION_POOL_CANONICAL_BACKBONE_SUMMARY,
     "no persistence",
     "no cross-feature grants",
-    "no arbitrary custom effect family",
+    "no arbitrary movement/projectile effect family",
   ]);
 }
 
@@ -242,7 +254,7 @@ export function mergeSelectionPoolFeatureAuthoringForUpdate(input: {
     );
   }
 
-  if (requestedUpdate.objectCount && requestedUpdate.objectCount > merged.objects.length) {
+  if (requestedUpdate.objectCount && requestedUpdate.objectCount > countSelectionPoolEntries(merged)) {
     merged = expandObjectPoolToCount(merged, requestedUpdate.objectCount, metadataObjectKind);
   }
 

@@ -2,8 +2,12 @@ import type {
   DependencyImpactRecord,
   DependencyRevalidationResult,
   FeatureContract,
+  FeatureContractSurface,
   ValidationStatus,
 } from "../schema/types.js";
+import {
+  areFeatureContractSurfacesCompatible,
+} from "../contracts/feature-contract.js";
 import type { RuneWeaverFeatureRecord, RuneWeaverWorkspace } from "./types.js";
 
 export interface DependencyRevalidationInput {
@@ -36,6 +40,13 @@ function findExportKind(
     return "state";
   }
   return undefined;
+}
+
+function findExportSurface(
+  contract: FeatureContract | undefined,
+  surfaceId: string,
+): FeatureContractSurface | undefined {
+  return contract?.exports.find((item) => item.id === surfaceId);
 }
 
 function getImpactedFeatures(
@@ -100,6 +111,7 @@ function evaluateFeatureImpact(
       }
 
       const nextKind = findExportKind(nextFeatureContract, edge.targetSurfaceId);
+      const nextSurface = findExportSurface(nextFeatureContract, edge.targetSurfaceId);
       if (!nextKind) {
         issues.push(
           `${edge.required ? "Required" : "Optional"} surface '${edge.targetSurfaceId}' is missing from '${providerFeatureId}'.`,
@@ -112,12 +124,36 @@ function evaluateFeatureImpact(
         continue;
       }
 
-      const consumedKind = feature.featureContract?.consumes.find(
+      const consumedSurface = feature.featureContract?.consumes.find(
         (item) => item.id === edge.targetSurfaceId,
-      )?.kind;
+      );
+      const consumedKind = consumedSurface?.kind;
       if (consumedKind && consumedKind !== nextKind) {
         issues.push(
           `${edge.required ? "Required" : "Optional"} surface '${edge.targetSurfaceId}' changed kind from '${consumedKind}' to '${nextKind}'.`,
+        );
+        if (edge.required) {
+          blocked = true;
+        } else {
+          downgraded = true;
+        }
+      }
+
+      const expectedContractId = edge.targetContractId || consumedSurface?.contractId;
+      if (
+        consumedSurface
+        && expectedContractId
+        && !areFeatureContractSurfacesCompatible(
+          {
+            id: consumedSurface.id,
+            kind: consumedSurface.kind,
+            contractId: expectedContractId,
+          },
+          nextSurface,
+        )
+      ) {
+        issues.push(
+          `${edge.required ? "Required" : "Optional"} surface '${edge.targetSurfaceId}' changed contract from '${expectedContractId}' to '${nextSurface?.contractId || "legacy-untyped"}'.`,
         );
         if (edge.required) {
           blocked = true;

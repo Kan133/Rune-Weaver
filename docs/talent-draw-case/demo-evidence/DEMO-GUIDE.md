@@ -1,25 +1,25 @@
 # Talent Draw Demo Guide
 
-**Generated:** 2026-04-19T12:41:40.584Z  
+**Generated:** 2026-04-23T02:42:45.643Z  
 **Status:** PASS  
-**Host:** D:\test3  
+**Host:** D:\rw-test-1  
 **Mode:** write  
 **Stable Feature ID:** talent_draw_demo
 
 ## 1. Overview
 
-Talent Draw Demo - F4-triggered three-choice talent selection system
+Talent Draw Demo is an F4-triggered three-choice talent selection system built on the shared `selection_pool + selection_outcome` family seam.
 
 Prompt:
 
-> 做一个按 F4 触发的三选一天赋抽取系统。玩家按 F4 后，从加权天赋池抽出 3 个候选天赋，显示卡牌选择 UI。玩家选择 1 个后立即应用效果，并且已选择的天赋后续不再出现。
+> Create a talent draw system triggered by F4. When the player presses F4, draw 3 candidates from a weighted talent pool, show a card selection UI, let the player confirm one talent, apply it immediately, and make selected talents not appear again in future draws during the same session.
 
-The demo uses an explicit workbench fixture. The generic Wizard is checked before fixture merge and must not inject Talent Draw-specific parameters.
+The demo uses explicit source-backed authoring parameters. The generic Wizard is checked before fixture merge and must not inject case-owned selection parameters.
 
 ## 2. Dry-Run
 
 ```bash
-npm run demo:talent-draw -- --host D:\test3
+npm run demo:talent-draw -- --host D:\rw-test-1
 ```
 
 Dry-run runs the full pipeline and the normal write executor with dry-run enabled. It should not create or modify host files.
@@ -27,17 +27,13 @@ Dry-run runs the full pipeline and the normal write executor with dry-run enable
 For a fresh x-template host, do this first:
 
 ```bash
-# 1. edit scripts/addon.config.ts
-#    change addon_name from x_template to your addon name
-
-# 2. install host dependencies and create addon links
 yarn install
 ```
 
 ## 3. Host Write
 
 ```bash
-npm run demo:talent-draw -- --host D:\test3 --write --force
+npm run demo:talent-draw -- --host D:\rw-test-1 --write --force
 ```
 
 Use this only after the dry-run evidence passes. The write path uses the same write executor as the Dota2 CLI and writes generated files under the configured host.
@@ -45,38 +41,34 @@ Use this only after the dry-run evidence passes. The write path uses the same wr
 Recommended launch after host write:
 
 ```bash
-cd D:\test3
+cd D:\rw-test-1
 yarn launch <addon_name> temp
 ```
 
-## 4. Evidence Pack
+## 4. Evidence Output
 
-The refresh flow keeps the latest evidence under `docs/talent-draw-case/demo-evidence/latest/`:
+This run writes evidence to:
+
+```
+docs/talent-draw-case/demo-evidence
+```
+
+Primary files:
 
 | File | Purpose |
 | --- | --- |
-| `demo-prepare-output.txt` | Output from `npm run cli -- dota2 demo prepare --host <host> --addon-name talent_draw_demo --map temp` |
-| `doctor-output.txt` | Output from `npm run cli -- dota2 doctor --host <host>` |
-| `validate-output.txt` | Output from `npm run cli -- dota2 validate --host <host>` |
-| `generated-files.json` | Workspace feature metadata and generated file list |
-| `review-artifact.json` | Canonical pipeline review artifact |
-| `gap-fill-approvals/` | Optional gap-fill approval records, when the demo used require_confirmation patches |
-| `vconsole-template.txt` | Manual VConsole checkpoints to verify during runtime |
-| `screenshots/` | Manual screenshot evidence instructions |
+| `docs/talent-draw-case/demo-evidence/artifact.json` | Structured pipeline and write evidence |
+| `docs/talent-draw-case/demo-evidence/DEMO-GUIDE.md` | Human-readable run guide and proof summary |
 
 ## 5. Dota2 Tools Check
 
-1. Open Dota 2 Workshop Tools for the addon at `D:\test3`.
+1. Open Dota 2 Workshop Tools for the addon at `D:\rw-test-1`.
 2. Launch the correct addon and map with `yarn launch <addon_name> temp`.
 3. Rebuild or refresh the addon scripts and Panorama assets.
 4. Start the local test map.
-5. Press F4.
-6. Confirm the talent modal displays three card slots.
-7. Confirm placeholder slots are disabled if the pool is short.
-8. Select one talent and verify the rarity attribute bonus.
-9. Trigger again and verify the selected talent does not reappear in the same session.
-
-Note: if the addon still behaves like bare x-template, the most likely issue is missing Rune Weaver bridge wiring, not write failure.
+5. Press F4 and confirm the modal shows three talent cards.
+6. Select one talent and verify the attribute bonus is applied immediately.
+7. Trigger the draw again and verify the selected talent does not reappear in the same session.
 
 ## 6. Pipeline Evidence
 
@@ -84,65 +76,65 @@ Wizard pollution check: PASS
 
 | Stage | Evidence |
 | --- | --- |
-| Intent | standalone-system, ready=true |
+| Intent | standalone-system, ready=undefined |
 | Blueprint | 5 modules |
 | Patterns | 5 resolved, 0 unresolved |
-| WritePlan | 10 entries, target=D:\test3 |
+| WritePlan | 10 entries, target=D:\rw-test-1 |
 | Generated | 10 files |
-| Smoke | 23/23 passed |
+| Smoke | 26/26 passed |
 
-## 6. Blueprint Modules
+## 7. Blueprint Modules
 
 | Module ID | Category | Role | Has Params |
 | --- | --- | --- | --- |
-| mod_trigger_0 | trigger | input_trigger | yes |
-| mod_data_1 | data | weighted_pool | yes |
-| mod_rule_2 | rule | selection_flow | yes |
-| mod_ui_3 | ui | selection_modal | yes |
-| mod_effect_4 | effect | effect_application | yes |
+| selection_input | trigger | input_trigger | yes |
+| selection_pool | data | weighted_pool | yes |
+| selection_flow | rule | selection_flow | yes |
+| selection_outcome | effect | selection_outcome | yes |
+| selection_modal | ui | selection_modal | yes |
 
-## 7. Patterns
+## 8. Patterns
 
 | Pattern ID | Role | Priority |
 | --- | --- | --- |
-| effect.modifier_applier | effect_application | required |
-| ui.selection_modal | selection_modal | required |
-| data.weighted_pool | weighted_pool | required |
-| input.key_binding | input_trigger | required |
 | rule.selection_flow | selection_flow | required |
+| data.weighted_pool | weighted_pool | required |
+| effect.outcome_realizer | selection_outcome | required |
+| input.key_binding | input_trigger | required |
+| ui.selection_modal | selection_modal | required |
 
-## 8. Write Preview
+## 9. Write Preview
 
 Write success: yes  
-Files created: 8  
+Files created: 10  
 Files modified: 0  
 Files skipped: 0
 
 | Path | Would Create | Preview |
 | --- | --- | --- |
-| game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua | yes | local ____lualib = require("lualib_bundle") local __TS__Class = ____lualib.__TS_ |
-| game/scripts/npc/npc_abilities_custom.txt | yes | "talent_draw_demo_effect_application_effect_modifier_applier" {     "BaseClass"  |
-| content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx | yes | /**  * TalentDrawDemoSelectionModalUiSelectionModal  * Generated selection modal |
-| content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less | yes | /* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .tal |
+| game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts | yes | /**  * TalentDrawDemoSelectionFlowRuleSelectionFlow  * 选择流程管理器 - Generated by Ru |
 | game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts | yes | /**  * TalentDrawDemoWeightedPoolDataWeightedPool  * 加权随机池 - Generated by Rune W |
+| game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts | yes | /**  * TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer  * 选择结果宿主实现层 - Genera |
 | game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts | yes | /**  * TalentDrawDemoInputTriggerInputKeyBindingAbility  * 按键绑定模块 - Generated by |
 | game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts | yes | /**  * TalentDrawDemoInputTriggerInputKeyBinding  * 按键绑定模块 - Generated by Rune W |
-| game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts | yes | /**  * TalentDrawDemoSelectionFlowRuleSelectionFlow  * 选择流程管理器 - Generated by Ru |
+| content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx | yes | /**  * TalentDrawDemoSelectionModalUiSelectionModal  * Generated selection modal |
+| content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less | yes | /* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .tal |
 | content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx | yes | /**  * TalentDrawDemoInputTriggerInputKeyBindingEmitter  * Generated input.key_b |
-| game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json | yes | {   "adapter": "selection_pool",   "version": 1,   "featureId": "talent_draw_dem |
+| game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json | yes | {   "adapter": "selection_pool",   "version": 2,   "featureId": "talent_draw_dem |
+| game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json | yes | {   "adapter": "rw_content_collections",   "version": 1,   "featureId": "talent_ |
 
-## 9. Verification Commands
+## 10. Verification Commands
 
 ```bash
 npm run check-types
 npm run demo:talent-draw
-npm run demo:talent-draw -- --host D:\test3
-npm run cli -- pattern validate rule.selection_flow
+npm run demo:talent-draw -- --host D:\rw-test-1
 ```
 
-## 10. Known Limits
+## 11. Known Limits
 
 1. Generator produces real content but may need refinement for production use
-2. KV generation for talents produces basic structure - custom implementation may be needed
+2. Selection outcome realization is still partially deferred when it would require broad generic modifier/KV synthesis
 3. UI card interaction logic is generated but may need manual tuning
 4. Pool state persistence is session-scoped only
+5. Host write readiness gate requires hostRoot to be set (defaults to not ready)

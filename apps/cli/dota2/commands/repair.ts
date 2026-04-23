@@ -78,8 +78,8 @@ export async function runRepairCommand(
     console.log("\n" + "=".repeat(70));
     console.log("Final Result: NO EXECUTABLE SAFE REPAIRS");
     console.log("=".repeat(70));
-    console.log("\nAll detected issues require manual intervention or regeneration:");
-    for (const action of repairPlan.manualActions) {
+    console.log("\nAll detected issues require regeneration or manual intervention:");
+    for (const action of repairPlan.nonExecutableActions) {
       console.log(`  - [${action.kind}] ${action.title}`);
       console.log(`    ${action.description}`);
     }

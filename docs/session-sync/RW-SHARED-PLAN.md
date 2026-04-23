@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-mainline-transition
-> Last verified: 2026-04-21
+> Last verified: 2026-04-23
 > Read when: coordinating Dota2 and War3 mainlines or deciding the current cross-track attention split
 > Do not use for: replacing latest session-sync notes or subsystem contract docs by itself
 
@@ -22,17 +22,22 @@ Use these status markers:
 Current step:
 
 - Step 6. Validation / evidence / case generalization
-- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts, the update-side three-layer governance upgrade that makes `CurrentFeatureTruth -> semanticAnalysis -> governedChange` the only intended update authority, and the provider-side ability identity alignment that stops cross-feature provider export from guessing `abilityName` when KV/Lua/export truth does not close. Fresh `rw-test6` dry-run evidence now also shows the bounded inventory wording cluster (`存储面板 / 仓库 / 库存面板`) converging through the same governed update seam, while fresh `rw-test11` create evidence shows the ambiguous weighted-card prompt has been narrowed to one honest `selection_flow` clarification and the explicit choose-one variant now re-proves the full dry-run create chain through `selection_pool` `admitted_explicit`. The active slice remains evidence closure on the stricter provider/consumer seam plus the remaining reveal-vs-choose create boundary.
+- Current proof delta: structured Panorama reference coverage now closes the fresh reveal-only UI grounding seam without policy softening, and a repo-side promotion-readiness harness now judges repeated exploratory seams without mutating formal admission truth. `rw-test14` still proves too-old exploratory hosts remain regenerate-only when raw grounding is missing, while fresh `rw-test24` proves both provider-shell and reveal-batch outputs write, validate, and doctor-pass with `groundingSummary = exact`. Stable family regression on `rw-test-1` and `rw-test-2` still confirms the source-backed selection cases remain clean.
+- Current control-plane delta: Dota2-first generic contract helpers, typed dependency revalidation, manual reusable-asset promotion governance, canonical grounding assessment governance, structured Panorama exact-backing, and a proof-first promotion-readiness harness are all landed. The active mainline no longer needs to argue about provider/consumer contract identity, reveal-only routing, or the last fresh-host UI grounding unknown; it can now focus on honest stale-host recovery boundaries and explicit manual promotion judgment.
+- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts, the update-side three-layer governance upgrade that makes `CurrentFeatureTruth -> semanticAnalysis -> governedChange` the only intended update authority, the generic selection outcome layer extraction that moves concrete attribute/item/unit realization out of `rule.selection_flow`, the shared selection-case demo/evidence runner extraction that turns the old talent-only proof lane into one reusable selection-case acceptance surface, the provider-side ability identity alignment that stops cross-feature provider export from guessing `abilityName` when KV/Lua/export truth does not close, the Dota2-first generic contract layer and reusable-asset governance V1, the reveal-only weighted-card boundary closure that keeps ambiguous prompts in clarification while explicit batch-reveal prompts route to a proven non-family exploratory continuation, the review-only grounding governance layer that turns raw adapter-local symbol checks into canonical artifact/module/feature assessments consumed by final commit, workspace persistence, validator, CLI, and workbench, the explicit stale-host grounding recovery seam that upgrades only when raw evidence survives, and now the structured Panorama exact-backing plus proof-first promotion-readiness harness that close the last fresh `TextButton` grounding gap without auto-promoting repeated exploratory outputs. Fresh `rw-test6` dry-run evidence still shows the bounded inventory wording cluster (`存储面板 / 仓库 / 库存面板`) converging through the same governed update seam, fresh `rw-test11` create evidence still isolates one honest `selection_flow` clarification plus a reproved explicit choose-one variant, fresh `rw-test-1` host evidence re-proves both the real CLI talent draw create path and the legacy `demo:talent-draw` harness on the new `selection_pool + selection_outcome` skeleton, fresh `rw-test-2` host evidence proves `equipment_draw_demo` as the second sibling case on the same family with Dota2-native item delivery owned by `selection_outcome`, and fresh `rw-test24` host evidence proves provider-shell plus reveal-batch writes, validate, doctor, and review outputs on the tightened grounding contract.
 
 Primary blocker:
 
+- Update: exploratory grounding governance V1 is now closed; the remaining active blockers are the regenerate-only subset of stale exploratory hosts, positive stale-host upgrade proof where raw evidence survives, and promotion judgment for repeated exploratory outputs.
+- The blocker is no longer missing typed `data + capability` contract metadata on the current Dota2 seams, and reusable-asset governance V1 is now explicit instead of implicit.
+- The blocker is no longer missing canonical grounding assessment authority in final commit, validator, workspace, CLI, or workbench.
 - The blocker is no longer missing V2 control-plane pieces, grammar gating removal, single-skill bundle convergence, facet-warning cleanup, source-backed update purity, templated `talent_draw` lifecycle stability, or initialized-host exploratory commit evidence.
 - The blocker is no longer exploratory bounded trigger-key updates drifting into split `input.key_binding` vs preserved Lua shell truth, and it is no longer Dota2 ability KV ownership drifting back toward aggregate-file ownership.
 - The blocker is now:
-  - dependency-driven revalidation needs a fresh provider/consumer proof pass on the converged planning/update surface
-  - create-side weighted-card prompts are healthier, but reveal-only vs choose-one semantics are still an honest open boundary; the ambiguous `弹出三张卡片` cluster now stops at one real `selection_flow` clarification and still lacks a proven non-family exploratory realization path when the user does not mean `choose 1`
-  - synthesis grounding and deferred evidence warnings still need tighter exact-symbol backing on exploratory cases beyond the provider identity seam that just landed
-  - exploratory outputs are still review-required and not yet converged into stabilized reusable assets
+  - stale exploratory hosts that were written before grounding governance landed now split into two honest paths: explicit upgrade only when raw grounding survives, regenerate-only otherwise
+  - stale-host recovery still lacks a positive end-to-end host proof where raw `metadata.grounding` survives and the explicit upgrade path succeeds
+  - repeated exploratory write paths still need explicit promotion judgment instead of drifting into "probably reusable" status; the new readiness harness closes evidence shape but not the manual decision
+  - reveal-only weighted-card is now a proven exploratory path, but it remains review-required and must not be treated as a stabilized reusable asset
 
 Plan items:
 
@@ -54,15 +59,27 @@ Plan items:
 - `[done]` Refactor `IntentSchema` internals into first-class `raw facts / governance decisions / open semantic residue` layers while keeping the public contract stable.
 - `[done]` Push `IntentGovernanceDecisions` into downstream Dota2 blueprint / `selection_pool` family-admission / planning consumers so schema-surface wording no longer changes governance branches.
 - `[done]` Align Dota2 provider ability identity so provider export only closes when KV / Lua / export share one authoritative runtime `abilityName`, and validator now rejects mismatched provider exports before host write can claim success.
-- `[doing]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases on top of the cleaner planning/update surface.
+- `[done]` Run or refresh dependency-driven revalidation evidence for provider/consumer cases on top of the cleaner planning/update surface, including fresh `rw-test-3` host proof for provider export identity, consumer sidecar preservation, and delete-style dependency blocking.
 - `[done]` Strip create-side weight-detail clarification noise and family-governance pollution from the ambiguous weighted-card prompt cluster; `rw-test11` now isolates a single honest `selection_flow` clarification and re-proves the explicit choose-one variant end to end in dry-run.
 - `[done]` Close the cross-feature consumer update-preservation hole so unrelated bounded updates keep existing provider bindings without requiring prompt restatement.
 - `[done]` Close the exploratory bounded-update seam so non-source-backed trigger-only updates preserve synthesized Lua+KV gameplay shell identity while rebinding authoritative trigger truth end to end.
 - `[done]` Move Dota2 ability KV ownership to fragment + aggregate-writer contract, including legacy rollback cleanup that removes ability blocks by authoritative identity instead of whole-file ownership.
 - `[done]` Upgrade update intent to the same three-layer governance seam as create, and push governed update authority into the main Dota2 update consumers.
-- `[doing]` Reduce synthesis grounding warnings further on exploratory asks.
-- `[doing]` Decide whether reveal-only weighted-card prompts should remain clarification-only or gain a separate non-`selection_pool` exploratory realization path.
-- `[todo]` Decide which repeated exploratory outputs are ready to graduate into reusable assets.
+- `[done]` Extract the generic selection outcome realization seam, migrate `selection_pool` / `talent_draw` to per-object outcomes, and re-prove both the real CLI create path and the legacy `demo:talent-draw` harness on fresh `rw-test-1` host evidence.
+- `[done]` Extract the shared selection-case demo/evidence runner so talent draw and equipment draw use one case-driven acceptance lane instead of parallel demo harnesses.
+- `[done]` Re-prove `equipment_draw_demo` on fresh `rw-test-2` host evidence as a second `selection_pool + selection_outcome` sibling case using Dota2-native item delivery.
+- `[done]` Close the prompt-side definition-only provider create boundary so `grant_only` provider shells advance past clarification and fail honestly at Blueprint instead of Stage 1 trigger/conflict questions.
+- `[done]` Close the Stage 2 Blueprint/module-synthesis blocker for definition-only provider shells so the create path becomes assemblable/writeable, including fresh `rw-test14` provider write + consumer update + validate/doctor proof.
+- `[done]` Land generic typed `contractId` metadata on `FeatureContract` `data/capability` surfaces plus dependency edges, and adopt it in Dota2 content-collection and provider-grant seams.
+- `[done]` Land reusable-asset governance V1 with repo-side manual promotion packets/registry, and admit `effect.outcome_realizer` and `selection_pool` as the first Dota2 exemplars.
+- `[done]` Close the reveal-only weighted-card boundary so ambiguous prompts block on clarification while explicit batch-reveal prompts write through a proven non-family exploratory path on fresh `rw-test20` host proof.
+- `[done]` Land exploratory grounding governance V1 so synthesized Dota2 outputs carry canonical artifact/module/feature grounding assessments through final commit, workspace, validator, CLI, and workbench, with fresh-host proof on `rw-test21`.
+- `[done]` Land explicit synthesized grounding recovery for raw-metadata-bearing stale hosts, keep too-old hosts regenerate-only, and tighten fresh grounding extraction/exact lookup to remove the reveal-batch helper/type false positives on fresh hosts.
+- `[done]` Close the fresh reveal-only UI grounding seam with structured Panorama exact-backing instead of allowlist/prompt fallback, and re-prove provider-shell plus reveal-batch on fresh `rw-test24` host evidence.
+- `[done]` Land the repo-side Dota2 promotion-readiness harness so repeated exploratory seams can be judged by explicit invariants without mutating formal admission truth.
+- `[doing]` Decide whether the `grant_only` provider export seam is ready for its first manual promotion packet.
+- `[todo]` Add one positive stale-host upgrade proof where raw grounding metadata survives, so the explicit recovery path is backed by host evidence instead of tests only.
+- `[todo]` Decide whether any reveal-only runtime slice has enough repeated evidence to become a future promotion candidate without polluting `selection_pool`.
 
 Mainline rule:
 
@@ -121,7 +138,7 @@ Plan items:
 
 Latest Dota2 session-sync:
 
-- [dota2-mainline-20260421-1724.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260421-1724.md)
+- [dota2-mainline-20260423-1444.md](/D:/Rune%20Weaver/docs/session-sync/dota2-mainline-20260423-1444.md)
 
 Latest War3 session-sync:
 

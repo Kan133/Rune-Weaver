@@ -8,6 +8,7 @@ export interface DoctorCheck {
   message: string;
   details?: string[];
   suggestion?: string;
+  remediationKind?: "repair_safe" | "upgrade_workspace_grounding" | "requires_regenerate" | "review_required";
 }
 
 export { checkAddonConfig, checkDotaDirectories, checkPackageJson } from "./doctor-checks-addon.js";

@@ -28,20 +28,25 @@ import {
   tryReadSourceArtifact,
   type FeatureAuthoringProposal,
   type ResolveSelectionPoolFamilyInput,
-  type SelectionPoolFeatureSourceArtifactV1,
-  type SelectionPoolInventoryUpdateRequest,
+  type SelectionPoolFeatureSourceArtifact,
   type SelectionPoolPromptMergeResult,
   type SelectionPoolProposalBuildResult,
+  isSelectionPoolFeatureSourceArtifactV2,
+  type SelectionPoolInventoryUpdateRequest,
 } from "./shared.js";
 import { migrateLegacyTalentDrawArtifact } from "./shared.js";
+import { countSelectionPoolEntries } from "./source-model.js";
 
 function loadExistingSourceArtifact(
   input: ResolveSelectionPoolFamilyInput,
   featureId: string,
-): SelectionPoolFeatureSourceArtifactV1 | undefined {
+): SelectionPoolFeatureSourceArtifact | undefined {
   const sourceModelRef = input.existingFeature?.sourceModel;
   if (isSelectionPoolSourceModelRef(sourceModelRef)) {
     const raw = tryReadSourceArtifact(input.hostRoot, sourceModelRef.path);
+    if (isSelectionPoolFeatureSourceArtifactV2(raw)) {
+      return raw;
+    }
     if (isSelectionPoolFeatureSourceArtifactV1(raw)) {
       return raw;
     }
@@ -54,6 +59,9 @@ function loadExistingSourceArtifact(
   }
   const currentPath = getSelectionPoolSourceArtifactRelativePath(featureId);
   const currentRaw = tryReadSourceArtifact(input.hostRoot, currentPath);
+  if (isSelectionPoolFeatureSourceArtifactV2(currentRaw)) {
+    return currentRaw;
+  }
   if (isSelectionPoolFeatureSourceArtifactV1(currentRaw)) {
     return currentRaw;
   }
@@ -70,6 +78,48 @@ export function buildProposalFromExistingFeature(
   featureId: string,
   objectKindHint: ReturnType<typeof inferObjectKind>,
 ): SelectionPoolProposalBuildResult {
+  const existingArtifact = loadExistingSourceArtifact(input, featureId);
+  if (existingArtifact) {
+    const baseSource = isLegacyTalentDrawSourceModelRef(input.existingFeature?.sourceModel)
+      ? "legacy_source_artifact"
+      : "existing_source_artifact";
+    const seedNote = baseSource === "legacy_source_artifact"
+      ? "selection_pool proposal loaded from legacy talent-draw source artifact."
+      : "selection_pool proposal loaded from existing source artifact.";
+    return {
+      proposal: createFeatureAuthoringProposal(
+        normalizeFeatureAuthoringParameters({
+          triggerKey: existingArtifact.triggerKey,
+          choiceCount: existingArtifact.choiceCount,
+          objectKind: existingArtifact.objectKind,
+          ...(isSelectionPoolFeatureSourceArtifactV2(existingArtifact)
+            ? {
+                localCollections: existingArtifact.localCollections,
+                poolEntries: existingArtifact.poolEntries,
+              }
+            : { objects: existingArtifact.objects }),
+          drawMode: existingArtifact.drawMode,
+          duplicatePolicy: existingArtifact.duplicatePolicy,
+          poolStateTracking: existingArtifact.poolStateTracking,
+          selectionPolicy: existingArtifact.selectionPolicy,
+          applyMode: existingArtifact.applyMode,
+          postSelectionPoolBehavior: existingArtifact.postSelectionPoolBehavior,
+          trackSelectedItems: existingArtifact.trackSelectedItems,
+          inventory: existingArtifact.inventory,
+          display: existingArtifact.display,
+          placeholderConfig: existingArtifact.placeholderConfig,
+          ...(isSelectionPoolFeatureSourceArtifactV1(existingArtifact) && existingArtifact.effectProfile
+            ? { effectProfile: existingArtifact.effectProfile }
+            : {}),
+        }, resolveSelectionPoolObjectKind(existingArtifact.objectKind) || objectKindHint),
+        input.proposalSource,
+        [seedNote],
+      ),
+      baseSource,
+      seedNotes: [seedNote],
+    };
+  }
+
   const existingAuthoring =
     isSelectionPoolFeatureAuthoring(input.existingFeature?.featureAuthoring)
       ? input.existingFeature.featureAuthoring
@@ -88,41 +138,6 @@ export function buildProposalFromExistingFeature(
       ),
       baseSource: "existing_feature",
       seedNotes: ["selection_pool proposal migrated from existing workspace featureAuthoring."],
-    };
-  }
-
-  const existingArtifact = loadExistingSourceArtifact(input, featureId);
-  if (existingArtifact) {
-    const baseSource = isLegacyTalentDrawSourceModelRef(input.existingFeature?.sourceModel)
-      ? "legacy_source_artifact"
-      : "existing_source_artifact";
-    const seedNote = baseSource === "legacy_source_artifact"
-      ? "selection_pool proposal loaded from legacy talent-draw source artifact."
-      : "selection_pool proposal loaded from existing source artifact.";
-    return {
-      proposal: createFeatureAuthoringProposal(
-        normalizeFeatureAuthoringParameters({
-          triggerKey: existingArtifact.triggerKey,
-          choiceCount: existingArtifact.choiceCount,
-          objectKind: existingArtifact.objectKind,
-          objects: existingArtifact.objects,
-          drawMode: existingArtifact.drawMode,
-          duplicatePolicy: existingArtifact.duplicatePolicy,
-          poolStateTracking: existingArtifact.poolStateTracking,
-          selectionPolicy: existingArtifact.selectionPolicy,
-          applyMode: existingArtifact.applyMode,
-          postSelectionPoolBehavior: existingArtifact.postSelectionPoolBehavior,
-          trackSelectedItems: existingArtifact.trackSelectedItems,
-          inventory: existingArtifact.inventory,
-          display: existingArtifact.display,
-          placeholderConfig: existingArtifact.placeholderConfig,
-          effectProfile: existingArtifact.effectProfile,
-        }, resolveSelectionPoolObjectKind(existingArtifact.objectKind) || objectKindHint),
-        input.proposalSource,
-        [seedNote],
-      ),
-      baseSource,
-      seedNotes: [seedNote],
     };
   }
 
@@ -186,7 +201,7 @@ export function applyPromptMerge(
       : proposal.parameters.inventory,
   }, metadataObjectKind);
 
-  const expansionTarget = typeof requestedObjectCount === "number" && requestedObjectCount > parameters.objects.length
+  const expansionTarget = typeof requestedObjectCount === "number" && requestedObjectCount > countSelectionPoolEntries(parameters)
     ? coercePositiveInteger(requestedObjectCount)
     : undefined;
   if (typeof expansionTarget === "number") {

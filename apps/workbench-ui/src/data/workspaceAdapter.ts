@@ -42,6 +42,32 @@ function deriveWorkspaceWarnings(status: RuneWeaverFeatureRecord['status']): str
   }
 }
 
+function deriveReadinessScore(record: RuneWeaverFeatureRecord): number | null {
+  const validationStatus = record.validationStatus?.status;
+  switch (validationStatus) {
+    case 'passed':
+      return record.groundingSummary?.reviewRequired ? 80 : 100;
+    case 'needs_review':
+      return record.groundingSummary?.status === 'insufficient' ? 45 : 65;
+    case 'failed':
+      return 20;
+    case 'unvalidated':
+      return 50;
+    default:
+      return record.commitDecision?.requiresReview ? 60 : null;
+  }
+}
+
+function deriveGroundingWarnings(record: RuneWeaverFeatureRecord): string[] {
+  const warnings = [...deriveWorkspaceWarnings(record.status)];
+  if (record.groundingSummary?.reviewRequired) {
+    warnings.push(
+      `Grounding is ${record.groundingSummary.status} (weak=${record.groundingSummary.weakSymbolCount}, unknown=${record.groundingSummary.unknownSymbolCount}).`,
+    );
+  }
+  return warnings;
+}
+
 export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord, hostType?: string | null): Feature {
   const isActive = record.status === 'active';
 
@@ -61,8 +87,17 @@ export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord, h
     },
     invalidPatternIds: [],
     readiness: {
-      score: null,
-      warnings: deriveWorkspaceWarnings(record.status),
+      score: deriveReadinessScore(record),
+      warnings: deriveGroundingWarnings(record),
+    },
+    grounding: {
+      status: record.groundingSummary?.status || 'none_required',
+      reviewRequired: record.groundingSummary?.reviewRequired || false,
+      verifiedSymbolCount: record.groundingSummary?.verifiedSymbolCount || 0,
+      allowlistedSymbolCount: record.groundingSummary?.allowlistedSymbolCount || 0,
+      weakSymbolCount: record.groundingSummary?.weakSymbolCount || 0,
+      unknownSymbolCount: record.groundingSummary?.unknownSymbolCount || 0,
+      warningCount: record.groundingSummary?.warnings.length || 0,
     },
   };
 

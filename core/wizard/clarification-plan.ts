@@ -11,6 +11,10 @@ import type {
 } from "../schema/types";
 import { getIntentGovernanceView } from "./intent-governance-view.js";
 import { hasAmbiguousRelationCandidates } from "./relation-resolver";
+import {
+  isDefinitionOnlyProviderBoundary,
+  isDefinitionOnlyProviderResolvedSemanticBoundary,
+} from "./intent-schema/definition-only-provider.js";
 import type { IntentSemanticAnalysis, IntentSemanticSurface } from "./intent-schema/semantic-analysis.js";
 
 interface ClarificationPlanInput {
@@ -20,6 +24,10 @@ interface ClarificationPlanInput {
   workspaceSemanticContext?: WorkspaceSemanticContext;
   relationCandidates?: RelationCandidate[];
   semanticAnalysis?: IntentSemanticAnalysis;
+}
+
+interface ClarificationSemanticGuards {
+  definitionOnlyProvider: boolean;
 }
 
 const EXTERNAL_PERSISTENCE_SIGNAL_PATTERN =
@@ -281,15 +289,17 @@ export function deriveWizardClarificationAuthority(
 export function buildWizardClarificationPlan(
   input: ClarificationPlanInput,
 ): WizardClarificationPlan | undefined {
+  const guards = deriveClarificationSemanticGuards(input);
   if (input.semanticAnalysis) {
-    return buildSemanticClarificationPlan(input);
+    return buildSemanticClarificationPlan(input, guards);
   }
 
-  return buildLegacyClarificationPlan(input);
+  return buildLegacyClarificationPlan(input, guards);
 }
 
 function buildSemanticClarificationPlan(
   input: ClarificationPlanInput,
+  guards: ClarificationSemanticGuards,
 ): WizardClarificationPlan | undefined {
   const questions: WizardClarificationQuestion[] = [];
   const maxQuestions = 3;
@@ -298,6 +308,13 @@ function buildSemanticClarificationPlan(
 
   for (const residue of openResidue) {
     if (residue.disposition !== "open" || residue.class === "bounded_detail_only") {
+      continue;
+    }
+
+    if (
+      guards.definitionOnlyProvider &&
+      isDefinitionOnlyProviderResolvedSemanticBoundary(residue.surface, residue.summary)
+    ) {
       continue;
     }
 
@@ -311,6 +328,7 @@ function buildSemanticClarificationPlan(
 
   if (
     !input.currentFeatureContext &&
+    !guards.definitionOnlyProvider &&
     !looksLikeGovernedPassiveRequest(input.schema) &&
     !governance.activation.interactive
     && !(governance.activation.kinds || []).includes("passive")
@@ -359,7 +377,7 @@ function buildSemanticClarificationPlan(
     );
   }
 
-  if (hasGovernedContradictorySignals(input.schema)) {
+  if (!guards.definitionOnlyProvider && hasGovernedContradictorySignals(input.schema)) {
     questions.push(
       applyQuestionImpact({
         id: "clarify-conflicting-semantics",
@@ -402,12 +420,14 @@ function buildSemanticClarificationPlan(
 
 function buildLegacyClarificationPlan(
   input: ClarificationPlanInput,
+  guards: ClarificationSemanticGuards,
 ): WizardClarificationPlan | undefined {
   const questions: WizardClarificationQuestion[] = [];
   const maxQuestions = 3;
 
   if (
     !input.currentFeatureContext &&
+    !guards.definitionOnlyProvider &&
     !looksLikePassiveRequest(input.rawText, input.schema) &&
     !hasTriggerAuthority(input.schema)
   ) {
@@ -484,7 +504,7 @@ function buildLegacyClarificationPlan(
     );
   }
 
-  if (hasContradictorySignals(input.rawText, input.schema)) {
+  if (!guards.definitionOnlyProvider && hasContradictorySignals(input.rawText, input.schema)) {
     questions.push(
       applyQuestionImpact({
         id: "clarify-conflicting-semantics",
@@ -578,6 +598,14 @@ function buildSemanticResidueQuestion(
 
 function looksLikeGovernedPassiveRequest(schema: IntentSchema): boolean {
   return (schema.interaction?.activations || []).some((activation) => activation.kind === "passive");
+}
+
+function deriveClarificationSemanticGuards(
+  input: Pick<ClarificationPlanInput, "rawText" | "schema">,
+): ClarificationSemanticGuards {
+  return {
+    definitionOnlyProvider: isDefinitionOnlyProviderBoundary(input.schema, input.rawText),
+  };
 }
 
 function requiresGovernedTargetOwnershipQuestion(schema: IntentSchema): boolean {

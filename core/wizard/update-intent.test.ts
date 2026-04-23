@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { IntentSchema } from "../schema/types.js";
+import { getSelectionPoolCanonicalModuleRoles } from "../schema/selection-pool-profile.js";
 import {
   buildWizardClarificationPlan,
   buildCurrentFeatureContext,
@@ -16,6 +17,17 @@ import {
 import { WIZARD_PROVIDER_TIMEOUT_MS } from "./provider-timeout.js";
 
 function createSourceBackedFeatureRecord() {
+  const localCollections = [
+    {
+      collectionId: "selection_pool",
+      visibility: "local" as const,
+      objects: Array.from({ length: 6 }, (_, index) => ({
+        objectId: `obj_${index + 1}`,
+        label: `Selection ${index + 1}`,
+        description: `Selection object ${index + 1}`,
+      })),
+    },
+  ];
   return {
     featureId: "selection_pool_demo",
     intentKind: "standalone-system",
@@ -26,6 +38,7 @@ function createSourceBackedFeatureRecord() {
       "input.key_binding",
       "data.weighted_pool",
       "rule.selection_flow",
+      "effect.outcome_realizer",
       "ui.selection_modal",
     ],
     modules: [
@@ -59,17 +72,17 @@ function createSourceBackedFeatureRecord() {
       },
       {
         moduleId: "selection_effect",
-        role: "effect_application",
+        role: "selection_outcome",
         category: "effect",
         sourceKind: "family" as const,
-        selectedPatternIds: [],
+        selectedPatternIds: ["effect.outcome_realizer"],
       },
     ],
     generatedFiles: [],
     entryBindings: [],
     sourceModel: {
       adapter: "selection_pool",
-      version: 1,
+      version: 2,
       path: "missing.source.json",
     },
     featureAuthoring: {
@@ -78,7 +91,17 @@ function createSourceBackedFeatureRecord() {
       parameters: {
         triggerKey: "F4",
         choiceCount: 3,
-        objects: Array.from({ length: 6 }, (_, index) => ({ id: `obj_${index + 1}` })),
+        localCollections,
+        poolEntries: localCollections[0].objects.map((object, index) => ({
+          entryId: object.objectId,
+          objectRef: {
+            source: "local_collection" as const,
+            collectionId: "selection_pool",
+            objectId: object.objectId,
+          },
+          weight: index < 2 ? 40 : index < 4 ? 30 : index === 4 ? 20 : 10,
+          tier: index < 2 ? "R" as const : index < 4 ? "SR" as const : index === 4 ? "SSR" as const : "UR" as const,
+        })),
         inventory: {
           enabled: false,
           capacity: 15,
@@ -123,6 +146,7 @@ function createGenericSourceBackedProjectionRecord() {
       "input.key_binding",
       "data.weighted_pool",
       "rule.selection_flow",
+      "effect.outcome_realizer",
       "ui.selection_modal",
     ],
     modules: [
@@ -152,7 +176,7 @@ function createGenericSourceBackedProjectionRecord() {
     entryBindings: [],
     sourceModel: {
       adapter: "selection_pool",
-      version: 1,
+      version: 2,
       path: "missing.source.json",
     },
     featureAuthoring: {
@@ -244,20 +268,8 @@ function testBuildCurrentFeatureContextStaysGeneric() {
   assert.equal(context.featureId, "selection_pool_demo");
   assert.equal(context.sourceBacked, true);
   assert.ok((context.moduleRecords || []).length >= 5);
-  assert.deepEqual(context.sourceBackedInvariantRoles, [
-    "input_trigger",
-    "weighted_pool",
-    "selection_flow",
-    "selection_modal",
-    "effect_application",
-  ]);
-  assert.deepEqual(context.preservedModuleBackbone, [
-    "input_trigger",
-    "weighted_pool",
-    "selection_flow",
-    "selection_modal",
-    "effect_application",
-  ]);
+  assert.deepEqual(context.sourceBackedInvariantRoles, getSelectionPoolCanonicalModuleRoles());
+  assert.deepEqual(context.preservedModuleBackbone, getSelectionPoolCanonicalModuleRoles());
   assert.equal(context.admittedSkeleton, undefined);
   assert.equal(context.boundedFields.triggerKey, "F4");
   assert.equal(context.boundedFields.choiceCount, 3);
@@ -454,20 +466,8 @@ function testSourceBackedInvariantBackboneOutranksGenericProjectionRoles() {
     "D:\\rw_test_missing",
   );
 
-  assert.deepEqual(context.sourceBackedInvariantRoles, [
-    "input_trigger",
-    "weighted_pool",
-    "selection_flow",
-    "selection_modal",
-    "effect_application",
-  ]);
-  assert.deepEqual(context.preservedModuleBackbone, [
-    "input_trigger",
-    "weighted_pool",
-    "selection_flow",
-    "selection_modal",
-    "effect_application",
-  ]);
+  assert.deepEqual(context.sourceBackedInvariantRoles, getSelectionPoolCanonicalModuleRoles());
+  assert.deepEqual(context.preservedModuleBackbone, getSelectionPoolCanonicalModuleRoles());
   assert.equal(context.preservedModuleBackbone.includes("gameplay-core"), false);
   assert.equal(context.preservedModuleBackbone.includes("shared-support"), false);
   assert.equal(context.preservedModuleBackbone.includes("ui-surface"), false);

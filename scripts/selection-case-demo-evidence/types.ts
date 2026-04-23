@@ -58,17 +58,21 @@ export interface EvidenceArtifact {
     generatedAt: string;
     fixtureVersion: string;
     pipelineVersion: string;
+    caseId: string;
     hostRoot: string;
+    evidenceDir: string;
     writeMode: "dry-run" | "write";
     stableFeatureId: string;
   };
   fixture: {
     prompt: string;
+    objectKind?: string;
     parameters: Record<string, unknown>;
   };
   wizardExtraction: {
     params: Record<string, unknown>;
-    talentDrawParamsInjected: boolean;
+    caseSpecificParamsInjected: boolean;
+    injectedKeys: string[];
   };
   schema: {
     id: string;
@@ -162,7 +166,7 @@ export interface EvidenceArtifact {
     exports: string[];
     contentPreview: string;
     hasDrawForSelection: boolean;
-    hasRarityBonus: boolean;
+    hasOutcomeEvidence: boolean;
     hasPlaceholderEvidence: boolean;
   }>;
   writeExecution: WriteExecutionResult | null;

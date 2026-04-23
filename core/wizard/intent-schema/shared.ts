@@ -15,6 +15,7 @@ export interface PromptSemanticHints {
   candidatePool: boolean;
   weightedDraw: boolean;
   playerChoice: boolean;
+  selectionResolutionMode?: "player_confirm_single" | "reveal_batch_immediate";
   inventory: boolean;
   inventoryBlocksWhenFull: boolean;
   noRepeatAfterSelection: boolean;

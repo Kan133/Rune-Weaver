@@ -18,9 +18,39 @@ export function buildArtifactSynthesisStageFromPlan(
       artifacts: [],
       warnings: [],
       blockers: [],
+      groundingSummary: {
+        status: "none_required",
+        reviewRequired: false,
+        verifiedSymbolCount: 0,
+        allowlistedSymbolCount: 0,
+        weakSymbolCount: 0,
+        unknownSymbolCount: 0,
+        warningCount: 0,
+        reasonCodes: [],
+      },
+      groundingOffenders: [],
       skipped: true,
     };
   }
+
+  const groundingSummary = plan.artifactSynthesisResult.groundingAssessment;
+  const groundingOffenders = (plan.moduleRecords || [])
+    .filter((record) =>
+      record.sourceKind === "synthesized"
+      && record.groundingAssessment
+      && record.groundingAssessment.reviewRequired,
+    )
+    .map((record) => ({
+      moduleId: record.moduleId,
+      status: record.groundingAssessment!.status,
+      reviewRequired: record.groundingAssessment!.reviewRequired,
+      verifiedSymbolCount: record.groundingAssessment!.verifiedSymbolCount,
+      allowlistedSymbolCount: record.groundingAssessment!.allowlistedSymbolCount,
+      weakSymbolCount: record.groundingAssessment!.weakSymbolCount,
+      unknownSymbolCount: record.groundingAssessment!.unknownSymbolCount,
+      warningCount: record.groundingAssessment!.warnings.length,
+      reasonCodes: record.groundingAssessment!.reasonCodes,
+    }));
 
   return {
     success: plan.artifactSynthesisResult.success,
@@ -74,6 +104,19 @@ export function buildArtifactSynthesisStageFromPlan(
       path: item.path,
     })),
     mustNotAddViolations: plan.artifactSynthesisResult.moduleResults?.flatMap((item) => item.mustNotAddViolations || []) || [],
+    groundingSummary: groundingSummary
+      ? {
+        status: groundingSummary.status,
+        reviewRequired: groundingSummary.reviewRequired,
+        verifiedSymbolCount: groundingSummary.verifiedSymbolCount,
+        allowlistedSymbolCount: groundingSummary.allowlistedSymbolCount,
+        weakSymbolCount: groundingSummary.weakSymbolCount,
+        unknownSymbolCount: groundingSummary.unknownSymbolCount,
+        warningCount: groundingSummary.warnings.length,
+        reasonCodes: groundingSummary.reasonCodes,
+      }
+      : undefined,
+    groundingOffenders,
     grounding: plan.artifactSynthesisResult.grounding?.map((item) => ({
       artifactId: item.artifactId,
       verifiedSymbols: item.verifiedSymbols,

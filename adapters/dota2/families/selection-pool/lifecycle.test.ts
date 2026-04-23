@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 
 import type { FeatureAuthoring } from "../../../../core/schema/types.js";
 import type { WritePlan } from "../../assembler/index.js";
-import { buildSelectionPoolExampleParameters } from "./__fixtures__/examples.js";
+import { buildSelectionPoolSyntheticParameters } from "./__fixtures__/synthetic.js";
 import {
   appendSelectionPoolSourceModelEntry,
   resolveSelectionPoolWorkspaceFields,
 } from "./index.js";
+import { resolveSelectionPoolCompiledObjects } from "./source-model.js";
 
 function createWritePlan(): WritePlan {
   return {
@@ -31,12 +32,12 @@ function createSelectionPoolFeatureAuthoring(): FeatureAuthoring {
     mode: "source-backed",
     profile: "selection_pool",
     objectKind: "talent",
-    parameters: buildSelectionPoolExampleParameters("talent"),
+    parameters: buildSelectionPoolSyntheticParameters("talent"),
     parameterSurface: {
       triggerKey: { kind: "single_hotkey", allowList: ["F4", "F5"] },
       choiceCount: { minimum: 1, maximum: 5 },
       objectKind: { allowed: ["talent", "equipment", "skill_card_placeholder"] },
-      objects: { minItems: 1, seededWhenMissing: true },
+      poolEntries: { minItems: 1, seededWhenMissing: true },
       inventory: {
         supported: true,
         capacityRange: { minimum: 1, maximum: 30 },
@@ -107,7 +108,15 @@ function testResolverUsesWritePlanMetadataWhenArtifactEntryExists(): void {
     resolved.sourceModel?.path,
     "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
   );
-  assert.equal(resolved.featureAuthoring?.parameters.objects.length, 6);
+  assert.equal(resolved.featureAuthoring?.parameters.poolEntries.length, 6);
+  assert.equal((resolved.featureAuthoring?.parameters as any).objects, undefined);
+  assert.equal((resolved.featureAuthoring?.parameters as any).effectProfile, undefined);
+  const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
+  assert.equal((sourceEntry?.parameters as any).objects, undefined);
+  assert.equal((sourceEntry?.parameters as any).effectProfile, undefined);
+  assert.equal(Array.isArray((sourceEntry?.parameters as any).poolEntries), true);
+  const compiled = resolveSelectionPoolCompiledObjects(sourceEntry?.parameters as any);
+  assert.equal(compiled.objects[0]?.outcome?.kind, "attribute_bonus");
 }
 
 testCreateDerivesLifecycleFieldsFromBlueprintAuthoring();

@@ -10,6 +10,16 @@ import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { loadWorkspace } from "../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
+import type { GroundingCheckResult } from "../../../core/schema/types.js";
+import {
+  aggregateModuleGroundingAssessments,
+  buildGroundingReviewReason,
+  validateGroundingAssessmentAgainstChecks,
+} from "../../../core/governance/grounding.js";
+import {
+  GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+  readProviderAbilityExportArtifact,
+} from "../cross-feature/grant-artifacts.js";
 import { extractLuaAbilityRuntimeSymbol } from "../provider-ability-identity.js";
 
 export interface PostGenerationValidationResult {
@@ -42,9 +52,6 @@ interface ProviderAbilityExportRecord {
   artifactPath: string;
   abilityName: string;
 }
-
-const DOTA2_PROVIDER_EXPORT_ADAPTER = "dota2_provider_ability_export";
-const GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID = "grantable_primary_hero_ability";
 
 function countBraceDelta(line: string): number {
   let delta = 0;
@@ -159,44 +166,24 @@ function collectProviderAbilityExports(hostRoot: string): {
       continue;
     }
 
-    try {
-      const parsed = JSON.parse(readFileSync(artifactPath, "utf-8"));
-      if (
-        parsed?.adapter !== DOTA2_PROVIDER_EXPORT_ADAPTER
-        || parsed?.version !== 1
-        || !Array.isArray(parsed?.surfaces)
-      ) {
-        issues.push(`${entry.name}: invalid provider export artifact shape`);
-        continue;
-      }
-
-      const surfaces = parsed.surfaces.filter(
-        (surface: unknown) =>
-          typeof surface === "object"
-          && surface !== null
-          && (surface as { surfaceId?: unknown }).surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
-      );
-
-      if (surfaces.length !== 1) {
-        issues.push(`${entry.name}: expected exactly one grantable provider surface, found ${surfaces.length}`);
-        continue;
-      }
-
-      const abilityName = (surfaces[0] as { abilityName?: unknown }).abilityName;
-      if (typeof abilityName !== "string" || abilityName.trim().length === 0) {
-        issues.push(`${entry.name}: provider export is missing abilityName`);
-        continue;
-      }
-
-      records.push({
-        featureId: entry.name,
-        artifactPath,
-        abilityName: abilityName.trim(),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      issues.push(`${entry.name}: failed to parse provider export artifact (${message})`);
+    const artifact = readProviderAbilityExportArtifact(hostRoot, entry.name);
+    if (!artifact) {
+      issues.push(`${entry.name}: invalid provider export artifact shape`);
+      continue;
     }
+    const surface = artifact.surfaces.find(
+      (candidate) => candidate.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    );
+    if (!surface) {
+      issues.push(`${entry.name}: expected one grantable provider surface`);
+      continue;
+    }
+
+    records.push({
+      featureId: entry.name,
+      artifactPath,
+      abilityName: surface.abilityName.trim(),
+    });
   }
 
   return { records, issues };
@@ -220,6 +207,7 @@ export function validatePostGeneration(hostRoot: string): PostGenerationValidati
   checks.push(checkRuneWeaverRootCss(hostRoot));
   checks.push(checkActiveKeyBindingConflicts(hostRoot));
   checks.push(checkSelectionPoolSeedData(hostRoot));
+  checks.push(checkSynthesizedGroundingGovernance(hostRoot));
 
   // Collect issues from failed checks
   for (const check of checks) {
@@ -373,6 +361,126 @@ function checkLuaScriptFilePaths(hostRoot: string): PostGenerationCheck {
       message: `Failed to check ScriptFile paths: ${message}`,
     };
   }
+}
+
+function normalizeGroundingChecks(rawGrounding: unknown): GroundingCheckResult[] {
+  if (!Array.isArray(rawGrounding)) {
+    return [];
+  }
+
+  return rawGrounding.filter((item): item is GroundingCheckResult =>
+    Boolean(item)
+    && typeof item === "object"
+    && typeof (item as Record<string, unknown>).artifactId === "string"
+    && Array.isArray((item as Record<string, unknown>).verifiedSymbols)
+    && Array.isArray((item as Record<string, unknown>).allowlistedSymbols)
+    && Array.isArray((item as Record<string, unknown>).weakSymbols)
+    && Array.isArray((item as Record<string, unknown>).unknownSymbols)
+    && Array.isArray((item as Record<string, unknown>).warnings),
+  );
+}
+
+function checkSynthesizedGroundingGovernance(hostRoot: string): PostGenerationCheck {
+  const checkName = "synthesized_grounding_governance";
+  const workspaceResult = loadWorkspace(hostRoot);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
+    return {
+      check: checkName,
+      passed: true,
+      message: "Workspace unavailable; grounding governance check skipped",
+    };
+  }
+
+  const structuralIssues: string[] = [];
+  const warnings: string[] = [];
+  let synthesizedFeatureCount = 0;
+
+  for (const feature of workspaceResult.workspace.features) {
+    const synthesizedModules = (feature.modules || []).filter((module) => module.sourceKind === "synthesized");
+    if (synthesizedModules.length === 0) {
+      continue;
+    }
+    synthesizedFeatureCount += 1;
+
+    if (!feature.groundingSummary) {
+      structuralIssues.push(`${feature.featureId}: missing feature groundingSummary`);
+    }
+
+    const featureRawChecks = synthesizedModules.flatMap((module) =>
+      normalizeGroundingChecks((module.metadata as Record<string, unknown> | undefined)?.grounding),
+    );
+    structuralIssues.push(
+      ...validateGroundingAssessmentAgainstChecks(
+        feature.groundingSummary,
+        featureRawChecks,
+        `feature '${feature.featureId}'`,
+      ),
+    );
+
+    const aggregatedFromModules = aggregateModuleGroundingAssessments(synthesizedModules);
+    if (
+      feature.groundingSummary
+      && (
+        feature.groundingSummary.status !== aggregatedFromModules.status
+        || feature.groundingSummary.verifiedSymbolCount !== aggregatedFromModules.verifiedSymbolCount
+        || feature.groundingSummary.allowlistedSymbolCount !== aggregatedFromModules.allowlistedSymbolCount
+        || feature.groundingSummary.weakSymbolCount !== aggregatedFromModules.weakSymbolCount
+        || feature.groundingSummary.unknownSymbolCount !== aggregatedFromModules.unknownSymbolCount
+      )
+    ) {
+      structuralIssues.push(`${feature.featureId}: feature groundingSummary does not match synthesized module assessments`);
+    }
+
+    for (const module of synthesizedModules) {
+      const rawGrounding = normalizeGroundingChecks(
+        (module.metadata as Record<string, unknown> | undefined)?.grounding,
+      );
+      structuralIssues.push(
+        ...validateGroundingAssessmentAgainstChecks(
+          module.groundingAssessment,
+          rawGrounding,
+          `feature '${feature.featureId}' module '${module.moduleId}'`,
+        ),
+      );
+
+      const warning = buildGroundingReviewReason(
+        `feature '${feature.featureId}' module '${module.moduleId}'`,
+        module.groundingAssessment,
+      );
+      if (warning) {
+        warnings.push(warning);
+      }
+    }
+  }
+
+  if (structuralIssues.length > 0) {
+    return {
+      check: checkName,
+      passed: false,
+      message: `${structuralIssues.length} synthesized grounding contract issues found`,
+      details: structuralIssues,
+      suggestion: "Recover canonical workspace grounding from preserved synthesized raw metadata when available; otherwise regenerate the synthesized feature so raw checks and canonical assessments are written together.",
+    };
+  }
+
+  if (warnings.length > 0) {
+    return {
+      check: checkName,
+      passed: true,
+      message: `${warnings.length} synthesized grounding warning(s) require review`,
+      details: warnings,
+      suggestion: "Review the synthesized modules with partial or insufficient grounding before promotion.",
+    };
+  }
+
+  return {
+    check: checkName,
+    passed: true,
+    message:
+      synthesizedFeatureCount > 0
+        ? `Synthesized grounding governance valid across ${synthesizedFeatureCount} feature(s)`
+        : "No synthesized modules require grounding governance validation",
+  };
 }
 
 function checkProviderAbilityExports(hostRoot: string): PostGenerationCheck {
@@ -1163,6 +1271,14 @@ export function printPostGenerationReport(result: PostGenerationValidationResult
     lines.push("--- Passed Checks ---");
     for (const check of passedChecks) {
       lines.push(`[PASS] ${check.check}: ${check.message}`);
+      if (check.details && check.details.length > 0) {
+        for (const detail of check.details.slice(0, 5)) {
+          lines.push(`       - ${detail}`);
+        }
+        if (check.details.length > 5) {
+          lines.push(`       ... and ${check.details.length - 5} more`);
+        }
+      }
     }
     lines.push("");
   }

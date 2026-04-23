@@ -6,18 +6,31 @@ import type {
   FeatureAuthoringProposal as CoreFeatureAuthoringProposal,
   FillIntentCandidate,
   IntentSchema,
+  NativeItemDeliveryMode,
+  NativeItemInventoryFallback,
+  OutcomePositionPolicy,
+  OutcomeSpec,
   SelectionPoolAdmissionDiagnostics,
   SelectionPoolAdmissionFinding,
+  SelectionPoolAttributeName,
   SelectionPoolAuthoredObject,
   SelectionPoolFeatureAuthoringParameters,
   SelectionPoolObjectKind,
   SelectionPoolObjectTier,
   SelectionPoolParameterSurface,
+  SpawnUnitTeamScope,
 } from "../../../../core/schema/types.js";
 import type {
   FeatureSourceModelRef,
   RuneWeaverFeatureRecord,
 } from "../../../../core/workspace/types.js";
+import {
+  SELECTION_POOL_CANONICAL_BACKBONE_SUMMARY,
+} from "../../../../core/schema/selection-pool-profile.js";
+import {
+  expandSelectionPoolPoolToCount,
+  normalizeSelectionPoolSourceParameters,
+} from "./source-model.js";
 
 export type FeatureAuthoring = CoreFeatureAuthoring<
   SelectionPoolFeatureAuthoringParameters,
@@ -60,9 +73,38 @@ export interface SelectionPoolFeatureSourceArtifactV1 {
   display?: NonNullable<SelectionPoolFeatureAuthoringParameters["display"]>;
   placeholderConfig?: NonNullable<SelectionPoolFeatureAuthoringParameters["placeholderConfig"]>;
   inventory?: SelectionPoolInventoryContract;
+  /** @deprecated compatibility input only; read old artifacts but do not write on new materialization */
   effectProfile?: NonNullable<SelectionPoolFeatureAuthoringParameters["effectProfile"]>;
   objects: SelectionPoolAuthoredObject[];
 }
+
+export interface SelectionPoolFeatureSourceArtifactV2 {
+  adapter: SelectionPoolSourceAdapter;
+  version: 2;
+  featureId: string;
+  objectKind?: SelectionPoolObjectKind;
+  triggerKey: string;
+  choiceCount: number;
+  drawMode: "single" | "multiple_without_replacement" | "multiple_with_replacement";
+  duplicatePolicy: "allow" | "avoid_when_possible" | "forbid";
+  poolStateTracking: "none" | "session";
+  selectionPolicy: "single";
+  applyMode: "immediate" | "deferred";
+  postSelectionPoolBehavior:
+    | "none"
+    | "remove_selected_from_remaining"
+    | "remove_selected_and_keep_unselected_eligible";
+  trackSelectedItems: boolean;
+  display?: NonNullable<SelectionPoolFeatureAuthoringParameters["display"]>;
+  placeholderConfig?: NonNullable<SelectionPoolFeatureAuthoringParameters["placeholderConfig"]>;
+  inventory?: SelectionPoolInventoryContract;
+  localCollections?: NonNullable<SelectionPoolFeatureAuthoringParameters["localCollections"]>;
+  poolEntries: NonNullable<SelectionPoolFeatureAuthoringParameters["poolEntries"]>;
+}
+
+export type SelectionPoolFeatureSourceArtifact =
+  | SelectionPoolFeatureSourceArtifactV1
+  | SelectionPoolFeatureSourceArtifactV2;
 
 export interface ResolveSelectionPoolFamilyInput {
   prompt: string;
@@ -97,12 +139,13 @@ export interface SelectionPoolCompiledModuleParameters {
   input_trigger: Record<string, unknown>;
   weighted_pool: Record<string, unknown>;
   selection_flow: Record<string, unknown>;
+  selection_outcome: Record<string, unknown>;
   selection_modal: Record<string, unknown>;
 }
 
 export interface SelectionPoolLifecycleState {
   featureAuthoring: FeatureAuthoring;
-  sourceArtifact: SelectionPoolFeatureSourceArtifactV1;
+  sourceArtifact: SelectionPoolFeatureSourceArtifact;
   sourceArtifactRef: FeatureSourceModelRef;
 }
 
@@ -155,7 +198,7 @@ export interface SelectionPoolDetectionResult {
 }
 
 export const SELECTION_POOL_SOURCE_ADAPTER: SelectionPoolSourceAdapter = "selection_pool";
-export const SELECTION_POOL_SOURCE_VERSION = 1;
+export const SELECTION_POOL_SOURCE_VERSION = 2;
 export const SELECTION_POOL_FAMILY_ID = "selection_pool";
 export const SELECTION_POOL_ALLOWED_HOTKEYS = [
   "Q", "W", "E", "R", "D", "F",
@@ -197,6 +240,38 @@ const DEFAULT_SELECTION_POOL_EFFECT_PROFILE: NonNullable<SelectionPoolFeatureAut
   },
 };
 
+function shouldSeedDefaultOutcomes(objectKindHint?: SelectionPoolObjectKind): boolean {
+  return objectKindHint === undefined || objectKindHint === "talent";
+}
+
+function buildAttributeBonusOutcomeFromTier(
+  tier: SelectionPoolObjectTier,
+  effectProfile: NonNullable<SelectionPoolFeatureAuthoringParameters["effectProfile"]> | undefined,
+): OutcomeSpec | undefined {
+  const bonus = effectProfile?.rarityAttributeBonusMap?.[tier];
+  if (!bonus || !isSelectionPoolAttributeName(bonus.attribute) || !Number.isFinite(Number(bonus.value))) {
+    return undefined;
+  }
+  return {
+    kind: "attribute_bonus",
+    attribute: bonus.attribute,
+    value: Number(bonus.value),
+  };
+}
+
+function getCompatibilityEffectProfile(
+  raw: Partial<SelectionPoolFeatureAuthoringParameters>,
+  objectKindHint?: SelectionPoolObjectKind,
+): NonNullable<SelectionPoolFeatureAuthoringParameters["effectProfile"]> | undefined {
+  if (raw.effectProfile?.kind === "tier_attribute_bonus_placeholder") {
+    return deepClone(raw.effectProfile);
+  }
+  if (shouldSeedDefaultOutcomes(objectKindHint)) {
+    return getEffectProfileDefaults();
+  }
+  return undefined;
+}
+
 export const SELECTION_POOL_PARAMETER_SURFACE: SelectionPoolParameterSurface = {
   triggerKey: {
     kind: "single_hotkey",
@@ -206,7 +281,7 @@ export const SELECTION_POOL_PARAMETER_SURFACE: SelectionPoolParameterSurface = {
     minimum: 1,
     maximum: 5,
   },
-  objects: {
+  poolEntries: {
     minItems: 1,
     seededWhenMissing: true,
   },
@@ -222,11 +297,11 @@ export const SELECTION_POOL_PARAMETER_SURFACE: SelectionPoolParameterSurface = {
     "single trigger entry only",
     "weighted pool candidate source",
     "confirm exactly one candidate",
-    "same-feature owned object collection only",
-    "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
+    "current feature owns pool membership only; object truth may come from local collections, feature exports, or external catalogs",
+    SELECTION_POOL_CANONICAL_BACKBONE_SUMMARY,
     "no persistence",
     "no cross-feature grants",
-    "no arbitrary custom effect family",
+    "no arbitrary movement/projectile effect family",
   ],
 };
 
@@ -320,6 +395,115 @@ export function isSelectionPoolObjectTier(value: unknown): value is SelectionPoo
   return value === "R" || value === "SR" || value === "SSR" || value === "UR";
 }
 
+export function isSelectionPoolAttributeName(value: unknown): value is SelectionPoolAttributeName {
+  return value === "strength" || value === "agility" || value === "intelligence" || value === "all";
+}
+
+export function isOutcomePositionPolicy(value: unknown): value is OutcomePositionPolicy {
+  return value === "hero_origin" || value === "hero_forward" || value === "cursor_point";
+}
+
+export function isNativeItemDeliveryMode(value: unknown): value is NativeItemDeliveryMode {
+  return value === "hero_inventory" || value === "ground_drop";
+}
+
+export function isNativeItemInventoryFallback(value: unknown): value is NativeItemInventoryFallback {
+  return value === "drop_to_ground" || value === "skip_delivery";
+}
+
+export function isSpawnUnitTeamScope(value: unknown): value is SpawnUnitTeamScope {
+  return value === "player_team";
+}
+
+export function normalizeOutcomeSpec(value: unknown): OutcomeSpec | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const raw = value as Record<string, unknown>;
+  if (raw.kind === "attribute_bonus") {
+    const numericValue = Number(raw.value);
+    if (!isSelectionPoolAttributeName(raw.attribute) || !Number.isFinite(numericValue)) {
+      return undefined;
+    }
+    return {
+      kind: "attribute_bonus",
+      attribute: raw.attribute,
+      value: numericValue,
+    };
+  }
+
+  if (raw.kind === "native_item_delivery") {
+    if (
+      typeof raw.itemName !== "string" ||
+      raw.itemName.trim().length === 0 ||
+      !isNativeItemDeliveryMode(raw.deliveryMode) ||
+      !isNativeItemInventoryFallback(raw.fallbackWhenInventoryFull) ||
+      !isOutcomePositionPolicy(raw.positionPolicy)
+    ) {
+      return undefined;
+    }
+    return {
+      kind: "native_item_delivery",
+      itemName: raw.itemName.trim(),
+      deliveryMode: raw.deliveryMode,
+      fallbackWhenInventoryFull: raw.fallbackWhenInventoryFull,
+      positionPolicy: raw.positionPolicy,
+    };
+  }
+
+  if (raw.kind === "spawn_unit") {
+    if (
+      typeof raw.unitName !== "string" ||
+      raw.unitName.trim().length === 0 ||
+      !isOutcomePositionPolicy(raw.positionPolicy)
+    ) {
+      return undefined;
+    }
+
+    const spawnCount = Number(raw.spawnCount);
+    const teamScope = isSpawnUnitTeamScope(raw.teamScope) ? raw.teamScope : "player_team";
+    return {
+      kind: "spawn_unit",
+      unitName: raw.unitName.trim(),
+      spawnCount: Number.isFinite(spawnCount) && spawnCount >= 1 ? Math.floor(spawnCount) : 1,
+      positionPolicy: raw.positionPolicy,
+      teamScope,
+    };
+  }
+
+  return undefined;
+}
+
+export function isOutcomeSpec(value: unknown): value is OutcomeSpec {
+  return normalizeOutcomeSpec(value) !== undefined;
+}
+
+export function collectSelectionPoolOutcomeValidationErrors(objects: unknown): string[] {
+  if (!Array.isArray(objects)) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  objects.forEach((candidate, index) => {
+    if (!candidate || typeof candidate !== "object") {
+      return;
+    }
+
+    const raw = candidate as Record<string, unknown>;
+    if (raw.outcome === undefined) {
+      return;
+    }
+
+    if (!normalizeOutcomeSpec(raw.outcome)) {
+      const objectId = typeof raw.id === "string" && raw.id.trim().length > 0 ? raw.id : `objects[${index}]`;
+      errors.push(`Invalid outcome spec for '${objectId}'.`);
+    }
+  });
+
+  return errors;
+}
+
 export function isSelectionPoolInventoryContract(value: unknown): value is SelectionPoolInventoryContract {
   return Boolean(
     value &&
@@ -331,6 +515,25 @@ export function isSelectionPoolInventoryContract(value: unknown): value is Selec
   );
 }
 
+export function isSelectionPoolEffectProfile(
+  value: unknown,
+): value is NonNullable<SelectionPoolFeatureAuthoringParameters["effectProfile"]> {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const raw = value as Record<string, unknown>;
+  if (raw.kind !== "tier_attribute_bonus_placeholder" || typeof raw.rarityAttributeBonusMap !== "object") {
+    return false;
+  }
+  return Object.values(raw.rarityAttributeBonusMap as Record<string, unknown>).every((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+    const bonus = entry as Record<string, unknown>;
+    return isSelectionPoolAttributeName(bonus.attribute) && Number.isFinite(Number(bonus.value));
+  });
+}
+
 export function isSelectionPoolAuthoredObject(value: unknown): value is SelectionPoolAuthoredObject {
   return Boolean(
     value &&
@@ -339,7 +542,11 @@ export function isSelectionPoolAuthoredObject(value: unknown): value is Selectio
       typeof (value as Record<string, unknown>).label === "string" &&
       typeof (value as Record<string, unknown>).description === "string" &&
       typeof (value as Record<string, unknown>).weight === "number" &&
-      isSelectionPoolObjectTier((value as Record<string, unknown>).tier),
+      isSelectionPoolObjectTier((value as Record<string, unknown>).tier) &&
+      (
+        (value as Record<string, unknown>).outcome === undefined ||
+        isOutcomeSpec((value as Record<string, unknown>).outcome)
+      ),
   );
 }
 
@@ -354,7 +561,10 @@ export function isSelectionPoolFeatureAuthoring(
       value.parameters !== null &&
       typeof (value.parameters as Record<string, unknown>).triggerKey === "string" &&
       typeof (value.parameters as Record<string, unknown>).choiceCount === "number" &&
-      Array.isArray((value.parameters as Record<string, unknown>).objects),
+      (
+        Array.isArray((value.parameters as Record<string, unknown>).poolEntries) ||
+        Array.isArray((value.parameters as Record<string, unknown>).objects)
+      ),
   );
 }
 
@@ -363,7 +573,10 @@ export function isSelectionPoolSourceModelRef(value: unknown): value is FeatureS
     value &&
       typeof value === "object" &&
       (value as Record<string, unknown>).adapter === SELECTION_POOL_SOURCE_ADAPTER &&
-      (value as Record<string, unknown>).version === SELECTION_POOL_SOURCE_VERSION &&
+      (
+        (value as Record<string, unknown>).version === 1 ||
+        (value as Record<string, unknown>).version === SELECTION_POOL_SOURCE_VERSION
+      ) &&
       typeof (value as Record<string, unknown>).path === "string",
   );
 }
@@ -385,13 +598,32 @@ export function isSelectionPoolFeatureSourceArtifactV1(value: unknown): value is
   const raw = value as Record<string, unknown>;
   return (
     raw.adapter === SELECTION_POOL_SOURCE_ADAPTER &&
-    raw.version === SELECTION_POOL_SOURCE_VERSION &&
+    raw.version === 1 &&
     typeof raw.featureId === "string" &&
     typeof raw.triggerKey === "string" &&
     typeof raw.choiceCount === "number" &&
     (raw.objectKind === undefined || resolveSelectionPoolObjectKind(raw.objectKind) !== undefined) &&
     Array.isArray(raw.objects) &&
     raw.objects.every((object) => isSelectionPoolAuthoredObject(object)) &&
+    (raw.inventory === undefined || isSelectionPoolInventoryContract(raw.inventory)) &&
+    (raw.effectProfile === undefined || isSelectionPoolEffectProfile(raw.effectProfile))
+  );
+}
+
+export function isSelectionPoolFeatureSourceArtifactV2(value: unknown): value is SelectionPoolFeatureSourceArtifactV2 {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const raw = value as Record<string, unknown>;
+  return (
+    raw.adapter === SELECTION_POOL_SOURCE_ADAPTER &&
+    raw.version === SELECTION_POOL_SOURCE_VERSION &&
+    typeof raw.featureId === "string" &&
+    typeof raw.triggerKey === "string" &&
+    typeof raw.choiceCount === "number" &&
+    (raw.objectKind === undefined || resolveSelectionPoolObjectKind(raw.objectKind) !== undefined) &&
+    Array.isArray(raw.poolEntries) &&
+    (raw.localCollections === undefined || Array.isArray(raw.localCollections)) &&
     (raw.inventory === undefined || isSelectionPoolInventoryContract(raw.inventory))
   );
 }
@@ -523,22 +755,25 @@ export function parseTriggerKey(prompt: string): string | undefined {
   }
 
   const targetOnly = prompt.match(
-    /(?:to|改成|改为|换成|切换为)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
+    /(?:trigger\s*key|hotkey|key(?:\s*binding)?|触发键|按键|快捷键|热键)[^\n]{0,12}?(?:to|as|is|改成|改为|换成|切换为)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
   );
   if (targetOnly?.[1]) {
     return targetOnly[1].toUpperCase();
   }
 
   const contextualMatch = prompt.match(
-    /(?:按(?:下)?|触发键|按键|快捷键|hotkey|trigger key|press)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
+    /(?:按(?:下)?|触发键|按键|快捷键|hotkey|trigger key|press(?:es)?|hit|tap|bind(?:ing)?|bound to|triggered by|when(?:\s+the)?\s+player\s+presses?)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
   );
   if (contextualMatch?.[1]) {
     return contextualMatch[1].toUpperCase();
   }
 
-  const allKeys = Array.from(prompt.matchAll(/\b(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/ig));
-  const lastKey = allKeys.at(-1)?.[1];
-  return lastKey ? lastKey.toUpperCase() : undefined;
+  const functionKeys = Array.from(prompt.matchAll(/\bF(?:1[0-2]|[1-9])\b/ig));
+  if (functionKeys.length === 1) {
+    return functionKeys[0]?.[0]?.toUpperCase();
+  }
+
+  return undefined;
 }
 
 export function parseChoiceCount(prompt: string): number | undefined {
@@ -560,7 +795,7 @@ export function parseRequestedObjectCount(prompt: string): number | undefined {
   const patterns = [
     /(?:to|到|扩充到|提升到|增加到)\s*(\d+)\s*(?:talents?|objects?|items?|entries?|rewards?|blessings?|个)/i,
     /(?:pool|collection|object|item|entry|reward|talent|blessing)(?:[\s-]+\w+){0,4}\s+(?:count|size)\s+(?:to|from\s+\d+\s+to)\s*(\d+)/i,
-    /(?:with|to)\s*(\d+)\s+(?:total\s+)?(?:same-feature\s+)?(?:objects?|items?|entries?|rewards?|talents?|blessings?)/i,
+    /(?:with|to|contains?|has)\s*(\d+)\s+(?:total\s+)?(?:same-feature\s+)?(?:objects?|items?|entries?|rewards?|talents?|blessings?)/i,
     /(?:池(?:子)?数量|对象数量|池大小|总数)(?:提升到|扩充到|增加到|到)\s*(\d+)/i,
   ];
 
@@ -649,6 +884,7 @@ export function promptRequestsStoredSelections(prompt: string): boolean {
 export function sanitizeObjectList(
   objects: SelectionPoolAuthoredObject[] | undefined,
   objectKindHint?: SelectionPoolObjectKind,
+  compatibilityEffectProfile?: NonNullable<SelectionPoolFeatureAuthoringParameters["effectProfile"]>,
 ): SelectionPoolAuthoredObject[] {
   const seen = new Set<string>();
   const normalized: SelectionPoolAuthoredObject[] = [];
@@ -661,15 +897,27 @@ export function sanitizeObjectList(
       continue;
     }
     seen.add(id);
+    const explicitOutcome = normalizeOutcomeSpec(candidate.outcome);
+    const fallbackOutcome = explicitOutcome || buildAttributeBonusOutcomeFromTier(candidate.tier, compatibilityEffectProfile);
     normalized.push({
       id,
       label: String(candidate.label).trim() || id,
       description: String(candidate.description).trim() || "Selection effect placeholder",
       weight: Math.max(1, Math.floor(Number(candidate.weight) || PLACEHOLDER_WEIGHT_BY_TIER[candidate.tier])),
       tier: candidate.tier,
+      ...(fallbackOutcome ? { outcome: fallbackOutcome } : {}),
     });
   }
-  return normalized.length > 0 ? normalized : buildGenericSeedObjects(objectKindHint);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return buildGenericSeedObjects(objectKindHint).map((object) => ({
+    ...object,
+    ...(buildAttributeBonusOutcomeFromTier(object.tier, compatibilityEffectProfile)
+      ? { outcome: buildAttributeBonusOutcomeFromTier(object.tier, compatibilityEffectProfile) }
+      : {}),
+  }));
 }
 
 function getObjectIdPrefix(objectKindHint?: SelectionPoolObjectKind): string {
@@ -681,10 +929,7 @@ function getObjectLabelBase(objectKindHint?: SelectionPoolObjectKind): string {
 }
 
 function getTierDescription(tier: SelectionPoolObjectTier): string {
-  if (tier === "R") return "+10 Strength";
-  if (tier === "SR") return "+10 Agility";
-  if (tier === "SSR") return "+10 Intelligence";
-  return "+10 All Attributes";
+  return `Placeholder selection option (${tier})`;
 }
 
 function buildGeneratedObject(
@@ -710,86 +955,16 @@ export function buildGenericSeedObjects(objectKindHint?: SelectionPoolObjectKind
   );
 }
 
-function parseObjectIdParts(
-  id: string,
-): { prefix: string; tier: SelectionPoolObjectTier; serial: number } | undefined {
-  const match = id.match(/^(.*?)(SSR|SR|UR|R)(\d+)$/);
-  if (!match) {
-    return undefined;
-  }
-  return {
-    prefix: match[1] || "",
-    tier: match[2] as SelectionPoolObjectTier,
-    serial: Number(match[3]),
-  };
-}
-
-function deriveObjectGenerationContext(
-  objects: SelectionPoolAuthoredObject[],
-  objectKindHint?: SelectionPoolObjectKind,
-): {
-  prefix: string;
-  nextSerialByTier: Record<SelectionPoolObjectTier, number>;
-} {
-  const nextSerialByTier: Record<SelectionPoolObjectTier, number> = {
-    R: 1,
-    SR: 1,
-    SSR: 1,
-    UR: 1,
-  };
-  let prefix = getObjectIdPrefix(objectKindHint);
-  for (const object of objects) {
-    const parsed = parseObjectIdParts(object.id);
-    if (!parsed) {
-      continue;
-    }
-    if (parsed.prefix) {
-      prefix = parsed.prefix;
-    }
-    nextSerialByTier[parsed.tier] = Math.max(nextSerialByTier[parsed.tier], parsed.serial + 1);
-  }
-  return { prefix, nextSerialByTier };
-}
-
 export function expandObjectPoolToCount(
   parameters: SelectionPoolFeatureAuthoringParameters,
   targetCount: number,
   objectKindHint?: SelectionPoolObjectKind,
 ): SelectionPoolFeatureAuthoringParameters {
-  if (parameters.objects.length >= targetCount) {
-    return parameters;
-  }
-
-  const context = deriveObjectGenerationContext(parameters.objects, objectKindHint || parameters.objectKind);
-  const existingIds = new Set(parameters.objects.map((object) => object.id));
-  const nextObjects = [...parameters.objects];
-  let sequenceIndex = 0;
-
-  while (nextObjects.length < targetCount) {
-    const tier = DEFAULT_OBJECT_TIER_SEQUENCE[sequenceIndex % DEFAULT_OBJECT_TIER_SEQUENCE.length];
-    const serial = context.nextSerialByTier[tier];
-    context.nextSerialByTier[tier] += 1;
-    const labelBase = getObjectLabelBase(objectKindHint || parameters.objectKind);
-    const serialText = String(serial).padStart(3, "0");
-    const candidate: SelectionPoolAuthoredObject = {
-      id: `${context.prefix}${tier}${serialText}`,
-      label: `${labelBase} ${tier}${serialText}`,
-      description: getTierDescription(tier),
-      weight: PLACEHOLDER_WEIGHT_BY_TIER[tier],
-      tier,
-    };
-    sequenceIndex += 1;
-    if (existingIds.has(candidate.id)) {
-      continue;
-    }
-    existingIds.add(candidate.id);
-    nextObjects.push(candidate);
-  }
-
-  return {
-    ...parameters,
-    objects: nextObjects,
-  };
+  const expanded = expandSelectionPoolPoolToCount(parameters, targetCount, objectKindHint);
+  return normalizeFeatureAuthoringParameters(
+    expanded,
+    objectKindHint || resolveSelectionPoolObjectKind(expanded.objectKind),
+  );
 }
 
 export function normalizeFeatureAuthoringParameters(
@@ -797,6 +972,7 @@ export function normalizeFeatureAuthoringParameters(
   objectKindHint?: SelectionPoolObjectKind,
 ): SelectionPoolFeatureAuthoringParameters {
   const metadataObjectKind = resolveSelectionPoolObjectKind(raw.objectKind) || objectKindHint;
+  const compatibilityEffectProfile = getCompatibilityEffectProfile(raw, metadataObjectKind);
   const triggerKey = String(raw.triggerKey || "F4").trim().toUpperCase();
   const choiceCount = Math.max(1, Math.min(5, Math.floor(Number(raw.choiceCount || 3))));
   const inventory = raw.inventory?.enabled === true
@@ -812,12 +988,10 @@ export function normalizeFeatureAuthoringParameters(
   const normalized: SelectionPoolFeatureAuthoringParameters = {
     triggerKey,
     choiceCount,
-    objects: sanitizeObjectList(
-      Array.isArray(raw.objects) && raw.objects.length > 0
-        ? raw.objects
-        : buildGenericSeedObjects(metadataObjectKind),
-      metadataObjectKind,
-    ),
+    ...normalizeSelectionPoolSourceParameters(raw, {
+      objectKindHint: metadataObjectKind,
+      compatibilityEffectProfile,
+    }),
     drawMode: raw.drawMode || "multiple_without_replacement",
     duplicatePolicy: raw.duplicatePolicy || "forbid",
     poolStateTracking: raw.poolStateTracking || "session",
@@ -837,7 +1011,6 @@ export function normalizeFeatureAuthoringParameters(
       ...(raw.placeholderConfig || {}),
       disabled: raw.placeholderConfig?.disabled ?? true,
     },
-    effectProfile: deepClone(raw.effectProfile || getEffectProfileDefaults()),
   };
 
   if (metadataObjectKind) {
@@ -852,7 +1025,6 @@ export function buildGenericSeedParameters(seed: SelectionPoolSeedParameters = {
     triggerKey: "F4",
     choiceCount: 3,
     objectKind: seed.objectKindHint,
-    objects: buildGenericSeedObjects(seed.objectKindHint),
     drawMode: "multiple_without_replacement",
     duplicatePolicy: "forbid",
     poolStateTracking: "session",
@@ -862,7 +1034,6 @@ export function buildGenericSeedParameters(seed: SelectionPoolSeedParameters = {
     trackSelectedItems: true,
     display: getDisplayDefaults(),
     placeholderConfig: getPlaceholderDefaults(),
-    effectProfile: getEffectProfileDefaults(),
   }, seed.objectKindHint);
 }
 
@@ -908,7 +1079,37 @@ export function migrateLegacyTalentDrawArtifact(
       weight: number;
     }>;
   },
-): SelectionPoolFeatureSourceArtifactV1 {
+): SelectionPoolFeatureSourceArtifactV2 {
+  const rarityAttributeBonusMap = Object.fromEntries(
+    Object.entries(artifact.effectApplication.rarityAttributeBonusMap)
+      .filter((entry): entry is [string, { attribute: SelectionPoolAttributeName; value: number }] =>
+        isSelectionPoolAttributeName(entry[1]?.attribute),
+      )
+      .map(([rarity, bonus]) => [rarity, { attribute: bonus.attribute, value: Number(bonus.value) }]),
+  ) as NonNullable<SelectionPoolFeatureAuthoringParameters["effectProfile"]>["rarityAttributeBonusMap"];
+  const compatibilityEffectProfile = {
+    kind: "tier_attribute_bonus_placeholder" as const,
+    rarityAttributeBonusMap,
+  };
+  const sourceParameters = normalizeSelectionPoolSourceParameters(
+    {
+      objectKind: "talent",
+      objects: artifact.talents.map((talent) => ({
+        id: talent.id,
+        label: talent.label,
+        description: talent.description,
+        weight: talent.weight,
+        tier: talent.tier,
+        ...(buildAttributeBonusOutcomeFromTier(talent.tier, compatibilityEffectProfile)
+          ? { outcome: buildAttributeBonusOutcomeFromTier(talent.tier, compatibilityEffectProfile) }
+          : {}),
+      })),
+    },
+    {
+      objectKindHint: "talent",
+      compatibilityEffectProfile,
+    },
+  );
   return {
     adapter: SELECTION_POOL_SOURCE_ADAPTER,
     version: SELECTION_POOL_SOURCE_VERSION,
@@ -938,17 +1139,8 @@ export function migrateLegacyTalentDrawArtifact(
       minDisplayCount: artifact.minDisplayCount,
     },
     placeholderConfig: deepClone(artifact.placeholderConfig),
-    effectProfile: {
-      kind: "tier_attribute_bonus_placeholder",
-      rarityAttributeBonusMap: deepClone(artifact.effectApplication.rarityAttributeBonusMap),
-    },
-    objects: artifact.talents.map((talent) => ({
-      id: talent.id,
-      label: talent.label,
-      description: talent.description,
-      weight: talent.weight,
-      tier: talent.tier,
-    })),
+    localCollections: sourceParameters.localCollections,
+    poolEntries: sourceParameters.poolEntries || [],
   };
 }
 
@@ -976,8 +1168,8 @@ export function createFillIntentCandidates(source: FillIntentCandidate["source"]
       source,
     },
     {
-      boundaryId: "selection_flow.effect_mapping",
-      summary: "Translate the authored object tier/effect profile into the admitted immediate apply hook.",
+      boundaryId: "selection_outcome.realization",
+      summary: "Translate authored per-object outcomes into the admitted host-native realization hook.",
       source,
     },
     {
@@ -992,11 +1184,26 @@ export function resolveSelectionPoolParametersFromFeature(
   feature: RuneWeaverFeatureRecord,
   sourceArtifact?: Record<string, unknown>,
 ): SelectionPoolFeatureAuthoringParameters | undefined {
-  if (isSelectionPoolFeatureAuthoring(feature.featureAuthoring)) {
+  if (isSelectionPoolFeatureSourceArtifactV2(sourceArtifact)) {
     return normalizeFeatureAuthoringParameters(
-      feature.featureAuthoring.parameters,
-      resolveSelectionPoolObjectKind(feature.featureAuthoring.parameters.objectKind)
-        || resolveSelectionPoolObjectKind(feature.featureAuthoring.objectKind),
+      {
+        triggerKey: sourceArtifact.triggerKey,
+        choiceCount: sourceArtifact.choiceCount,
+        objectKind: sourceArtifact.objectKind,
+        localCollections: sourceArtifact.localCollections,
+        poolEntries: sourceArtifact.poolEntries,
+        drawMode: sourceArtifact.drawMode,
+        duplicatePolicy: sourceArtifact.duplicatePolicy,
+        poolStateTracking: sourceArtifact.poolStateTracking,
+        selectionPolicy: sourceArtifact.selectionPolicy,
+        applyMode: sourceArtifact.applyMode,
+        postSelectionPoolBehavior: sourceArtifact.postSelectionPoolBehavior,
+        trackSelectedItems: sourceArtifact.trackSelectedItems,
+        inventory: sourceArtifact.inventory,
+        display: sourceArtifact.display,
+        placeholderConfig: sourceArtifact.placeholderConfig,
+      },
+      resolveSelectionPoolObjectKind(sourceArtifact.objectKind),
     );
   }
 
@@ -1030,7 +1237,8 @@ export function resolveSelectionPoolParametersFromFeature(
         triggerKey: migrated.triggerKey,
         choiceCount: migrated.choiceCount,
         objectKind: migrated.objectKind,
-        objects: migrated.objects,
+        localCollections: migrated.localCollections,
+        poolEntries: migrated.poolEntries,
         drawMode: migrated.drawMode,
         duplicatePolicy: migrated.duplicatePolicy,
         poolStateTracking: migrated.poolStateTracking,
@@ -1041,9 +1249,16 @@ export function resolveSelectionPoolParametersFromFeature(
         inventory: migrated.inventory,
         display: migrated.display,
         placeholderConfig: migrated.placeholderConfig,
-        effectProfile: migrated.effectProfile,
       },
       resolveSelectionPoolObjectKind(migrated.objectKind),
+    );
+  }
+
+  if (isSelectionPoolFeatureAuthoring(feature.featureAuthoring)) {
+    return normalizeFeatureAuthoringParameters(
+      feature.featureAuthoring.parameters,
+      resolveSelectionPoolObjectKind(feature.featureAuthoring.parameters.objectKind)
+        || resolveSelectionPoolObjectKind(feature.featureAuthoring.objectKind),
     );
   }
 

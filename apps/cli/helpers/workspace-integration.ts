@@ -27,6 +27,10 @@ import {
   FeatureWriteResult,
   ModuleImplementationRecord,
 } from "../../../core/workspace/index.js";
+import {
+  aggregateModuleGroundingAssessments,
+  buildGroundingReviewReason,
+} from "../../../core/governance/grounding.js";
 import { injectHostEntryBridge, refreshBridge } from "../../../adapters/dota2/bridge/index.js";
 import { resolveDota2GapFillBoundaryIdsForPatterns } from "../../../adapters/dota2/gap-fill/boundaries.js";
 import {
@@ -136,6 +140,13 @@ function buildModuleReviewReasons(
     reasons.push("Module includes synthesized host-native implementation and should remain reviewable.");
   } else if (strategy === "exploratory") {
     reasons.push("Module has no templated pattern backing and remains exploratory.");
+  }
+  const groundingReason = buildGroundingReviewReason(
+    `module '${module.id}'`,
+    existingRecord?.groundingAssessment,
+  );
+  if (groundingReason) {
+    reasons.push(groundingReason);
   }
 
   return [...new Set(reasons)];
@@ -319,6 +330,7 @@ function buildModuleImplementationRecords(
       integrationHints: baseRecord?.integrationHints,
       stateExpectations: baseRecord?.stateExpectations,
       synthesizedArtifactIds: synthesizedArtifactIds.length > 0 ? synthesizedArtifactIds : undefined,
+      groundingAssessment: baseRecord?.groundingAssessment,
       metadata: baseRecord?.metadata,
     } satisfies ModuleImplementationRecord;
   });
@@ -400,6 +412,9 @@ export function updateWorkspaceState(
     modules: modules || existingFeature?.modules || [],
     priorCommitDecision: blueprint.commitDecision || existingFeature?.commitDecision,
   });
+  const groundingSummary = aggregateModuleGroundingAssessments(
+    modules || existingFeature?.modules || [],
+  );
   const ownedArtifacts = buildOwnedArtifactsFromWritePlan({
     writePlan,
     sourceModelPath: sourceBackedFields.sourceModel?.path,
@@ -424,6 +439,7 @@ export function updateWorkspaceState(
     validationStatus: blueprint.validationStatus || null,
     dependencyEdges: blueprint.dependencyEdges || [],
     commitDecision: lifecycle.commitDecision || null,
+    groundingSummary,
     gapFillBoundaries: uniqueStrings([
       ...resolveDota2GapFillBoundaryIdsForPatterns(
         assemblyPlan.selectedPatterns.map((p) => p.patternId)

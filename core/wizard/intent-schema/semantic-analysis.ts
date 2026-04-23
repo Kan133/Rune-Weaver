@@ -46,6 +46,7 @@ export interface IntentGovernanceSelectionContract {
   present: boolean;
   source?: IntentSelectionContract["source"];
   choiceMode?: IntentSelectionContract["choiceMode"];
+  resolutionMode?: IntentSelectionContract["resolutionMode"];
   cardinality?: IntentSelectionContract["cardinality"];
   choiceCount?: number;
   repeatability?: IntentSelectionContract["repeatability"];

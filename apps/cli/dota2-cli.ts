@@ -263,6 +263,27 @@ export interface Dota2ReviewArtifact {
       retrievalSummary?: string;
       evidenceRefs?: Array<{ title: string; sourceKind: string; path?: string }>;
       mustNotAddViolations?: string[];
+      groundingSummary?: {
+        status: string;
+        reviewRequired: boolean;
+        verifiedSymbolCount: number;
+        allowlistedSymbolCount: number;
+        weakSymbolCount: number;
+        unknownSymbolCount: number;
+        warningCount: number;
+        reasonCodes: string[];
+      };
+      groundingOffenders?: Array<{
+        moduleId: string;
+        status: string;
+        reviewRequired: boolean;
+        verifiedSymbolCount: number;
+        allowlistedSymbolCount: number;
+        weakSymbolCount: number;
+        unknownSymbolCount: number;
+        warningCount: number;
+        reasonCodes: string[];
+      }>;
       grounding?: Array<{
         artifactId: string;
         verifiedSymbols: string[];
@@ -890,6 +911,17 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   };
 
   artifact.stages.artifactSynthesis = buildArtifactSynthesisStageFromPlan(plan);
+  if (artifact.stages.artifactSynthesis?.groundingSummary) {
+    const groundingSummary = artifact.stages.artifactSynthesis.groundingSummary;
+    console.log(
+      `     Grounding: ${groundingSummary.status} | verified=${groundingSummary.verifiedSymbolCount} | allowlisted=${groundingSummary.allowlistedSymbolCount} | weak=${groundingSummary.weakSymbolCount} | unknown=${groundingSummary.unknownSymbolCount} | review=${groundingSummary.reviewRequired ? "yes" : "no"}`,
+    );
+    if ((artifact.stages.artifactSynthesis.groundingOffenders || []).length > 0) {
+      console.log(
+        `     Grounding Offenders: ${artifact.stages.artifactSynthesis.groundingOffenders!.map((item) => `${item.moduleId}:${item.status}`).join(", ")}`,
+      );
+    }
+  }
 
   if (!plan) {
     artifact.finalVerdict.weakestStage = "assemblyPlan";

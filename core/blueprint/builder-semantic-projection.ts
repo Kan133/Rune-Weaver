@@ -12,8 +12,12 @@ import {
 } from "./blueprint-semantic-shaping";
 import { stripNegativeConstraintFragments } from "./semantic-lexical";
 import { buildModulePlanning } from "./module-planning.js";
-import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
+import {
+  getIntentGovernanceView,
+  hasGovernanceRevealBatchResolution,
+} from "../wizard/intent-governance-view.js";
 import { classifySchedulerTimerRisk, detectSelectionFlowAsk } from "./seam-authority";
+import { isDefinitionOnlyProviderBoundary } from "../wizard/intent-schema/definition-only-provider.js";
 
 export interface BlueprintSemanticProjection {
   modules: BlueprintModule[];
@@ -31,6 +35,10 @@ function hasConcreteTriggerBinding(parameters: Record<string, unknown>): boolean
     || (typeof parameters.triggerKey === "string" && parameters.triggerKey.trim().length > 0)
     || (typeof parameters.toKey === "string" && parameters.toKey.trim().length > 0),
   );
+}
+
+function isRevealBatchImmediateSelection(schema: IntentSchema): boolean {
+  return hasGovernanceRevealBatchResolution(schema);
 }
 
 function upsertModule(modules: BlueprintModule[], newModule: BlueprintModule): void {
@@ -68,12 +76,18 @@ function createTypedRequirementModule(
   schema: IntentSchema,
 ): BlueprintModule | null {
   const category = resolveRequirementCategory(req, schema);
-  const role = resolveRequirementRole(req, category, schema, [
-    req.id,
-    req.summary,
-    ...(req.inputs || []),
-    ...(req.outputs || []),
-  ]);
+  const revealBatchImmediate = isRevealBatchImmediateSelection(schema);
+  const role =
+    revealBatchImmediate && category === "rule"
+      ? "reveal_batch_runtime"
+      : revealBatchImmediate && category === "ui"
+        ? "reveal_surface"
+        : resolveRequirementRole(req, category, schema, [
+          req.id,
+          req.summary,
+          ...(req.inputs || []),
+          ...(req.outputs || []),
+        ]);
   const parameters = resolveRequirementParameters(req, category, schemaParams, schema);
   if (category === "trigger" && !hasConcreteTriggerBinding(parameters)) {
     return null;
@@ -101,14 +115,27 @@ function createFunctionalModule(
   index: number,
   prefix: string,
   schemaParams: Record<string, unknown>,
+  schema: IntentSchema,
 ): BlueprintModule | null {
   const sanitizedRequirement = stripNegativeConstraintFragments(req);
   if (isNegativeConstraintRequirement(req) || sanitizedRequirement.length === 0) {
     return null;
   }
 
-  const category = inferCategoryFromRequirement(sanitizedRequirement);
-  const role = inferRoleFromCategory(category, [sanitizedRequirement]);
+  const definitionOnlyProviderShell =
+    isDefinitionOnlyProviderBoundary(schema, schema.request?.rawPrompt)
+    && /ability shell|provider shell|shell definition|feature-owned shell|later external granting|定义|壳/iu.test(sanitizedRequirement);
+  const category = definitionOnlyProviderShell ? "effect" : inferCategoryFromRequirement(sanitizedRequirement);
+  const revealBatchImmediate = isRevealBatchImmediateSelection(schema);
+  const role =
+    revealBatchImmediate && category === "rule"
+      ? "reveal_batch_runtime"
+      : revealBatchImmediate && category === "ui"
+        ? "reveal_surface"
+        : category === "effect"
+          && definitionOnlyProviderShell
+      ? "gameplay_ability"
+      : inferRoleFromCategory(category, [sanitizedRequirement]);
   const parameters = extractModuleParameters(category, schemaParams);
   if (category === "trigger" && !hasConcreteTriggerBinding(parameters)) {
     return null;
@@ -192,12 +219,16 @@ function addMechanicModules(
   prefix: string,
   schemaParams: Record<string, unknown>,
 ): void {
+  const revealBatchImmediate = isRevealBatchImmediateSelection(schema);
   for (const category of inferCategoriesFromMechanics(schema)) {
-    const role = inferRoleFromCategory(
-      category,
-      collectMechanicContextSignals(schema, category),
-      detectSelectionFlowAsk(schema),
-    );
+    const role =
+      revealBatchImmediate && category === "rule"
+        ? "reveal_batch_runtime"
+        : inferRoleFromCategory(
+          category,
+          collectMechanicContextSignals(schema, category),
+          detectSelectionFlowAsk(schema),
+        );
     const parameters = collectMechanicModuleParameters(schema, category, role, schemaParams);
     if (category === "trigger" && !hasConcreteTriggerBinding(parameters)) {
       continue;
@@ -253,9 +284,12 @@ function createUIModule(
   index: number,
   prefix: string,
   schemaParams: Record<string, unknown>,
+  schema: IntentSchema,
 ): BlueprintModule {
   const parameters = extractModuleParameters("ui", schemaParams);
-  const role = inferRoleFromCategory("ui", [surface]);
+  const role = isRevealBatchImmediateSelection(schema)
+    ? "reveal_surface"
+    : inferRoleFromCategory("ui", [surface]);
   return {
     id: `${prefix}ui_${index}`,
     role,
@@ -295,6 +329,7 @@ function buildFlatModules(
       i,
       modulePrefix,
       schemaParams,
+      schema,
     );
     if (module) {
       upsertModule(modules, module);
@@ -314,7 +349,7 @@ function buildFlatModules(
     for (let i = 0; i < governance.ui.surfaces.length; i += 1) {
       upsertModule(
         modules,
-        createUIModule(governance.ui.surfaces[i], i, modulePrefix, schemaParams),
+        createUIModule(governance.ui.surfaces[i], i, modulePrefix, schemaParams, schema),
       );
     }
   }

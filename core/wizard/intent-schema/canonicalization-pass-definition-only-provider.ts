@@ -3,6 +3,7 @@ import type { IntentSchemaCanonicalizationPass } from "./shared.js";
 import {
   analyzeDefinitionOnlyProviderSemantics,
   canonicalizeDefinitionOnlyProviderCandidate,
+  reconcileDefinitionOnlyProviderOpenSemanticResidue,
 } from "./definition-only-provider.js";
 
 export const DEFINITION_ONLY_PROVIDER_CANONICALIZATION_PASS: IntentSchemaCanonicalizationPass = {
@@ -21,12 +22,12 @@ export const DEFINITION_ONLY_PROVIDER_CANONICALIZATION_PASS: IntentSchemaCanonic
   ],
   matches(candidate, context) {
     const semantics = analyzeDefinitionOnlyProviderSemantics(candidate, context.rawText);
-    return semantics.matches && semantics.hasConsumerSideDrift;
+    return semantics.matches;
   },
   apply({ candidate, semanticAnalysis }) {
     const normalizedCandidate = canonicalizeDefinitionOnlyProviderCandidate(candidate);
     const openSemanticResidue = appendResolvedAssumptionResidue(
-      semanticAnalysis.openSemanticResidue,
+      reconcileDefinitionOnlyProviderOpenSemanticResidue(semanticAnalysis.openSemanticResidue),
       {
         summaries: [
           "Definition-only provider shells stay feature-owned and session-local; downstream grant or attachment logic belongs to consumers, not this feature.",

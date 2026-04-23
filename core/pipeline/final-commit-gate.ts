@@ -6,6 +6,7 @@ import type {
   ModuleImplementationRecord,
   ValidationStatus,
 } from "../schema/types.js";
+import { buildGroundingReviewReason } from "../governance/grounding.js";
 
 export interface FinalCommitGateInput {
   blueprint: Blueprint;
@@ -39,7 +40,12 @@ function unique(values: string[]): string[] {
 function collectModuleReviewReasons(moduleRecords: ModuleImplementationRecord[]): string[] {
   return unique(
     moduleRecords.flatMap((module) =>
-      (module.reviewReasons || []).map((reason) => `[module:${module.moduleId}] ${reason}`),
+      [
+        ...(module.reviewReasons || []),
+        buildGroundingReviewReason(`module '${module.moduleId}'`, module.groundingAssessment) || "",
+      ]
+        .filter((reason) => reason.trim().length > 0)
+        .map((reason) => `[module:${module.moduleId}] ${reason}`),
     ),
   );
 }

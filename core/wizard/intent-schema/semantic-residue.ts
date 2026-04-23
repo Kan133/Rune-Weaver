@@ -32,8 +32,14 @@ export function deriveIntentOpenSemanticResidue(
     input.candidate.resolvedAssumptions,
     input.promptHints,
   );
+  const derivedSelectionResidue = deriveSelectionFlowResolutionResidue(input);
 
-  return dedupeOpenSemanticResidue([...directUncertainties, ...legacyResidue, ...assumedResidue]);
+  return dedupeOpenSemanticResidue([
+    ...directUncertainties,
+    ...legacyResidue,
+    ...assumedResidue,
+    ...derivedSelectionResidue,
+  ]);
 }
 
 export function projectOpenSemanticResidueToUncertainties(
@@ -231,6 +237,48 @@ function normalizeResolvedAssumptionResidue(
     ),
     source: "schema.resolved_assumption" as const,
   }));
+}
+
+function deriveSelectionFlowResolutionResidue(
+  input: DeriveIntentOpenSemanticResidueInput,
+): IntentOpenSemanticResidue {
+  const resolutionMode = input.candidate.selection?.resolutionMode ?? input.promptHints.selectionResolutionMode;
+  if (resolutionMode === "player_confirm_single" || resolutionMode === "reveal_batch_immediate") {
+    return [];
+  }
+
+  const choiceCount =
+    input.promptHints.candidateCount ??
+    input.candidate.selection?.choiceCount;
+  const presentsMultipleCandidates = (choiceCount || 0) > 1;
+  const revealPresentationPressure = Boolean(
+    input.promptHints.candidatePool &&
+      input.promptHints.uiSurface &&
+      (presentsMultipleCandidates || input.promptHints.weightedDraw || input.promptHints.rarityDisplay),
+  );
+  const explicitPlayerChoice = Boolean(
+    input.promptHints.playerChoice ||
+      input.candidate.selection?.choiceMode === "user-chosen" ||
+      input.candidate.selection?.choiceMode === "hybrid" ||
+      input.candidate.selection?.cardinality === "single",
+  );
+
+  if (!revealPresentationPressure || explicitPlayerChoice) {
+    return [];
+  }
+
+  return [{
+    id: "clarify_selection_resolution_mode",
+    summary:
+      "The request shows multiple candidates but does not say whether the player chooses one or the revealed results resolve immediately without a follow-up choice.",
+    surface: "selection_flow",
+    class: "governance_relevant",
+    disposition: "open",
+    affects: ["intent", "blueprint"],
+    severity: "high",
+    targetPaths: resolveResidueTargetPaths("selection_flow"),
+    source: "canonicalization",
+  }];
 }
 
 function dedupeOpenSemanticResidue(

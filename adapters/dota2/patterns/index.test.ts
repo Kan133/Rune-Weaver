@@ -128,12 +128,37 @@ assert.ok(
   "rule.selection_flow should advertise the narrow local progression token"
 );
 assert.ok(
+  selectionFlow!.capabilities.includes("selection.flow.outcome_request_emit"),
+  "rule.selection_flow should advertise the normalized outcome request seam"
+);
+assert.ok(
   selectionFlow!.stateAffordances?.includes("progression.round_counter_state"),
   "rule.selection_flow should expose the round-counter progression state surface"
 );
 assert.ok(
   selectionFlow!.stateAffordances?.includes("progression.level_state"),
   "rule.selection_flow should expose the level progression state surface"
+);
+assert.ok(
+  !selectionFlow!.parameters?.some((param) => param.name === "effectApplication"),
+  "rule.selection_flow should no longer own concrete effectApplication parameters"
+);
+
+const outcomeRealizer = getPatternMeta("effect.outcome_realizer");
+assert.ok(outcomeRealizer, "effect.outcome_realizer should exist in the catalog");
+assert.ok(
+  outcomeRealizer!.capabilities.includes("selection.outcome.native_item_delivery"),
+  "effect.outcome_realizer should advertise native item delivery"
+);
+assert.ok(
+  outcomeRealizer!.capabilities.includes("selection.outcome.spawn_unit"),
+  "effect.outcome_realizer should advertise bounded unit spawn"
+);
+assert.ok(
+  outcomeRealizer!.constraints?.includes(
+    "当前仅支持 attribute_bonus / native_item_delivery / spawn_unit 三种 outcome kind"
+  ),
+  "effect.outcome_realizer should publicly narrow supported outcome kinds"
 );
 
 const linearProjectile = getPatternMeta("dota2.linear_projectile_emit");

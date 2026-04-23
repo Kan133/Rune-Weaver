@@ -99,10 +99,13 @@ export interface IntentSpatialContract {
   };
 }
 
+export type IntentSelectionResolutionMode = "player_confirm_single" | "reveal_batch_immediate";
+
 export interface IntentSelectionContract {
   mode?: "deterministic" | "weighted" | "filtered" | "user-chosen" | "hybrid";
   source?: "none" | "candidate-collection" | "weighted-pool" | "filtered-pool";
   choiceMode?: "none" | "user-chosen" | "random" | "weighted" | "hybrid";
+  resolutionMode?: IntentSelectionResolutionMode;
   cardinality?: "single" | "multiple";
   choiceCount?: number;
   repeatability?: "one-shot" | "repeatable" | "persistent";
@@ -691,6 +694,7 @@ export interface FeatureContractSurface {
   id: string;
   kind: "event" | "data" | "capability" | "state" | "integration";
   summary: string;
+  contractId?: string;
 }
 
 export interface FeatureStateScope {
@@ -711,6 +715,7 @@ export interface FeatureDependencyEdge {
   relation: FeatureDependencyRelation;
   targetFeatureId?: string;
   targetSurfaceId?: string;
+  targetContractId?: string;
   required?: boolean;
   summary?: string;
 }
@@ -771,6 +776,7 @@ export interface SynthesizedArtifact {
   content: string;
   summary: string;
   rationale: string[];
+  groundingAssessment?: GroundingAssessment;
   metadata?: Record<string, unknown>;
 }
 
@@ -797,6 +803,32 @@ export interface GroundingCheckResult {
   unknownSymbols: string[];
   warnings: string[];
   evidenceRefs?: EvidenceRef[];
+}
+
+export type GroundingAssessmentStatus =
+  | "none_required"
+  | "exact"
+  | "partial"
+  | "insufficient";
+
+export type GroundingAssessmentReasonCode =
+  | "no_symbols_required"
+  | "verified_symbols_present"
+  | "allowlisted_symbols_present"
+  | "weak_symbols_present"
+  | "unknown_symbols_present"
+  | "missing_exact_or_allowlisted_backing";
+
+export interface GroundingAssessment {
+  status: GroundingAssessmentStatus;
+  reviewRequired: boolean;
+  verifiedSymbolCount: number;
+  allowlistedSymbolCount: number;
+  weakSymbolCount: number;
+  unknownSymbolCount: number;
+  warnings: string[];
+  reasonCodes: GroundingAssessmentReasonCode[];
+  evidenceRefs: EvidenceRef[];
 }
 
 export interface ModuleImplementationRecord {
@@ -827,6 +859,7 @@ export interface ModuleImplementationRecord {
   integrationHints?: string[];
   stateExpectations?: string[];
   synthesizedArtifactIds?: string[];
+  groundingAssessment?: GroundingAssessment;
   metadata?: Record<string, unknown>;
 }
 
@@ -872,6 +905,7 @@ export interface ModuleSynthesisResult {
   assumptions?: string[];
   mustNotAddViolations?: string[];
   grounding?: GroundingCheckResult[];
+  groundingAssessment?: GroundingAssessment;
   compatibilityPatternId?: string;
 }
 
@@ -890,6 +924,7 @@ export interface ArtifactSynthesisResult {
   retrievalSummary?: RetrievalSummary;
   evidenceRefs?: EvidenceRef[];
   grounding?: GroundingCheckResult[];
+  groundingAssessment?: GroundingAssessment;
   compatibilityPatternId?: string;
 }
 
@@ -1014,6 +1049,11 @@ export type SourceBackedFeatureAuthoringMode = "source-backed";
 export type SourceBackedFeatureProfile = string;
 export type SelectionPoolObjectKind = "talent" | "equipment" | "skill_card_placeholder";
 export type SelectionPoolObjectTier = "R" | "SR" | "SSR" | "UR";
+export type SelectionPoolAttributeName = "strength" | "agility" | "intelligence" | "all";
+export type OutcomePositionPolicy = "hero_origin" | "hero_forward" | "cursor_point";
+export type NativeItemDeliveryMode = "hero_inventory" | "ground_drop";
+export type NativeItemInventoryFallback = "drop_to_ground" | "skip_delivery";
+export type SpawnUnitTeamScope = "player_team";
 
 export interface SourceBackedParameterSurface {
   invariants?: string[];
@@ -1025,12 +1065,84 @@ export interface FeatureAuthoringSourceArtifactRef {
   path: string;
 }
 
+export interface AttributeBonusOutcomeSpec {
+  kind: "attribute_bonus";
+  attribute: SelectionPoolAttributeName;
+  value: number;
+}
+
+export interface NativeItemDeliveryOutcomeSpec {
+  kind: "native_item_delivery";
+  itemName: string;
+  deliveryMode: NativeItemDeliveryMode;
+  fallbackWhenInventoryFull: NativeItemInventoryFallback;
+  positionPolicy: OutcomePositionPolicy;
+}
+
+export interface SpawnUnitOutcomeSpec {
+  kind: "spawn_unit";
+  unitName: string;
+  spawnCount?: number;
+  positionPolicy: OutcomePositionPolicy;
+  teamScope?: SpawnUnitTeamScope;
+}
+
+export type OutcomeSpec =
+  | AttributeBonusOutcomeSpec
+  | NativeItemDeliveryOutcomeSpec
+  | SpawnUnitOutcomeSpec;
+
 export interface SelectionPoolAuthoredObject {
   id: string;
   label: string;
   description: string;
   weight: number;
   tier: SelectionPoolObjectTier;
+  outcome?: OutcomeSpec;
+}
+
+export interface SelectionPoolReusableObject {
+  objectId: string;
+  label: string;
+  description: string;
+  outcome?: OutcomeSpec;
+}
+
+export interface SelectionPoolLocalCollection {
+  collectionId: string;
+  visibility?: "local" | "exported";
+  objects: SelectionPoolReusableObject[];
+}
+
+export type SelectionPoolObjectRef =
+  | {
+      source: "local_collection";
+      collectionId: string;
+      objectId: string;
+    }
+  | {
+      source: "feature_export";
+      featureId: string;
+      collectionId: string;
+      objectId: string;
+    }
+  | {
+      source: "external_catalog";
+      catalogId: string;
+      objectId: string;
+    };
+
+export interface SelectionPoolPoolEntryDisplayOverride {
+  label?: string;
+  description?: string;
+}
+
+export interface SelectionPoolPoolEntry {
+  entryId: string;
+  objectRef: SelectionPoolObjectRef;
+  weight: number;
+  tier: SelectionPoolObjectTier;
+  displayOverride?: SelectionPoolPoolEntryDisplayOverride;
 }
 
 export interface SelectionPoolInventoryContract {
@@ -1044,14 +1156,17 @@ export interface SelectionPoolInventoryContract {
 
 export interface SelectionPoolEffectProfile {
   kind: "tier_attribute_bonus_placeholder";
-  rarityAttributeBonusMap: Record<string, { attribute: string; value: number }>;
+  rarityAttributeBonusMap: Record<string, { attribute: SelectionPoolAttributeName; value: number }>;
 }
 
 export interface SelectionPoolFeatureAuthoringParameters {
   triggerKey: string;
   choiceCount: number;
   objectKind?: SelectionPoolObjectKind;
-  objects: SelectionPoolAuthoredObject[];
+  localCollections?: SelectionPoolLocalCollection[];
+  poolEntries?: SelectionPoolPoolEntry[];
+  /** @deprecated compatibility input only; normalize into localCollections + poolEntries and do not persist on new writes */
+  objects?: SelectionPoolAuthoredObject[];
   drawMode?: "single" | "multiple_without_replacement" | "multiple_with_replacement";
   duplicatePolicy?: "allow" | "avoid_when_possible" | "forbid";
   poolStateTracking?: "none" | "session";
@@ -1076,6 +1191,7 @@ export interface SelectionPoolFeatureAuthoringParameters {
     description?: string;
     disabled?: boolean;
   };
+  /** @deprecated compatibility input only; normalize into objects[].outcome and do not persist on new writes */
   effectProfile?: SelectionPoolEffectProfile;
 }
 
@@ -1088,7 +1204,7 @@ export interface SelectionPoolParameterSurface {
     minimum: number;
     maximum: number;
   };
-  objects: {
+  poolEntries: {
     minItems: number;
     seededWhenMissing: boolean;
   };
@@ -1247,6 +1363,7 @@ export interface BlueprintProposal {
 export interface ModuleNeed extends Record<string, unknown> {
   moduleId: string;
   semanticRole: string;
+  category?: BlueprintModule["category"];
   backboneKind?: "gameplay_ability" | "ui_surface" | "supporting_surface";
   facetIds?: string[];
   coLocatePreferred?: boolean;

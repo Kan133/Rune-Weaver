@@ -67,6 +67,7 @@ function applyDeterministicMechanicHints(
   const hasEffectApplication =
     typeof extractedParameters.effectApplication === "object"
     && extractedParameters.effectApplication !== null;
+  const revealBatchImmediate = schema.selection?.resolutionMode === "reveal_batch_immediate";
 
   return {
     ...mechanics,
@@ -77,9 +78,11 @@ function applyDeterministicMechanicHints(
       || typeof extractedParameters.drawMode === "string"
       || typeof extractedParameters.duplicatePolicy === "string",
     playerChoice:
-      mechanics.playerChoice
-      || typeof extractedParameters.selectionPolicy === "string"
-      || typeof extractedParameters.choiceCount === "number",
+      revealBatchImmediate
+        ? false
+        : mechanics.playerChoice
+          || typeof extractedParameters.selectionPolicy === "string"
+          || typeof extractedParameters.choiceCount === "number",
     uiModal:
       mechanics.uiModal
       || typeof extractedParameters.payloadShape === "string"

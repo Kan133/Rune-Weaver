@@ -3,7 +3,11 @@ import type {
   IntentSchema,
   ModuleFacetSpec,
 } from "../schema/types.js";
-import { getIntentGovernanceView } from "../wizard/intent-governance-view.js";
+import {
+  getIntentGovernanceView,
+  hasGovernanceRevealBatchResolution,
+} from "../wizard/intent-governance-view.js";
+import { isDefinitionOnlyProviderBoundary } from "../wizard/intent-schema/definition-only-provider.js";
 import {
   inferIntegrationHints,
   inferInvariants,
@@ -47,7 +51,11 @@ export function isGameplayAbilityBackboneEligible(
   flatModules: BlueprintModule[],
 ): boolean {
   const governance = getIntentGovernanceView(schema);
-  if (detectSelectionFlowAsk(schema)) {
+  const revealBatchResolution = hasGovernanceRevealBatchResolution(schema);
+  const definitionOnlyProvider =
+    isDefinitionOnlyProviderBoundary(schema, schema.request?.rawPrompt)
+    && flatModules.some((module) => module.role === "gameplay_ability");
+  if (detectSelectionFlowAsk(schema) && !revealBatchResolution) {
     return false;
   }
   if ((schema.requirements.typed || []).some((requirement) => requirement.kind === "integration")) {
@@ -56,7 +64,19 @@ export function isGameplayAbilityBackboneEligible(
   if ((governance.composition.dependencies?.length || 0) > 0) {
     return false;
   }
-  if ((schema.integrations?.expectedBindings || []).some((binding) => binding.kind === "data-source")) {
+  const hasDataSourceBinding = (schema.integrations?.expectedBindings || []).some((binding) => binding.kind === "data-source");
+  const hasExternalContentDependency = (governance.content.collections || []).some((collection) =>
+    collection.ownership === "external" || collection.ownership === "shared",
+  );
+  if (revealBatchResolution) {
+    return !hasExternalContentDependency
+      && !((governance.state.states || []).some((state) =>
+      state.owner === "external" || state.lifetime === "persistent",
+    )) && flatModules.some((module) =>
+      ["trigger", "data", "rule", "effect", "resource"].includes(module.category),
+    );
+  }
+  if (hasDataSourceBinding) {
     return false;
   }
   if ((governance.state.states || []).some((state) =>
@@ -65,6 +85,9 @@ export function isGameplayAbilityBackboneEligible(
       || state.lifetime === "persistent",
   )) {
     return false;
+  }
+  if (definitionOnlyProvider) {
+    return true;
   }
 
   const schedulerRisk = classifySchedulerTimerRisk(schema);

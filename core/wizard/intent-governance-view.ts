@@ -103,16 +103,33 @@ export function hasGovernanceFeatureOwnedCandidateCollection(schema: IntentSchem
   );
 }
 
+export function hasGovernancePlayerConfirmedSelection(schema: IntentSchema): boolean {
+  const view = getIntentGovernanceView(schema);
+  return Boolean(
+    view.selection.resolutionMode === "player_confirm_single" ||
+      view.mechanics.playerChoice ||
+      view.selection.choiceMode === "user-chosen" ||
+      view.selection.choiceMode === "hybrid" ||
+      (view.selection.cardinality === "single" && (view.selection.choiceCount || 0) > 1),
+  );
+}
+
+export function hasGovernanceRevealBatchResolution(schema: IntentSchema): boolean {
+  return getIntentGovernanceView(schema).selection.resolutionMode === "reveal_batch_immediate";
+}
+
 export function hasGovernanceSelectionFlowContract(schema: IntentSchema): boolean {
   const view = getIntentGovernanceView(schema);
+  if (!hasGovernancePlayerConfirmedSelection(schema) || hasGovernanceRevealBatchResolution(schema)) {
+    return false;
+  }
+
   return Boolean(
     view.mechanics.candidatePool ||
       view.mechanics.weightedSelection ||
-      view.mechanics.playerChoice ||
       view.mechanics.uiModal ||
-      view.selection.present ||
+      hasGovernancePlayerConfirmedSelection(schema) ||
       view.selection.source !== undefined ||
-      view.selection.cardinality !== undefined ||
       view.selection.repeatability !== undefined ||
       view.selection.duplicatePolicy !== undefined ||
       view.selection.inventory !== undefined,

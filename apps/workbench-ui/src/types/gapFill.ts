@@ -4,9 +4,13 @@ export interface GapFillBoundaryMeta {
 }
 
 export const GAP_FILL_BOUNDARY_META: Record<string, GapFillBoundaryMeta> = {
+  'selection_outcome.realization': {
+    label: '选择结果实现层',
+    description: '只改对象 outcome 到宿主原生结果的实现，不改触发键、桥接、池状态或 UI 通道。',
+  },
   'selection_flow.effect_mapping': {
-    label: '选择流程效果映射',
-    description: '只改选择结果与实际效果的映射，不改触发键、桥接或 UI 通道。',
+    label: '选择流程效果映射（兼容别名）',
+    description: '兼容旧边界 id；当前真实实现层已经迁到 selection_outcome.realization。',
   },
   'weighted_pool.selection_policy': {
     label: '权重池选择策略',
