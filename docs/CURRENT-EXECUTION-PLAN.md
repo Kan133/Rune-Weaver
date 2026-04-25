@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-phase-change
-> Last verified: 2026-04-23
+> Last verified: 2026-04-25
 > Read when: deciding the active Dota2 mainline execution queue and critical-path task order
 > Do not use for: cross-track coordination by itself or long-term roadmap planning
 
@@ -33,6 +33,7 @@ The active queue is now:
 - keep compatibility-only fallback visibly secondary for stale bridge/workspace payloads without turning it back into product authority
 - use `export-bridge` as the only legacy payload refresh lane when stale payloads need to be retired
 - keep checked-in public samples and dev/test fixtures from re-teaching raw legacy payload shapes as the default product path
+- keep the repaired create front-door closed now that explicit choose-one `selection_pool` asks and catalog-backed `equipment` draws no longer leak into wizard-default or exploratory fallback
 
 ## Current Goal
 
@@ -45,6 +46,12 @@ Current target chain:
 ## Current Blocker
 
 The primary blocker is no longer missing architecture or case evidence.
+
+The former create-front-door blocker is also closed:
+
+- explicit choose-one local weighted-selection asks no longer stop at Stage 1 by default
+- bounded external-catalog equipment draws close through honest `selection_pool` family/source truth
+- ambiguous weighted-card prompts still block honestly on unresolved `selection_flow`
 
 The primary blocker is keeping product surfaces honest while stale payloads still exist:
 

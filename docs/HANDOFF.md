@@ -4,9 +4,9 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-phase-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-25
 > Read when: resuming active work, aligning workers, or deciding the next implementation slice
-> Do not use for: replacing architecture baseline, task contract, or execution queue truth
+> Do not use for: replacing architecture baseline, task contract, or freshest session-sync blocker truth
 
 ## Purpose
 
@@ -50,27 +50,26 @@ Add when relevant:
 > Do not use it by itself as the execution queue or architecture baseline.
 > Pair it with [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md), [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md), and the latest session-sync notes when freshness matters.
 
-The current mission is not "finish the old evidence-closure queue again."
+The current mission is not to reopen gap-fill-era mainline work.
 
 It is:
 
-**productize the post-write business-logic fill path without turning Gap Fill into a second architecture or execution authority.**
+**hold Dota2 Step 7 productization honest after the governance read-model and create-front-door closure landed.**
 
 Current execution priorities:
 
-- keep the current feature-scoped Gap Fill path stable as a real CLI-backed flow
-- carry the proven review/apply/validate chain into the next bounded mechanism case
-- keep blueprint / pattern / generator as structure and Gap Fill as business-logic refinement
-- choose the next honest proof point from the now-stable chain instead of reopening Talent Draw-only closure work by default
+- keep bridge / connected-host / workbench on the same `governanceReadModel` projection
+- keep compatibility-only fallback visibly limited to legacy display, not product authority
+- keep `export-bridge` as the only stale payload refresh lane
+- keep the no-core boundary intact until second-host evidence exists
+- treat any newly exposed same-host integration conflicts as downstream governance/integration work, not as a reason to reopen Stage 1 wizard authority
 
 Still deferred:
 
-- moving business logic back into `core/wizard`
-- `regenerate`
-- `rollback`
-- structure-level update
-- second host
-- broad workbench productization beyond thin CLI-backed orchestration
+- lifting the governance read-model into core
+- second-host genericization claims
+- broad new product semantics beyond existing Dota2 Step 7 control-plane truth
+- turning Workbench into a lifecycle authority
 
 ## Current Reality
 
@@ -80,28 +79,28 @@ Still deferred:
 
 What already exists:
 
-- authoritative CLI `create`
+- authoritative CLI `run/create`
 - authoritative CLI `update`
-- authoritative CLI `delete`
-- minimum governance baseline
-- host ownership boundary
-- workspace state file
-- bridge export for UI consumption
-- workspace-driven preview/onboarding UI shell
-- feature-scoped `gapFillBoundaries` recorded in workspace state
-- CLI-backed `dota2 gap-fill` that can operate from a selected feature
-- Workbench feature detail can launch the CLI-backed Gap Fill planning flow
+- authoritative CLI `regenerate`
+- authoritative CLI `rollback`
+- authoritative CLI `repair`, `doctor`, and `validate`
+- root-level bridge export with `governanceReadModel`
+- connected-host live status with adapter-owned `governanceReadModel`
+- workbench read-model-first product surfaces
+- display-only compatibility fallback for legacy payloads
+- event-driven, `export-bridge`-only stale payload refresh lane
+- create front-door closure for explicit choose-one local `selection_pool` asks, including honest external-catalog equipment flow
 
-What is still incomplete:
+What is still incomplete or intentionally bounded:
 
-- Approval/apply/validate now exists as a structured product flow and has been exercised successfully on a real host, but Dota2 still has only one fully exercised mechanism path.
-- Fresh-host manual Talent Draw evidence still exists as historical closure work, but it is no longer the day-to-day mainline blocker for routing new worker effort.
-- Older workspaces may still require manual boundary choice through backward-compatibility fallbacks.
-- Workbench remains thinner than the README story and must not be mistaken for a second executor.
+- compatibility-only fallback still exists for old bridge/raw workspace/host-status/workbench-result payloads and must not regrow authority
+- `repairability` remains observational and can honestly stay `not_checked` on connected-host/workbench inspect surfaces
+- Workbench is a product entry and review shell, not an authoritative executor
+- second-host evidence still does not exist for a core-generic governance read-model
 
 ## Working Mode
 
-Use worker agents for narrow scoped work.
+Use worker agents for narrow scoped work when safe and available.
 
 Do:
 
@@ -148,44 +147,51 @@ Do not:
 
 For the active milestone:
 
-- `create`
-  - must create a persisted feature with artifacts, bindings, and workspace record
+- `run/create`
+  - must create a persisted feature with artifacts, bindings, workspace record, and honest governance truth
 - `update`
   - must keep the same `featureId`
   - must only touch that feature's owned files and allowed bridge updates
-  - is not semantic incremental update
-- `delete`
-  - must unload the feature from workspace, owned files, and bridge exposure
+- `regenerate`
+  - must preserve lifecycle/governance truth and remain governed by the same final gates
+- `rollback`
+  - must remain bounded by owned scope and dependency safety
+- `repair`
+  - is bounded local repair / muscle fill, not a second generation architecture
 
 Agents must not treat:
 
-- metadata-only update
-- workspace-record-only delete
+- compatibility-only UI display
+- bridge snapshots
+- connected-host read-only observations
 
-as accepted finished behavior.
+as replacements for canonical workspace authority.
 
 ## Minimum Governance v1
 
-The governance baseline only needs to answer:
+The governance baseline needs to answer:
 
 1. which feature is the target
 2. which files and surfaces are owned
 3. whether another feature already owns the touched area
 4. whether a bridge or integration point is already occupied
 5. whether delete would break a dependent feature
-6. whether the write should proceed, block, or ask for confirmation
+6. whether the write should proceed, block, or require review
+
+In Step 7 product surfaces, this truth is projected through the Dota2 governance read-model; product surfaces must not reinvent it locally.
 
 ## Frontend / Workbench Boundary
 
 Current workbench/UI should be treated as:
 
-- feature/workspace visualization
-- onboarding shell
-- host/workspace evidence surface
-- CLI-backed Gap Fill launch surface
-- not the primary lifecycle truth
+- product entry
+- workspace / feature visualization
+- governed bridge and connected-host review surface
+- orchestration shell
+- evidence / inspect surface
+- not the primary lifecycle authority
 
-The current UI should follow workspace-backed feature management, not invent a second execution system.
+The current UI should follow workspace-backed feature management and the Dota2 governance read-model, not invent a second execution system.
 
 ## Authoritative Lifecycle Path
 
@@ -196,23 +202,27 @@ This currently includes:
 - `dota2 init`
 - `dota2 run`
 - `dota2 update`
-- `dota2 delete`
-- `dota2 gap-fill`
+- `dota2 regenerate`
+- `dota2 rollback`
+- `dota2 repair`
+- `dota2 doctor`
+- `dota2 validate`
+- `export-bridge`
 
-`dota2 init` is the formal host-readiness prerequisite before lifecycle operations on a new host.
+Boundary reminders:
 
-`dota2 gap-fill` is the current post-write business-logic refinement path.
-It remains downstream of blueprint / pattern / generator structure and must not be described as a freeform architecture or host-routing authority.
+- `export-bridge` is the only stale payload refresh lane
+- `doctor` / `validate` / `repair` do not refresh stale payloads
+- connected-host status is read-only and cheap; it does not implicitly run doctor/validate
 
 The workbench path remains:
 
 - preview / visualization
-- onboarding shell
-- evidence surface
-- Gap Fill entry and review shell
+- review / inspect / connected-host entry
+- source warning / legacy compatibility display
 - non-authoritative for lifecycle acceptance
 
-Do not use workbench as proof of product-grade lifecycle behavior.
+Do not use workbench as proof that lifecycle authority moved out of CLI.
 
 ## Next Implementation Order
 
@@ -221,12 +231,11 @@ Do not use workbench as proof of product-grade lifecycle behavior.
 > The authoritative Dota2 execution queue remains [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md).
 > Use [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) and the latest session-sync notes when same-day freshness matters.
 
-1. replace raw boundary ids with clearer boundary labels and selection guidance
-2. keep the review/apply/validate path stable on real hosts without inventing a second executor
-3. open the next bounded Dota2 mechanism case on the same real chain
-4. only after a second case is honest and stable should broader gap-fill surface work resume
-
-Use [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md) for the active worker-task queue.
+1. keep read-model-first product consumption stable across bridge, connected host, CLI inspect wording, and workbench UI
+2. keep compatibility-only fallback compressed to legacy display only
+3. keep `export-bridge` as the sole stale payload refresh lane
+4. keep the no-core guard intact until second-host evidence exists
+5. treat newly exposed same-host integration conflicts as downstream governance/integration work, not as a reason to widen wizard/front-door authority
 
 ## Reference Docs
 
@@ -244,7 +253,7 @@ Use these when needed:
 
 Treat these as planning/reference, not current shipped truth:
 
-- `WORKBENCH-*`
-- semantic update contracts
-- regenerate/rollback-heavy lifecycle docs
-- historical task-history files
+- long-range product/roadmap docs
+- core-generic read-model ideas
+- second-host claims
+- historical packet-era validation narratives

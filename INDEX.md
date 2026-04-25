@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-phase-change
-> Last verified: 2026-04-20
+> Last verified: 2026-04-25
 > Read when: entering the repo and locating the right control docs
 > Do not use for: overriding DOC-STATUS-REGISTRY or AGENT-DOC-ROUTING
 
@@ -44,6 +44,7 @@ Rune Weaver currently has:
 - stable low-frequency baseline docs for the ratified V2 lifecycle, architecture, and workspace truth
 - fresh session-sync notes for same-day mainline status
 - a shared plan for cross-track coordination
+- Step 7-aligned product/entry docs for read-model-first bridge, connected-host, and workbench surfaces
 
 Do not treat this file as the freshest step/blocker tracker.
 Do not treat [README.md](/D:/Rune%20Weaver/README.md) as the freshest same-day status board either; it is the public product boundary, not the live execution queue.
@@ -119,7 +120,7 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 ### Reference, Not Single Source Of Truth
 
 - [PRODUCT-GUIDE-FOR-AI-PM-ZH.md](/D:/Rune%20Weaver/docs/PRODUCT-GUIDE-FOR-AI-PM-ZH.md)
-  - 面向 AI 产品经理和外部协作者的公开产品说明，解释 workflow、feature-first 方法论与 Rune Weaver 的泛化路径；不替代 README 的当前能力边界
+  - 面向 AI 产品经理和外部协作者的公开产品说明，解释 workflow、feature-first 方法论、Step 7 产品化边界与 Rune Weaver 的泛化路径；不替代 README 的当前能力边界
 - [PRODUCT.md](/D:/Rune%20Weaver/docs/PRODUCT.md)
 - [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md)
   - planning-only and may lag fresh mainline status
@@ -128,6 +129,7 @@ For same-day current-step / blocker truth, prefer [RW-SHARED-PLAN.md](/D:/Rune%2
 - [FEATURE-CONFLICT-GOVERNANCE-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/FEATURE-CONFLICT-GOVERNANCE-GUARDRAILS-ZH.md)
 - [FEATURE-BOUNDARY-RELATIONSHIP-GUARDRAILS-ZH.md](/D:/Rune%20Weaver/docs/FEATURE-BOUNDARY-RELATIONSHIP-GUARDRAILS-ZH.md)
 - [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md)
+  - 当前可公开演示的 CLI authoritative path 与 governed product-surface walkthrough
 
 ### Planning Narrative Only
 

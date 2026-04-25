@@ -1,10 +1,10 @@
-# Rune Weaver
+﻿# Rune Weaver
 
 > Status: authoritative
 > Audience: mixed
 > Doc family: baseline
 > Update cadence: on-phase-change
-> Last verified: 2026-04-18
+> Last verified: 2026-04-25
 > Read when: understanding the public product boundary, current Dota2 capability, and the governed feature-generation model
 > Do not use for: same-day execution priority, freshest blocker truth, or replacing session-sync/current-plan inputs
 
@@ -12,44 +12,42 @@
 
 **Rune Weaver 是一个把自然语言 feature 意图转成受治理、可验证、可维护游戏代码的系统。**
 
-它追求的不是“随便生成一点代码”，而是把一个 feature 作为一等对象管理：
+它追求的不是“让模型随便生成一点代码”，而是把一个 feature 作为一等对象管理：
 
 - 有稳定 `featureId`
 - 有 owned files 和 bridge 入口
-- 有更新、重生成、删除的生命周期
-- 有 feature 间依赖与验证状态
-- 有 review artifact 和 workspace truth
+- 有 create / update / regenerate / delete / repair 的生命周期
+- 有 feature 间依赖、治理状态、grounding 与 review truth
+- 有 workspace truth、bridge projection 和 product-facing governance read-model
 
 ## 当前状态
 
-**As of 2026-04-18**
+**As of 2026-04-25**
 
-- 当前唯一主线仍是 Dota2。
-- Dota2 主线已经 ratify 到 **V2 governance-first** 语义。
-- 当前主链支持：
-  - `create`
-  - `update`
-  - `regenerate`
-  - `delete`
-  - `rollback` maintenance command
-- 当前 exploratory / guided-native 路径不再把 synthetic `dota2.exploratory_ability` 当成主实现；新主语义是 **ArtifactSynthesis + LocalRepair + final commit gate**。
-- `gap-fill` 仍保留兼容命令名，但当前产品语义已经降位为 **bounded local repair / muscle fill**。
+- 当前唯一可信主线仍是 Dota2。
+- Dota2 主线当前处于 **Step 7: Productization / UX bridge**。
+- Dota2 已完成 V2 governance-first 控制面，并把 product surfaces 收口到 **read-model-first**：
+  - bridge export 带 root-level `governanceReadModel`
+  - connected-host status 在有 workspace 时返回 `governanceReadModel`
+  - workbench / inspect / doctor wording 优先消费同一投影，而不是各自推导 lifecycle truth
+- compatibility-only fallback 仍存在，但只服务旧 bridge / raw workspace / old host-status / legacy workbench-result payload，且只允许作为 **legacy display boundary**。
+- `export-bridge` 是唯一 stale payload refresh lane。
 - CLI 仍是 authoritative lifecycle path。
-- Workbench 仍是 orchestration / review / evidence shell，不是 authoritative executor。
+- Workbench 仍是 product entry / orchestration / review shell，不是 lifecycle authority。
 - War3 仍是 bounded secondary lane，不应被描述成 write-ready 第二宿主。
 
 如果你需要同日 step / blocker truth，请优先看 [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md) 和 `docs/session-sync/` 下最新的 mainline note。
 
-## 核心工作流
+## 当前主链
 
-当前接受的主链是：
+当前接受的 Dota2 主链是：
 
 ```mermaid
 flowchart LR
   A["User Request"] --> B["Wizard"]
-  B --> C["IntentSchema"]
+  B --> C["IntentSchema / Clarification Signals"]
   C --> D["Blueprint Stage"]
-  D --> E["Pattern Retrieval / Strategy Selection"]
+  D --> E["Pattern / Family Resolution"]
   E --> F["AssemblyPlan"]
   F --> G["HostRealizationPlan"]
   G --> H["GeneratorRoutingPlan"]
@@ -59,56 +57,102 @@ flowchart LR
   K --> L["Host / Runtime Validation"]
   L --> M["Final Commit Decision"]
   M --> N["Workspace Lifecycle Update"]
+  N --> O["Governance Read-Model Projection"]
 ```
 
 这里有几条当前 baseline：
 
-- Blueprint 内部可以使用 `DesignDraft`、`FeatureContract`、`FeatureDependencyEdge`、阶段性 `commitDecision`，但外部公开名字仍保持 `IntentSchema` / `Blueprint` / `FinalBlueprint`。
-- family 和 pattern 是 **reuse asset**，不是 mechanic admission gate。
-- 未命中 family / pattern 的 ask，不应该因为 catalog 没见过就被判死；它应该进入 `guided_native` 或 `exploratory`。
-- `blocked` 的含义已经收紧到 ownership / safety / host-impossible / dependency-breakage / validation-failure。
-- 最终 authority 不是 blueprint 的 `ready | weak | blocked`，而是链路末尾的 **final commit decision**。
+- 最终 authority 不是 Stage 1 语义姿态，也不是单个 UI surface 的 ready/weak 命名，而是链路末尾的 **final commit decision** 与后续 canonical workspace truth。
+- clarification 只负责 observation/signals；真正的 blocking authority 由 Blueprint 之后的 execution authority 决定。
+- family 和 pattern 是 **reusable governance truth**，不是 prompt 级 mechanic allowlist。
+- 未命中 family / pattern 的 ask，不应因为 catalog 没见过就被判死；它应进入 honest `guided_native` 或 `exploratory` 路径，并保留 review truth。
+- `blocked` 的含义收紧到 ownership / safety / host-impossible / unresolved dependency / validation-failure。
 
-## Blueprint、Pattern、Family、Repair 各自做什么
+## Dota2 已落地的关键边界
 
-- `Blueprint`
-  - 决定 feature 结构、owned scope、dependency contract、strategy 选择
-- `Family`
-  - 提供可重复 feature 类别的 skeleton
-- `Pattern`
-  - 提供可复用机制 tactics 和 host binding
-- `ArtifactSynthesis`
-  - 在 target surfaces 已固定后，为 guided-native / exploratory 路径生成 owned candidate artifacts
-- `LocalRepair`
-  - 只在 `fillContracts` / owned scope 内做 bounded patch 和 muscle fill
+### Create / Update / Regenerate / Delete / Repair
 
-Rune Weaver 的原则是：
+- CLI 支持：
+  - `create` / `run`
+  - `update`
+  - `regenerate`
+  - `rollback` / delete-style maintenance
+  - `repair`
+  - `doctor`
+  - `validate`
+  - `export-bridge`
+- exploratory / guided-native 输出不再把 synthetic `dota2.exploratory_ability` 当主实现语义；当前主语义是 **ArtifactSynthesis + bounded LocalRepair + final commit gate**。
+- `gap-fill` 仍保留兼容命令名，但当前产品语义已经降位为 **repair alias / bounded local repair / muscle fill**。
 
-- hard-code **how features are governed**
-- do not hard-code **all mechanics they are allowed to attempt**
+### Workbench / Bridge / Connected Host
 
-## 当前已证明的能力边界
+- Workbench 是当前产品入口与 review shell：
+  - 它可以消费 bridge artifact
+  - 它可以消费 connected-host live status
+  - 它优先显示 `governanceReadModel`
+- bridge artifact 现在是 governed payload：
+  - root-level `governanceReadModel`
+  - `_bridge` metadata
+  - workspace snapshot
+- connected-host live path 也优先走 read-model-first：
+  - `/api/host/status -> useHostScanner -> useFeatureStore -> workspaceAdapter`
+  - 未请求 live observation 时，`repairability = not_checked` 是 honest 状态，不是缺数据
+
+### Compatibility / Refresh 边界
+
+- compatibility-only fallback 只允许输出 display-safe 信号：
+  - persisted feature status
+  - legacy warning / source warning
+  - `repairability = not_checked`
+  - neutral summary text
+- compatibility-only fallback 不能输出：
+  - `clean`
+  - `committable`
+  - admitted reusable assets
+  - grounding trust / quality
+  - readiness score
+- stale payload refresh 只走：
+
+```bash
+npm run cli -- export-bridge --host <path> [--output <dir>]
+```
+
+- `doctor` / `validate` / `repair` / connected-host status / manual JSON editing 都不是 refresh lane。
+
+### 当前已证明的 create front-door 边界
+
+- 显式 choose-one 的本地 weighted-selection ask 不再默认走 wizard-by-default。
+- `selection_pool` 现在允许：
+  - feature-owned pool membership
+  - `external_catalog` object truth
+  - honest external catalog-backed equipment/native-item path
+- `equipment` 通过 catalog-backed `selection_pool` path 闭合，而不是靠 case 特判或 exploratory fallback。
+- ambiguous weighted-card prompt 仍会被 honest clarification 卡住，不会偷写成 generic synthesized micro-feature。
+
+## 当前诚实能力边界
 
 当前 Dota2 baseline 可以诚实地说：
 
-- workspace 是 feature registry 和 lifecycle truth
+- workspace 是 feature registry、lifecycle truth 与 governance persistence surface
 - feature record 已持久化：
-  - maturity
-  - implementationStrategy
-  - featureContract
-  - dependencyEdges
-  - validationStatus
-  - commitDecision
+  - `maturity`
+  - `implementationStrategy`
+  - `featureContract`
+  - `dependencyEdges`
+  - `validationStatus`
+  - `commitDecision`
+  - grounding summary
 - templated 路径仍是稳定主路
-- exploratory / guided-native 路径可以生成 host-owned Lua/KV/UI candidate artifacts
-- repair 已经降位成 bounded local repair，而不是 primary generation model
-- dependency-driven revalidation 已接入 declared contracts
-- create / update / regenerate / delete 不再只靠 prompt 文本做跨 feature 推断
+- exploratory / guided-native 路径可以生成 host-owned Lua / KV / UI candidate artifacts
+- bridge / CLI / workbench / connected-host 可以消费统一的 governance read-model
+- reveal/provider 的 governance truth、seam admission、grounding recovery、stale-host upgrade proof 已落地到控制面
 
 当前还不能诚实宣称的内容：
 
-- broad mechanic generalization 已经被大规模 runtime 证明
 - exploratory 输出已经“无需 review”
+- compatibility fallback 可以代表治理真相
+- `export-bridge` 之外存在第二条 legacy payload refresh lane
+- governance read-model 已经 host-agnostic，可以安全上抬到 `core/**`
 - War3 已经是 write-ready host
 
 ## 产品边界
@@ -133,22 +177,27 @@ Rune Weaver 不拥有：
 
 ## 当前推荐入口
 
-CLI 仍是真实入口：
+authoritative lifecycle path 仍是 CLI：
 
 ```bash
 npm install
 npm run cli -- dota2 run "<request>" --host <path> --write
 npm run cli -- dota2 update "<request>" --host <path> --feature <featureId> --write
 npm run cli -- dota2 regenerate "<request>" --host <path> --feature <featureId> --write
-npm run cli -- dota2 delete --host <path> --feature <featureId> --write
-npm run cli -- dota2 repair --host <path> --feature <featureId> --instruction "..."
+npm run cli -- dota2 rollback --host <path> --feature <featureId> --write
+npm run cli -- dota2 repair --host <path>
+npm run cli -- dota2 repair --host <path> --safe
+npm run cli -- dota2 doctor --host <path>
+npm run cli -- dota2 validate --host <path>
+npm run cli -- export-bridge --host <path>
 ```
 
 补充说明：
 
-- `dota2 gap-fill` 仍可运行，但现在只是 `repair` 的兼容 alias。
-- exploratory / guided-native 输出默认带 `requiresReview=true`。
 - review artifact 是当前链路的一部分，不是可选附属物。
+- exploratory / guided-native 输出默认仍带 `requiresReview=true`。
+- Workbench 是产品入口、观察面和证据面，但不是 lifecycle authority。
+- connected host 和 bridge sample 都优先读 `governanceReadModel`；compatibility-only 只保留给 legacy payload。
 
 ## 进一步阅读
 
