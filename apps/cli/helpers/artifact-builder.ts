@@ -56,34 +56,48 @@ export interface VerdictResult {
 export function calculateFinalVerdict(input: VerdictInput): VerdictResult {
   const { stages, options, writePlan, runtimeValidationResult, workspaceStateResult, hostValidationDetails } = input;
   const { force, dryRun } = options;
+  const finalCommitDecision = stages.finalCommitDecision;
+  const artifactSynthesis = stages.artifactSynthesis;
+  const dependencyRevalidation = stages.dependencyRevalidation;
 
   const coreStages = [
     stages.intentSchema,
     stages.blueprint,
     stages.patternResolution,
+    stages.artifactSynthesis,
     stages.assemblyPlan,
     stages.hostRealization,
     stages.generatorRouting,
     stages.generator,
+    stages.localRepair,
+    stages.dependencyRevalidation,
+    stages.finalCommitDecision,
     stages.writeExecutor,
     stages.hostValidation,
     stages.runtimeValidation,
     stages.workspaceState,
-  ];
+  ].filter(Boolean);
 
-  const allStagesSuccess = coreStages.every((s) => s && (s as { success: boolean }).success);
+  const allStagesSuccess = coreStages.every((s) => (s as { success: boolean }).success);
   const hasUnresolvedPatterns = stages.patternResolution.unresolvedPatterns.length > 0;
+  const unresolvedHandledBySynthesis =
+    hasUnresolvedPatterns &&
+    Boolean(artifactSynthesis?.triggered) &&
+    Boolean(artifactSynthesis?.success);
+  const hasActionableUnresolvedPatterns = hasUnresolvedPatterns && !unresolvedHandledBySynthesis;
   const wasForceOverride = force && stages.assemblyPlan.readyForHostWrite === false;
   const featureFilesCreated = (hostValidationDetails.featureFilesCount as number) > 0;
   const wsFailed = !workspaceStateResult.success && !workspaceStateResult.skipped;
   const runtimeFailed = !runtimeValidationResult.success && !dryRun;
 
+  const commitBlocked = finalCommitDecision ? !finalCommitDecision.success || finalCommitDecision.outcome === "blocked" : false;
+
   let completionKind: CompletionKind = "partial";
-  if (allStagesSuccess && !hasUnresolvedPatterns && !wasForceOverride && stages.assemblyPlan.readyForHostWrite && !wsFailed && !runtimeFailed) {
+  if (allStagesSuccess && !hasActionableUnresolvedPatterns && !wasForceOverride && stages.assemblyPlan.readyForHostWrite && !wsFailed && !runtimeFailed && !commitBlocked) {
     completionKind = "default-safe";
-  } else if (allStagesSuccess && wasForceOverride && !wsFailed && !runtimeFailed) {
+  } else if (allStagesSuccess && wasForceOverride && !wsFailed && !runtimeFailed && !commitBlocked) {
     completionKind = "forced";
-  } else if (allStagesSuccess && hasUnresolvedPatterns && !wsFailed && !runtimeFailed) {
+  } else if (allStagesSuccess && hasActionableUnresolvedPatterns && !wsFailed && !runtimeFailed && !commitBlocked) {
     completionKind = "partial";
   } else if (wsFailed || runtimeFailed) {
     completionKind = "partial";
@@ -93,7 +107,8 @@ export function calculateFinalVerdict(input: VerdictInput): VerdictResult {
     allStagesSuccess &&
     !wsFailed &&
     !runtimeFailed &&
-    !hasUnresolvedPatterns &&
+    !commitBlocked &&
+    !hasActionableUnresolvedPatterns &&
     !wasForceOverride &&
     stages.assemblyPlan.readyForHostWrite;
 
@@ -113,8 +128,11 @@ export function calculateFinalVerdict(input: VerdictInput): VerdictResult {
     !wsFailed;
 
   const risks: string[] = [...(stages.hostValidation.issues || [])];
-  if (hasUnresolvedPatterns) {
+  if (hasActionableUnresolvedPatterns) {
     risks.push(`Has ${stages.patternResolution.unresolvedPatterns.length} unresolved patterns`);
+  }
+  if (unresolvedHandledBySynthesis) {
+    risks.push("Pattern gaps were handled through synthesized modules; requires human review before stabilization");
   }
   if (wasForceOverride) {
     risks.push("Execution required --force override");
@@ -124,6 +142,14 @@ export function calculateFinalVerdict(input: VerdictInput): VerdictResult {
   }
   if (wsFailed) {
     risks.push(`Workspace state update failed: ${workspaceStateResult.error}`);
+  }
+  if (commitBlocked) {
+    risks.push(...(finalCommitDecision?.reasons || ["Final commit decision blocked"]));
+  }
+  if (dependencyRevalidation?.downgradedFeatures && dependencyRevalidation.downgradedFeatures.length > 0) {
+    risks.push(
+      `Dependency revalidation downgraded ${dependencyRevalidation.downgradedFeatures.length} dependent feature(s) to needs_review`,
+    );
   }
 
   const routingPlan = stages.generatorRouting;
@@ -141,8 +167,8 @@ export function calculateFinalVerdict(input: VerdictInput): VerdictResult {
     nextSteps.push("Fix workspace state update failure");
   }
   if (completionKind === "partial") {
-    if (hasUnresolvedPatterns) {
-      nextSteps.push("Add missing patterns to resolve all pattern hints");
+    if (hasActionableUnresolvedPatterns) {
+      nextSteps.push("Resolve unresolved module needs with family/pattern assets or synthesis support");
     }
     if (!featureFilesCreated) {
       nextSteps.push("Improve feature file identification");
@@ -154,6 +180,12 @@ export function calculateFinalVerdict(input: VerdictInput): VerdictResult {
   if (completionKind === "default-safe") {
     nextSteps.push("Host runtime validation");
     nextSteps.push("Rollback support");
+  }
+  if (finalCommitDecision?.requiresReview) {
+    nextSteps.push("Review the exploratory / guided-native output before treating it as stabilized");
+    if (finalCommitDecision.reviewModules && finalCommitDecision.reviewModules.length > 0) {
+      nextSteps.push(`Review modules: ${finalCommitDecision.reviewModules.join(", ")}`);
+    }
   }
   if (routingPlan && !routingPlan.success && routingPlan.blockers?.some((b: string) => b.includes("KV route"))) {
     nextSteps.push("Implement dota2-kv generator to unblock KV routes");
@@ -234,6 +266,11 @@ export function computeAbilityName(entry: WritePlanEntry, index: number): string
 }
 
 export function generateKVContentWithIndex(entry: WritePlanEntry, index: number): string {
+  const synthesizedContent = entry.metadata?.synthesizedContent;
+  if (typeof synthesizedContent === "string" && synthesizedContent.length > 0) {
+    return synthesizedContent;
+  }
+
   const abilityName = computeAbilityName(entry, index);
 
   const entryMetadata = entry.metadata || {};
@@ -294,6 +331,11 @@ export function generateKVContentWithIndex(entry: WritePlanEntry, index: number)
 }
 
 export function generateKVContent(entry: WritePlanEntry): string {
+  const synthesizedContent = entry.metadata?.synthesizedContent;
+  if (typeof synthesizedContent === "string" && synthesizedContent.length > 0) {
+    return synthesizedContent;
+  }
+
   const patternSegment = entry.sourcePattern.includes(".")
     ? entry.sourcePattern.split(".").pop() || entry.sourcePattern
     : entry.sourcePattern;
@@ -381,6 +423,11 @@ function deriveFeatureIdFromTargetPath(targetPath: string): string | null {
 }
 
 export function generateCodeContent(entry: WritePlanEntry, stableFeatureId?: string): string {
+  const synthesizedContent = entry.metadata?.synthesizedContent;
+  if (typeof synthesizedContent === "string" && synthesizedContent.length > 0) {
+    return synthesizedContent;
+  }
+
   const familyHint = entry.generatorFamilyHint;
 
   if (entry.deferred) {

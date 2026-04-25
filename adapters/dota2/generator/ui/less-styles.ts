@@ -268,7 +268,7 @@ function generateSelectionModalStyles(
 }
 
 .${classBase}-modal {
-  width: 820px;
+  width: 880px;
   min-height: 360px;
   horizontal-align: center;
   vertical-align: center;
@@ -302,8 +302,19 @@ function generateSelectionModalStyles(
 
 .modal-content {
   width: 100%;
+  flow-children: down;
+}
+
+.modal-options {
+  width: 100%;
+  flow-children: down;
+}
+
+.modal-options-row {
+  width: fit-children;
   flow-children: right;
   horizontal-align: center;
+  margin-bottom: 16px;
 }
 
 .selection-card {

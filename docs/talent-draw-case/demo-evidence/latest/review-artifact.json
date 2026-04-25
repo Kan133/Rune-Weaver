@@ -1,1040 +1,234 @@
 {
-  "meta": {
-    "generatedAt": "2026-04-14T10:59:43.304Z",
-    "fixtureVersion": "1.0",
-    "pipelineVersion": "3.0",
-    "hostRoot": "D:\\RN",
-    "writeMode": "write",
-    "stableFeatureId": "talent_draw_demo"
-  },
-  "fixture": {
-    "prompt": "做一个按 F4 触发的三选一天赋抽取系统。玩家按 F4 后，从加权天赋池抽出 3 个候选天赋，显示卡牌选择 UI。玩家选择 1 个后，根据天赋稀有度给英雄增加属性，并且已选择的天赋后续不再出现。",
-    "parameters": {
-      "triggerKey": "F4",
-      "choiceCount": 3,
-      "drawMode": "multiple_without_replacement",
-      "duplicatePolicy": "forbid",
-      "poolStateTracking": "session",
-      "selectionPolicy": "single",
-      "applyMode": "immediate",
-      "postSelectionPoolBehavior": "remove_selected_from_remaining",
-      "trackSelectedItems": true,
-      "payloadShape": "card_with_rarity",
-      "minDisplayCount": 3,
-      "placeholderConfig": {
-        "id": "empty_slot",
-        "name": "Empty Slot",
-        "description": "No talent available",
-        "disabled": true
-      },
-      "effectApplication": {
-        "enabled": true,
-        "rarityAttributeBonusMap": {
-          "R": {
-            "attribute": "strength",
-            "value": 10
-          },
-          "SR": {
-            "attribute": "agility",
-            "value": 10
-          },
-          "SSR": {
-            "attribute": "intelligence",
-            "value": 10
-          },
-          "UR": {
-            "attribute": "all",
-            "value": 10
-          }
-        }
-      },
-      "entries": [
-        {
-          "id": "R001",
-          "label": "Strength Boost",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "R002",
-          "label": "Fortitude",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "SR001",
-          "label": "Agility Boost",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SR002",
-          "label": "Swift Reflexes",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SSR001",
-          "label": "Intelligence Boost",
-          "description": "+10 Intelligence",
-          "weight": 20,
-          "tier": "SSR"
-        },
-        {
-          "id": "UR001",
-          "label": "Ultimate Growth",
-          "description": "+10 All Attributes",
-          "weight": 10,
-          "tier": "UR"
-        }
-      ]
-    }
-  },
-  "wizardExtraction": {
-    "params": {
-      "triggerKey": "F4"
-    },
-    "talentDrawParamsInjected": false
-  },
-  "schema": {
-    "id": "talent_draw_schema",
-    "intentKind": "standalone-system",
-    "isReadyForBlueprint": true,
-    "normalizedMechanics": {
-      "trigger": true,
-      "candidatePool": true,
-      "weightedSelection": true,
-      "playerChoice": true,
-      "uiModal": true,
-      "outcomeApplication": true
-    },
-    "parameters": {
-      "triggerKey": "F4",
-      "choiceCount": 3,
-      "drawMode": "multiple_without_replacement",
-      "duplicatePolicy": "forbid",
-      "poolStateTracking": "session",
-      "selectionPolicy": "single",
-      "applyMode": "immediate",
-      "postSelectionPoolBehavior": "remove_selected_from_remaining",
-      "trackSelectedItems": true,
-      "payloadShape": "card_with_rarity",
-      "minDisplayCount": 3,
-      "placeholderConfig": {
-        "id": "empty_slot",
-        "name": "Empty Slot",
-        "description": "No talent available",
-        "disabled": true
-      },
-      "effectApplication": {
-        "enabled": true,
-        "rarityAttributeBonusMap": {
-          "R": {
-            "attribute": "strength",
-            "value": 10
-          },
-          "SR": {
-            "attribute": "agility",
-            "value": 10
-          },
-          "SSR": {
-            "attribute": "intelligence",
-            "value": 10
-          },
-          "UR": {
-            "attribute": "all",
-            "value": 10
-          }
-        }
-      },
-      "entries": [
-        {
-          "id": "R001",
-          "label": "Strength Boost",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "R002",
-          "label": "Fortitude",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "SR001",
-          "label": "Agility Boost",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SR002",
-          "label": "Swift Reflexes",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SSR001",
-          "label": "Intelligence Boost",
-          "description": "+10 Intelligence",
-          "weight": 20,
-          "tier": "SSR"
-        },
-        {
-          "id": "UR001",
-          "label": "Ultimate Growth",
-          "description": "+10 All Attributes",
-          "weight": 10,
-          "tier": "UR"
-        }
-      ]
-    }
-  },
-  "blueprint": {
-    "id": "standalone_system_exbt",
-    "moduleCount": 5,
-    "modules": [
-      {
-        "id": "mod_func_0",
-        "category": "trigger",
-        "role": "input_trigger",
-        "patternIds": [
-          "input.key_binding"
-        ],
-        "hasParameters": true
-      },
-      {
-        "id": "mod_func_1",
-        "category": "data",
-        "role": "weighted_pool",
-        "patternIds": [
-          "data.weighted_pool"
-        ],
-        "hasParameters": true
-      },
-      {
-        "id": "mod_func_2",
-        "category": "rule",
-        "role": "selection_flow",
-        "patternIds": [
-          "rule.selection_flow"
-        ],
-        "hasParameters": true
-      },
-      {
-        "id": "mod_func_3",
-        "category": "effect",
-        "role": "effect_application",
-        "patternIds": [],
-        "hasParameters": true
-      },
-      {
-        "id": "mod_ui_4",
-        "category": "ui",
-        "role": "selection_modal",
-        "patternIds": [
-          "ui.selection_modal"
-        ],
-        "hasParameters": true
-      }
-    ],
-    "connections": [
-      {
-        "from": "mod_func_0",
-        "to": "mod_func_2",
-        "purpose": "触发规则执行"
-      },
-      {
-        "from": "mod_func_0",
-        "to": "mod_func_3",
-        "purpose": "触发效果应用"
-      },
-      {
-        "from": "mod_func_1",
-        "to": "mod_func_2",
-        "purpose": "提供数据输入"
-      },
-      {
-        "from": "mod_func_1",
-        "to": "mod_func_3",
-        "purpose": "提供效果参数"
-      },
-      {
-        "from": "mod_func_2",
-        "to": "mod_func_3",
-        "purpose": "规则决策驱动效果"
-      },
-      {
-        "from": "mod_func_3",
-        "to": "mod_ui_4",
-        "purpose": "效果状态驱动 UI 更新"
-      }
-    ],
-    "patternHints": [
-      {
-        "category": "input",
-        "suggestedPatterns": [
-          "input.key_binding"
-        ],
-        "rationale": "需要输入触发机制"
-      },
-      {
-        "category": "data",
-        "suggestedPatterns": [
-          "data.weighted_pool"
-        ],
-        "rationale": "需要候选项池管理"
-      },
-      {
-        "category": "rule",
-        "suggestedPatterns": [
-          "rule.selection_flow"
-        ],
-        "rationale": "需要加权随机选择"
-      },
-      {
-        "category": "rule",
-        "suggestedPatterns": [
-          "rule.selection_flow"
-        ],
-        "rationale": "需要玩家选择处理"
-      },
-      {
-        "category": "ui",
-        "suggestedPatterns": [
-          "ui.selection_modal"
-        ],
-        "rationale": "需要模态 UI 界面"
-      },
-      {
-        "category": "effect",
-        "suggestedPatterns": [],
-        "rationale": "需要结果应用机制（多态模块，由 resolver/assembly 根据上下文解析具体 pattern）"
-      }
-    ]
-  },
-  "patterns": {
-    "resolved": [
-      {
-        "patternId": "input.key_binding",
-        "role": "input",
-        "priority": "preferred",
-        "source": "hint"
-      },
-      {
-        "patternId": "data.weighted_pool",
-        "role": "data",
-        "priority": "preferred",
-        "source": "hint"
-      },
-      {
-        "patternId": "rule.selection_flow",
-        "role": "rule",
-        "priority": "preferred",
-        "source": "hint"
-      },
-      {
-        "patternId": "ui.selection_modal",
-        "role": "ui",
-        "priority": "preferred",
-        "source": "hint"
-      },
-      {
-        "patternId": "effect.modifier_applier",
-        "role": "effect_application",
-        "priority": "required",
-        "source": "category"
-      }
-    ],
-    "unresolved": [],
-    "complete": true
-  },
-  "assemblyPlan": {
-    "blueprintId": "standalone_system_exbt",
-    "selectedPatterns": [
-      "input.key_binding",
-      "data.weighted_pool",
-      "rule.selection_flow",
-      "ui.selection_modal",
-      "effect.modifier_applier"
-    ],
-    "writeTargets": [
-      {
-        "target": "server",
-        "path": "server/standalone_system_exbt.ts",
-        "summary": "[CANDIDATE] Server module for standalone_system_exbt"
-      },
-      {
-        "target": "shared",
-        "path": "shared/standalone_system_exbt.ts",
-        "summary": "[CANDIDATE] Shared definitions for standalone_system_exbt"
-      },
-      {
-        "target": "ui",
-        "path": "ui/standalone_system_exbt.tsx",
-        "summary": "[CANDIDATE] UI component for standalone_system_exbt"
-      }
-    ],
-    "bridgeUpdates": [
-      {
-        "target": "server",
-        "file": "rune_weaver/index.ts",
-        "action": "create"
-      },
-      {
-        "target": "server",
-        "file": "rune_weaver/generated/server/index.ts",
-        "action": "refresh"
-      },
-      {
-        "target": "server",
-        "file": "game/scripts/src/modules/index.ts",
-        "action": "inject_once"
-      },
-      {
-        "target": "ui",
-        "file": "rune_weaver/index.tsx",
-        "action": "create"
-      },
-      {
-        "target": "ui",
-        "file": "rune_weaver/generated/ui/index.tsx",
-        "action": "refresh"
-      },
-      {
-        "target": "ui",
-        "file": "content/panorama/src/hud/script.tsx",
-        "action": "inject_once"
-      }
-    ],
-    "readyForHostWrite": false
-  },
-  "hostRealization": {
-    "version": "1.0",
-    "host": "dota2",
-    "sourceBlueprintId": "standalone_system_exbt",
-    "units": [
-      {
-        "id": "mod_func_0",
-        "realizationType": "ts",
-        "hostTargets": [
-          "server_ts"
-        ],
-        "confidence": "high",
-        "sourcePatternIds": [
-          "input.key_binding"
-        ]
-      },
-      {
-        "id": "mod_func_1",
-        "realizationType": "shared-ts",
-        "hostTargets": [
-          "shared_ts"
-        ],
-        "confidence": "medium",
-        "sourcePatternIds": [
-          "data.weighted_pool"
-        ]
-      },
-      {
-        "id": "mod_func_2",
-        "realizationType": "ts",
-        "hostTargets": [
-          "server_ts"
-        ],
-        "confidence": "high",
-        "sourcePatternIds": [
-          "rule.selection_flow"
-        ]
-      },
-      {
-        "id": "mod_func_3",
-        "realizationType": "kv+lua",
-        "hostTargets": [
-          "lua_ability",
-          "ability_kv"
-        ],
-        "confidence": "high",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "mod_ui_4",
-        "realizationType": "ui",
-        "hostTargets": [
-          "panorama_tsx",
-          "panorama_less"
-        ],
-        "confidence": "high",
-        "sourcePatternIds": [
-          "ui.selection_modal"
-        ]
-      }
-    ],
-    "blockers": []
-  },
-  "generatorRouting": {
-    "version": "1.0",
-    "host": "dota2",
-    "sourceBlueprintId": "standalone_system_exbt",
-    "routes": [
-      {
-        "id": "route_mod_func_0_ts_0",
-        "generatorFamily": "dota2-ts",
-        "routeKind": "ts",
-        "hostTarget": "server_ts",
-        "sourcePatternIds": [
-          "input.key_binding"
-        ]
-      },
-      {
-        "id": "route_mod_func_1_ts_0",
-        "generatorFamily": "dota2-ts",
-        "routeKind": "ts",
-        "hostTarget": "shared_ts",
-        "sourcePatternIds": [
-          "data.weighted_pool"
-        ]
-      },
-      {
-        "id": "route_mod_func_2_ts_0",
-        "generatorFamily": "dota2-ts",
-        "routeKind": "ts",
-        "hostTarget": "server_ts",
-        "sourcePatternIds": [
-          "rule.selection_flow"
-        ]
-      },
-      {
-        "id": "route_mod_func_3_lua_0",
-        "generatorFamily": "dota2-lua",
-        "routeKind": "lua",
-        "hostTarget": "lua_ability",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "route_mod_func_3_kv_1",
-        "generatorFamily": "dota2-kv",
-        "routeKind": "kv",
-        "hostTarget": "ability_kv",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "route_mod_ui_4_ui_0",
-        "generatorFamily": "dota2-ui",
-        "routeKind": "ui",
-        "hostTarget": "panorama_tsx",
-        "sourcePatternIds": [
-          "ui.selection_modal"
-        ]
-      },
-      {
-        "id": "route_mod_ui_4_ui_1",
-        "generatorFamily": "dota2-ui",
-        "routeKind": "ui",
-        "hostTarget": "panorama_less",
-        "sourcePatternIds": [
-          "ui.selection_modal"
-        ]
-      }
-    ],
-    "warnings": [],
-    "blockers": []
-  },
-  "writePlan": {
-    "id": "writeplan_standalone_system_exbt_1776164383292",
-    "targetProject": "D:\\RN",
-    "entryCount": 8,
-    "stats": {
-      "total": 8,
-      "create": 8,
-      "update": 0,
-      "conflicts": 0,
-      "deferred": 0
-    },
-    "entries": [
-      {
-        "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-        "contentType": "typescript",
-        "operation": "create",
-        "sourcePattern": "input.key_binding",
-        "contentSummary": "Ability 类: input.key_binding",
-        "generatorFamilyHint": "dota2-ts",
-        "deferred": false
-      },
-      {
-        "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-        "contentType": "typescript",
-        "operation": "create",
-        "sourcePattern": "input.key_binding",
-        "contentSummary": "input/input.key_binding (typescript) params: {\"key\":\"F4\"}",
-        "generatorFamilyHint": "dota2-ts",
-        "deferred": false
-      },
-      {
-        "targetPath": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-        "contentType": "typescript",
-        "operation": "create",
-        "sourcePattern": "data.weighted_pool",
-        "contentSummary": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}",
-        "generatorFamilyHint": "dota2-ts",
-        "deferred": false
-      },
-      {
-        "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-        "contentType": "typescript",
-        "operation": "create",
-        "sourcePattern": "rule.selection_flow",
-        "contentSummary": "rule/rule.selection_flow (typescript) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}",
-        "generatorFamilyHint": "dota2-ts",
-        "deferred": false
-      },
-      {
-        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-        "contentType": "tsx",
-        "operation": "create",
-        "sourcePattern": "ui.selection_modal",
-        "contentSummary": "ui/ui.selection_modal (tsx) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}",
-        "generatorFamilyHint": "dota2-ui",
-        "deferred": false
-      },
-      {
-        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-        "contentType": "less",
-        "operation": "create",
-        "sourcePattern": "ui.selection_modal",
-        "contentSummary": "ui/ui.selection_modal (less) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}",
-        "generatorFamilyHint": "dota2-ui",
-        "deferred": false
-      },
-      {
-        "targetPath": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-        "contentType": "lua",
-        "operation": "create",
-        "sourcePattern": "effect.modifier_applier",
-        "contentSummary": "effect/effect.modifier_applier (lua) params: {\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}",
-        "generatorFamilyHint": "dota2-lua",
-        "deferred": false
-      },
-      {
-        "targetPath": "game/scripts/npc/npc_abilities_custom.txt",
-        "contentType": "kv",
-        "operation": "create",
-        "sourcePattern": "effect.modifier_applier",
-        "contentSummary": "effect/effect.modifier_applier (kv) params: {\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}",
-        "generatorFamilyHint": "dota2-kv",
-        "deferred": false
-      }
-    ],
-    "deferredWarnings": []
-  },
-  "generatedContent": [
-    {
-      "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-      "language": "typescript",
-      "exports": [
-        "TalentDrawDemoInputInputKeyBindingAbility",
-        "registerTalentDrawDemoInputInputKeyBindingAbility"
-      ],
-      "contentPreview": "/**  * TalentDrawDemoInputInputKeyBindingAbility  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputInputKeyBindingAbility {   private static instance: TalentDrawDemoInputInputK",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-      "language": "typescript",
-      "exports": [
-        "TalentDrawDemoInputInputKeyBinding",
-        "registerTalentDrawDemoInputInputKeyBinding"
-      ],
-      "contentPreview": "/**  * TalentDrawDemoInputInputKeyBinding  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputInputKeyBinding {   private static instance: TalentDrawDemoInputInputKeyBinding;   p",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-      "language": "typescript",
-      "exports": [
-        "TalentDrawDemoDataDataWeightedPool",
-        "registerTalentDrawDemoDataDataWeightedPool"
-      ],
-      "contentPreview": "/**  * TalentDrawDemoDataDataWeightedPool  * 加权随机池 - Generated by Rune Weaver  *   * Features:  * - drawMode: multiple_without_replacement  * - duplicatePolicy: forbid  * - poolStateTracking: session ",
-      "hasDrawForSelection": true,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-      "language": "typescript",
-      "exports": [
-        "TalentDrawDemoRuleRuleSelectionFlow",
-        "registerTalentDrawDemoRuleRuleSelectionFlow"
-      ],
-      "contentPreview": "/**  * TalentDrawDemoRuleRuleSelectionFlow  * 选择流程管理器 - Generated by Rune Weaver  *  * Features:  * - triggerKey: \"F4\"  * - choiceCount: 3  * - selectionPolicy: \"single\"  * - applyMode: \"immediate\"  *",
-      "hasDrawForSelection": true,
-      "hasRarityBonus": true,
-      "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-      "language": "tsx",
-      "exports": [
-        "TalentDrawDemoUiUiSelectionModal"
-      ],
-      "contentPreview": "/**  * TalentDrawDemoUiUiSelectionModal  * Generated selection modal  *  * Features:  * - triggerKey: \"F4\"  * - choiceCount: 3  * - payloadShape: \"card_with_rarity\"  * - dismissBehavior: \"selection_on",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": true
-    },
-    {
-      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-      "language": "less",
-      "exports": [],
-      "contentPreview": "/* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .talent_draw_demo_ui_ui_selection_modal-overlay {   width: 100%;   height: 100%;   horizontal-align: center;   vertical-alig",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": true
-    },
-    {
-      "targetPath": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-      "language": "lua",
-      "exports": [
-        "talent_draw_demo_effect_application_effect_modifier_applier",
-        "modifier_talent_draw_demo_effect_application_effect_modifier_applier"
-      ],
-      "contentPreview": "local ____lualib = require(\"lualib_bundle\") local __TS__Class = ____lualib.__TS__Class local __TS__ClassExtends = ____lualib.__TS__ClassExtends local __TS__DecorateLegacy = ____lualib.__TS__DecorateLe",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "game/scripts/npc/npc_abilities_custom.txt",
-      "language": "kv",
-      "exports": [
-        "rw_talent_draw_demo_modifier_applier"
-      ],
-      "contentPreview": "\"rw_talent_draw_demo_modifier_applier\" {     \"BaseClass\"              \"ability_datadriven\"     \"AbilityBehavior\"        \"DOTA_ABILITY_BEHAVIOR_NO_TARGET\"     \"AbilityType\"           \"DOTA_ABILITY_TYPE",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": false
-    }
+  "version": "1.0",
+  "generatedAt": "2026-04-22T16:44:27.153Z",
+  "commandKind": "creation",
+  "applicableStages": [
+    "intentSchema",
+    "blueprint",
+    "patternResolution",
+    "artifactSynthesis",
+    "assemblyPlan",
+    "hostRealization",
+    "generatorRouting",
+    "generator",
+    "localRepair",
+    "dependencyRevalidation",
+    "finalCommitDecision",
+    "writeExecutor",
+    "hostValidation",
+    "runtimeValidation",
+    "workspaceState"
   ],
-  "writeExecution": {
-    "success": true,
-    "writeResult": {
+  "inputProvenance": {
+    "requestedSubcommand": "run",
+    "normalizedCommand": "run",
+    "promptSource": "positional",
+    "promptHash": "d69583a673d1dcad4cdf15c49ac04bf9f82505833b31c589f042d6d55eeb1c6b"
+  },
+  "cliOptions": {
+    "command": "run",
+    "prompt": "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.",
+    "hostRoot": "D:\\rw-test-3",
+    "featureId": "skill_provider_demo",
+    "dryRun": true,
+    "write": false,
+    "force": false
+  },
+  "input": {
+    "rawPrompt": "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.",
+    "goal": "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting."
+  },
+  "semanticExportStatus": {
+    "written": false,
+    "reason": "Semantic artifacts were not written because clarification blocked blueprint generation."
+  },
+  "intentSchema": {
+    "usedFallback": false,
+    "intentKind": "micro-feature",
+    "uiNeeded": false,
+    "readiness": "ready",
+    "mechanics": [],
+    "promptPackageId": "wizard.create",
+    "promptConstraints": {
+      "mustPreserve": [],
+      "mustNotAdd": [],
+      "exactScalars": {},
+      "openSemanticGaps": []
+    },
+    "retrieval": {
+      "summary": "Collected 0 evidence refs for wizard.create.",
+      "tiersUsed": [],
+      "evidenceRefs": []
+    }
+  },
+  "stages": {
+    "intentSchema": {
       "success": true,
-      "executed": [
-        {
-          "type": "create",
-          "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-          "content": "/**\n * TalentDrawDemoInputInputKeyBindingAbility\n * 按键绑定模块 - Generated by Rune Weaver\n */\n\nexport class TalentDrawDemoInputInputKeyBindingAbility {\n  private static instance: TalentDrawDemoInputInputKeyBindingAbility;\n  private boundKeys: Set<string> = new Set();\n  private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;\n  private readonly configuredKey: string = \"F4\";\n  private readonly featureId: string = \"talent_draw_demo\";\n  private configuredKeyBound = false;\n\n  static getInstance(): TalentDrawDemoInputInputKeyBindingAbility {\n    if (!TalentDrawDemoInputInputKeyBindingAbility.instance) {\n      TalentDrawDemoInputInputKeyBindingAbility.instance = new TalentDrawDemoInputInputKeyBindingAbility();\n    }\n    return TalentDrawDemoInputInputKeyBindingAbility.instance;\n  }\n\n  /**\n   * 绑定按键\n   */\n  bindKey(\n    key: string,\n    callback: (playerId: number, event?: { [key: string]: unknown }) => void\n  ): void {\n    if (this.boundKeys.has(key)) {\n      print(`[Rune Weaver] Key ${key} already bound, skipping`);\n      return;\n    }\n\n    this.boundKeys.add(key);\n\n    if (GameRules && (GameRules as any).XNetTable) {\n      CustomGameEventManager.RegisterListener(\"player_key_pressed\", (_eventSourceIndex: number, event: any) => {\n        if (!event || event.key !== key) {\n          return;\n        }\n\n        if (event.featureId && event.featureId !== this.featureId) {\n          return;\n        }\n\n        const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n        if (playerId < 0) {\n          print(`[Rune Weaver] Ignored key ${key} because player id is missing`);\n          return;\n        }\n\n        callback(playerId, event);\n      });\n    }\n\n    print(`[Rune Weaver] Bound key: ${key} for feature ${this.featureId}`);\n  }\n\n  /**\n   * 解绑按键\n   */\n  unbindKey(key: string): void {\n    this.boundKeys.delete(key);\n    print(`[Rune Weaver] Unbound key: ${key}`);\n  }\n\n  setHandler(handler: (playerId: number, event?: { [key: string]: unknown }) => void): void {\n    this.handler = handler;\n    if (!this.configuredKeyBound) {\n      this.bindConfiguredKey();\n    }\n  }\n\n  bindConfiguredKey(): void {\n    if (this.configuredKeyBound) {\n      return;\n    }\n    this.configuredKeyBound = true;\n    this.bindKey(this.configuredKey, (playerId, event) => {\n      if (!this.handler) {\n        print(`[Rune Weaver] No handler configured for ${this.configuredKey} (${this.featureId})`);\n        return;\n      }\n      this.handler(playerId, event);\n    });\n  }\n\n  getConfiguredKey(): string {\n    return this.configuredKey;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoInputInputKeyBindingAbility(): void {\n  TalentDrawDemoInputInputKeyBindingAbility.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoInputInputKeyBindingAbility registered\");\n}\n",
-          "rwOwned": true,
-          "description": "Ability 类: input.key_binding"
-        },
-        {
-          "type": "create",
-          "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-          "content": "/**\n * TalentDrawDemoInputInputKeyBinding\n * 按键绑定模块 - Generated by Rune Weaver\n */\n\nexport class TalentDrawDemoInputInputKeyBinding {\n  private static instance: TalentDrawDemoInputInputKeyBinding;\n  private boundKeys: Set<string> = new Set();\n  private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;\n  private readonly configuredKey: string = \"F4\";\n  private readonly featureId: string = \"talent_draw_demo\";\n  private configuredKeyBound = false;\n\n  static getInstance(): TalentDrawDemoInputInputKeyBinding {\n    if (!TalentDrawDemoInputInputKeyBinding.instance) {\n      TalentDrawDemoInputInputKeyBinding.instance = new TalentDrawDemoInputInputKeyBinding();\n    }\n    return TalentDrawDemoInputInputKeyBinding.instance;\n  }\n\n  /**\n   * 绑定按键\n   */\n  bindKey(\n    key: string,\n    callback: (playerId: number, event?: { [key: string]: unknown }) => void\n  ): void {\n    if (this.boundKeys.has(key)) {\n      print(`[Rune Weaver] Key ${key} already bound, skipping`);\n      return;\n    }\n\n    this.boundKeys.add(key);\n\n    if (GameRules && (GameRules as any).XNetTable) {\n      CustomGameEventManager.RegisterListener(\"player_key_pressed\", (_eventSourceIndex: number, event: any) => {\n        if (!event || event.key !== key) {\n          return;\n        }\n\n        if (event.featureId && event.featureId !== this.featureId) {\n          return;\n        }\n\n        const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n        if (playerId < 0) {\n          print(`[Rune Weaver] Ignored key ${key} because player id is missing`);\n          return;\n        }\n\n        callback(playerId, event);\n      });\n    }\n\n    print(`[Rune Weaver] Bound key: ${key} for feature ${this.featureId}`);\n  }\n\n  /**\n   * 解绑按键\n   */\n  unbindKey(key: string): void {\n    this.boundKeys.delete(key);\n    print(`[Rune Weaver] Unbound key: ${key}`);\n  }\n\n  setHandler(handler: (playerId: number, event?: { [key: string]: unknown }) => void): void {\n    this.handler = handler;\n    if (!this.configuredKeyBound) {\n      this.bindConfiguredKey();\n    }\n  }\n\n  bindConfiguredKey(): void {\n    if (this.configuredKeyBound) {\n      return;\n    }\n    this.configuredKeyBound = true;\n    this.bindKey(this.configuredKey, (playerId, event) => {\n      if (!this.handler) {\n        print(`[Rune Weaver] No handler configured for ${this.configuredKey} (${this.featureId})`);\n        return;\n      }\n      this.handler(playerId, event);\n    });\n  }\n\n  getConfiguredKey(): string {\n    return this.configuredKey;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoInputInputKeyBinding(): void {\n  TalentDrawDemoInputInputKeyBinding.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoInputInputKeyBinding registered\");\n}\n",
-          "rwOwned": true,
-          "description": "input/input.key_binding (typescript) params: {\"key\":\"F4\"}"
-        },
-        {
-          "type": "create",
-          "targetPath": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-          "content": "/**\n * TalentDrawDemoDataDataWeightedPool\n * 加权随机池 - Generated by Rune Weaver\n * \n * Features:\n * - drawMode: multiple_without_replacement\n * - duplicatePolicy: forbid\n * - poolStateTracking: session\n */\n\ninterface TalentEntry {\n  id: string;\n  label: string;\n  description: string;\n  weight: number;\n  tier?: string;\n}\n\ninterface WeightedItem<T> {\n  item: T;\n  weight: number;\n  tier?: number;\n}\n\nexport class TalentDrawDemoDataDataWeightedPool<T extends TalentEntry = TalentEntry> {\n  private static instance?: TalentDrawDemoDataDataWeightedPool<any>;\n  private items: WeightedItem<T>[] = [];\n  private totalWeight: number = 0;\n\n  // Session state (poolStateTracking=\"session\")\n  private sessionState: {\n    remainingTalentIds: string[];\n    ownedTalentIds: string[];\n    currentChoiceIds: string[];\n  } = {\n    remainingTalentIds: [],\n    ownedTalentIds: [],\n    currentChoiceIds: [],\n  };\n\n  static getInstance<U extends TalentEntry = TalentEntry>(): TalentDrawDemoDataDataWeightedPool<U> {\n    if (!TalentDrawDemoDataDataWeightedPool.instance) {\n      TalentDrawDemoDataDataWeightedPool.instance = new TalentDrawDemoDataDataWeightedPool<U>();\n    }\n    return TalentDrawDemoDataDataWeightedPool.instance as TalentDrawDemoDataDataWeightedPool<U>;\n  }\n\n  constructor() {\n    // Initialize with case-specific entries\n    const initialEntries = [\n    { id: \"R001\", label: \"Strength Boost\", description: \"+10 Strength\", weight: 40, tier: \"R\" },\n    { id: \"R002\", label: \"Fortitude\", description: \"+10 Strength\", weight: 40, tier: \"R\" },\n    { id: \"SR001\", label: \"Agility Boost\", description: \"+10 Agility\", weight: 30, tier: \"SR\" },\n    { id: \"SR002\", label: \"Swift Reflexes\", description: \"+10 Agility\", weight: 30, tier: \"SR\" },\n    { id: \"SSR001\", label: \"Intelligence Boost\", description: \"+10 Intelligence\", weight: 20, tier: \"SSR\" },\n    { id: \"UR001\", label: \"Ultimate Growth\", description: \"+10 All Attributes\", weight: 10, tier: \"UR\" }\n    ] as T[];\n    for (const entry of initialEntries) {\n      this.add(entry, entry.weight, entry.tier ? this.tierToNumber(entry.tier) : 0);\n    }\n    // Initialize session state with all entry IDs\n    this.sessionState.remainingTalentIds = initialEntries.map(e => e.id);\n    this.sessionState.ownedTalentIds = [];\n    this.sessionState.currentChoiceIds = [];\n\n  }\n\n  private tierToNumber(tier: string): number {\n    const tierMap: Record<string, number> = { 'R': 1, 'SR': 2, 'SSR': 3, 'UR': 4 };\n    return tierMap[tier] || 1;\n  }\n\n  /**\n   * 添加条目\n   */\n  add(item: T, weight: number, tier?: number): void {\n    this.items.push({ item, weight, tier });\n    this.totalWeight += weight;\n  }\n\n  /**\n   * 移除条目\n   */\n  remove(item: T): boolean {\n    const index = this.items.findIndex(i => i.item === item);\n    if (index === -1) return false;\n    \n    this.totalWeight -= this.items[index].weight;\n    this.items.splice(index, 1);\n    return true;\n  }\n\n  /**\n   * 清空池子\n   */\n  clear(): void {\n    this.items = [];\n    this.totalWeight = 0;\n  }\n\n  /**\n   * 按权重随机抽取一个\n   */\n  draw(): T | null {\n    if (this.items.length === 0 || this.totalWeight <= 0) {\n      return null;\n    }\n\n    let random = RandomFloat(0, this.totalWeight);\n    \n    for (const item of this.items) {\n      random -= item.weight;\n      if (random <= 0) {\n        return item.item;\n      }\n    }\n    \n    return this.items[this.items.length - 1]?.item || null;\n  }\n\n  /**\n   * 按权重随机抽取多个（不重复）\n   */\n  drawMultiple(count: number): T[] {\n    const result: T[] = [];\n    const tempPool = new TalentDrawDemoDataDataWeightedPool<T>();\n    \n    // 复制所有条目\n    for (const item of this.items) {\n      tempPool.add(item.item, item.weight, item.tier);\n    }\n    \n    // 抽取指定数量\n    for (let i = 0; i < count && i < this.items.length; i++) {\n      const drawn = tempPool.draw();\n      if (drawn !== null) {\n        result.push(drawn);\n        tempPool.remove(drawn);\n      }\n    }\n    \n    return result;\n  }\n\n  /**\n   * Draw multiple candidates for selection (without replacement)\n   * Supports duplicatePolicy=\"forbid\" to prevent duplicates\n   */\n  drawForSelection(count: number = 3): T[] {\n    if (this.items.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoDataDataWeightedPool: No items in pool`);\n      return [];\n    }\n\n    const result: T[] = [];\n    const drawnIds = new Set<string>();\n    const availableItems = this.items.filter(item => \n      this.sessionState.remainingTalentIds.includes((item.item as any).id)\n    );\n\n    if (availableItems.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoDataDataWeightedPool: No available items in session pool`);\n      return [];\n    }\n\n    for (let i = 0; i < count && availableItems.length > 0; i++) {\n      // Check duplicate policy\n      if (\"forbid\" === \"forbid\" && drawnIds.size >= availableItems.length) {\n        print(`[Rune Weaver] TalentDrawDemoDataDataWeightedPool: Cannot draw more unique items (duplicatePolicy=\"forbid\")`);\n        break;\n      }\n\n      // Calculate total weight of current available items for each draw\n      const currentTotalWeight = availableItems.reduce((sum, item) => sum + item.weight, 0);\n      \n      if (currentTotalWeight <= 0) {\n        print(`[Rune Weaver] TalentDrawDemoDataDataWeightedPool: No weight available in pool`);\n        break;\n      }\n\n      let random = RandomFloat(0, currentTotalWeight);\n      let drawnItem: WeightedItem<T> | null = null;\n\n      for (const item of availableItems) {\n        random -= item.weight;\n        if (random <= 0) {\n          drawnItem = item;\n          break;\n        }\n      }\n\n      if (drawnItem) {\n        const itemId = (drawnItem.item as any).id;\n        \n        // Check for duplicates if policy is \"forbid\"\n        if (\"forbid\" === \"forbid\" && drawnIds.has(itemId)) {\n          // Skip this draw and try again\n          i--;\n          continue;\n        }\n\n        result.push(drawnItem.item);\n        drawnIds.add(itemId);\n\n        // Remove from available items for this draw session\n        const index = availableItems.indexOf(drawnItem);\n        if (index > -1) {\n          availableItems.splice(index, 1);\n        }\n      }\n    }\n\n    // Update currentChoiceIds in session state\n    this.sessionState.currentChoiceIds = result.map(item => (item as any).id);\n\n    return result;\n  }\n\n  /**\n   * Commit player selection\n   * Remove selected item from remainingTalentIds\n   * Add selected item to ownedTalentIds\n   */\n  commitSelection(selectedId: string): void {\n    // Remove from remaining\n    const remainingIndex = this.sessionState.remainingTalentIds.indexOf(selectedId);\n    if (remainingIndex > -1) {\n      this.sessionState.remainingTalentIds.splice(remainingIndex, 1);\n    }\n\n    // Add to owned\n    if (!this.sessionState.ownedTalentIds.includes(selectedId)) {\n      this.sessionState.ownedTalentIds.push(selectedId);\n    }\n\n    // Clear current choices\n    this.sessionState.currentChoiceIds = [];\n\n    print(`[Rune Weaver] TalentDrawDemoDataDataWeightedPool: Committed selection ${selectedId}, remaining: ${this.sessionState.remainingTalentIds.length}`);\n  }\n\n  /**\n   * Get remaining talent IDs in session\n   */\n  getRemainingTalentIds(): string[] {\n    return [...this.sessionState.remainingTalentIds];\n  }\n\n  /**\n   * Get owned talent IDs in session\n   */\n  getOwnedTalentIds(): string[] {\n    return [...this.sessionState.ownedTalentIds];\n  }\n\n  /**\n   * Get current choice IDs in session\n   */\n  getCurrentChoiceIds(): string[] {\n    return [...this.sessionState.currentChoiceIds];\n  }\n\n  /**\n   * Reset session state\n   */\n  resetSessionState(): void {\n    this.sessionState.remainingTalentIds = this.items.map(item => (item.item as any).id);\n    this.sessionState.ownedTalentIds = [];\n    this.sessionState.currentChoiceIds = [];\n    print(`[Rune Weaver] TalentDrawDemoDataDataWeightedPool: Session state reset`);\n  }\n\n  /**\n   * 按 tier 过滤后抽取\n   */\n  drawByTier(tier: number): T | null {\n    const tierItems = this.items.filter(i => i.tier === tier);\n    if (tierItems.length === 0) return null;\n    \n    const tierTotalWeight = tierItems.reduce((sum, i) => sum + i.weight, 0);\n    let random = RandomFloat(0, tierTotalWeight);\n    \n    for (const item of tierItems) {\n      random -= item.weight;\n      if (random <= 0) {\n        return item.item;\n      }\n    }\n    \n    return tierItems[tierItems.length - 1]?.item || null;\n  }\n\n  /**\n   * 获取所有条目\n   */\n  getAllItems(): WeightedItem<T>[] {\n    return [...this.items];\n  }\n\n  /**\n   * 获取条目数量\n   */\n  getCount(): number {\n    return this.items.length;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoDataDataWeightedPool(): void {\n  TalentDrawDemoDataDataWeightedPool.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoDataDataWeightedPool registered\");\n}\n",
-          "rwOwned": true,
-          "description": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}"
-        },
-        {
-          "type": "create",
-          "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-          "content": "/**\n * TalentDrawDemoRuleRuleSelectionFlow\n * 选择流程管理器 - Generated by Rune Weaver\n *\n * Features:\n * - triggerKey: \"F4\"\n * - choiceCount: 3\n * - selectionPolicy: \"single\"\n * - applyMode: \"immediate\"\n * - postSelectionPoolBehavior: \"remove_selected_from_remaining\"\n * - trackSelectedItems: true\n * - Apply effect immediately\n * \n */\n\ninterface SelectionOption {\n  id: string;\n  name: string;\n  description: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface PoolCandidate {\n  id: string;\n  name?: string;\n  label?: string;\n  description?: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface PlayerSelection {\n  playerId: number;\n  options: SelectionOption[];\n  selectedIndex: number;\n  isConfirmed: boolean;\n  deferredEffect?: SelectionOption;\n}\n\nexport class TalentDrawDemoRuleRuleSelectionFlow {\n  private static instance: TalentDrawDemoRuleRuleSelectionFlow;\n  private activeSelections: Map<number, PlayerSelection> = new Map();\n  private selectionCallbacks: Map<number, (option: SelectionOption) => void> = new Map();\n\n  private playerSessionStates: Map<number, {\n    remainingIds: string[];\n    ownedIds: string[];\n    currentChoiceIds: string[];\n  }> = new Map();\n\n  private rarityAttributeBonusMap: Record<string, { attribute: string; value: number }> = {\n      \"R\": { attribute: \"strength\", value: 10 },\n      \"SR\": { attribute: \"agility\", value: 10 },\n      \"SSR\": { attribute: \"intelligence\", value: 10 },\n      \"UR\": { attribute: \"all\", value: 10 }\n  };\n\n\n  static getInstance(): TalentDrawDemoRuleRuleSelectionFlow {\n    if (!TalentDrawDemoRuleRuleSelectionFlow.instance) {\n      TalentDrawDemoRuleRuleSelectionFlow.instance = new TalentDrawDemoRuleRuleSelectionFlow();\n    }\n    return TalentDrawDemoRuleRuleSelectionFlow.instance;\n  }\n\n  initPlayerSession(playerId: number, allIds: string[]): void {\n    this.playerSessionStates.set(playerId, {\n      remainingIds: [...allIds],\n      ownedIds: [],\n      currentChoiceIds: [],\n    });\n    print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: Initialized session for player ${playerId}`);\n  }\n\n  getPlayerSession(\n    playerId: number\n  ): { remainingIds: string[]; ownedIds: string[]; currentChoiceIds: string[] } | undefined {\n    return this.playerSessionStates.get(playerId);\n  }\n\n  private removeFromRemaining(playerId: number, optionId: string): void {\n    const session = this.playerSessionStates.get(playerId);\n    if (!session) return;\n\n    const index = session.remainingIds.indexOf(optionId);\n    if (index > -1) {\n      session.remainingIds.splice(index, 1);\n    }\n  }\n\n  private addToOwned(playerId: number, optionId: string): void {\n    const session = this.playerSessionStates.get(playerId);\n    if (!session) return;\n\n    if (!session.ownedIds.includes(optionId)) {\n      session.ownedIds.push(optionId);\n    }\n  }\n\n  private updateCurrentChoices(playerId: number, choiceIds: string[]): void {\n    const session = this.playerSessionStates.get(playerId);\n    if (!session) return;\n    session.currentChoiceIds = [...choiceIds];\n  }\n\n  startSelection(\n    playerId: number,\n    options: SelectionOption[],\n    onSelected: (option: SelectionOption) => void\n  ): void {\n    if (options.length === 0) {\n      print(\"[Rune Weaver] Cannot start selection with empty options\");\n      return;\n    }\n\n    this.activeSelections.set(playerId, {\n      playerId,\n      options,\n      selectedIndex: -1,\n      isConfirmed: false,\n    });\n    this.selectionCallbacks.set(playerId, onSelected);\n\n    this.updateCurrentChoices(playerId, options.map((option) => option.id));\n    this.sendToClient(playerId, options);\n  }\n\n  onPlayerSelect(playerId: number, optionIndex: number): void {\n    const selection = this.activeSelections.get(playerId);\n    if (!selection) return;\n    if (optionIndex < 0 || optionIndex >= selection.options.length) return;\n\n    selection.selectedIndex = optionIndex;\n    this.fireSelectionEvent(playerId, selection.options[optionIndex]);\n  }\n\n  onPlayerConfirm(playerId: number): void {\n    const selection = this.activeSelections.get(playerId);\n    if (!selection || selection.selectedIndex === -1) return;\n\n    selection.isConfirmed = true;\n    const selectedOption = selection.options[selection.selectedIndex];\n    \n    this.removeFromRemaining(playerId, selectedOption.id);\n    this.addToOwned(playerId, selectedOption.id);\n\n    this.applyEffectByRarity(playerId, selectedOption);\n\n\n    const callback = this.selectionCallbacks.get(playerId);\n    if (callback) {\n      callback(selectedOption);\n    }\n\n    this.fireConfirmationEvent(playerId, selectedOption);\n    this.activeSelections.delete(playerId);\n    this.selectionCallbacks.delete(playerId);\n  }\n\n  private applyEffectByRarity(playerId: number, option: SelectionOption): void {\n    const hero = PlayerResource.GetSelectedHeroEntity(playerId as PlayerID);\n    if (!hero) {\n      print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: No hero found for player ${playerId}`);\n      return;\n    }\n\n    const DEFAULT_RARITY = \"R\";\n    const rarity = option.tier || DEFAULT_RARITY;\n    const bonusConfig = this.rarityAttributeBonusMap[rarity];\n    if (!bonusConfig) {\n      print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: No bonus config for rarity ${rarity}`);\n      return;\n    }\n\n    const { attribute, value } = bonusConfig;\n    switch (attribute) {\n      case \"strength\":\n        hero.ModifyStrength(value);\n        break;\n      case \"agility\":\n        hero.ModifyAgility(value);\n        break;\n      case \"intelligence\":\n        hero.ModifyIntellect(value);\n        break;\n      case \"all\":\n        hero.ModifyStrength(value);\n        hero.ModifyAgility(value);\n        hero.ModifyIntellect(value);\n        break;\n      default:\n        print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: Unknown attribute ${attribute}`);\n    }\n\n    this.fireEffectAppliedEvent(playerId, option, bonusConfig);\n  }\n\n  private fireEffectAppliedEvent(\n    playerId: number,\n    option: SelectionOption,\n    bonusConfig: { attribute: string; value: number }\n  ): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_effect_applied\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          attribute: bonusConfig.attribute,\n          value: bonusConfig.value,\n          rarity: option.tier || \"R\",\n        }\n      );\n    }\n  }\n\n  private fireSelectionEvent(playerId: number, option: SelectionOption): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_selection_made\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          rarity: option.tier || \"R\",\n        }\n      );\n    }\n  }\n\n  private fireConfirmationEvent(playerId: number, option: SelectionOption): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_selection_confirmed\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          rarity: option.tier || \"R\",\n          timestamp: GameRules.GetGameTime(),\n        }\n      );\n    }\n  }\n\n  private sendToClient(playerId: number, options: SelectionOption[]): void {\n    if ((GameRules as any).XNetTable) {\n      (GameRules as any).XNetTable.SetTableValue(\n        \"rune_weaver_selection\",\n        `player_${playerId}_feature_talent_draw_demo`,\n        { featureId: \"talent_draw_demo\", options, status: \"waiting\" }\n      );\n    }\n\n    if (CustomGameEventManager) {\n      const payload = {\n        featureId: \"talent_draw_demo\",\n        options,\n        choiceCount: 3,\n        selectionPolicy: \"single\",\n        title: \"Choose Your Talent\",\n        description: \"Press F4 to open talent draw\",\n      };\n      const player = PlayerResource.GetPlayer(playerId as PlayerID);\n      print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: Sending selection UI to player ${playerId}, options=${options.length}, player=${player ? \"ok\" : \"missing\"}`);\n      if (player) {\n        (CustomGameEventManager.Send_ServerToPlayer as any)(\n          player,\n          \"rune_weaver_show_selection\",\n          payload\n        );\n      } else {\n        (CustomGameEventManager.Send_ServerToAllClients as any)(\n          \"rune_weaver_show_selection\",\n          payload\n        );\n      }\n    }\n  }\n\n  generateOptionsFromPool<T extends SelectionOption>(\n    playerId: number,\n    pool: any,\n    count: number\n  ): T[] {\n    const normalizeCandidates = (candidates: PoolCandidate[]): T[] => {\n      const options = candidates.map((candidate) => ({\n        id: candidate.id,\n        name: candidate.name || candidate.label || candidate.id,\n        description: candidate.description || \"\",\n        icon: candidate.icon,\n        tier: candidate.tier,\n      })) as T[];\n\n      return options;\n    };\n\n    if (pool && typeof pool.drawForSelection === \"function\") {\n      const candidates = normalizeCandidates(pool.drawForSelection(count) as PoolCandidate[]);\n      const candidateIds: string[] = [];\n      for (const candidate of candidates as T[]) {\n        candidateIds.push(candidate.id);\n      }\n      this.updateCurrentChoices(playerId, candidateIds);\n      return candidates;\n    }\n\n    if (pool && typeof pool.drawMultiple === \"function\") {\n      return normalizeCandidates(pool.drawMultiple(count) as PoolCandidate[]);\n    }\n\n    return [];\n  }\n\n  triggerSelectionFromPool(playerId: number, pool: any): void {\n    if (!pool) {\n      print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: No pool available`);\n      return;\n    }\n\n    \n    if (!this.getPlayerSession(playerId) && typeof this.initPlayerSession === \"function\") {\n      const remainingIds: string[] =\n        typeof pool.getRemainingTalentIds === \"function\"\n          ? pool.getRemainingTalentIds()\n          : (() => {\n              const ids: string[] = [];\n              if (typeof pool.getAllItems === \"function\") {\n                for (const item of pool.getAllItems()) {\n                  ids.push(item.item.id);\n                }\n              }\n              return ids;\n            })();\n      if (remainingIds.length > 0) {\n        this.initPlayerSession(playerId, remainingIds);\n      }\n    }\n\n\n    const options = this.generateOptionsFromPool(playerId, pool, 3);\n    if (!options || options.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow: No options generated for player ${playerId}`);\n      return;\n    }\n\n    this.startSelection(playerId, options, (selectedOption) => {\n      if (pool && typeof pool.commitSelection === \"function\") {\n        pool.commitSelection(selectedOption.id);\n      }\n    });\n  }\n}\n\nexport function registerTalentDrawDemoRuleRuleSelectionFlow(): void {\n  const flow = TalentDrawDemoRuleRuleSelectionFlow.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoRuleRuleSelectionFlow registered\");\n\n  if (CustomGameEventManager) {\n    CustomGameEventManager.RegisterListener(\"rune_weaver_player_select\", (_eventSourceIndex: number, event: any) => {\n      if (event.featureId && event.featureId !== \"talent_draw_demo\") {\n        return;\n      }\n      const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n      const optionIndex = Number(event.optionIndex ?? -1);\n      if (playerId >= 0 && optionIndex >= 0) {\n        flow.onPlayerSelect(playerId, optionIndex);\n      }\n    });\n\n    CustomGameEventManager.RegisterListener(\"rune_weaver_player_confirm\", (_eventSourceIndex: number, event: any) => {\n      if (event.featureId && event.featureId !== \"talent_draw_demo\") {\n        return;\n      }\n      const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n      if (playerId >= 0) {\n        flow.onPlayerConfirm(playerId);\n      }\n    });\n  }\n}\n",
-          "rwOwned": true,
-          "description": "rule/rule.selection_flow (typescript) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}"
-        },
-        {
-          "type": "create",
-          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-          "content": "/**\n * TalentDrawDemoUiUiSelectionModal\n * Generated selection modal\n *\n * Features:\n * - triggerKey: \"F4\"\n * - choiceCount: 3\n * - payloadShape: \"card_with_rarity\"\n * - dismissBehavior: \"selection_only\"\n * - minDisplayCount: 3\n */\n\nimport React, { useEffect, useRef, useState } from \"react\";\nimport { registerCustomKey } from \"../../../utils/keybinding\";\nimport { setKeyDownCallback } from \"../../../hooks/useKeyboard\";\n\nconst rwRegisteredKeys = new Set<string>();\n\ninterface SelectionItem {\n  id: string;\n  name: string;\n  description?: string;\n  icon?: string;\n  tier?: string;\n  rarity?: string;\n  disabled?: boolean;\n  isPlaceholder?: boolean;\n}\n\ninterface TalentDrawDemoUiUiSelectionModalProps {\n  items?: SelectionItem[];\n  title?: string;\n  description?: string;\n  onSelect?: (index: number) => void;\n  onConfirm?: () => void;\n  onDismiss?: () => void;\n  visible?: boolean;\n}\n\nexport function TalentDrawDemoUiUiSelectionModal(props: TalentDrawDemoUiUiSelectionModalProps) {\n  const {\n    items,\n    title = \"Choose Your Talent\",\n    description = \"Select one of the following talents\",\n    onSelect,\n    onConfirm,\n    onDismiss,\n    visible = false,\n  } = props;\n\n  const featureId = \"talent_draw_demo\";\n  const triggerKey = \"F4\";\n  const sendCustomEvent = (eventName: string, payload: Record<string, unknown>) => {\n    (GameEvents.SendCustomGameEventToServer as any)(eventName, payload);\n  };\n\n  const placeholderConfig = {\n    id: \"empty_slot\",\n    name: \"Empty Slot\",\n    description: \"No talent available\",\n    disabled: true\n  };\n  const minDisplayCount = 3;\n\n  // GAP_FILL_BOUNDARY: ui.selection_modal.payload_adapter\n  // Allowed: item normalization, placeholder padding, defensive fallback values, card presentation formatting.\n  // Forbidden: root mount changes, transport event changes, LESS/HUD wiring changes.\n  const normalizeSelectionItems = (rawItems?: unknown): SelectionItem[] => {\n    // Defensive fallback: treat null/undefined/empty as empty array\n    if (rawItems === undefined || rawItems === null) {\n      return [];\n    }\n\n    // Handle array-like values or object-like values from Lua\n    const itemsArray: unknown[] = Array.isArray(rawItems) ? rawItems : Object.values(rawItems ?? {});\n\n    return itemsArray\n      .filter((item): item is Record<string, unknown> => {\n        // Filter out non-object/null/undefined entries\n        return item !== null && item !== undefined && typeof item === \"object\";\n      })\n      .map((item, index): SelectionItem => {\n        // Normalize rarity/tier: support both rarity and tier, prefer tier for display\n        // rarityValue: used for card presentation formatting (visual theming)\n        // tierValue: used for display label and CSS class generation\n        const rarityValue = item.rarity ?? item.tier;\n        const tierValue = item.tier ?? item.rarity;\n        // Defensive fallback values: preserve type safety for downstream card presentation\n        // - id: coerce numbers, generate indexed fallback for missing/invalid values\n        // - name: required string fallback to \"Unknown\"\n        // - description/icon/tier/rarity: optional strings, undefined if invalid\n        // - disabled/isPlaceholder: boolean defaults to false for safety\n        return {\n          id: typeof item.id === \"string\" ? item.id : typeof item.id === \"number\" ? String(item.id) : `unknown_${index}`,\n          name: typeof item.name === \"string\" ? item.name : \"Unknown\",\n          description: typeof item.description === \"string\" ? item.description : undefined,\n          icon: typeof item.icon === \"string\" ? item.icon : undefined,\n          tier: typeof tierValue === \"string\" ? tierValue : undefined,\n          rarity: typeof rarityValue === \"string\" ? rarityValue : undefined,\n          disabled: typeof item.disabled === \"boolean\" ? item.disabled : false,\n          isPlaceholder: typeof item.isPlaceholder === \"boolean\" ? item.isPlaceholder : false,\n        };\n      })\n  };\n\n  const [selectedIndex, setSelectedIndex] = useState<number>(-1);\n  const [isVisible, setIsVisible] = useState(visible);\n  const [modalItems, setModalItems] = useState<SelectionItem[]>(() => normalizeSelectionItems(items));\n  const [modalTitle, setModalTitle] = useState(title);\n  const [modalDescription, setModalDescription] = useState(description);\n\n  // Use refs for stable effect dependencies\n  const titleRef = useRef(title);\n  const descriptionRef = useRef(description);\n  const featureIdRef = useRef(featureId);\n  const triggerKeyRef = useRef(triggerKey);\n\n  // Update refs when values change\n  useEffect(() => {\n    titleRef.current = title;\n    descriptionRef.current = description;\n    featureIdRef.current = featureId;\n    triggerKeyRef.current = triggerKey;\n  });\n\n  useEffect(() => {\n    setIsVisible(visible);\n  }, [visible]);\n\n  useEffect(() => {\n    setModalItems(normalizeSelectionItems(items));\n  }, [items]);\n\n  useEffect(() => {\n    setModalTitle(title);\n  }, [title]);\n\n  useEffect(() => {\n    setModalDescription(description);\n  }, [description]);\n\n  useEffect(() => {\n    console.log(\"[Rune Weaver] TalentDrawDemoUiUiSelectionModal mounted for feature talent_draw_demo\");\n\n    if (!rwRegisteredKeys.has(triggerKeyRef.current)) {\n      registerCustomKey(triggerKeyRef.current);\n      rwRegisteredKeys.add(triggerKeyRef.current);\n    }\n\n    setKeyDownCallback(triggerKeyRef.current, () => {\n      sendCustomEvent(\"player_key_pressed\", {\n        key: triggerKeyRef.current,\n        featureId: featureIdRef.current,\n        playerId: Game.GetLocalPlayerID(),\n      });\n    });\n\n    const showSelectionSub = GameEvents.Subscribe(\"rune_weaver_show_selection\", (data: {\n      featureId?: string;\n      options?: unknown;\n      title?: string;\n      description?: string;\n    }) => {\n      if (data.featureId && data.featureId !== featureIdRef.current) {\n        return;\n      }\n      const normalizedItems = normalizeSelectionItems(data.options);\n      console.log(`[Rune Weaver] TalentDrawDemoUiUiSelectionModal received selection event: options=${normalizedItems.length}`);\n      setModalItems(normalizedItems);\n      setModalTitle(data.title || titleRef.current);\n      setModalDescription(data.description || descriptionRef.current);\n      setSelectedIndex(-1);\n      setIsVisible(true);\n    });\n\n    const confirmSub = GameEvents.Subscribe(\"rune_weaver_selection_confirmed\", (data: { featureId?: string }) => {\n      if (data.featureId && data.featureId !== featureIdRef.current) {\n        return;\n      }\n      setIsVisible(false);\n      setSelectedIndex(-1);\n    });\n\n    return () => {\n      setKeyDownCallback(triggerKeyRef.current, () => {});\n      GameEvents.Unsubscribe(showSelectionSub);\n      GameEvents.Unsubscribe(confirmSub);\n    };\n  }, []);\n\n  const padWithPlaceholders = (sourceItems: SelectionItem[]): SelectionItem[] => {\n    if (sourceItems.length >= minDisplayCount) {\n      return sourceItems;\n    }\n\n    const paddedItems = [...sourceItems];\n    const placeholderCount = minDisplayCount - sourceItems.length;\n    for (let index = 0; index < placeholderCount; index++) {\n      paddedItems.push({\n        id: `${placeholderConfig.id}_${index}`,\n        name: placeholderConfig.name,\n        description: placeholderConfig.description,\n        disabled: placeholderConfig.disabled,\n        isPlaceholder: true,\n      });\n    }\n    return paddedItems;\n  };\n\n  // Dismiss behavior: selection_only\n\n  const displayItems = padWithPlaceholders(modalItems);\n\n  // Get selected item for debug logging and validation\n  const selectedItem = selectedIndex >= 0 && selectedIndex < displayItems.length \n    ? displayItems[selectedIndex] \n    : null;\n\n  // Check if confirm should be disabled\n  const isConfirmDisabled = selectedIndex === -1 || \n    selectedItem?.disabled === true || \n    selectedItem?.isPlaceholder === true;\n\n  if (!isVisible || displayItems.length === 0) {\n    return null;\n  }\n\n  const handleSelect = (index: number) => {\n    const item = displayItems[index];\n    if (!item) {\n      return;\n    }\n\n    if (item.disabled || item.isPlaceholder) {\n      return;\n    }\n\n    setSelectedIndex(index);\n    console.log(`[Rune Weaver] TalentDrawDemoUiUiSelectionModal selected item id=${item.id}`);\n    sendCustomEvent(\"rune_weaver_player_select\", {\n      PlayerID: Game.GetLocalPlayerID(),\n      optionIndex: index,\n      featureId: featureIdRef.current,\n    });\n    onSelect?.(index);\n  };\n\n  const handleConfirm = () => {\n    if (selectedIndex === -1) {\n      return;\n    }\n\n    // Prevent selection of disabled or placeholder items\n    const item = displayItems[selectedIndex];\n    if (!item) {\n      return;\n    }\n\n    if (item.disabled || item.isPlaceholder) {\n      console.log(`[Rune Weaver] TalentDrawDemoUiUiSelectionModal confirm blocked for disabled/placeholder item id=${item.id}`);\n      return;\n    }\n\n    console.log(`[Rune Weaver] TalentDrawDemoUiUiSelectionModal confirmed item id=${item.id}`);\n    sendCustomEvent(\"rune_weaver_player_confirm\", {\n      PlayerID: Game.GetLocalPlayerID(),\n      optionIndex: selectedIndex,\n      featureId: featureIdRef.current,\n    });\n    onConfirm?.();\n    setIsVisible(false);\n  };\n\n  const handleDismiss = () => {\n    // Dismiss not allowed in selection_only mode\n  };\n\n  return (\n    <Panel className=\"talent_draw_demo_ui_ui_selection_modal-overlay\">\n        <Panel className=\"talent_draw_demo_ui_ui_selection_modal-modal\">\n          <Panel className=\"modal-header\">\n            <Label text={modalTitle} />\n          <Label className=\"modal-description\" text={modalDescription || \"\"} />\n        </Panel>\n\n        <Panel className=\"modal-content\">\n          {displayItems.map((item, index) => (\n            <Panel\n              key={item.id}\n              className={`selection-card ${selectedIndex === index ? \"selected\" : \"\"} ${item.disabled ? \"disabled\" : \"\"} ${item.isPlaceholder ? \"placeholder\" : \"\"}`}\n              onactivate={() => handleSelect(index)}\n            >\n              <Label className=\"card-name\" text={item.name} />\n              <Label className=\"card-description\" text={item.description || \"\"} />\n              <Label className={`card-tier ${item.tier ? `tier-${item.tier.toLowerCase()}` : \"tier-none\"}`} text={item.tier || \"\"} />\n            </Panel>\n          ))}\n        </Panel>\n\n        <Panel className=\"modal-footer\">\n          <Panel\n            className={`btn-confirm ${isConfirmDisabled ? \"disabled\" : \"\"}`}\n            onactivate={handleConfirm}\n          >\n            <Label text=\"确认选择\" />\n          </Panel>\n          \n        </Panel>\n      </Panel>\n    </Panel>\n  );\n}\n\nexport default TalentDrawDemoUiUiSelectionModal;\n",
-          "rwOwned": true,
-          "description": "ui/ui.selection_modal (tsx) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}"
-        },
-        {
-          "type": "create",
-          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-          "content": "/* Generated by Rune Weaver */\n/* talent_draw_demo - ui.selection_modal */\n\n.talent_draw_demo_ui_ui_selection_modal-overlay {\n  width: 100%;\n  height: 100%;\n  horizontal-align: center;\n  vertical-align: center;\n  background-color: #00000099;\n  z-index: 50;\n}\n\n.talent_draw_demo_ui_ui_selection_modal-modal {\n  width: 820px;\n  min-height: 360px;\n  horizontal-align: center;\n  vertical-align: center;\n  flow-children: down;\n  padding: 24px;\n  background-color: #101820ee;\n  border: 2px solid #8fd0ff66;\n  box-shadow: #000000aa 0px 0px 18px 0px;\n}\n\n.modal-header {\n  width: 100%;\n  flow-children: down;\n  margin-bottom: 18px;\n}\n\n.modal-header Label {\n  width: 100%;\n  color: #f2fbff;\n  font-size: 30px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.modal-description {\n  margin-top: 6px;\n  color: #b9ced8;\n  font-size: 18px;\n  font-weight: normal;\n}\n\n.modal-content {\n  width: 100%;\n  flow-children: right;\n  horizontal-align: center;\n}\n\n.selection-card {\n  width: 240px;\n  height: 180px;\n  margin: 0px 8px;\n  padding: 14px;\n  flow-children: down;\n  background-color: #17242dcc;\n  border: 2px solid #6c8b9a66;\n}\n\n.selection-card:hover {\n  brightness: 1.5;\n}\n\n.selection-card.selected {\n  border: 2px solid #ffd76a;\n  background-color: #223849ee;\n}\n\n.selection-card.disabled,\n.selection-card.placeholder {\n  saturation: 0.15;\n  brightness: 0.45;\n}\n\n.card-name {\n  width: 100%;\n  color: #ffffff;\n  font-size: 22px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.card-description {\n  width: 100%;\n  margin-top: 10px;\n  color: #c8d7de;\n  font-size: 16px;\n  text-align: center;\n  white-space: normal;\n}\n\n.card-tier {\n  horizontal-align: center;\n  margin-top: 12px;\n  padding: 2px 10px;\n  color: #ffffff;\n  font-size: 16px;\n  font-weight: bold;\n  background-color: #475569;\n}\n\n.tier-r {\n  background-color: #4f8fba;\n}\n\n.tier-sr {\n  background-color: #3aa66b;\n}\n\n.tier-ssr {\n  background-color: #b06ad9;\n}\n\n.tier-ur {\n  background-color: #d5a43c;\n}\n\n.modal-footer {\n  width: 100%;\n  margin-top: 20px;\n  flow-children: right;\n  horizontal-align: center;\n}\n\n.btn-confirm,\n.btn-dismiss {\n  min-width: 150px;\n  height: 44px;\n  margin: 0px 8px;\n  padding: 8px 20px;\n  background-color: #2f7fa3;\n  border: 1px solid #9fdfff99;\n}\n\n.btn-confirm:hover,\n.btn-dismiss:hover {\n  brightness: 1.4;\n}\n\n.btn-confirm.disabled {\n  saturation: 0.1;\n  brightness: 0.45;\n}\n\n.btn-confirm Label,\n.btn-dismiss Label {\n  horizontal-align: center;\n  vertical-align: center;\n  color: #ffffff;\n  font-size: 20px;\n  font-weight: bold;\n}\n",
-          "rwOwned": true,
-          "description": "ui/ui.selection_modal (less) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}"
-        },
-        {
-          "type": "create",
-          "targetPath": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-          "content": "local ____lualib = require(\"lualib_bundle\")\nlocal __TS__Class = ____lualib.__TS__Class\nlocal __TS__ClassExtends = ____lualib.__TS__ClassExtends\nlocal __TS__DecorateLegacy = ____lualib.__TS__DecorateLegacy\nlocal ____exports = {}\nlocal ____dota_ts_adapter = require(\"utils.dota_ts_adapter\")\nlocal BaseAbility = ____dota_ts_adapter.BaseAbility\nlocal BaseModifier = ____dota_ts_adapter.BaseModifier\nlocal registerAbility = ____dota_ts_adapter.registerAbility\nlocal registerModifier = ____dota_ts_adapter.registerModifier\n\n-- ============================================================\n-- ABILITY: talent_draw_demo_effect_application_effect_modifier_applier\n-- ============================================================\n____exports.talent_draw_demo_effect_application_effect_modifier_applier = __TS__Class()\nlocal talent_draw_demo_effect_application_effect_modifier_applier = ____exports.talent_draw_demo_effect_application_effect_modifier_applier\ntalent_draw_demo_effect_application_effect_modifier_applier.name = \"talent_draw_demo_effect_application_effect_modifier_applier\"\n__TS__ClassExtends(talent_draw_demo_effect_application_effect_modifier_applier, BaseAbility)\n\nfunction talent_draw_demo_effect_application_effect_modifier_applier.prototype.OnSpellStart(self)\n    local caster = self:GetCaster()\n    local duration = self:GetSpecialValueFor(\"buff_duration\") or 6.0\n\n    -- T20 Learning: use native AddNewModifier, NOT BaseModifier.apply()\n    -- BaseModifier.apply() is a static method not copied to _G by registerModifier\n    local modifier_applied = caster:AddNewModifier(caster, self, \"modifier_talent_draw_demo_effect_application_effect_modifier_applier\", {duration = duration})\n\n    if modifier_applied then\n        print(\"[talent_draw_demo_effect_application_effect_modifier_applier] ✅ modifier_talent_draw_demo_effect_application_effect_modifier_applier applied\")\n    else\n        print(\"[talent_draw_demo_effect_application_effect_modifier_applier] ❌ modifier_talent_draw_demo_effect_application_effect_modifier_applier AddNewModifier returned nil\")\n    end\n\n    self:PlayEffects()\nend\n\nfunction talent_draw_demo_effect_application_effect_modifier_applier.prototype.PlayEffects(self)\n    local particle = \"particles/units/heroes/hero_ogre_magi/ogre_magi_bloodlust_target.vpcf\"\n    local sound = \"Hero_OgreMagi.Bloodlust.Target\"\n    local effect = ParticleManager:CreateParticle(particle, PATTACH_ABSORIGIN_FOLLOW, self:GetCaster())\n    ParticleManager:ReleaseParticleIndex(effect)\n    EmitSoundOn(sound, self:GetCaster())\nend\n\ntalent_draw_demo_effect_application_effect_modifier_applier = __TS__DecorateLegacy({registerAbility(nil)}, talent_draw_demo_effect_application_effect_modifier_applier)\n____exports.talent_draw_demo_effect_application_effect_modifier_applier = talent_draw_demo_effect_application_effect_modifier_applier\n_G.talent_draw_demo_effect_application_effect_modifier_applier = talent_draw_demo_effect_application_effect_modifier_applier\n\n-- ============================================================\n-- MODIFIER: modifier_talent_draw_demo_effect_application_effect_modifier_applier (same file as ability — T19 pattern)\n-- Archetype: buff\n-- Engine only loads ScriptFile; separate modifier files are never loaded.\n-- ============================================================\n____exports.modifier_talent_draw_demo_effect_application_effect_modifier_applier = __TS__Class()\nlocal modifier_talent_draw_demo_effect_application_effect_modifier_applier = ____exports.modifier_talent_draw_demo_effect_application_effect_modifier_applier\nmodifier_talent_draw_demo_effect_application_effect_modifier_applier.name = \"modifier_talent_draw_demo_effect_application_effect_modifier_applier\"\n__TS__ClassExtends(modifier_talent_draw_demo_effect_application_effect_modifier_applier, BaseModifier)\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:IsHidden()\n    return false\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:IsDebuff()\n    return false\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:IsPurgable()\n    return true\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:IsBuff()\n    return true\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:GetStatusEffectName()\n    return \"particles/status_fx/status_effect_frost.vpcf\"\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:StatusEffectPriority()\n    return 10\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:DeclareFunctions(self)\n    return MODIFIER_PROPERTY_MOVESPEED_BONUS_CONSTANT\nend\n\n\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype.GetModifierMoveSpeedBonus_Constant(self)\nreturn self:GetAbility():GetSpecialValueFor('movespeed_bonus') or 80\nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:OnCreated(self)\n    print(\"[modifier_talent_draw_demo_effect_application_effect_modifier_applier] OnCreated\")\n    \nend\n\nfunction modifier_talent_draw_demo_effect_application_effect_modifier_applier.prototype:OnDestroy(self)\n    print(\"[modifier_talent_draw_demo_effect_application_effect_modifier_applier] OnDestroy\")\nend\n\n-- T19 + T20: registerModifier(nil) + no .apply() — matches crystal_nova_x exactly\nmodifier_talent_draw_demo_effect_application_effect_modifier_applier = __TS__DecorateLegacy({registerModifier(nil)}, modifier_talent_draw_demo_effect_application_effect_modifier_applier)\n____exports.modifier_talent_draw_demo_effect_application_effect_modifier_applier = modifier_talent_draw_demo_effect_application_effect_modifier_applier\n_G.modifier_talent_draw_demo_effect_application_effect_modifier_applier = modifier_talent_draw_demo_effect_application_effect_modifier_applier\n\nreturn ____exports",
-          "rwOwned": true,
-          "description": "effect/effect.modifier_applier (lua) params: {\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}"
-        },
-        {
-          "type": "create",
-          "targetPath": "game/scripts/npc/npc_abilities_custom.txt",
-          "content": "\"DOTAAbilities\"\n{\n\t\"talent_draw_demo_effect_application_effect_modifier_applier\"\n\t{\n\t    \"BaseClass\"              \"ability_lua\"\n\t    \"AbilityBehavior\"        \"DOTA_ABILITY_BEHAVIOR_NO_TARGET\"\n\t    \"ScriptFile\"            \"rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier\"\n\t    \"AbilityType\"           \"DOTA_ABILITY_TYPE_BASIC\"\n\t    \"MaxLevel\"               \"4\"\n\t    \"RequiredLevel\"          \"1\"\n\t    \"LevelsBetweenUpgrades\"  \"3\"\n\t    \"AbilityCastPoint\"      \"0.1\"\n\t    \"AbilityCooldown\"      \"8.0\"\n\t    \"AbilityManaCost\"       \"50\"\n\t    \"AbilityCastRange\"      \"0\"\n\t    \"Precache\"\n\t    {\n\t        \"particle://particles/units/heroes/hero_ogre_magi/ogre_magi_bloodlust_target.vpcf\"\n\t        \"soundfile://soundevents/game_sounds_heroes/game_sounds_ogre_magi.vsndevts\"\n\t    }\n\t}\n}\n",
-          "rwOwned": true,
-          "description": "KV aggregation: 1 abilities -> game/scripts/npc/npc_abilities_custom.txt"
-        }
+      "summary": "Define a single primary hero gameplay ability shell that exists only as a grantable feature artifact for later external granting, with no activation input, no auto-attach behavior, no embedded grant logic, and no modifier application. [ready]",
+      "issues": [
+        "IntentSchema uncertainties: 0"
       ],
-      "failed": [],
-      "skipped": [],
-      "createdFiles": [
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-        "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-        "game/scripts/npc/npc_abilities_custom.txt"
-      ],
+      "usedFallback": false
+    },
+    "blueprint": {
+      "success": false,
+      "summary": "",
+      "moduleCount": 0,
+      "patternHints": [],
+      "issues": []
+    },
+    "patternResolution": {
+      "success": false,
+      "resolvedPatterns": [],
+      "unresolvedPatterns": [],
+      "issues": [],
+      "complete": false
+    },
+    "artifactSynthesis": {
+      "success": true,
+      "triggered": false,
+      "artifacts": [],
+      "warnings": [],
+      "blockers": [],
+      "skipped": true
+    },
+    "assemblyPlan": {
+      "success": false,
+      "selectedPatterns": [],
+      "writeTargets": [],
+      "readyForHostWrite": false,
+      "blockers": []
+    },
+    "hostRealization": {
+      "success": false,
+      "units": [],
+      "blockers": []
+    },
+    "generatorRouting": {
+      "success": false,
+      "routes": [],
+      "warnings": [],
+      "blockers": []
+    },
+    "generator": {
+      "success": false,
+      "generatedFiles": [],
+      "issues": []
+    },
+    "localRepair": {
+      "success": true,
+      "triggered": false,
+      "attempted": false,
+      "repairedTargets": [],
+      "warnings": [],
+      "blockers": [],
+      "skipped": true
+    },
+    "dependencyRevalidation": {
+      "success": true,
+      "impactedFeatures": [],
+      "blockers": [],
+      "downgradedFeatures": [],
+      "compatibleFeatures": [],
+      "skipped": true
+    },
+    "finalCommitDecision": {
+      "success": false,
+      "outcome": "blocked",
+      "requiresReview": true,
+      "reasons": [],
+      "reviewModules": [],
+      "impactedFeatures": [],
+      "dependencyBlockers": [],
+      "downgradedFeatures": [],
+      "skipped": true
+    },
+    "writeExecutor": {
+      "success": false,
+      "executedActions": 0,
+      "skippedActions": 0,
+      "failedActions": 0,
+      "createdFiles": [],
       "modifiedFiles": []
     },
-    "review": {
-      "version": "1.0",
-      "hostRoot": "D:\\RN",
-      "featureId": "talent_draw_demo",
-      "filesToCreate": [
-        {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-          "rwOwned": true,
-          "lineCount": 99,
-          "description": "Ability 类: input.key_binding"
-        },
-        {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-          "rwOwned": true,
-          "lineCount": 99,
-          "description": "input/input.key_binding (typescript) params: {\"key\":\"F4\"}"
-        },
-        {
-          "path": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-          "rwOwned": true,
-          "lineCount": 315,
-          "description": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}"
-        },
-        {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-          "rwOwned": true,
-          "lineCount": 387,
-          "description": "rule/rule.selection_flow (typescript) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}"
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-          "rwOwned": true,
-          "lineCount": 315,
-          "description": "ui/ui.selection_modal (tsx) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}"
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-          "rwOwned": true,
-          "lineCount": 155,
-          "description": "ui/ui.selection_modal (less) params: {\"triggerKey\":\"F4\",\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\",\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true},\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}},\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}]}"
-        },
-        {
-          "path": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-          "rwOwned": true,
-          "lineCount": 107,
-          "description": "effect/effect.modifier_applier (lua) params: {\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}"
-        },
-        {
-          "path": "game/scripts/npc/npc_abilities_custom.txt",
-          "rwOwned": true,
-          "lineCount": 23,
-          "description": "KV aggregation: 1 abilities -> game/scripts/npc/npc_abilities_custom.txt"
-        }
-      ],
-      "filesToRefresh": [],
-      "injectOnceTargets": [],
-      "skippedItems": [],
-      "blockers": [],
-      "readyToExecute": true,
-      "generatedAt": "2026-04-14T10:59:43.295Z"
+    "hostValidation": {
+      "success": false,
+      "checks": [],
+      "issues": [],
+      "details": {}
     },
-    "evidence": {
-      "filesCreated": [
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-        "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-        "game/scripts/npc/npc_abilities_custom.txt"
-      ],
-      "filesModified": [],
-      "filesSkipped": [],
-      "dryRunArtifacts": [
-        {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-          "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoInputInputKeyBindingAbility  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputInputKeyBindingAbility {   private static instance: TalentDrawDemoInputInputK"
-        },
-        {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-          "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoInputInputKeyBinding  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputInputKeyBinding {   private static instance: TalentDrawDemoInputInputKeyBinding;   p"
-        },
-        {
-          "path": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-          "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoDataDataWeightedPool  * 加权随机池 - Generated by Rune Weaver  *   * Features:  * - drawMode: multiple_without_replacement  * - duplicatePolicy: forbid  * - poolStateTracking: session "
-        },
-        {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-          "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoRuleRuleSelectionFlow  * 选择流程管理器 - Generated by Rune Weaver  *  * Features:  * - triggerKey: \"F4\"  * - choiceCount: 3  * - selectionPolicy: \"single\"  * - applyMode: \"immediate\"  *"
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-          "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoUiUiSelectionModal  * Generated selection modal  *  * Features:  * - triggerKey: \"F4\"  * - choiceCount: 3  * - payloadShape: \"card_with_rarity\"  * - dismissBehavior: \"selection_on"
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-          "wouldCreate": true,
-          "preview": "/* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .talent_draw_demo_ui_ui_selection_modal-overlay {   width: 100%;   height: 100%;   horizontal-align: center;   vertical-alig"
-        },
-        {
-          "path": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-          "wouldCreate": true,
-          "preview": "local ____lualib = require(\"lualib_bundle\") local __TS__Class = ____lualib.__TS__Class local __TS__ClassExtends = ____lualib.__TS__ClassExtends local __TS__DecorateLegacy = ____lualib.__TS__DecorateLe"
-        },
-        {
-          "path": "game/scripts/npc/npc_abilities_custom.txt",
-          "wouldCreate": true,
-          "preview": "\"rw_talent_draw_demo_modifier_applier\" {     \"BaseClass\"              \"ability_datadriven\"     \"AbilityBehavior\"        \"DOTA_ABILITY_BEHAVIOR_NO_TARGET\"     \"AbilityType\"           \"DOTA_ABILITY_TYPE"
-        }
+    "runtimeValidation": {
+      "success": true,
+      "serverPassed": true,
+      "uiPassed": true,
+      "serverErrors": 0,
+      "uiErrors": 0,
+      "limitations": []
+    },
+    "workspaceState": {
+      "success": true,
+      "featureId": "",
+      "totalFeatures": 0,
+      "skipped": true
+    }
+  },
+  "finalVerdict": {
+    "pipelineComplete": false,
+    "completionKind": "partial",
+    "weakestStage": "intentSchema",
+    "sufficientForDemo": false,
+    "hasUnresolvedPatterns": false,
+    "wasForceOverride": false,
+    "remainingRisks": [
+      "The governed create semantics still do not expose a reliable trigger or passive ownership boundary."
+    ],
+    "nextSteps": [
+      "Answer the clarification questions and rerun the command."
+    ]
+  },
+  "clarificationPlan": {
+    "questions": [
+      {
+        "id": "clarify-trigger-authority",
+        "question": "What exactly triggers this feature, and who owns that trigger?",
+        "targetPaths": [
+          "interaction.activations",
+          "flow.triggerSummary",
+          "requirements.typed"
+        ],
+        "reason": "The governed create semantics still do not expose a reliable trigger or passive ownership boundary.",
+        "impact": "blueprint-blocking-structural"
+      }
+    ],
+    "maxQuestions": 3,
+    "requiredForFaithfulInterpretation": true,
+    "targetPaths": [
+      "interaction.activations",
+      "flow.triggerSummary",
+      "requirements.typed"
+    ],
+    "reason": "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
+    "authority": {
+      "blocksBlueprint": true,
+      "blocksWrite": true,
+      "requiresReview": true,
+      "unresolvedDependencies": [],
+      "reasons": [
+        "The governed create semantics still do not expose a reliable trigger or passive ownership boundary."
       ]
     }
   },
-  "smokeAssertions": {
-    "passed": true,
-    "total": 23,
-    "passedCount": 23,
-    "failed": [],
-    "details": [
-      {
-        "name": "Wizard does not implicitly provide Talent Draw params",
-        "passed": true,
-        "message": "Wizard unexpectedly extracted: "
-      },
-      {
-        "name": "Schema has fixture parameters merged",
-        "passed": true,
-        "message": "triggerKey=F4, choiceCount=3"
-      },
-      {
-        "name": "Blueprint has trigger/data/rule/ui/effect modules",
-        "passed": true,
-        "message": "Found: trigger, data, rule, effect, ui"
-      },
-      {
-        "name": "Blueprint modules have parameters",
-        "passed": true
-      },
-      {
-        "name": "Selected patterns include five key patterns",
-        "passed": true,
-        "message": "Missing: "
-      },
-      {
-        "name": "AssemblyPlan exists",
-        "passed": true
-      },
-      {
-        "name": "Assembly write targets include server paths",
-        "passed": true
-      },
-      {
-        "name": "Assembly write targets include shared paths",
-        "passed": true
-      },
-      {
-        "name": "Assembly write targets include UI paths",
-        "passed": true
-      },
-      {
-        "name": "HostRealizationPlan created",
-        "passed": true
-      },
-      {
-        "name": "GeneratorRoutingPlan created",
-        "passed": true
-      },
-      {
-        "name": "WritePlan created",
-        "passed": true
-      },
-      {
-        "name": "WritePlan has entries",
-        "passed": true
-      },
-      {
-        "name": "WritePlan target project matches host option",
-        "passed": true
-      },
-      {
-        "name": "WritePlan includes server paths",
-        "passed": true
-      },
-      {
-        "name": "WritePlan includes shared paths",
-        "passed": true
-      },
-      {
-        "name": "WritePlan includes UI paths",
-        "passed": true
-      },
-      {
-        "name": "Generated files produced",
-        "passed": true
-      },
-      {
-        "name": "Generated content includes drawForSelection",
-        "passed": true
-      },
-      {
-        "name": "Generated content references rarity/bonus mapping",
-        "passed": true
-      },
-      {
-        "name": "Generated content has placeholder evidence",
-        "passed": true
-      },
-      {
-        "name": "Write execution evidence created",
-        "passed": true
-      },
-      {
-        "name": "Host root option recorded",
-        "passed": true
-      }
+  "clarificationAuthority": {
+    "blocksBlueprint": true,
+    "blocksWrite": true,
+    "requiresReview": true,
+    "unresolvedDependencies": [],
+    "reasons": [
+      "The governed create semantics still do not expose a reliable trigger or passive ownership boundary."
     ]
   },
-  "knownLimitations": [
-    "Generator produces real content but may need refinement for production use",
-    "KV generation for talents produces basic structure - custom implementation may be needed",
-    "UI card interaction logic is generated but may need manual tuning",
-    "Pool state persistence is session-scoped only"
-  ]
+  "workspaceSemanticContext": {
+    "featureCount": 0,
+    "features": []
+  }
 }

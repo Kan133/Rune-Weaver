@@ -47,7 +47,7 @@ export function FeatureCard({ feature, isSelected, onClick }: FeatureCardProps) 
       <div className="mt-2 flex items-center gap-3 text-xs text-white/40">
         <span className="font-mono">#{normalizedFeature.systemId}</span>
         <span>·</span>
-        <span>v{normalizedFeature.revision}</span>
+        <span>{normalizedFeature.revision !== null ? `v${normalizedFeature.revision}` : 'v?'}</span>
         {normalizedFeature.childrenIds.length > 0 && (
           <>
             <span>·</span>

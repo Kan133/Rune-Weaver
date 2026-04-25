@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-04-23T16:35:00+08:00",
+  "candidateId": "grant_only_provider_export_seam",
+  "classification": "seam",
+  "readinessGate": {
+    "status": "ready_for_manual_promotion_review",
+    "reason": "The repo-side readiness harness marks the provider export seam ready for manual promotion review.",
+    "source": "adapters/dota2/governance/promotion-readiness-harness.ts"
+  },
+  "formalPromotionState": {
+    "promotionPacket": "dota2.grant_only_provider_export_seam.explore_to_seam.v1",
+    "registryEntry": "present",
+    "admission": "admitted",
+    "reason": "Core governance now models assetType='seam', Dota2 governance validates the seam implementation lookup, fresh and stale host gates passed, and durable acceptance refs are present."
+  },
+  "acceptanceEvidence": {
+    "availableRefs": [
+      "docs/provider-export-seam/artifact.json",
+      "docs/provider-export-seam/acceptance-summary.json",
+      "docs/session-sync/dota2-mainline-20260423-1444.md"
+    ],
+    "freshHostProof": "D:\\rw-test24",
+    "staleHostNegativeProof": "D:\\rw-test14",
+    "staleHostPositiveUpgradeProof": "D:\\rw-test25",
+    "stableSelectionFamilyRegression": [
+      "D:\\rw-test-1",
+      "D:\\rw-test-2"
+    ]
+  },
+  "packetReadiness": {
+    "status": "closed",
+    "reasons": [
+      "Core reusable-asset governance supports assetType='seam' and kind='explore_to_seam'.",
+      "Dota2 registry has an admitted grant_only_provider_export_seam entry with seamExists closure.",
+      "Positive stale-host upgrade proof closed on D:\\rw-test25 using the explicit upgrade_workspace_grounding path."
+    ]
+  },
+  "misuseBoundaries": [
+    "Do not treat this seam admission as provider-shell pattern admission.",
+    "Do not treat reveal-only weighted-card as promoted; it remains exploratory.",
+    "Do not use admitted seam status to relax validator or grounding governance.",
+    "Do not infer automatic promotion for future exploratory outputs from this one manual admission."
+  ],
+  "finalJudgment": "admitted_seam_manual_review_closed"
+}

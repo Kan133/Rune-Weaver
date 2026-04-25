@@ -7,7 +7,7 @@ export const mockGroups: Group[] = [
   { id: 'system', name: '系统', icon: 'Settings', count: 4 },
 ];
 
-export const mockFeatures: Feature[] = [
+const baseMockFeatures: Feature[] = [
   {
     id: '1',
     displayName: '天赋抽取系统',
@@ -495,3 +495,61 @@ export const mockFeatures: Feature[] = [
     },
   },
 ];
+
+function buildCompatibilityOnlyMockReviewSignals(feature: Feature): Feature['reviewSignals'] {
+  const reviewSignals = feature.reviewSignals;
+  return {
+    ...reviewSignals,
+    lifecycle: {
+      featureStatus:
+        feature.status === 'active'
+          ? 'active'
+          : feature.status === 'archived'
+            ? 'archived'
+            : 'unknown',
+      maturity: null,
+      implementationStrategy: null,
+      commitOutcome: null,
+      canAssemble: null,
+      canWriteHost: null,
+      requiresReview: reviewSignals.readiness.warnings.length > 0,
+      reasons: reviewSignals.readiness.warnings,
+      summary: 'Compatibility-only mock fixture: lifecycle details are display-only and not canonical governance truth.',
+    },
+    reusableGovernance: {
+      admittedCount: 0,
+      attentionCount: 0,
+      familyAdmissions: [],
+      patternAdmissions: [],
+      seamAdmissions: [],
+      summary: 'Compatibility-only mock fixture: reusable governance admissions are unavailable.',
+    },
+    compatibilitySource: 'compatibility-only',
+    grounding: {
+      status: 'none_required',
+      reviewRequired: false,
+      verifiedSymbolCount: 0,
+      allowlistedSymbolCount: 0,
+      weakSymbolCount: 0,
+      unknownSymbolCount: 0,
+      warningCount: 0,
+      warnings: [],
+      reasonCodes: [],
+      summary: 'Compatibility-only mock fixture: grounding quality is unavailable.',
+    },
+    repairability: {
+      status: 'not_checked',
+      reasons: [],
+      summary: 'Compatibility-only mock fixture: live repairability observation is unavailable.',
+    },
+    readiness: {
+      score: null,
+      warnings: [...reviewSignals.readiness.warnings],
+    },
+  };
+}
+
+export const mockFeatures: Feature[] = baseMockFeatures.map((feature) => ({
+  ...feature,
+  reviewSignals: buildCompatibilityOnlyMockReviewSignals(feature),
+}));

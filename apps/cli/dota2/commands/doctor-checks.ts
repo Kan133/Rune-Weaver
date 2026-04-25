@@ -1,3 +1,5 @@
+import type { Dota2GovernanceRepairabilityKind } from "./dota2-governance-read-model.js";
+
 /**
  * Doctor Command - Health Check Types and Barrel Export
  */
@@ -8,6 +10,7 @@ export interface DoctorCheck {
   message: string;
   details?: string[];
   suggestion?: string;
+  remediationKind?: Dota2GovernanceRepairabilityKind;
 }
 
 export { checkAddonConfig, checkDotaDirectories, checkPackageJson } from "./doctor-checks-addon.js";

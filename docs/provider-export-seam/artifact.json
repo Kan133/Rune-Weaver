@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "generatedAt": "2026-04-23T16:35:00+08:00",
+    "proofPackVersion": "1.1",
+    "status": "admitted",
+    "promotionDisposition": "manual_admitted",
+    "hostKind": "dota2-x-template"
+  },
+  "candidate": {
+    "candidateId": "grant_only_provider_export_seam",
+    "summary": "Grant-only provider export seam for cross-feature ability grants.",
+    "candidateKind": "seam",
+    "currentReadinessVerdict": "ready_for_manual_promotion_review",
+    "formalAdmissionStatus": "admitted"
+  },
+  "authoritativeInputs": {
+    "readinessSpec": "adapters/dota2/governance/promotion-readiness.ts",
+    "readinessHarness": "adapters/dota2/governance/promotion-readiness-harness.ts",
+    "dota2ReusableAssetGovernance": "adapters/dota2/governance/reusable-assets.ts",
+    "coreReusableAssetGovernance": "core/governance/reusable-assets.ts",
+    "latestSessionSync": "docs/session-sync/dota2-mainline-20260423-1444.md",
+    "sharedPlan": "docs/session-sync/RW-SHARED-PLAN.md"
+  },
+  "formalGovernance": {
+    "assetType": "seam",
+    "packetId": "dota2.grant_only_provider_export_seam.explore_to_seam.v1",
+    "registryStatus": "admitted",
+    "contractRefs": [
+      "dota2.primary_hero_ability.grantable",
+      "dota2_provider_ability_export",
+      "dota2_selection_grant_contract",
+      "dota2_selection_grant_binding"
+    ],
+    "reviewRequiredRisks": [
+      "The seam must not collapse back into hidden attachment authority.",
+      "selection_pool and other consumer-local families must not absorb provider seam authority.",
+      "Exploratory success or exact grounding must not auto-promote other reusable truth without manual admission."
+    ]
+  },
+  "readinessInvariants": [
+    "authoritative Lua/KV identity must close to exactly one runtime abilityName",
+    "the provider exports exactly one grant_only capability surface",
+    "consumer binding stays explicit and local to the consuming feature",
+    "bridge may preload the grant runtime but must not auto-attach it to heroes",
+    "non-provider features must not leak provider export sidecars"
+  ],
+  "proofCaseIds": [
+    "authoritative_provider_identity_closes",
+    "definition_only_provider_shell_exports_grant_only_surface",
+    "selection_pool_local_shell_stays_outside_provider_export",
+    "identity_drift_blocks_provider_export",
+    "bridge_preloads_grant_runtime_without_auto_attach"
+  ],
+  "hostEvidence": {
+    "freshHostProof": {
+      "hostRoot": "D:\\rw-test24",
+      "status": "passes_write_validate_doctor_review",
+      "notes": [
+        "skill_provider_demo and reveal_batch_demo both write on a fresh initialized host.",
+        "The fresh proof host still keeps the feature lifecycle exploratory and requiresReview=true.",
+        "This host proof is one admission input for the seam, not a reusable admission for provider shell or reveal-only runtime."
+      ]
+    },
+    "staleHostRecovery": {
+      "positiveUpgradeHostProof": {
+        "hostRoot": "D:\\rw-test25",
+        "status": "passes_explicit_upgrade_workspace_grounding",
+        "sequence": [
+          "write skill_provider_demo",
+          "write reveal_batch_demo",
+          "manually remove only canonical module groundingAssessment and feature groundingSummary",
+          "validate detects upgradeable legacy grounding state",
+          "doctor recommends upgrade_workspace_grounding",
+          "repair --safe restores canonical module and feature grounding truth",
+          "validate passes",
+          "doctor passes after one-shot Panorama build"
+        ]
+      },
+      "negativeProofHost": "D:\\rw-test14",
+      "negativeProofStatus": "requires_regenerate_when_raw_grounding_missing"
+    },
+    "stableFamilyRegression": [
+      {
+        "hostRoot": "D:\\rw-test-1",
+        "status": "validate_passed"
+      },
+      {
+        "hostRoot": "D:\\rw-test-2",
+        "status": "validate_passed"
+      }
+    ]
+  },
+  "evidenceRefs": [
+    "adapters/dota2/governance/promotion-readiness-harness.ts",
+    "adapters/dota2/governance/promotion-readiness.test.ts",
+    "adapters/dota2/cross-feature/grant-seam.test.ts",
+    "adapters/dota2/bridge/bridge-wiring.test.ts",
+    "adapters/dota2/validator/post-generation-repair.test.ts",
+    "adapters/dota2/validator/post-generation-validator.test.ts",
+    "docs/session-sync/dota2-mainline-20260423-1444.md"
+  ],
+  "guardrails": [
+    "Admission applies to the grant-only provider export seam, not to provider shell as a pattern.",
+    "Reveal-only weighted-card remains exploratory and is not admitted as a seam, pattern, or family.",
+    "Stale-host recovery remains explicit and one-way; workspace read normalization must not invent grounding truth.",
+    "The feature lifecycle for fresh exploratory outputs remains exploratory / requiresReview even when the seam is admitted."
+  ]
+}

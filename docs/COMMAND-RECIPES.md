@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-23
 > Read when: locating real command entry points for validation, demo, or maintenance work
 > Do not use for: inventing unsupported commands, changing scope, or replacing the execution baseline
 
@@ -195,6 +195,19 @@ npm run cli -- export-bridge --host <path> --output <dir>
 
 **输出**: `apps/workbench-ui/public/bridge-workspace.json`
 
+**Step 7 边界**:
+- `export-bridge` 是唯一 legacy payload refresh lane
+- 它的职责是把旧 raw workspace / 旧 bridge 风格 payload 刷新为带根级 `governanceReadModel` 的 governed bridge payload
+- 它不是 `doctor` / `validate` / `repair` 的替代，也不产生新的 runtime semantics 或 reusable admission
+
+**Refresh cadence (event-driven, not time-driven)**:
+- Refresh when feature lifecycle changes affect the product-facing bridge artifact: create, update, rollback, delete, regenerate, or any other feature state change that should be reflected in `apps/workbench-ui/public/bridge-workspace.json`
+- Refresh when the Dota2 governance read-model schema or projection changes in a way that affects exported lifecycle, reusable governance, grounding, repairability, or `productVerdict`
+- Refresh when the product-facing bridge artifact is missing root-level `governanceReadModel`
+- Refresh when a proof host is re-exported and the checked-in product-facing bridge sample must reflect the fresh proof host or fresh `_bridge.exportedAt`
+- Do not treat `doctor`, `validate`, `repair`, `workbench --inspect`, or manual JSON editing as refresh lanes
+- To retire a stale payload, always re-run `npm run cli -- export-bridge --host <path>`
+
 ---
 
 ## 3. Workbench 直接调用
@@ -273,7 +286,7 @@ Get-Content "game/scripts/src/rune_weaver/rune-weaver.workspace.json" | ConvertF
 # 步骤 5: 列出 features 确认（观察用）
 npx tsx apps/workbench/index.ts --list D:\test1
 
-# 步骤 6: 导出 bridge
+# 步骤 6: 导出 bridge（也是唯一 legacy payload refresh lane）
 npm run cli -- export-bridge --host D:\test1
 ```
 
@@ -418,9 +431,9 @@ apps/workbench-ui/public/bridge-workspace.json
 | `npm run verify:p0` | **stable** | 代码健康检查，可用于开发验证 |
 | `npm run check-types` | **stable** | 类型检查，可用于开发验证 |
 | `npm run test` | **stable** | 单元测试，可用于开发验证 |
-| `npm run cli -- export-bridge` | **stable** | Bridge 导出，可用于开发验证 |
+| `npm run cli -- export-bridge` | **stable** | Bridge 导出；也是唯一 legacy payload refresh lane，可用于开发验证 |
 | `npx tsx apps/workbench/index.ts --list` | **stable** | 列出 features，观察用 |
-| `npx tsx apps/workbench/index.ts --inspect` | **stable** | 查看 feature 详情，观察用 |
+| `npx tsx apps/workbench/index.ts --inspect` | **stable** | 查看 feature 详情，观察用；不是 legacy payload refresh lane |
 | `npx tsx apps/workbench/index.ts --delete` | **stable** | 删除 feature，可用于清理 |
 
 **注意**: 以上命令可用于开发验证和观察，但 `verify:p0` 通过 ≠ Packet A 已完成。
@@ -468,7 +481,7 @@ npx tsx apps/workbench/index.ts --list D:\test1
 # Inspect feature
 npx tsx apps/workbench/index.ts --inspect <id> D:\test1
 
-# Export bridge
+# Export bridge（若要退役 stale legacy payload，只走这一条 lane）
 npm run cli -- export-bridge --host D:\test1
 ```
 
@@ -490,6 +503,13 @@ npm run cli -- export-bridge --host D:\test1
 # 5. 检查 bridge
 cat apps/workbench-ui/public/bridge-workspace.json
 ```
+
+说明:
+- `export-bridge` 用于刷新 legacy payload 到 governed bridge payload
+- `workbench --inspect` 只负责观察当前 feature / read-model 呈现，不负责刷新 payload
+- `doctor` / `validate` 用于验证或观察治理真相，不属于 refresh lane
+- 如果 bridge 要代表新的 feature lifecycle、read-model projection、缺失的根级 `governanceReadModel` 修复，或新的 proof-host 导出，刷新动作都只走 `export-bridge`
+- 禁止把手工编辑 `bridge-workspace.json` 当作 refresh；那会绕开 canonical lane，也无法证明 payload 仍来自 `rune-weaver-cli`
 
 ---
 

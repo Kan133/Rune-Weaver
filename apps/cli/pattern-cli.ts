@@ -12,6 +12,7 @@
 
 import { validatePatternForAdmission, type PatternValidationResult } from "../../core/patterns/index.js";
 import { dota2Patterns, validateDota2Pattern, type Dota2PatternMeta } from "../../adapters/dota2/patterns/index.js";
+import { getDota2ReusableAssetAdmissionStatus } from "../../adapters/dota2/governance/reusable-assets.js";
 
 export interface PatternCLIOptions {
   command: string;
@@ -86,6 +87,7 @@ async function runValidate(options: PatternCLIOptions): Promise<boolean> {
           valid: r.result.core.valid && r.result.dota2.valid,
           core: r.result.core,
           dota2: r.result.dota2,
+          governanceStatus: r.result.governanceStatus,
         })),
         null,
         2,
@@ -98,7 +100,7 @@ async function runValidate(options: PatternCLIOptions): Promise<boolean> {
     for (const { pattern, result } of results) {
       const valid = result.core.valid && result.dota2.valid;
       const icon = valid ? "✅" : "❌";
-      logInfo(`${icon} ${pattern.id} (${pattern.category})`);
+      logInfo(`${icon} ${pattern.id} (${pattern.category}) [governance=${result.governanceStatus}]`);
 
       if (!valid && options.verbose) {
         for (const error of [...result.core.errors, ...result.dota2.errors]) {
@@ -117,7 +119,8 @@ async function runValidate(options: PatternCLIOptions): Promise<boolean> {
 function validateSinglePattern(pattern: Dota2PatternMeta) {
   const core = validatePatternForAdmission(pattern);
   const dota2 = validateDota2Pattern(pattern);
-  return { core, dota2 };
+  const governanceStatus = getDota2ReusableAssetAdmissionStatus("pattern", pattern.id);
+  return { core, dota2, governanceStatus };
 }
 
 async function runCheckDraft(options: PatternCLIOptions): Promise<boolean> {
@@ -210,7 +213,8 @@ function checkContractParameters(pattern: Dota2PatternMeta): string[] {
   // Pattern-specific required parameters
   const requiredParams: Record<string, string[]> = {
     "data.weighted_pool": ["drawMode", "duplicatePolicy", "poolStateTracking"],
-    "rule.selection_flow": ["postSelectionPoolBehavior", "trackSelectedItems", "effectApplication"],
+    "rule.selection_flow": ["postSelectionPoolBehavior", "trackSelectedItems"],
+    "effect.outcome_realizer": ["outcomes"],
     "ui.selection_modal": ["payloadShape", "minDisplayCount", "placeholderConfig"],
   };
   
@@ -236,13 +240,14 @@ function checkContractParameters(pattern: Dota2PatternMeta): string[] {
 
 function printValidationResult(
   pattern: Dota2PatternMeta,
-  result: { core: PatternValidationResult; dota2: { valid: boolean; errors: string[] } },
+  result: { core: PatternValidationResult; dota2: { valid: boolean; errors: string[] }; governanceStatus: string },
 ): void {
   const valid = result.core.valid && result.dota2.valid;
 
   logInfo(`${valid ? "✅" : "❌"} ${pattern.id}`);
   logInfo(`   类别: ${pattern.category}`);
   logInfo(`   摘要: ${pattern.summary}`);
+  logInfo(`   治理状态: ${result.governanceStatus}`);
   logInfo("");
 
   logInfo("   核心检查:");

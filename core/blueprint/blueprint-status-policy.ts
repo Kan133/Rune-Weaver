@@ -5,47 +5,37 @@ import {
   NormalizedBlueprintStatus,
   ProposalStatus,
 } from "../schema/types";
-import { isResolvableExistingSeamIssue } from "./clarification-policy";
 import type { SemanticAssessment } from "./seam-authority";
 
 type SchemaReadiness = "ready" | "weak" | "blocked";
 
 export function getSchemaReadiness(schema: IntentSchema): SchemaReadiness {
-  if (schema.readiness) {
-    return schema.readiness;
-  }
-
-  if (schema.isReadyForBlueprint) {
-    return "ready";
-  }
-
-  if ((schema.requiredClarifications || []).some((item) => item.blocksFinalization)) {
+  if (schema.readiness === "blocked") {
     return "blocked";
   }
 
-  if ((schema.openQuestions || []).length > 0 || (schema.uncertainties || []).length > 0) {
+  if (schema.readiness === "weak" || schema.isReadyForBlueprint === false) {
     return "weak";
   }
 
-  return "blocked";
+  if ((schema.uncertainties || []).length > 0) {
+    return "weak";
+  }
+
+  return "ready";
 }
 
 export function collectProposalIssues(schema: IntentSchema): string[] {
   const issues = [
-    ...schema.openQuestions
-      .filter((question) => !isResolvableExistingSeamIssue(question, schema))
-      .map((question) => `Open question: ${question}`),
     ...(schema.uncertainties || [])
-      .filter((item) => !isResolvableExistingSeamIssue(item.summary, schema))
       .map((item) => `Uncertainty: ${item.summary}`),
   ];
   return [...new Set(issues)];
 }
 
 export function collectProposalBlockers(schema: IntentSchema): string[] {
-  return (schema.requiredClarifications || [])
-    .filter((item) => item.blocksFinalization && !isResolvableExistingSeamIssue(item.question, schema))
-    .map((item) => item.question);
+  void schema;
+  return [];
 }
 
 export function getProposalStatus(
@@ -68,16 +58,22 @@ export function getNormalizedStatus(
   modules: BlueprintModule[],
   assessment: SemanticAssessment
 ): NormalizedBlueprintStatus {
-  const readiness = getSchemaReadiness(schema);
-  if (readiness === "blocked" || proposal.status === "blocked" || assessment.blockers.length > 0) {
-    return "blocked";
-  }
+  // Stage 1 proposal posture remains useful evidence, but final blueprint status
+  // must come from assembled blueprint facts and semantic assessment only.
+  void schema;
+  void proposal;
 
   if (modules.length === 0) {
     return "blocked";
   }
 
-  if (readiness === "weak" || proposal.status === "needs_review" || assessment.warnings.length > 0) {
+  if (assessment.blockers.length > 0) {
+    return "blocked";
+  }
+
+  if (
+    assessment.warnings.length > 0
+  ) {
     return "weak";
   }
 

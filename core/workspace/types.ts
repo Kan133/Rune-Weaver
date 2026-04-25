@@ -8,7 +8,19 @@
  */
 
 import type { HostKind } from "../host/types.js";
-import type { FeatureAuthoring } from "../schema/types.js";
+import type {
+  CommitDecision,
+  FeatureAuthoring,
+  FeatureContract,
+  FeatureDependencyEdge,
+  FeatureMaturity,
+  GroundingAssessment,
+  ImplementationStrategy,
+  ModuleImplementationRecord,
+  ValidationStatus,
+} from "../schema/types.js";
+
+export type { ModuleImplementationRecord } from "../schema/types.js";
 
 export interface EntryBinding {
   target: "server" | "ui" | "config";
@@ -23,6 +35,33 @@ export interface FeatureSourceModelRef {
   path: string;
 }
 
+export type ManagedAggregateOwner = "dota2-ability-kv-aggregate";
+
+export type FeatureOwnedArtifact =
+  | {
+      kind: "generated_file";
+      path: string;
+    }
+  | {
+      kind: "rw_source_model";
+      path: string;
+      adapter?: string;
+      version?: number;
+    }
+  | {
+      kind: "ability_kv_fragment";
+      path: string;
+      aggregateTargetPath: string;
+      abilityName: string;
+      scriptFile: string;
+      managedBy: ManagedAggregateOwner;
+    }
+  | {
+      kind: "materialized_aggregate";
+      path: string;
+      managedBy: ManagedAggregateOwner;
+    };
+
 export interface RuneWeaverFeatureRecord {
   featureId: string;
   featureName?: string;
@@ -30,12 +69,21 @@ export interface RuneWeaverFeatureRecord {
   status: "active" | "disabled" | "archived" | "rolled_back";
   revision: number;
   blueprintId: string;
+  modules?: ModuleImplementationRecord[];
   selectedPatterns: string[];
   generatedFiles: string[];
+  ownedArtifacts?: FeatureOwnedArtifact[];
   entryBindings: EntryBinding[];
   sourceModel?: FeatureSourceModelRef;
   featureAuthoring?: FeatureAuthoring;
   dependsOn?: string[];
+  maturity?: FeatureMaturity;
+  implementationStrategy?: ImplementationStrategy;
+  featureContract?: FeatureContract;
+  validationStatus?: ValidationStatus;
+  dependencyEdges?: FeatureDependencyEdge[];
+  commitDecision?: CommitDecision;
+  groundingSummary?: GroundingAssessment;
   integrationPoints?: string[];  // 存储集成点标识，如 ["input.key_binding:Q"]
   gapFillBoundaries?: string[];
   createdAt: string;
@@ -73,11 +121,21 @@ export interface WorkspaceValidationResult {
 export interface FeatureWriteResult {
   featureId: string;
   blueprintId: string;
+  modules?: ModuleImplementationRecord[] | null;
   selectedPatterns: string[];
   generatedFiles: string[];
+  ownedArtifacts?: FeatureOwnedArtifact[];
   entryBindings: EntryBinding[];
   sourceModel?: FeatureSourceModelRef | null;
   featureAuthoring?: FeatureAuthoring | null;
+  dependsOn?: string[];
+  maturity?: FeatureMaturity;
+  implementationStrategy?: ImplementationStrategy;
+  featureContract?: FeatureContract | null;
+  validationStatus?: ValidationStatus | null;
+  dependencyEdges?: FeatureDependencyEdge[];
+  commitDecision?: CommitDecision | null;
+  groundingSummary?: GroundingAssessment | null;
   gapFillBoundaries?: string[];
 }
 

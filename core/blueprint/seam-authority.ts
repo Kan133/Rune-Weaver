@@ -3,11 +3,49 @@ import {
   BlueprintProposal,
   IntentRequirement,
   IntentSchema,
+  ModuleFacetSpec,
   ModuleNeed,
 } from "../schema/types";
 import { collectIntentStrings, collectTypedParameterKeys, readPositiveNumber } from "./semantic-lexical";
+import {
+  getIntentGovernanceView,
+  hasGovernanceExternalOrSharedOwnership,
+  hasGovernancePersistentScope,
+  hasGovernanceRevealBatchResolution,
+  hasGovernanceSelectionFlowContract,
+} from "../wizard/intent-governance-view.js";
+import {
+  isDefinitionOnlyProviderBoundary,
+  isDefinitionOnlyProviderDerivedState,
+} from "../wizard/intent-schema/definition-only-provider.js";
+
+export type SemanticRiskDisposition =
+  | "reusable_fit"
+  | "synthesis_required"
+  | "governance_blocked";
+
+export interface SemanticRiskFinding {
+  code:
+    | "proposal_legality"
+    | "scheduler_timer"
+    | "reward_progression"
+    | "spawn_emission"
+    | "session_state";
+  severity: "info" | "warning" | "error";
+  message: string;
+  family:
+    | "proposal_legality"
+    | "scheduler_timer"
+    | "reward_progression"
+    | "spawn_emission"
+    | "session_state";
+  disposition: SemanticRiskDisposition;
+  summary: string;
+}
 
 export interface SemanticAssessment {
+  riskFindings: SemanticRiskFinding[];
+  findings?: SemanticRiskFinding[];
   blockers: string[];
   warnings: string[];
   notes: string[];
@@ -19,21 +57,45 @@ export function assessSemanticCompleteness(
   schema: IntentSchema,
   modules: BlueprintModule[],
   moduleNeeds: ModuleNeed[],
-  proposal: BlueprintProposal
+  proposal: BlueprintProposal,
+  moduleFacets: ModuleFacetSpec[] = [],
 ): SemanticAssessment {
+  const governance = getIntentGovernanceView(schema);
+  const findings: SemanticRiskFinding[] = [];
   const blockers = new Set<string>();
   const warnings = new Set<string>();
   const notes = new Set<string>();
   const typedRequirements = schema.requirements.typed || [];
+  const facetsByBackbone = new Map<string, ModuleFacetSpec[]>();
+
+  for (const facet of moduleFacets) {
+    const existing = facetsByBackbone.get(facet.backboneModuleId) || [];
+    existing.push(facet);
+    facetsByBackbone.set(facet.backboneModuleId, existing);
+  }
 
   if (proposal.blockedBy && proposal.blockedBy.length > 0) {
     for (const blocker of proposal.blockedBy) {
-      blockers.add(`Blocked by clarification: ${blocker}`);
+      const summary = `Blocked by proposal/legality authority: ${blocker}`;
+      findings.push({
+        code: "proposal_legality",
+        severity: "error",
+        message: summary,
+        family: "proposal_legality",
+        disposition: "governance_blocked",
+        summary,
+      });
+      blockers.add(summary);
     }
   }
 
-  if (typedRequirements.length === 0 && schema.requirements.functional.length === 0) {
-    blockers.add("IntentSchema does not provide any functional or typed requirements for FinalBlueprint normalization.");
+  const hasSemanticInputs =
+    typedRequirements.length > 0
+    || schema.requirements.functional.length > 0
+    || Object.values(governance.mechanics || {}).some((value) => value === true);
+
+  if (!hasSemanticInputs) {
+    warnings.add("IntentSchema does not provide any functional or typed requirements for FinalBlueprint normalization.");
   }
 
   for (const requirement of typedRequirements) {
@@ -44,24 +106,39 @@ export function assessSemanticCompleteness(
     const category = resolveRequirementCategoryForAssessment(requirement, schema);
     const matchingNeed = moduleNeeds.find((need) => {
       const module = modules.find((item) => item.id === need.moduleId);
-      return module?.category === category;
+      if (!module) {
+        return false;
+      }
+      if (module.category === category) {
+        return true;
+      }
+      if (module.planningKind !== "backbone") {
+        return false;
+      }
+      const facets = facetsByBackbone.get(module.id) || [];
+      return facets.some((facet) => facet.category === category);
     });
 
     if (!matchingNeed) {
-      blockers.add(`Missing canonical ModuleNeed for must requirement '${requirement.id}'.`);
+      warnings.add(`Missing canonical ModuleNeed for must requirement '${requirement.id}'.`);
       continue;
     }
 
     if (matchingNeed.requiredCapabilities.length === 0) {
-      blockers.add(`Must requirement '${requirement.id}' does not resolve requiredCapabilities.`);
+      warnings.add(`Must requirement '${requirement.id}' does not resolve requiredCapabilities.`);
     }
 
-    if (category === "effect" && (schema.effects?.operations || []).length === 0) {
+    if (
+      category === "effect"
+      && matchingNeed.semanticRole !== "gameplay_ability"
+      && (governance.effect.operations || []).length === 0
+    ) {
       warnings.add(`Must effect requirement '${requirement.id}' is underspecified because no effect operations were provided.`);
     }
 
-    if (category === "rule" && !schema.selection?.mode) {
-      warnings.add(`Must rule requirement '${requirement.id}' is underspecified because selection.mode is missing.`);
+    const matchingModule = modules.find((item) => item.id === matchingNeed.moduleId);
+    if (category === "rule" && matchingModule?.role === "selection_flow" && !governance.selection.present) {
+      warnings.add(`Must rule requirement '${requirement.id}' is underspecified because selection governance is missing.`);
     }
 
     if (category === "ui" && !matchingNeed.requiredOutputs?.length) {
@@ -77,7 +154,7 @@ export function assessSemanticCompleteness(
     }
   }
 
-  addUnsupportedFamilyGapBlockers(schema, blockers);
+  addSemanticRiskFindings(schema, findings, warnings, blockers);
   addCoarseCapabilityWarnings(moduleNeeds, warnings);
 
   const uncertaintyCount = schema.uncertainties?.length ?? 0;
@@ -85,12 +162,20 @@ export function assessSemanticCompleteness(
     notes.add(`Normalization retained ${uncertaintyCount} uncertainty item(s).`);
   }
 
-  const clarificationCount = schema.requiredClarifications?.length ?? 0;
-  if (clarificationCount > 0) {
-    notes.add(`Normalization retained ${clarificationCount} clarification item(s).`);
+  const contentCollectionCount = schema.contentModel?.collections?.length ?? 0;
+  if (contentCollectionCount > 0) {
+    const featureOwnedCount =
+      schema.contentModel?.collections?.filter((collection) => collection.ownership === "feature").length ?? 0;
+    notes.add(
+      featureOwnedCount > 0
+        ? `IntentSchema carries ${featureOwnedCount} feature-owned content collection(s); keep them as Blueprint evidence for possible source-backed authoring instead of collapsing them into parameters.`
+        : `IntentSchema carries ${contentCollectionCount} content collection semantic hint(s).`,
+    );
   }
 
   return {
+    riskFindings: findings,
+    findings,
     blockers: [...blockers],
     warnings: [...warnings],
     notes: [...notes],
@@ -121,7 +206,7 @@ export function shouldUseShortTimeBuffCapability(
   return targets.every((target) => isSelfTargetedEffectTarget(target));
 }
 
-export function isAdmittedLocalCooldownSchedulerSlice(schema: IntentSchema): boolean {
+export function detectLocalCooldownSchedulerReusableFit(schema: IntentSchema): boolean {
   if (!hasLocalCooldownOnlySchedulerSignals(schema)) {
     return false;
   }
@@ -130,13 +215,13 @@ export function isAdmittedLocalCooldownSchedulerSlice(schema: IntentSchema): boo
     return false;
   }
 
-  if (hasSelectionSchedulerPressure(schema)) {
+  if (detectSelectionFlowAsk(schema)) {
     return false;
   }
 
   if (
-    hasUnsupportedRewardProgressionSignals(schema) ||
-    hasUnsupportedSpawnEmissionSignals(schema)
+    classifyRewardProgressionRisk(schema) === "governance_blocked" ||
+    classifySpawnEmissionRisk(schema) === "governance_blocked"
   ) {
     return false;
   }
@@ -144,26 +229,33 @@ export function isAdmittedLocalCooldownSchedulerSlice(schema: IntentSchema): boo
   return true;
 }
 
-export function hasUnsupportedSchedulerTimerSignals(schema: IntentSchema): boolean {
+export function classifySchedulerTimerRisk(
+  schema: IntentSchema
+): SemanticRiskDisposition | undefined {
   if (!hasAnySchedulerTimerSignals(schema)) {
-    return false;
+    return undefined;
   }
 
-  return !isAdmittedLocalCooldownSchedulerSlice(schema);
+  if (detectLocalCooldownSchedulerReusableFit(schema)) {
+    return "reusable_fit";
+  }
+
+  return "synthesis_required";
 }
 
-export function isSelectionLocalProgressionStateRequirement(
+export function detectSelectionLocalProgressionStateRequirement(
   req: IntentRequirement,
   schema: IntentSchema
 ): boolean {
   return (
     req.kind === "state" &&
-    isAdmittedSelectionLocalProgressionSlice(schema) &&
+    detectSelectionLocalProgressionReusableFit(schema) &&
     stateRequirementLooksLikeProgression(req, schema)
   );
 }
 
-export function isAdmittedSelectionLocalProgressionSlice(schema: IntentSchema): boolean {
+export function detectSelectionLocalProgressionReusableFit(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   if (!hasAnyRewardProgressionSignals(schema)) {
     return false;
   }
@@ -172,19 +264,19 @@ export function isAdmittedSelectionLocalProgressionSlice(schema: IntentSchema): 
     return false;
   }
 
-  if (hasAnySchedulerTimerSignals(schema) || hasAnySpawnEmissionSignals(schema)) {
+  if (hasAnySchedulerTimerSignals(schema) || detectSpawnEmitterSignals(schema)) {
     return false;
   }
 
   if (
-    !schema.normalizedMechanics.candidatePool ||
-    !schema.normalizedMechanics.weightedSelection ||
-    !schema.normalizedMechanics.playerChoice
+    !governance.mechanics.candidatePool ||
+    !governance.mechanics.weightedSelection ||
+    !governance.mechanics.playerChoice
   ) {
     return false;
   }
 
-  if (schema.selection?.inventory) {
+  if (governance.selection.inventory) {
     return false;
   }
 
@@ -202,12 +294,22 @@ export function isAdmittedSelectionLocalProgressionSlice(schema: IntentSchema): 
   return buildSelectionLocalProgressionConfig(progressionRequirement, schema) !== undefined;
 }
 
-export function hasUnsupportedRewardProgressionSignals(schema: IntentSchema): boolean {
+export function classifyRewardProgressionRisk(
+  schema: IntentSchema
+): SemanticRiskDisposition | undefined {
   if (!hasAnyRewardProgressionSignals(schema)) {
-    return false;
+    return undefined;
   }
 
-  return !isAdmittedSelectionLocalProgressionSlice(schema);
+  if (detectSelectionLocalProgressionReusableFit(schema)) {
+    return "reusable_fit";
+  }
+
+  if (hasForbiddenRewardProgressionScope(schema)) {
+    return "governance_blocked";
+  }
+
+  return "synthesis_required";
 }
 
 export function buildSelectionLocalProgressionConfig(
@@ -269,8 +371,9 @@ export function stateRequirementLooksLikeProgression(
   return schema.stateModel?.states?.some((state) => stateLooksLikeProgressionState(state)) || false;
 }
 
-export function isAdmittedForwardLinearProjectileSlice(schema: IntentSchema): boolean {
-  if (!hasAnySpawnEmissionSignals(schema)) {
+export function detectForwardLinearProjectileReusableFit(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
+  if (!detectSpawnEmitterSignals(schema)) {
     return false;
   }
 
@@ -282,20 +385,20 @@ export function isAdmittedForwardLinearProjectileSlice(schema: IntentSchema): bo
   }
 
   if (
-    schema.normalizedMechanics.candidatePool ||
-    schema.normalizedMechanics.weightedSelection ||
-    schema.normalizedMechanics.playerChoice ||
-    schema.normalizedMechanics.uiModal
+    governance.mechanics.candidatePool ||
+    governance.mechanics.weightedSelection ||
+    governance.mechanics.playerChoice ||
+    governance.mechanics.uiModal
   ) {
     return false;
   }
 
   if (
-    schema.selection?.mode !== undefined ||
-    schema.selection?.cardinality !== undefined ||
-    schema.selection?.repeatability !== undefined ||
-    schema.selection?.duplicatePolicy !== undefined ||
-    schema.selection?.inventory !== undefined
+    governance.selection.present ||
+    governance.selection.cardinality !== undefined ||
+    governance.selection.repeatability !== undefined ||
+    governance.selection.duplicatePolicy !== undefined ||
+    governance.selection.inventory !== undefined
   ) {
     return false;
   }
@@ -311,37 +414,75 @@ export function isAdmittedForwardLinearProjectileSlice(schema: IntentSchema): bo
   return getForwardLinearProjectileRequirement(schema) !== undefined;
 }
 
-export function hasUnsupportedSpawnEmissionSignals(schema: IntentSchema): boolean {
-  if (!hasAnySpawnEmissionSignals(schema)) {
-    return false;
+export function classifySpawnEmissionRisk(
+  schema: IntentSchema
+): SemanticRiskDisposition | undefined {
+  if (!detectSpawnEmitterSignals(schema)) {
+    return undefined;
   }
 
-  return !isAdmittedForwardLinearProjectileSlice(schema);
+  if (detectForwardLinearProjectileReusableFit(schema)) {
+    return "reusable_fit";
+  }
+
+  return "synthesis_required";
 }
 
-export function hasStandaloneEntitySessionStateGap(schema: IntentSchema): boolean {
+export function classifyStandaloneSessionStateRisk(
+  schema: IntentSchema
+): SemanticRiskDisposition | undefined {
+  const governance = getIntentGovernanceView(schema);
+  const definitionOnlyProvider = isDefinitionOnlyProviderBoundary(schema, schema.request?.rawPrompt);
   const typedStateRequirements = (schema.requirements.typed || []).filter(
     (requirement) => requirement.kind === "state"
   );
-  const states = schema.stateModel?.states || [];
+  const states = (governance.state.states || []).filter((state) => {
+    if (!definitionOnlyProvider) {
+      return true;
+    }
+    const definitionOnlyState = state as {
+      id?: string;
+      stateId?: string;
+      summary?: string;
+      owner?: "feature" | "session" | "external";
+      lifetime?: "ephemeral" | "session" | "persistent";
+      mutationMode?: "create" | "update" | "consume" | "expire" | "remove";
+    };
+    return !isDefinitionOnlyProviderDerivedState({
+      id: definitionOnlyState.id || definitionOnlyState.stateId || "",
+      summary: definitionOnlyState.summary || "",
+      owner: definitionOnlyState.owner,
+      lifetime: definitionOnlyState.lifetime,
+      mutationMode: definitionOnlyState.mutationMode,
+    });
+  });
+  const rawStates = (schema.stateModel?.states || []).filter((state) =>
+    !definitionOnlyProvider || !isDefinitionOnlyProviderDerivedState(state),
+  );
 
-  if (typedStateRequirements.length === 0 && states.length === 0) {
-    return false;
+  if (typedStateRequirements.length === 0 && rawStates.length === 0) {
+    return undefined;
+  }
+
+  if (states.some((state) => state.lifetime === "persistent" || state.owner === "external" || state.owner === "session")) {
+    return "governance_blocked";
   }
 
   if (
     typedStateRequirements.some((requirement) => {
-      if (isSelectionLocalProgressionStateRequirement(requirement, schema)) {
+      if (detectSelectionLocalProgressionStateRequirement(requirement, schema)) {
         return false;
       }
 
-      return !schema.normalizedMechanics.candidatePool;
+      return !governance.mechanics.candidatePool;
     })
   ) {
-    return true;
+    return "synthesis_required";
   }
 
-  return states.some((state) => !isAdmittedPatternOwnedState(state, schema));
+  return rawStates.some((state) => !isPatternOwnedStateReusableFit(state, schema))
+    ? "synthesis_required"
+    : "reusable_fit";
 }
 
 export function stateLooksLikeCommittedSelection(state: StateModelState): boolean {
@@ -407,44 +548,114 @@ function addCoarseCapabilityWarnings(
     for (const capability of need.requiredCapabilities) {
       if (capability === "selection.flow.resolve") {
         warnings.add(
-          `ModuleNeed '${need.semanticRole}' falls back to coarse capability 'selection.flow.resolve'; selection semantics remain underspecified on the current seam.`
+          `ModuleNeed '${need.semanticRole}' falls back to coarse capability 'selection.flow.resolve'; selection semantics remain underspecified and should continue via synthesis or stronger pattern grounding.`
         );
       }
-      if (capability === "state.session.snapshot") {
+      if (capability === "state.session.feature_owned") {
         warnings.add(
-          `ModuleNeed '${need.semanticRole}' falls back to coarse capability 'state.session.snapshot'; state semantics remain underspecified on the current seam.`
+          `ModuleNeed '${need.semanticRole}' falls back to coarse capability 'state.session.feature_owned'; state semantics remain underspecified and should continue via synthesis or stronger pattern grounding.`
         );
       }
     }
   }
 }
 
-function addUnsupportedFamilyGapBlockers(
+function addSemanticRiskFindings(
   schema: IntentSchema,
+  findings: SemanticRiskFinding[],
+  warnings: Set<string>,
   blockers: Set<string>
 ): void {
-  if (hasUnsupportedSchedulerTimerSignals(schema)) {
-    blockers.add(
-      "Scheduler/timer semantics exceed the current admitted cooldown-local effect slice; delay/periodic and cross-module/post-selection scheduler orchestration remain outside the current seam."
+  const schedulerRisk = classifySchedulerTimerRisk(schema);
+  if (schedulerRisk) {
+    pushRiskFinding(
+      findings,
+      warnings,
+      blockers,
+      "scheduler_timer",
+      schedulerRisk,
+      schedulerRisk === "reusable_fit"
+        ? "Scheduler/timer semantics match the reusable local-cooldown slice."
+        : "Scheduler/timer semantics need synthesis (delay/periodic/cooldown orchestration is synthesis-safe on this seam)."
     );
   }
 
-  if (hasUnsupportedRewardProgressionSignals(schema)) {
-    blockers.add(
-      "Reward/progression semantics exceed the current admitted selection-local threshold progression slice; persistence, economy, inventory grant, and cross-feature reward remain outside the current seam."
+  const progressionRisk = classifyRewardProgressionRisk(schema);
+  if (progressionRisk) {
+    pushRiskFinding(
+      findings,
+      warnings,
+      blockers,
+      "reward_progression",
+      progressionRisk,
+      progressionRisk === "reusable_fit"
+        ? "Reward/progression semantics match the reusable selection-local threshold slice."
+        : progressionRisk === "governance_blocked"
+          ? "Reward/progression semantics request persistent/economy/inventory scope and are governance-blocked."
+          : "Reward/progression semantics require synthesis beyond the reusable local-threshold slice."
     );
   }
 
-  if (hasUnsupportedSpawnEmissionSignals(schema)) {
-    blockers.add(
-      "Spawn/emission semantics exceed the current admitted forward-linear-projectile slice; helper-unit / follow / effect-coupled spawn choreography remain outside the current seam."
+  const spawnRisk = classifySpawnEmissionRisk(schema);
+  if (spawnRisk) {
+    pushRiskFinding(
+      findings,
+      warnings,
+      blockers,
+      "spawn_emission",
+      spawnRisk,
+      spawnRisk === "reusable_fit"
+        ? "Spawn/emission semantics match the reusable forward-linear-projectile slice."
+        : "Spawn/emission semantics require synthesis but remain seam-safe via feature-owned spawn emitter composition."
     );
   }
 
-  if (hasStandaloneEntitySessionStateGap(schema)) {
-    blockers.add(
-      "Standalone entity/session state semantics are requested, but grammar-v1 currently only admits pattern-owned session-local state inside data.weighted_pool / rule.selection_flow; standalone session store and shared state bus remain outside the current seam."
+  const stateRisk = classifyStandaloneSessionStateRisk(schema);
+  if (stateRisk) {
+    pushRiskFinding(
+      findings,
+      warnings,
+      blockers,
+      "session_state",
+      stateRisk,
+      stateRisk === "reusable_fit"
+        ? "Session state semantics remain within pattern-owned reusable state handling."
+        : stateRisk === "governance_blocked"
+          ? "Standalone entity/session state semantics request persistent/external/shared ownership and are governance-blocked."
+          : "Standalone entity/session state semantics require synthesis via feature-owned session state."
     );
+  }
+}
+
+function pushRiskFinding(
+  findings: SemanticRiskFinding[],
+  warnings: Set<string>,
+  blockers: Set<string>,
+  family: SemanticRiskFinding["family"],
+  disposition: SemanticRiskDisposition,
+  summary: string
+): void {
+  const severity =
+    disposition === "governance_blocked"
+      ? "error"
+      : disposition === "synthesis_required"
+        ? "warning"
+        : "info";
+  findings.push({
+    code: family,
+    severity,
+    message: summary,
+    family,
+    disposition,
+    summary,
+  });
+  if (disposition === "governance_blocked") {
+    blockers.add(summary);
+    return;
+  }
+
+  if (disposition === "synthesis_required") {
+    warnings.add(summary);
   }
 }
 
@@ -452,7 +663,7 @@ function resolveRequirementCategoryForAssessment(
   req: IntentRequirement,
   schema: IntentSchema
 ): BlueprintModule["category"] {
-  if (isSelectionLocalProgressionStateRequirement(req, schema)) {
+  if (detectSelectionLocalProgressionStateRequirement(req, schema)) {
     return "rule";
   }
 
@@ -477,8 +688,11 @@ function resolveRequirementCategoryForAssessment(
 }
 
 function hasAnySchedulerTimerSignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const parameterKeys = collectTypedParameterKeys(schema);
   if (
+    governance.timing.intervalSeconds !== undefined ||
+    governance.timing.cooldownSeconds !== undefined ||
     parameterKeys.has("initialDelaySeconds") ||
     parameterKeys.has("tickSeconds") ||
     parameterKeys.has("delaySeconds") ||
@@ -495,8 +709,10 @@ function hasAnySchedulerTimerSignals(schema: IntentSchema): boolean {
 }
 
 function hasLocalCooldownOnlySchedulerSignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const parameterKeys = collectTypedParameterKeys(schema);
   if (
+    governance.timing.intervalSeconds !== undefined ||
     parameterKeys.has("initialDelaySeconds") ||
     parameterKeys.has("tickSeconds") ||
     parameterKeys.has("delaySeconds") ||
@@ -513,8 +729,10 @@ function hasLocalCooldownOnlySchedulerSignals(schema: IntentSchema): boolean {
 }
 
 function hasLocalCooldownSignal(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   const parameterKeys = collectTypedParameterKeys(schema);
   if (
+    governance.timing.cooldownSeconds !== undefined ||
     parameterKeys.has("cooldownSeconds") ||
     parameterKeys.has("cooldown") ||
     parameterKeys.has("abilityCooldown")
@@ -558,23 +776,12 @@ function hasDisallowedSchedulerOrchestrationText(schema: IntentSchema): boolean 
   });
 }
 
-function hasSelectionSchedulerPressure(schema: IntentSchema): boolean {
-  if (
-    schema.normalizedMechanics.candidatePool === true ||
-    schema.normalizedMechanics.weightedSelection === true ||
-    schema.normalizedMechanics.playerChoice === true ||
-    schema.normalizedMechanics.uiModal === true
-  ) {
-    return true;
+export function detectSelectionFlowAsk(schema: IntentSchema): boolean {
+  if (hasGovernanceRevealBatchResolution(schema)) {
+    return false;
   }
 
-  if (
-    schema.selection?.mode !== undefined ||
-    schema.selection?.cardinality !== undefined ||
-    schema.selection?.repeatability !== undefined ||
-    schema.selection?.duplicatePolicy !== undefined ||
-    schema.selection?.inventory !== undefined
-  ) {
+  if (hasGovernanceSelectionFlowContract(schema)) {
     return true;
   }
 
@@ -614,12 +821,8 @@ function hasAnyRewardProgressionSignals(schema: IntentSchema): boolean {
 }
 
 function hasForbiddenRewardProgressionScope(schema: IntentSchema): boolean {
-  if (
-    schema.selection?.inventory ||
-    schema.stateModel?.states?.some(
-      (state) => state.lifetime === "persistent" || state.owner === "external"
-    )
-  ) {
+  const governance = getIntentGovernanceView(schema);
+  if (governance.selection.inventory || hasGovernancePersistentScope(schema) || hasGovernanceExternalOrSharedOwnership(schema)) {
     return true;
   }
 
@@ -664,8 +867,13 @@ function getSelectionLocalProgressionStateIds(schema: IntentSchema): {
   };
 }
 
-function hasAnySpawnEmissionSignals(schema: IntentSchema): boolean {
+export function detectSpawnEmitterSignals(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
   if (getForwardLinearProjectileRequirement(schema)) {
+    return true;
+  }
+
+  if ((governance.outcome.operations || []).includes("spawn")) {
     return true;
   }
 
@@ -683,6 +891,20 @@ function hasAnySpawnEmissionSignals(schema: IntentSchema): boolean {
       normalized.includes("投射物") ||
       normalized.includes("帮助单位") ||
       normalized.includes("跟随玩家")
+    );
+  });
+}
+
+export function detectFollowOwnerMotionSignals(schema: IntentSchema): boolean {
+  return collectIntentStrings(schema).some((value) => {
+    const normalized = value.toLowerCase();
+    return (
+      normalized.includes("follow") ||
+      normalized.includes("follow owner") ||
+      normalized.includes("following the player") ||
+      normalized.includes("tracking") ||
+      normalized.includes("跟随玩家") ||
+      normalized.includes("跟随")
     );
   });
 }
@@ -729,23 +951,24 @@ function hasBlockedSpawnEmissionText(schema: IntentSchema): boolean {
   });
 }
 
-function isAdmittedPatternOwnedState(
+function isPatternOwnedStateReusableFit(
   state: StateModelState,
   schema: IntentSchema
 ): boolean {
-  if (stateLooksLikePoolState(state) && schema.normalizedMechanics.candidatePool) {
+  const governance = getIntentGovernanceView(schema);
+  if (stateLooksLikePoolState(state) && governance.mechanics.candidatePool) {
     return true;
   }
 
   if (
     stateLooksLikeCommittedSelection(state) &&
-    (schema.normalizedMechanics.weightedSelection || schema.normalizedMechanics.playerChoice || !!schema.selection?.mode)
+    (governance.mechanics.weightedSelection || governance.mechanics.playerChoice || governance.selection.present)
   ) {
     return true;
   }
 
   if (
-    isAdmittedSelectionLocalProgressionSlice(schema) &&
+    detectSelectionLocalProgressionReusableFit(schema) &&
     stateLooksLikeProgressionState(state) &&
     isSessionLocalFeatureState(state)
   ) {

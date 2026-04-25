@@ -16,7 +16,7 @@ import { createLLMClientFromEnv, readLLMExecutionConfig } from "../../core/llm/f
 import { runWizardToIntentSchema } from "../../core/wizard/intent-schema.js";
 import { BlueprintBuilder } from "../../core/blueprint/builder.js";
 import { validateBlueprint } from "../../core/blueprint/validator.js";
-import type { IntentSchema, Blueprint } from "../../core/schema/types.js";
+import type { IntentSchema, Blueprint, WizardClarificationPlan } from "../../core/schema/types.js";
 import type { BlueprintValidationResult, BlueprintReviewArtifact } from "../../core/blueprint/types.js";
 
 export interface BlueprintCLIOptions {
@@ -33,13 +33,13 @@ export interface BlueprintCLIOptions {
 // 返回状态类型
 type BlueprintCLIStatus = 
   | "success"           // 成功生成 Blueprint
-  | "schema_not_ready"  // Schema 需要澄清（正常分支，非错误）
   | "validation_error"  // 验证错误
   | "execution_error";  // 执行失败
 
 interface BlueprintCLIResult {
   status: BlueprintCLIStatus;
   schema?: IntentSchema;
+  clarificationPlan?: WizardClarificationPlan;
   blueprint?: Blueprint;
   validation?: BlueprintValidationResult;
   reviewArtifact?: BlueprintReviewArtifact;
@@ -100,6 +100,7 @@ export async function runBlueprintCLI(options: BlueprintCLIOptions): Promise<boo
  */
 async function runBlueprintCommand(options: BlueprintCLIOptions): Promise<BlueprintCLIResult> {
   let schema: IntentSchema;
+  let clarificationPlan: WizardClarificationPlan | undefined;
 
   // 1. 获取 IntentSchema
   if (options.fromFile) {
@@ -125,6 +126,7 @@ async function runBlueprintCommand(options: BlueprintCLIOptions): Promise<Bluepr
       };
     }
     schema = wizardResult.schema!;
+    clarificationPlan = wizardResult.clarificationPlan;
   } else {
     return {
       status: "execution_error",
@@ -132,17 +134,7 @@ async function runBlueprintCommand(options: BlueprintCLIOptions): Promise<Bluepr
     };
   }
 
-  // 2. 检查 IntentSchema 是否准备好构建 Blueprint
-  // 这是正常分支，不是错误！
-  if (!schema.isReadyForBlueprint) {
-    return {
-      status: "schema_not_ready",
-      schema,
-      message: "IntentSchema 需要进一步澄清",
-    };
-  }
-
-  // 3. 构建 Blueprint
+  // 2. 构建 Blueprint
   logInfo("");
   logInfo("🔍 步骤 2/2: 构建 Blueprint...");
 
@@ -153,10 +145,11 @@ async function runBlueprintCommand(options: BlueprintCLIOptions): Promise<Bluepr
 
   const buildResult = builder.build(schema);
 
-  if (!buildResult.success || !buildResult.blueprint) {
+  if (!buildResult.blueprint) {
     return {
       status: "execution_error",
       schema,
+      clarificationPlan,
       message: "Blueprint 构建失败",
       issues: buildResult.issues.map(i => ({
         code: i.code,
@@ -166,29 +159,37 @@ async function runBlueprintCommand(options: BlueprintCLIOptions): Promise<Bluepr
     };
   }
 
-  // 4. 验证 Blueprint
+  // 3. 验证 Blueprint
   const validation = validateBlueprint(buildResult.blueprint);
 
-  // 5. 生成评审产物
+  // 4. 生成评审产物
   const reviewArtifact = generateReviewArtifact(schema, buildResult.blueprint, validation);
 
-  // 6. 保存评审产物到 tmp/blueprint-review/
+  // 5. 保存评审产物到 tmp/blueprint-review/
   await saveReviewArtifact(reviewArtifact, buildResult.blueprint.id);
 
+  const validationStatus = validation.valid && buildResult.success ? "success" : "validation_error";
+
   return {
-    status: validation.valid ? "success" : "validation_error",
+    status: validationStatus,
     schema,
+    clarificationPlan,
     blueprint: buildResult.blueprint,
     validation,
     reviewArtifact,
-    message: validation.valid ? "Blueprint 生成成功" : "Blueprint 验证未通过",
+    message: validationStatus === "success" ? "Blueprint 生成成功" : "Blueprint 已生成，但仍需 review",
+    issues: buildResult.issues.map(i => ({
+      code: i.code,
+      message: i.message,
+      path: i.path,
+    })),
   };
 }
 
 /**
  * 运行 Wizard 生成 IntentSchema
  */
-async function runWizard(options: BlueprintCLIOptions): Promise<{ success: boolean; schema?: IntentSchema; error?: string }> {
+async function runWizard(options: BlueprintCLIOptions): Promise<{ success: boolean; schema?: IntentSchema; clarificationPlan?: WizardClarificationPlan; error?: string }> {
   try {
     const client = createLLMClientFromEnv(process.cwd());
     const llmConfig = readLLMExecutionConfig(process.cwd(), "blueprint");
@@ -210,7 +211,7 @@ async function runWizard(options: BlueprintCLIOptions): Promise<{ success: boole
       };
     }
 
-    return { success: true, schema: result.schema };
+    return { success: true, schema: result.schema, clarificationPlan: result.clarificationPlan };
   } catch (error) {
     return {
       success: false,
@@ -255,7 +256,7 @@ function generateReviewArtifact(
     sourceSchema: {
       goal: schema.request.goal,
       intentKind: schema.classification.intentKind,
-      isReadyForBlueprint: schema.isReadyForBlueprint,
+      uncertaintyCount: schema.uncertainties?.length || 0,
     },
     blueprint: {
       id: blueprint.id,
@@ -298,6 +299,7 @@ function buildJSONOutput(result: BlueprintCLIResult): Record<string, unknown> {
   return {
     status: result.status,
     schema: result.schema,
+    clarificationPlan: result.clarificationPlan,
     blueprint: result.blueprint,
     validation: result.validation,
     reviewArtifact: result.reviewArtifact,
@@ -311,28 +313,6 @@ function buildJSONOutput(result: BlueprintCLIResult): Record<string, unknown> {
  */
 function printTerminalOutput(result: BlueprintCLIResult, options: BlueprintCLIOptions): void {
   switch (result.status) {
-    case "schema_not_ready":
-      logInfo("");
-      logInfo("⏸️  IntentSchema 需要进一步澄清");
-      logInfo("━".repeat(60));
-      logInfo("当前 goal:");
-      logInfo(`  ${result.schema?.request.goal}`);
-      logInfo("");
-      logInfo("待澄清问题:");
-      if (result.schema?.openQuestions.length === 0) {
-        logInfo("  (openQuestions 为空，建议添加具体问题)");
-      } else {
-        for (const q of result.schema?.openQuestions || []) {
-          logInfo(`  • ${q}`);
-        }
-      }
-      logInfo("");
-      logInfo("已解决的假设:");
-      for (const a of result.schema?.resolvedAssumptions || []) {
-        logInfo(`  ✓ ${a}`);
-      }
-      break;
-
     case "execution_error":
       logError("");
       logError("❌ 执行失败");
@@ -349,6 +329,13 @@ function printTerminalOutput(result: BlueprintCLIResult, options: BlueprintCLIOp
 
     case "validation_error":
     case "success":
+      if (result.clarificationPlan?.questions.length) {
+        logInfo("");
+        logInfo("🧭 Wizard 建议追问:");
+        for (const question of result.clarificationPlan.questions) {
+          logInfo(`  • ${question.question}`);
+        }
+      }
       if (result.blueprint && result.validation) {
         printBlueprintSummary(result.blueprint, result.validation);
       }

@@ -1,265 +1,158 @@
-# Blueprint 验证与评审指南
+# Blueprint Validation
 
 > Status: active-reference
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-14
-> Read when: validating or reviewing Blueprint structure
-> Do not use for: final blueprint authority semantics, current planning truth, or host-write decisions
+> Last verified: 2026-04-20
+> Read when: validating or reviewing current Blueprint/Assembly/final-gate truth in the mainline pipeline
+> Do not use for: the standalone `blueprint validate` CLI in isolation or as a substitute for final commit gating
 
-## 概述
+## Purpose
 
-本文档定义 Blueprint 的结构验证规则和评审标准，确保从 IntentSchema 生成的 Blueprint 符合装配要求。
+This document records the current layered validation chain.
 
-## 验证阶段
+The important shift is:
 
-Blueprint 验证分为以下几个阶段：
+- validation is no longer just a structural `Blueprint` check
+- the real chain now spans blueprint normalization, assembly continuation, synthesis/repair, dependency revalidation, host/runtime validation, and final commit gating
 
-1. **结构验证 (Structural Validation)**
-2. **语义验证 (Semantic Validation)**
-3. **统计检查 (Statistical Analysis)**
+## Current Validation Layers
 
----
+### 1. Blueprint Normalization
 
-## 1. 结构验证
+This layer produces:
 
-### 1.1 基本信息验证
+- `FinalBlueprint.status`
+- normalization issues
+- blueprint-stage `commitDecision`
 
-| 检查项 | 级别 | 说明 |
-|--------|------|------|
-| version | Error | Blueprint 必须有版本号 |
-| id | Error | Blueprint 必须有唯一标识符 |
-| summary | Error | Blueprint 必须有描述信息 |
-| summary.name | Warning | 建议添加名称便于识别 |
-| host | Error | 必须指定目标宿主环境 |
+Current meanings:
 
-### 1.2 模块验证
+- `ready`
+  - planning structure closed strongly enough to continue
+- `weak`
+  - planning may continue, but review/write limits remain explicit
+- `blocked`
+  - planning truth itself does not close honestly
 
-#### 必填字段
+Important boundary:
 
-| 检查项 | 级别 | 说明 |
-|--------|------|------|
-| 模块存在性 | Error | 至少需要一个模块 |
-| module.id | Error | 每个模块必须有唯一 ID |
-| 模块 ID 唯一性 | Error | 不允许重复模块 ID |
+- this is still not the final lifecycle verdict
 
-#### 建议字段
+### 2. Assembly / Resolution Validation
 
-| 检查项 | 级别 | 说明 |
-|--------|------|------|
-| module.summary | Warning | 模块描述有助于理解 |
-| module.responsibilities | Warning | 明确模块职责边界 |
+This layer checks:
 
-### 1.3 连接验证
+- selected pattern coherence
+- unresolved need carry-forward honesty
+- module implementation records
+- synthesis-bundle coherence when present
 
-| 检查项 | 级别 | 说明 |
-|--------|------|------|
-| connection.id | Error | 连接必须有唯一 ID |
-| 连接 ID 唯一性 | Error | 不允许重复连接 ID |
-| connection.from | Error | 必须指定来源模块 |
-| connection.to | Error | 必须指定目标模块 |
-| from 模块存在性 | Error | 来源模块必须在 modules 中 |
-| to 模块存在性 | Error | 目标模块必须在 modules 中 |
-| 自连接 | Warning | 模块连接到自己需要检查 |
+Current honest behavior:
 
-#### 连接类型标准
+- unresolved needs may remain visible instead of being turned into fake resolved patterns
+- review warnings may accumulate here without forcing an immediate hard block
 
-推荐使用的标准连接类型：
+### 3. Synthesis / Repair Validation
 
-- `data` - 数据传输
-- `event` - 事件触发
-- `control` - 控制流
-- `state` - 状态同步
-- `visual` - 视觉更新
+This layer checks:
 
-非标准类型会触发 Warning，但不会被阻止。
+- synthesized artifacts stay inside declared owned scope
+- repair stays inside bounded local boundaries
+- no repair action widens ownership, routing, or dependency truth
 
-### 1.4 UI 计划验证
+### 4. Dependency Revalidation
 
-| 场景 | 检查项 | 级别 |
-|------|--------|------|
-| 有 UI 模块但无 uiPlan | Error | 必须为 UI 模块提供计划 |
-| 有 uiPlan 但无 UI 模块 | Warning | 检查是否需要 UI 模块 |
-| requiredSurfaces 为空 | Warning | 添加 UI 界面描述 |
-| surface.id 缺失 | Error | 每个 surface 必须有 ID |
-| requiresDesignSpec 但无 designSpecRef | Warning | 补充设计规格引用 |
+This layer checks:
 
----
+- required provider/consumer contracts still hold
+- provider removals or surface changes downgrade or block consumers honestly
+- impacted feature truth is carried into the final gate
 
-## 2. 语义验证
+### 5. Host Validation
 
-### 2.1 依赖关系验证
+This layer checks host-facing write truth such as:
 
-| 检查项 | 级别 | 说明 |
-|--------|------|------|
-| 孤立模块 | Warning | 无连接的模块需检查必要性 |
-| 循环依赖 | Warning | 可能存在逻辑循环 |
+- expected namespaces and files
+- generator outputs
+- bridge refresh integrity
+- adapter-specific validation such as provider export alignment
 
-### 2.2 模块链完整性
+### 6. Runtime Validation
 
-对于典型的技能/系统 Blueprint，期望的结构：
+This layer checks runtime-meaningful outputs when applicable.
 
-```
-[input_binding] → [flow/data] → [effect]
-                      ↓
-                  [ui_surface]
-```
+Current rule:
 
-验证检查：
-- 是否有输入模块（input_binding）
-- 是否有效果模块（effect）或数据处理模块
-- UI 模块是否与主流程连接
+- skipped runtime validation does not equal runtime success
+- dry-run mode does not claim runtime proof
 
----
+### 7. Final Commit Gate
 
-## 3. 统计检查
+The final lifecycle authority is:
 
-### 3.1 模块数量
+- `CommitDecision.outcome`
 
-| 指标 | 阈值 | 级别 | 建议 |
-|------|------|------|------|
-| 模块数量 | > 10 | Warning | 拆分为多个 Blueprint |
-| 依赖深度 | > 5 | Warning | 简化依赖关系 |
+Current outcomes:
 
-### 3.2 模块类型分布
+- `committable`
+- `exploratory`
+- `blocked`
 
-健康的 Blueprint 应该包含：
+This layer composes:
 
-- **输入模块**: 至少 1 个（除非被动系统）
-- **效果/处理模块**: 至少 1 个
-- **UI 模块**: 根据需求（0-N 个）
+- blueprint warnings/blockers
+- module review reasons
+- dependency blockers
+- repair blockers
+- host/runtime validation failures
 
-### 3.3 连接密度
+## Current `ValidationStatus` Surface
 
-计算连接密度：
-```
-density = connections.length / modules.length
-```
+The persisted validation object is staged:
 
-| 密度 | 评价 |
-|------|------|
-| < 0.5 | 模块过于分散 |
-| 0.5 - 2.0 | 正常范围 |
-| > 2.0 | 连接复杂，需要检查 |
-
----
-
-## 4. 评审清单
-
-### 4.1 创建者自查清单
-
-在提交 Blueprint 前，请确认：
-
-- [ ] 所有 Error 级别问题已解决
-- [ ] 每个模块都有明确的责任边界
-- [ ] 连接关系符合逻辑流向
-- [ ] UI 计划与实际模块对应
-- [ ] 模块 ID 命名清晰（如 `dash_input`, `dash_effect`）
-
-### 4.2 评审者检查清单
-
-- [ ] 结构验证通过（valid = true）
-- [ ] 模块分解合理，符合单一职责原则
-- [ ] 连接类型使用正确
-- [ ] 统计指标在合理范围内
-- [ ] 与 IntentSchema 的意图一致
-
----
-
-## 5. 常见问题与修复
-
-### Q1: "存在 UI 模块，但缺少 uiPlan"
-
-**原因**: Blueprint 包含 `ui_surface` 类型的模块，但没有 `uiPlan` 字段。
-
-**修复**:
-```typescript
-{
-  uiPlan: {
-    requiredSurfaces: [
-      { id: "selection_modal", type: "modal", purpose: "选择界面" }
-    ]
-  }
+```ts
+interface ValidationStatus {
+  status: ValidationOutcome;
+  warnings: string[];
+  blockers: string[];
+  blueprint?: ValidationStageStatus;
+  synthesis?: ValidationStageStatus;
+  repair?: ValidationStageStatus;
+  dependency?: ValidationStageStatus;
+  host?: ValidationStageStatus;
+  runtime?: ValidationStageStatus;
 }
 ```
 
-### Q2: "模块 'xxx' 没有与其他模块连接"
+Current meaning:
 
-**原因**: 模块定义了但未在 connections 中引用。
+- `ValidationStatus` is the reviewable history of the chain
+- it is not just a one-shot blueprint validator result
 
-**修复**: 添加适当的连接，或删除不必要的模块。
+## Review Guidance
 
-### Q3: "可能存在循环依赖"
+When reviewing a current Blueprint/mainline result, ask in this order:
 
-**原因**: 模块 A → B → C → A 形成循环。
+1. did clarification authority already say planning or write was blocked?
+2. is Blueprint honest about `ready`, `weak`, or `blocked`?
+3. are unresolved needs represented honestly?
+4. did synthesis/repair stay within owned scope?
+5. do dependency edges still close?
+6. did host/runtime validation actually pass?
+7. what did the final `CommitDecision` say?
 
-**修复**: 
-- 检查逻辑是否真的需要循环
-- 考虑使用事件机制解耦
-- 重新设计模块边界
+## What This Doc Does Not Mean
 
----
+This doc is not claiming:
 
-## 6. 验证 API
+- the standalone `blueprint validate` CLI models the full mainline validation chain
+- blueprint status alone decides host write readiness
+- old `uiPlan`-era structural rules are still the center of validation truth
 
-### validateBlueprint
+## Summary
 
-```typescript
-import { validateBlueprint } from "./core/blueprint/validator.js";
+Current validation is layered.
 
-const result = validateBlueprint(blueprint);
-
-// result.valid: boolean
-// result.errors: ValidationIssue[]
-// result.warnings: ValidationIssue[]
-// result.stats: BlueprintStats
-```
-
-### CLI 验证
-
-```bash
-# 验证 Blueprint 文件
-npm run cli -- blueprint validate --from tmp/blueprint.json
-
-# JSON 输出
-npm run cli -- blueprint validate --from tmp/blueprint.json --json
-```
-
----
-
-## 7. 验证结果解读
-
-### 结果状态
-
-| valid | errors | warnings | 含义 |
-|-------|--------|----------|------|
-| true | 0 | 0 | ✅ 完全通过，可直接装配 |
-| true | 0 | N | ⚠️ 通过，但有建议优化项 |
-| false | N | - | ❌ 未通过，需修复错误 |
-
-### 问题严重度
-
-- **Error**: 阻止装配的结构性问题
-- **Warning**: 建议优化，但不阻止装配
-
----
-
-## 8. 与 Assembly 的衔接
-
-只有通过验证（valid = true）的 Blueprint 才能进入 Assembly 阶段：
-
-```
-IntentSchema → Blueprint → [验证] → AssemblyPlan → WritePlan → 代码生成
-                              ↓
-                         valid = true ? 继续
-                         valid = false ? 返回修复
-```
-
----
-
-## 附录：验证规则版本
-
-- **Version**: 0.1
-- **Last Updated**: 2026-04-05
-- **Applies to**: Blueprint v0.1
+Blueprint validation matters, but it is only the first honest slice of a longer chain whose final authority is the chain-end `CommitDecision`.

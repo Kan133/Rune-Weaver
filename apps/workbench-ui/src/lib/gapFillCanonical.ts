@@ -38,7 +38,7 @@ export interface GapFillContinuationState {
 export const TALENT_DRAW_CANONICAL_PROMPT =
   "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。";
 
-export const TALENT_DRAW_CANONICAL_BOUNDARY = "selection_flow.effect_mapping";
+export const TALENT_DRAW_CANONICAL_BOUNDARY = "selection_outcome.realization";
 
 export const TALENT_DRAW_CANONICAL_CONTINUATION_ORDER = [
   "create skeleton",
@@ -118,7 +118,7 @@ export function buildCanonicalGapFillGuidance(input: {
       summary:
         "这次输入没有命中冻结的 Talent Draw canonical prompt 和 boundary，结果只能记为 exploratory evidence。",
       nextStep:
-        "如需 acceptance evidence，请切回固定 prompt 和 selection_flow.effect_mapping 边界。",
+        "如需 acceptance evidence，请切回固定 prompt 和 selection_outcome.realization 边界。",
       evidenceMode: "exploratory",
       expectedPrompt: TALENT_DRAW_CANONICAL_PROMPT,
       expectedBoundary: TALENT_DRAW_CANONICAL_BOUNDARY,

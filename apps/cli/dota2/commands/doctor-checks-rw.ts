@@ -2,9 +2,14 @@
  * Doctor Command - Rune Weaver Specific Checks
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { validatePostGeneration } from "../../../../adapters/dota2/validator/post-generation-validator.js";
+import { planPostGenerationRepairs } from "../../../../adapters/dota2/validator/post-generation-repair.js";
+import {
+  buildDota2RepairabilityReadModel,
+  type Dota2GovernanceRepairabilityKind,
+} from "./dota2-governance-read-model.js";
 import type { DoctorCheck } from "./doctor-checks.js";
 
 function readAddonName(hostRoot: string): string | null {
@@ -133,8 +138,48 @@ function readActiveFeatureCount(hostRoot: string): number | null {
   }
 }
 
+function findGeneratedUiLessFiles(hostRoot: string): string[] {
+  const generatedUiRoot = join(hostRoot, "content/panorama/src/rune_weaver/generated/ui");
+  if (!existsSync(generatedUiRoot)) {
+    return [];
+  }
+
+  const files: string[] = [];
+  const stack = [generatedUiRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || !existsSync(current)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.name.endsWith(".less")) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
 export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
   const result = validatePostGeneration(hostRoot);
+  const groundingCheck = result.checks.find((check) => check.check === "synthesized_grounding_governance");
+
+  if (result.valid && groundingCheck?.details?.length) {
+    const repairability = buildDota2RepairabilityReadModel("review_required");
+    return {
+      name: "Post-Generation Validation",
+      status: "warn",
+      remediationKind: "review_required",
+      message: `All ${result.summary.total} checks passed, but ${groundingCheck.details.length} ${repairability.label} warning(s) remain`,
+      details: groundingCheck.details.slice(0, 5),
+      suggestion: repairability.buildSuggestion(hostRoot),
+    };
+  }
 
   if (result.valid) {
     return { name: "Post-Generation Validation", status: "pass", message: `All ${result.summary.total} checks passed` };
@@ -143,14 +188,67 @@ export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
   const details = result.issues.slice(0, 5);
   if (result.issues.length > 5) details.push(`... and ${result.issues.length - 5} more`);
   const failedCheck = result.checks.find((check) => !check.passed);
+  const repairPlan = planPostGenerationRepairs(result, hostRoot);
+  const remediationKind = resolvePostGenerationRemediationKind(repairPlan);
+  if (remediationKind === "requires_regenerate") {
+    repairPlan.actions
+      .filter((action) => action.kind === "requires_regenerate")
+      .slice(0, 3)
+      .forEach((action) => details.push(`Repair path: ${action.title}`));
+  } else if (remediationKind === "upgrade_workspace_grounding") {
+    repairPlan.actions
+      .filter((action) => action.kind === "upgrade_workspace_grounding")
+      .slice(0, 3)
+      .forEach((action) => details.push(`Repair path: ${action.title}`));
+  }
 
   return {
     name: "Post-Generation Validation",
     status: "fail",
-    message: `${result.summary.failed}/${result.summary.total} checks failed`,
+    remediationKind,
+    message: buildPostGenerationFailureMessage(result.summary.failed, result.summary.total, remediationKind),
     details,
-    suggestion: failedCheck?.suggestion,
+    suggestion: resolvePostGenerationSuggestion(hostRoot, remediationKind, failedCheck?.suggestion),
   };
+}
+
+function resolvePostGenerationRemediationKind(
+  repairPlan: ReturnType<typeof planPostGenerationRepairs>,
+): Dota2GovernanceRepairabilityKind {
+  if (repairPlan.summary.requiresRegenerate > 0 && repairPlan.executableActions.length === 0) {
+    return "requires_regenerate";
+  }
+  if (repairPlan.summary.upgradeWorkspaceGrounding > 0) {
+    return "upgrade_workspace_grounding";
+  }
+  return "repair_safe";
+}
+
+function buildPostGenerationFailureMessage(
+  failedCount: number,
+  totalCount: number,
+  remediationKind: DoctorCheck["remediationKind"],
+): string {
+  if (!remediationKind) {
+    return `${failedCount}/${totalCount} checks failed`;
+  }
+
+  const repairability = buildDota2RepairabilityReadModel(remediationKind);
+  return repairability.failureQualifier
+    ? `${failedCount}/${totalCount} checks failed (${repairability.failureQualifier})`
+    : `${failedCount}/${totalCount} checks failed`;
+}
+
+function resolvePostGenerationSuggestion(
+  hostRoot: string,
+  remediationKind: DoctorCheck["remediationKind"],
+  fallback?: string,
+): string | undefined {
+  if (!remediationKind) {
+    return fallback;
+  }
+
+  return buildDota2RepairabilityReadModel(remediationKind).buildSuggestion(hostRoot) || fallback;
 }
 
 export function checkProjectStructure(hostRoot: string): DoctorCheck {
@@ -216,9 +314,9 @@ export function checkProjectStructure(hostRoot: string): DoctorCheck {
 export function checkGapFillBoundaryAnchors(): DoctorCheck {
   const requiredAnchors = [
     {
-      filePath: join(process.cwd(), "adapters/dota2/generator/server/selection-flow.ts"),
-      exportName: "SELECTION_FLOW_GAP_FILL_BOUNDARIES",
-      marker: "GAP_FILL_BOUNDARY: selection_flow.effect_mapping",
+      filePath: join(process.cwd(), "adapters/dota2/generator/server/outcome-realizer.ts"),
+      exportName: "SELECTION_OUTCOME_GAP_FILL_BOUNDARIES",
+      marker: "GAP_FILL_BOUNDARY: selection_outcome.realization",
     },
     {
       filePath: join(process.cwd(), "adapters/dota2/generator/server/weighted-pool.ts"),
@@ -272,6 +370,7 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
   const hudEntry = join(hostRoot, "content/panorama/src/hud/script.tsx");
   const hudStyles = join(hostRoot, "content/panorama/src/hud/styles.less");
   const activeFeatureCount = readActiveFeatureCount(hostRoot);
+  const generatedUiLessFiles = findGeneratedUiLessFiles(hostRoot);
   const issues: string[] = [];
 
   if (!existsSync(serverEntry)) {
@@ -300,7 +399,14 @@ export function checkRuntimeBridgeWiring(hostRoot: string): DoctorCheck {
     issues.push("Missing content/panorama/src/hud/styles.less");
   } else {
     const content = readFileSync(hudStyles, "utf-8");
-    if ((activeFeatureCount ?? 1) > 0 && !content.includes("rune_weaver")) {
+    if (!/\.rune-weaver-root\s*\{/.test(content)) {
+      issues.push("hud/styles.less does not declare .rune-weaver-root");
+    }
+    if (
+      (activeFeatureCount ?? 1) > 0
+      && generatedUiLessFiles.length > 0
+      && !/@import "\.\.\/rune_weaver\/generated\/ui\/[^"]+\.less";/.test(content)
+    ) {
       issues.push("hud/styles.less does not import Rune Weaver styles");
     }
   }
@@ -382,7 +488,16 @@ export function generateRecommendations(checks: DoctorCheck[]): string[] {
   }
   if (dirs?.status === "fail") recs.push("Install host links: rename addon.config first, then run yarn install");
   if (workspace?.status !== "pass") recs.push("Repair workspace metadata: npm run cli -- dota2 init --host <path>");
-  if (postGen?.status === "fail") recs.push("Fix issues: npm run cli -- dota2 repair --host <path> --safe");
+  if (postGen?.status === "fail" && postGen.remediationKind === "requires_regenerate") {
+    recs.push("Regenerate stale synthesized features; repair cannot reconstruct missing raw grounding.");
+  } else if (postGen?.status === "fail" && postGen.remediationKind === "upgrade_workspace_grounding") {
+    recs.push("Upgrade legacy synthesized grounding: npm run cli -- dota2 repair --host <path> --safe");
+  } else if (postGen?.status === "fail") {
+    recs.push("Fix issues: npm run cli -- dota2 repair --host <path> --safe");
+  }
+  if (postGen?.status === "warn" && postGen.remediationKind === "review_required") {
+    recs.push("Review synthesized grounding warnings before promotion.");
+  }
   if (pkg?.status === "warn") recs.push("Install deps: yarn install");
   if (structure?.status === "warn") recs.push("Refresh Rune Weaver bridge or generated outputs if this host should contain a feature");
   if (bridge?.status === "fail") recs.push("Repair bridge wiring: npm run cli -- dota2 repair --host <path> --safe");

@@ -12,7 +12,9 @@ import {
   BRIDGE_ARTIFACT_CONTRACT,
   type WorkspaceSourceConfig,
 } from '@/data/workspaceSource';
-import type { RuneWeaverWorkspace } from '@/types/workspace';
+import { buildLegacyGovernanceIssues } from '@/data/workspaceGovernanceCompatibility';
+import { buildWorkspaceRefreshHint, type WorkspaceRefreshHint } from '@/data/workspaceRefreshHint';
+import type { Dota2GovernanceReadModel, RuneWeaverWorkspace } from '@/types/workspace';
 import { fetchHostStatus, type HostStatusResult } from '@/hooks/useHostScanner';
 
 export interface BridgeArtifactMeta {
@@ -43,8 +45,10 @@ interface FeatureStore {
   features: Feature[];
   groups: Group[];
   workspace: RuneWeaverWorkspace | null;
+  governanceReadModel: Dota2GovernanceReadModel | null;
   workspaceSource: WorkspaceSourceConfig | null;
   workspaceIssues: string[];
+  workspaceRefreshHint: WorkspaceRefreshHint | null;
   bridgeArtifactMeta: BridgeArtifactMeta | null;
   availableSources: WorkspaceSourceConfig[];
   connectedHostRoot: string | null;
@@ -119,6 +123,14 @@ function mapWorkspaceIssues(hostStatus: HostStatusResult): string[] {
   );
 }
 
+function mapConnectedHostWorkspaceIssues(hostStatus: HostStatusResult): string[] {
+  const issues = mapWorkspaceIssues(hostStatus);
+  if (hostStatus.workspace && !hostStatus.governanceReadModel) {
+    issues.push(...buildLegacyGovernanceIssues('host-status-payload'));
+  }
+  return issues;
+}
+
 function mapIntegrationStatus(
   hostStatus: HostStatusResult,
 ): HostConfigState['integrationStatus'] {
@@ -134,11 +146,12 @@ function mapIntegrationStatus(
 
 function buildWorkspaceSnapshot(
   workspace: RuneWeaverWorkspace | null,
+  governanceReadModel: Dota2GovernanceReadModel | null,
   selectedGroupId: string,
   preferredFeatureId?: string | null,
 ): Pick<FeatureStore, 'features' | 'groups' | 'selectedFeatureId' | 'selectedGroupId'> {
-  const features = workspace ? adaptWorkspaceToFeatures(workspace) : [];
-  const groups = workspace ? deriveGroupsFromWorkspace(workspace) : buildEmptyGroups();
+  const features = workspace ? adaptWorkspaceToFeatures(workspace, governanceReadModel) : [];
+  const groups = workspace ? deriveGroupsFromWorkspace(workspace, governanceReadModel) : buildEmptyGroups();
 
   return {
     features,
@@ -152,8 +165,10 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
   features: [],
   groups: buildEmptyGroups(),
   workspace: null,
+  governanceReadModel: null,
   workspaceSource: null,
   workspaceIssues: [],
+  workspaceRefreshHint: null,
   bridgeArtifactMeta: null,
   availableSources: getAvailableSources() || WORKSPACE_SOURCES,
   connectedHostRoot: null,
@@ -316,8 +331,10 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
 
   connectHostWorkspace: (hostStatus, preferredFeatureId) => {
     set((state) => {
+      const governanceReadModel = hostStatus.governanceReadModel ?? null;
       const snapshot = buildWorkspaceSnapshot(
         hostStatus.workspace ?? null,
+        governanceReadModel,
         state.selectedGroupId,
         preferredFeatureId ?? state.selectedFeatureId,
       );
@@ -325,8 +342,10 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
       return {
         ...snapshot,
         workspace: hostStatus.workspace ?? null,
+        governanceReadModel,
         workspaceSource: null,
-        workspaceIssues: mapWorkspaceIssues(hostStatus),
+        workspaceIssues: mapConnectedHostWorkspaceIssues(hostStatus),
+        workspaceRefreshHint: null,
         bridgeArtifactMeta: null,
         connectedHostRoot: hostStatus.hostRoot,
         isWorkspaceConnected: !!hostStatus.workspace,
@@ -355,7 +374,9 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
         features: [],
         groups: buildEmptyGroups(),
         workspace: null,
+        governanceReadModel: null,
         workspaceIssues: ['无法重新读取当前连接宿主的 workspace。'],
+        workspaceRefreshHint: null,
         bridgeArtifactMeta: null,
         isWorkspaceConnected: false,
         selectedFeatureId: null,
@@ -376,8 +397,10 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
       features: [],
       groups: buildEmptyGroups(),
       workspace: null,
+      governanceReadModel: null,
       workspaceSource: null,
       workspaceIssues: [],
+      workspaceRefreshHint: null,
       bridgeArtifactMeta: null,
       connectedHostRoot: null,
       isWorkspaceConnected: false,
@@ -391,11 +414,18 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
   },
 
   switchWorkspaceSource: async (source) => {
-    const { workspace, source: effectiveSource, issues, bridgeMeta } =
+    const { workspace, governanceReadModel, source: effectiveSource, issues, bridgeMeta } =
       await loadWorkspaceFromExplicitSource(source);
+    const workspaceRefreshHint = buildWorkspaceRefreshHint({
+      source: effectiveSource,
+      workspace,
+      issues,
+      bridgeMeta,
+    });
 
     const snapshot = buildWorkspaceSnapshot(
       workspace,
+      governanceReadModel ?? null,
       get().selectedGroupId,
       get().selectedFeatureId,
     );
@@ -403,8 +433,10 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
     set((state) => ({
       ...snapshot,
       workspace,
+      governanceReadModel: governanceReadModel ?? null,
       workspaceSource: effectiveSource,
       workspaceIssues: issues,
+      workspaceRefreshHint,
       bridgeArtifactMeta: bridgeMeta || null,
       connectedHostRoot: null,
       isWorkspaceConnected: false,
@@ -446,7 +478,7 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
     let features = state.features;
 
     if (state.selectedGroupId !== 'all') {
-      features = features.filter((feature) => feature.group === state.selectedGroupId);
+      features = features.filter((feature) => (feature.group || 'unknown') === state.selectedGroupId);
     }
 
     if (state.searchQuery) {

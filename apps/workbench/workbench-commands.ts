@@ -2,6 +2,10 @@ import { existsSync } from "fs";
 import { join } from "path";
 
 import { deleteFeature, findFeatureById, loadWorkspace, saveWorkspace, workspaceExists } from "../../core/workspace/manager.js";
+import {
+  buildDota2FeatureGovernanceReadModel,
+  formatDota2FeatureGovernanceReadModel,
+} from "../cli/dota2/commands/dota2-governance-read-model.js";
 
 export async function runList(hostRoot: string): Promise<void> {
   console.log("=".repeat(60));
@@ -198,6 +202,10 @@ export async function runInspect(featureId: string, hostRoot: string): Promise<v
   console.log(`   Selected Patterns: ${feature.selectedPatterns.join(", ")}`);
   console.log(`   Created: ${feature.createdAt}`);
   console.log(`   Updated: ${feature.updatedAt}`);
+  const governanceReadModel = buildDota2FeatureGovernanceReadModel(feature);
+  for (const line of formatDota2FeatureGovernanceReadModel(governanceReadModel)) {
+    console.log(`   ${line}`);
+  }
 
   if (feature.generatedFiles.length > 0) {
     console.log("\n📁 Generated Files:");

@@ -15,12 +15,13 @@
  */
 
 import { createInterface } from "readline";
-import { existsSync, readFileSync } from "fs";
 import { runWizardCLI, showWizardHelp } from "./wizard-cli.js";
 import { runBlueprintCLI, showBlueprintHelp } from "./blueprint-cli.js";
 import { runAssemblyCLI, showAssemblyHelp } from "./assembly-cli.js";
 import { runDota2CLI, showDota2Help } from "./dota2-cli.js";
+import { resolveDota2CommandSurface } from "./dota2/command-surface.js";
 import { runPatternCLI, showPatternHelp } from "./pattern-cli.js";
+import { consumePossiblySpacedFlagValue } from "./arg-value.js";
 import { readLLMExecutionConfig } from "../../core/llm/factory.js";
 
 // ============================================================================
@@ -49,6 +50,8 @@ interface CLIOptions {
   output?: string;
   temperature?: number;
   model?: string;
+  corpus?: string;
+  runs?: number;
   addonName?: string;
   mapName?: string;
   scenario?: string;
@@ -87,6 +90,17 @@ function parseArgs(): CLIOptions {
     }
   }
 
+  if (options.command === "wizard" && args.length > 0 && !args[0].startsWith("-")) {
+    const firstArg = args[0];
+    if (firstArg === "stability") {
+      options.subcommand = "stability";
+      args.shift();
+    } else {
+      options.input = firstArg;
+      args.shift();
+    }
+  }
+
   if (options.command === "assembly" && args.length > 0 && !args[0].startsWith("-")) {
     options.subcommand = args[0];
     args.shift();
@@ -110,7 +124,11 @@ function parseArgs(): CLIOptions {
     const arg = args[i];
     switch (arg) {
       case "--host":
-        options.host = args[++i];
+        {
+          const parsed = consumePossiblySpacedFlagValue(args, i);
+          options.host = parsed.value;
+          i = parsed.nextIndex;
+        }
         break;
       case "--input":
       case "-i":
@@ -129,7 +147,11 @@ function parseArgs(): CLIOptions {
         options.instruction = args[++i];
         break;
       case "--approve":
-        options.approve = args[++i];
+        {
+          const parsed = consumePossiblySpacedFlagValue(args, i);
+          options.approve = parsed.value;
+          i = parsed.nextIndex;
+        }
         break;
       case "--mode":
         options.gapFillMode = args[++i] as "review" | "apply" | "validate-applied";
@@ -157,13 +179,23 @@ function parseArgs(): CLIOptions {
         break;
       case "--output":
       case "-o":
-        options.output = args[++i];
+        {
+          const parsed = consumePossiblySpacedFlagValue(args, i);
+          options.output = parsed.value;
+          i = parsed.nextIndex;
+        }
         break;
       case "--temperature":
         options.temperature = parseFloat(args[++i]);
         break;
       case "--model":
         options.model = args[++i];
+        break;
+      case "--corpus":
+        options.corpus = args[++i];
+        break;
+      case "--runs":
+        options.runs = parseInt(args[++i], 10);
         break;
       case "--addon-name":
         options.addonName = args[++i];
@@ -228,13 +260,16 @@ function showHelp(command?: string, subcommand?: string): void {
 命令:
   create                创建新功�?(默认)
   wizard <text>         运行 Wizard 生成 IntentSchema
+  wizard stability      运行 Wizard 稳定性采样与摘要
   blueprint <text>      运行 Wizard -> Blueprint 完整链路
   dota2 run <prompt>    运行完整 Dota2 主链�?
-  export-bridge         导出 workspace �?UI bridge
+  export-bridge         唯一 legacy payload refresh lane；重新导出 governed UI bridge
 
 export-bridge 命令:
   npm run cli -- export-bridge --host <path>
   npm run cli -- export-bridge --host <path> --output <dir>
+                      重新生成 canonical bridge payload 与 governanceReadModel
+                      不属于 repair / doctor / validate surface
 
 dota2 命令:
   npm run cli -- dota2 init --host <path> --skip-install
@@ -305,12 +340,16 @@ assembly 命令:
 
 async function runWizardCommand(options: CLIOptions): Promise<boolean> {
   const wizardOptions = {
+    subcommand: (options.subcommand || "generate") as "generate" | "stability",
     rawText: options.input || "",
     json: options.json || false,
     output: options.output,
     verbose: options.verbose,
     temperature: options.temperature,
     model: options.model,
+    corpus: options.corpus,
+    runs: options.runs,
+    hostRoot: options.host,
   };
   
   return await runWizardCLI(wizardOptions);
@@ -367,27 +406,10 @@ async function runAssemblyCommand(options: CLIOptions): Promise<boolean> {
   return await runAssemblyCLI(assemblyOptions);
 }
 
-// F011: Export bridge command - CLI �?UI bridge
+// F011: Export bridge command - canonical legacy payload refresh lane for the UI bridge
 async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
-  const args = process.argv.slice(2);
-  let hostRoot: string | undefined;
-  let outputDir: string | undefined;
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--host") {
-      hostRoot = args[i + 1];
-    }
-    if (args[i] === "--output" || args[i] === "-o") {
-      outputDir = args[i + 1];
-    }
-  }
-
-  if (!hostRoot) {
-    hostRoot = options.host;
-  }
-  if (!outputDir) {
-    outputDir = options.output;
-  }
+  const hostRoot = options.host;
+  const outputDir = options.output;
 
   if (!hostRoot) {
     console.error("�?Missing --host. Usage: npm run cli -- export-bridge --host <path>");
@@ -395,7 +417,7 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
   }
 
   console.log("=".repeat(60));
-  console.log("🌉 Rune Weaver - Export Bridge for UI");
+  console.log("Rune Weaver - Export Bridge (Legacy Payload Refresh Lane)");
   console.log("=".repeat(60));
   console.log(`\n📁 Host: ${hostRoot}`);
   if (outputDir) {
@@ -403,6 +425,8 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
   } else {
     console.log(`📤 Output: apps/workbench-ui/public (default)`);
   }
+  console.log("Surface: canonical refresh lane for legacy bridge/raw payload consumers");
+  console.log("Boundary: does not run doctor, repair, or validate");
 
   const { exportHostToBridge } = await import("../../adapters/dota2/bridge/export.js");
   const result = await exportHostToBridge(hostRoot, outputDir);
@@ -425,81 +449,33 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
     }
   }
 
-  console.log("\n💡 Tip: Run workbench-ui and select 'Local Bridge' source to view this workspace");
+  console.log("\nTip: use this command to refresh legacy payload consumers with a governed bridge export.");
+  console.log("Tip: doctor / repair / validate remain separate runtime and validation surfaces.");
 
   return result.success;
 }
 
 async function runDota2Command(options: CLIOptions): Promise<boolean> {
   const args = process.argv.slice(2);
-  let prompt: string | undefined;
-  let hostRoot: string | undefined;
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--host") {
-      hostRoot = args[i + 1];
-    }
-    if (
-      !args[i].startsWith("-") &&
-      args[i] !== "dota2" &&
-      args[i] !== "run" &&
-      args[i] !== "dry-run" &&
-      args[i] !== "review" &&
-      args[i] !== "update" &&
-      args[i] !== "regenerate" &&
-      args[i] !== "rollback" &&
-      args[i] !== "init" &&
-      args[i] !== "check-host" &&
-      args[i] !== "validate" &&
-      args[i] !== "repair" &&
-      args[i] !== "doctor" &&
-      args[i] !== "gap-fill" &&
-      args[i] !== "demo" &&
-      args[i] !== "lifecycle" &&
-      args[i] !== "prepare" &&
-      args[i] !== "prove"
-    ) {
-      if (!prompt && !args[i - 1]?.startsWith("-")) {
-        prompt = args[i];
-      }
-    }
+  let surface;
+  try {
+    surface = resolveDota2CommandSurface({
+      rawArgs: args,
+      requestedSubcommand: options.subcommand,
+      input: options.input,
+      inputBase64Env: options.inputBase64Env,
+      host: options.host,
+      env: process.env,
+    });
+  } catch (error) {
+    console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+    return false;
   }
 
-  if (!prompt) {
-    prompt = options.input;
-  }
-
-  if (!prompt && options.inputBase64Env) {
-    const encodedPrompt = process.env[options.inputBase64Env];
-    if (!encodedPrompt) {
-      console.error(`❌ Missing environment variable for --input-base64-env: ${options.inputBase64Env}`);
-      return false;
-    }
-
-    try {
-      prompt = Buffer.from(encodedPrompt, "base64").toString("utf8");
-    } catch (error) {
-      console.error(`❌ Failed to decode base64 prompt from environment variable: ${options.inputBase64Env}`);
-      console.error(error);
-      return false;
-    }
-  }
-
-  if (prompt && existsSync(prompt)) {
-    try {
-      prompt = readFileSync(prompt, "utf8");
-    } catch (error) {
-      console.error(`❌ Failed to read prompt file: ${prompt}`);
-      console.error(error);
-      return false;
-    }
-  }
-
-  if (!hostRoot) {
-    hostRoot = options.host;
-  }
-
-  const subcommand = options.subcommand || "run";
+  const prompt = surface.prompt;
+  const hostRoot = surface.hostRoot;
+  const subcommand = surface.normalizedSubcommand;
+  const inputProvenance = surface.inputProvenance;
   
   // T149: Handle init subcommand
   if (subcommand === "init") {
@@ -555,6 +531,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: subcommand as "validate" | "repair" | "doctor" | "demo" | "lifecycle",
       prompt: "",
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       dryRun: subcommand === "repair"
         ? !options.safe
@@ -610,6 +587,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: "rollback" as const,
       prompt: "",
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       dryRun: options.dryRun || (!options.write && !options.force),
       write: options.write,
@@ -635,6 +613,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
         command: "gap-fill" as const,
         prompt: "",
         hostRoot,
+        inputProvenance,
         approvalFile: options.approve,
         gapFillMode: options.gapFillMode || (options.apply ? "apply" : undefined),
         apply: true,
@@ -663,6 +642,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: "gap-fill" as const,
       prompt: options.instruction,
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       boundaryId: options.boundaryId,
       instruction: options.instruction,
@@ -699,6 +679,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
       command: "update" as const,
       prompt,
       hostRoot,
+      inputProvenance,
       featureId: options.feature,
       dryRun: options.dryRun || (!options.write && !options.force),
       write: options.write,
@@ -727,6 +708,7 @@ async function runDota2Command(options: CLIOptions): Promise<boolean> {
     command: (subcommand || "run") as "run" | "dry-run" | "review" | "update" | "regenerate" | "rollback" | "gap-fill",
     prompt,
     hostRoot,
+    inputProvenance,
     featureId: options.feature,
     dryRun: options.dryRun || (!options.write && !options.force),
     write: options.write,

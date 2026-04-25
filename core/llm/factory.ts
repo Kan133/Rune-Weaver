@@ -8,6 +8,7 @@ import { LLMConfigError } from "./errors";
 import {
   LLMClient,
   LLMExecutionConfig,
+  LLMReasoningEffort,
   LLMThinkingMode,
   LLMProviderKind,
   LLMWorkflowKind,
@@ -58,6 +59,8 @@ export function readLLMEnvironment(projectRoot: string = process.cwd()): Record<
 
 const WORKFLOW_ENV_PREFIX: Record<LLMWorkflowKind, string> = {
   wizard: "LLM_WIZARD",
+  synthesis: "LLM_SYNTHESIS",
+  "local-repair": "LLM_LOCAL_REPAIR",
   blueprint: "LLM_BLUEPRINT",
   "dota2-planning": "LLM_DOTA2_PLANNING",
   "gap-fill": "LLM_GAP_FILL",
@@ -66,6 +69,8 @@ const WORKFLOW_ENV_PREFIX: Record<LLMWorkflowKind, string> = {
 
 const DEFAULT_WORKFLOW_THINKING: Record<LLMWorkflowKind, LLMThinkingMode> = {
   wizard: "enabled",
+  synthesis: "disabled",
+  "local-repair": "disabled",
   blueprint: "disabled",
   "dota2-planning": "enabled",
   "gap-fill": "disabled",
@@ -73,7 +78,9 @@ const DEFAULT_WORKFLOW_THINKING: Record<LLMWorkflowKind, LLMThinkingMode> = {
 };
 
 const DEFAULT_WORKFLOW_TEMPERATURE: Record<LLMWorkflowKind, number> = {
-  wizard: 1,
+  wizard: 0.2,
+  synthesis: 0.2,
+  "local-repair": 0.2,
   blueprint: 0.6,
   "dota2-planning": 1,
   "gap-fill": 0.6,
@@ -83,6 +90,7 @@ const DEFAULT_WORKFLOW_TEMPERATURE: Record<LLMWorkflowKind, number> = {
 const DEFAULT_OPENAI_COMPAT_THINKING_PAYLOAD_MODE: OpenAICompatibleThinkingPayloadMode = "auto";
 const KIMI_THINKING_MODEL_PATTERN = /^kimi-k2\.5/i;
 const GLM_THINKING_MODEL_PATTERN = /^glm-4\.7/i;
+const GPT5_REASONING_MODEL_PATTERN = /^gpt-5(?:[\.-]|$)/i;
 const PROCESS_ENV_LLM_OVERRIDE_FLAG = "RW_LLM_PROCESS_ENV_OVERRIDES";
 
 export function readLLMExecutionConfig(
@@ -94,7 +102,7 @@ export function readLLMExecutionConfig(
   const model = readExecutionModel(env, provider);
   const prefix = WORKFLOW_ENV_PREFIX[workflow];
   const thinking = readThinkingMode(env[`${prefix}_THINKING`]) ?? DEFAULT_WORKFLOW_THINKING[workflow];
-  const temperature = readWorkflowTemperature(env[`${prefix}_TEMPERATURE`], workflow);
+  const reasoningEffort = readReasoningEffort(env[`${prefix}_REASONING_EFFORT`]);
   const openAICompatThinkingPayloadMode = readOpenAICompatibleThinkingPayloadMode(
     env.OPENAI_COMPAT_THINKING_PAYLOAD
   );
@@ -102,7 +110,16 @@ export function readLLMExecutionConfig(
     provider,
     model,
     thinking,
-    openAICompatThinkingPayloadMode
+    openAICompatThinkingPayloadMode,
+    reasoningEffort,
+  );
+  const normalizedTemperature = rawWorkflowTemperature(
+    env[`${prefix}_TEMPERATURE`],
+    workflow,
+    provider,
+    model,
+    thinking,
+    providerOptions,
   );
 
   validateWorkflowConfig({
@@ -110,14 +127,15 @@ export function readLLMExecutionConfig(
     model,
     workflow,
     thinking,
-    temperature,
+    temperature: normalizedTemperature,
     providerOptions,
   });
 
   return {
     model,
-    temperature,
+    temperature: normalizedTemperature,
     thinking,
+    reasoningEffort,
     providerOptions,
   };
 }
@@ -164,12 +182,30 @@ function readOpenAICompatibleThinkingPayloadMode(
   );
 }
 
-function readWorkflowTemperature(
+function readReasoningEffort(raw: string | undefined): LLMReasoningEffort | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  if (raw === "none" || raw === "low" || raw === "medium" || raw === "high" || raw === "xhigh") {
+    return raw;
+  }
+
+  throw new LLMConfigError(
+    `Unsupported reasoning effort '${raw}'. Expected 'none', 'low', 'medium', 'high', or 'xhigh'.`,
+  );
+}
+
+function rawWorkflowTemperature(
   raw: string | undefined,
   workflow: LLMWorkflowKind,
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  thinking: LLMThinkingMode,
+  providerOptions?: Record<string, unknown>,
 ): number {
   if (!raw) {
-    return DEFAULT_WORKFLOW_TEMPERATURE[workflow];
+    return getDefaultWorkflowTemperature(workflow, provider, model, thinking, providerOptions);
   }
 
   const parsed = Number(raw);
@@ -178,6 +214,20 @@ function readWorkflowTemperature(
   }
 
   return parsed;
+}
+
+function getDefaultWorkflowTemperature(
+  workflow: LLMWorkflowKind,
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  thinking: LLMThinkingMode,
+  providerOptions?: Record<string, unknown>,
+): number {
+  if (requiresFixedThinkingTemperature(provider, model, providerOptions)) {
+    return thinking === "enabled" ? 1 : 0.6;
+  }
+
+  return DEFAULT_WORKFLOW_TEMPERATURE[workflow];
 }
 
 function readExecutionModel(
@@ -222,14 +272,50 @@ function buildProviderOptions(
   provider: LLMProviderKind | undefined,
   model: string | undefined,
   thinking: LLMThinkingMode,
-  thinkingPayloadMode: OpenAICompatibleThinkingPayloadMode
+  thinkingPayloadMode: OpenAICompatibleThinkingPayloadMode,
+  reasoningEffort?: LLMReasoningEffort,
 ): Record<string, unknown> | undefined {
-  if (!shouldSendThinkingPayload(provider, model, thinkingPayloadMode)) {
-    return undefined;
+  const providerOptions: Record<string, unknown> = {};
+
+  if (shouldSendThinkingPayload(provider, model, thinkingPayloadMode)) {
+    providerOptions.thinking = { type: thinking };
   }
 
-  return {
-    thinking: { type: thinking },
+  if (shouldSendReasoningEffort(provider, model, reasoningEffort)) {
+    providerOptions.reasoning_effort = reasoningEffort;
+  }
+
+  return Object.keys(providerOptions).length > 0
+    ? providerOptions
+    : undefined;
+}
+
+function shouldSendReasoningEffort(
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  reasoningEffort: LLMReasoningEffort | undefined,
+): boolean {
+  return (
+    provider === "openai-compatible" &&
+    !!model &&
+    !!reasoningEffort &&
+    GPT5_REASONING_MODEL_PATTERN.test(model)
+  );
+}
+
+function validateReasoningEffortSupport(
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  reasoningEffort: LLMReasoningEffort | undefined,
+): void {
+  if (!reasoningEffort) {
+    return;
+  }
+
+  if (provider !== "openai-compatible" || !model || !GPT5_REASONING_MODEL_PATTERN.test(model)) {
+    throw new LLMConfigError(
+      `Reasoning effort is configured for model '${model ?? "unknown"}', but only openai-compatible GPT-5 models are currently supported.`,
+    );
   };
 }
 
@@ -238,15 +324,13 @@ function validateWorkflowConfig(input: {
   model: string | undefined;
   workflow: LLMWorkflowKind;
   thinking: LLMThinkingMode;
+  reasoningEffort?: LLMReasoningEffort;
   temperature: number;
   providerOptions?: Record<string, unknown>;
 }): void {
-  if (
-    input.provider !== "openai-compatible" ||
-    !input.model ||
-    !KIMI_THINKING_MODEL_PATTERN.test(input.model) ||
-    !(input.providerOptions && "thinking" in input.providerOptions)
-  ) {
+  validateReasoningEffortSupport(input.provider, input.model, input.reasoningEffort);
+
+  if (!requiresFixedThinkingTemperature(input.provider, input.model, input.providerOptions)) {
     return;
   }
 
@@ -261,6 +345,19 @@ function validateWorkflowConfig(input: {
       `Workflow '${input.workflow}' uses ${input.model} with thinking=disabled, which requires temperature=0.6.`,
     );
   }
+}
+
+function requiresFixedThinkingTemperature(
+  provider: LLMProviderKind | undefined,
+  model: string | undefined,
+  providerOptions?: Record<string, unknown>,
+): boolean {
+  return (
+    provider === "openai-compatible" &&
+    !!model &&
+    KIMI_THINKING_MODEL_PATTERN.test(model) &&
+    !!(providerOptions && "thinking" in providerOptions)
+  );
 }
 
 function readOpenAICompatibleConfig(

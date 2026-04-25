@@ -1,131 +1,178 @@
 {
-  "version": "0.1",
-  "hostType": "dota2-x-template",
-  "hostRoot": "D:/Dota2CustomGame/sample-addon",
-  "addonName": "sample-addon",
-  "initializedAt": "2026-04-10T10:00:00.000Z",
-  "features": [
-    {
-      "featureId": "feat_dash_001",
-      "featureName": "冲刺技能",
-      "intentKind": "ability_active",
-      "status": "active",
-      "revision": 3,
-      "blueprintId": "blueprint_dash_001",
-      "selectedPatterns": ["effect.dash", "dota2.short_time_buff", "cooldown_manager"],
-      "generatedFiles": [
-        "game/scripts/npc/abilities/dash_ability.txt",
-        "game/scripts/src/rune_weaver/abilities/dash_ability.lua",
-        "game/scripts/src/rune_weaver/types/dash_ability.d.ts"
-      ],
-      "entryBindings": [
-        {
-          "target": "server",
-          "file": "game/scripts/src/rune_weaver/abilities/dash_ability.lua",
-          "kind": "register",
-          "symbol": "dash_ability"
-        }
-      ],
-      "dependsOn": [],
-      "createdAt": "2026-04-09T10:00:00.000Z",
-      "updatedAt": "2026-04-10T08:30:00.000Z"
+  "workspace": {
+    "version": "0.1",
+    "hostType": "dota2-x-template",
+    "hostRoot": "D:/Dota2CustomGame/sample-addon",
+    "addonName": "sample-addon",
+    "mapName": "sample_map",
+    "initializedAt": "2026-04-10T10:00:00.000Z",
+    "features": [
+      {
+        "featureId": "sample_dash_ability",
+        "featureName": "Sample Dash Ability",
+        "intentKind": "micro-feature",
+        "status": "active",
+        "revision": 3,
+        "blueprintId": "blueprint_dash_001",
+        "selectedPatterns": ["effect.dash", "dota2.short_time_buff", "cooldown_manager"],
+        "generatedFiles": [
+          "game/scripts/npc/abilities/dash_ability.txt",
+          "game/scripts/src/rune_weaver/abilities/dash_ability.lua",
+          "game/scripts/src/rune_weaver/types/dash_ability.d.ts"
+        ],
+        "entryBindings": [
+          {
+            "target": "server",
+            "file": "game/scripts/src/rune_weaver/abilities/dash_ability.lua",
+            "kind": "register",
+            "symbol": "dash_ability"
+          }
+        ],
+        "dependsOn": [],
+        "maturity": "templated",
+        "implementationStrategy": "family",
+        "createdAt": "2026-04-09T10:00:00.000Z",
+        "updatedAt": "2026-04-10T08:30:00.000Z"
+      },
+      {
+        "featureId": "sample_talent_system",
+        "featureName": "Sample Talent Draw System",
+        "intentKind": "standalone-system",
+        "status": "active",
+        "revision": 5,
+        "blueprintId": "blueprint_talent_001",
+        "selectedPatterns": ["system.talent_draw", "data.weighted_pool", "ui.selection_modal"],
+        "generatedFiles": [
+          "game/scripts/src/rune_weaver/systems/talent_draw.lua",
+          "game/scripts/src/rune_weaver/systems/talent_pool.lua",
+          "content/panorama/src/rune_weaver/ui/talent_selection.tsx"
+        ],
+        "entryBindings": [
+          {
+            "target": "server",
+            "file": "game/scripts/src/rune_weaver/systems/talent_draw.lua",
+            "kind": "import",
+            "symbol": "TalentDrawSystem"
+          },
+          {
+            "target": "ui",
+            "file": "content/panorama/src/rune_weaver/ui/talent_selection.tsx",
+            "kind": "mount",
+            "symbol": "TalentSelection"
+          }
+        ],
+        "dependsOn": [],
+        "maturity": "stabilized",
+        "implementationStrategy": "family",
+        "createdAt": "2026-04-08T09:00:00.000Z",
+        "updatedAt": "2026-04-10T10:00:00.000Z"
+      }
+    ]
+  },
+  "governanceReadModel": {
+    "schemaVersion": "dota2-governance-read-model/v1",
+    "workspace": {
+      "hostRoot": "D:/Dota2CustomGame/sample-addon",
+      "featureCount": 2,
+      "liveValidationSummary": {
+        "status": "not_checked",
+        "failedCheckCount": 0,
+        "warningCount": 0,
+        "executableRepairCount": 0,
+        "summary": "Static governed sample; live host validation was not requested."
+      }
     },
-    {
-      "featureId": "feat_heal_002",
-      "featureName": "治疗光环",
-      "intentKind": "aura_passive",
-      "status": "active",
-      "revision": 2,
-      "blueprintId": "blueprint_heal_002",
-      "selectedPatterns": ["effect.heal", "aura.radius", "modifier.manager"],
-      "generatedFiles": [
-        "game/scripts/npc/abilities/heal_aura.txt",
-        "game/scripts/src/rune_weaver/abilities/heal_aura.lua",
-        "game/scripts/src/rune_weaver/modifiers/heal_aura_modifier.lua"
-      ],
-      "entryBindings": [
-        {
-          "target": "server",
-          "file": "game/scripts/src/rune_weaver/abilities/heal_aura.lua",
-          "kind": "register",
-          "symbol": "heal_aura"
-        }
-      ],
-      "dependsOn": [],
-      "createdAt": "2026-04-09T12:00:00.000Z",
-      "updatedAt": "2026-04-09T15:00:00.000Z"
-    },
-    {
-      "featureId": "feat_talent_system",
-      "featureName": "天赋抽取系统",
-      "intentKind": "system_mechanic",
-      "status": "active",
-      "revision": 5,
-      "blueprintId": "blueprint_talent_001",
-      "selectedPatterns": ["system.talent_draw", "data.weighted_pool", "ui.selection_modal"],
-      "generatedFiles": [
-        "game/scripts/src/rune_weaver/systems/talent_draw.lua",
-        "game/scripts/src/rune_weaver/systems/talent_pool.lua",
-        "content/panorama/src/rune_weaver/ui/talent_selection.tsx"
-      ],
-      "entryBindings": [
-        {
-          "target": "server",
-          "file": "game/scripts/src/rune_weaver/systems/talent_draw.lua",
-          "kind": "import",
-          "symbol": "TalentDrawSystem"
+    "features": [
+      {
+        "featureId": "sample_dash_ability",
+        "status": "active",
+        "revision": 3,
+        "updatedAt": "2026-04-10T08:30:00.000Z",
+        "lifecycle": {
+          "maturity": "exploratory",
+          "implementationStrategy": "exploratory",
+          "commitOutcome": "exploratory",
+          "requiresReview": true,
+          "reviewReasons": ["Static governed sample is not live host proof."]
         },
-        {
-          "target": "ui",
-          "file": "content/panorama/src/rune_weaver/ui/talent_selection.tsx",
-          "kind": "mount",
-          "symbol": "TalentSelection"
+        "reusableGovernance": {
+          "familyAdmissions": [],
+          "patternAdmissions": [],
+          "seamAdmissions": [],
+          "admittedCount": 0,
+          "attentionCount": 0,
+          "summary": "Static governed sample does not claim formal reusable-asset admission."
+        },
+        "grounding": {
+          "status": "none_required",
+          "reviewRequired": false,
+          "verifiedSymbolCount": 0,
+          "allowlistedSymbolCount": 0,
+          "weakSymbolCount": 0,
+          "unknownSymbolCount": 0,
+          "warningCount": 0,
+          "warnings": [],
+          "reasonCodes": ["sample_static_no_symbols_required"],
+          "summary": "Static sample does not require host symbol grounding."
+        },
+        "repairability": {
+          "status": "not_checked",
+          "reasons": ["Static governed sample has no live repair run."],
+          "summary": "Live repairability was not checked for this sample."
+        },
+        "productVerdict": {
+          "label": "Static governed sample",
+          "reasons": ["Governance read-model is present; live validation and reusable admission are not claimed."]
         }
-      ],
-      "dependsOn": [],
-      "createdAt": "2026-04-08T09:00:00.000Z",
-      "updatedAt": "2026-04-10T10:00:00.000Z"
-    },
-    {
-      "featureId": "feat_fireball_003",
-      "featureName": "火球术",
-      "intentKind": "ability_active",
-      "status": "disabled",
-      "revision": 1,
-      "blueprintId": "blueprint_fireball_003",
-      "selectedPatterns": ["effect.damage", "projectile.linear", "particle.effect"],
-      "generatedFiles": [
-        "game/scripts/npc/abilities/fireball.txt"
-      ],
-      "entryBindings": [],
-      "dependsOn": [],
-      "createdAt": "2026-04-10T11:00:00.000Z",
-      "updatedAt": "2026-04-10T11:00:00.000Z"
-    },
-    {
-      "featureId": "feat_shield_004",
-      "featureName": "护盾技能",
-      "intentKind": "ability_active",
-      "status": "active",
-      "revision": 4,
-      "blueprintId": "blueprint_shield_004",
-      "selectedPatterns": ["effect.shield", "modifier.barrier", "cooldown_manager"],
-      "generatedFiles": [
-        "game/scripts/npc/abilities/shield_ability.txt",
-        "game/scripts/src/rune_weaver/abilities/shield_ability.lua",
-        "game/scripts/src/rune_weaver/modifiers/shield_modifier.lua"
-      ],
-      "entryBindings": [
-        {
-          "target": "server",
-          "file": "game/scripts/src/rune_weaver/abilities/shield_ability.lua",
-          "kind": "register",
-          "symbol": "shield_ability"
+      },
+      {
+        "featureId": "sample_talent_system",
+        "status": "active",
+        "revision": 5,
+        "updatedAt": "2026-04-10T10:00:00.000Z",
+        "lifecycle": {
+          "maturity": "exploratory",
+          "implementationStrategy": "family",
+          "commitOutcome": "exploratory",
+          "requiresReview": true,
+          "reviewReasons": ["Static governed sample is not live host proof."]
+        },
+        "reusableGovernance": {
+          "familyAdmissions": [],
+          "patternAdmissions": [],
+          "seamAdmissions": [],
+          "admittedCount": 0,
+          "attentionCount": 0,
+          "summary": "Static governed sample does not claim formal reusable-asset admission."
+        },
+        "grounding": {
+          "status": "none_required",
+          "reviewRequired": false,
+          "verifiedSymbolCount": 0,
+          "allowlistedSymbolCount": 0,
+          "weakSymbolCount": 0,
+          "unknownSymbolCount": 0,
+          "warningCount": 0,
+          "warnings": [],
+          "reasonCodes": ["sample_static_no_symbols_required"],
+          "summary": "Static sample does not require host symbol grounding."
+        },
+        "repairability": {
+          "status": "not_checked",
+          "reasons": ["Static governed sample has no live repair run."],
+          "summary": "Live repairability was not checked for this sample."
+        },
+        "productVerdict": {
+          "label": "Static governed sample",
+          "reasons": ["Governance read-model is present; live validation and reusable admission are not claimed."]
         }
-      ],
-      "dependsOn": [],
-      "createdAt": "2026-04-07T14:00:00.000Z",
-      "updatedAt": "2026-04-09T16:00:00.000Z"
-    }
-  ]
+      }
+    ]
+  },
+  "_bridge": {
+    "exportedAt": "2026-04-23T00:00:00.000Z",
+    "exportedBy": "workbench-ui-governed-sample",
+    "sourceHostRoot": "D:/Dota2CustomGame/sample-addon",
+    "version": "0.1"
+  }
 }

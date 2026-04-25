@@ -85,10 +85,94 @@ function withSyntheticPatterns<T>(run: () => T): T {
 {
   const result = resolvePatterns({
     ...baseBlueprint,
+    sourceIntent: {
+      intentKind: "standalone-system",
+      goal: "selection flow family regression",
+      normalizedMechanics: {
+        trigger: true,
+        candidatePool: true,
+        weightedSelection: true,
+        playerChoice: true,
+        uiModal: true,
+        outcomeApplication: true,
+      },
+    },
+    modules: [
+      {
+        id: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        patternIds: ["rule.selection_flow"],
+        responsibilities: [
+          "Draw weighted candidates and enforce single-choice confirmation.",
+          "Emit a normalized confirmed outcome request inside the bounded family contract.",
+          "Apply post-selection pool behavior inside the bounded family contract.",
+        ],
+        inputs: [
+          "selection_open_request",
+          "candidate_options",
+          "selection_confirm",
+        ],
+        outputs: [
+          "selection_ui_payload",
+          "selection_commit",
+          "selection_outcome_request",
+        ],
+        parameters: {
+          choiceCount: 3,
+          selectionPolicy: "single",
+          applyMode: "immediate",
+          postSelectionPoolBehavior: "remove_selected_from_remaining",
+          trackSelectedItems: true,
+        },
+      },
+    ],
+    moduleRecords: [
+      {
+        moduleId: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        sourceKind: "family",
+        familyId: "selection_pool",
+        patternId: "rule.selection_flow",
+        selectedPatternIds: ["rule.selection_flow"],
+        artifactTargets: ["server"],
+        ownedPaths: [],
+        fillContractIds: [],
+        reviewRequired: false,
+        requiresReview: false,
+        reviewReasons: [],
+        implementationStrategy: "family",
+        maturity: "templated",
+        outputKinds: ["server"],
+        resolvedFrom: "family",
+        summary: "Selection pool family module 'selection_flow' projected from source-backed authoring truth.",
+      },
+    ],
+    patternHints: [
+      {
+        category: "rule",
+        suggestedPatterns: ["rule.selection_flow"],
+        rationale: "selection_pool keeps selection_flow as a family-projected module.",
+      },
+    ],
+  });
+
+  assert.equal(result.unresolved.length, 0);
+  assert.equal(result.patterns.length, 1);
+  assert.equal(result.patterns[0]?.patternId, "rule.selection_flow");
+  assert.equal(result.patterns[0]?.moduleId, "selection_flow");
+  assert.equal(result.moduleRecords.length, 1);
+  assert.equal(result.moduleRecords[0]?.patternId, "rule.selection_flow");
+}
+
+{
+  const result = resolvePatterns({
+    ...baseBlueprint,
     moduleNeeds: [
       {
-        moduleId: "unsupported_case",
-        semanticRole: "unsupported_case",
+        moduleId: "catalog_miss_case",
+        semanticRole: "catalog_miss_case",
         requiredCapabilities: ["capability.missing.from.catalog"],
       },
     ],
@@ -96,7 +180,80 @@ function withSyntheticPatterns<T>(run: () => T): T {
 
   assert.equal(result.patterns.length, 0);
   assert.equal(result.unresolved.length, 1);
+  assert.equal(result.unresolvedModuleNeeds.length, 1);
+  assert.equal(result.viable, true);
+  assert.equal(result.complete, false);
   assert.deepEqual(result.unresolved[0].missingCapabilities, ["capability.missing.from.catalog"]);
+  assert.equal(result.unresolvedModuleNeeds[0].moduleId, "catalog_miss_case");
+  assert.match(result.unresolved[0].reason, /module synthesis/i);
+  assert.match(result.unresolved[0].suggestedAlternative || "", /module synthesis/i);
+  assert.doesNotMatch(result.unresolved[0].reason, /admitted|unsupported|seam/i);
+  assert.ok(
+    result.issues.some((issue) => issue.code === "NO_PATTERNS_RESOLVED" && issue.severity === "warning"),
+  );
+}
+
+{
+  const result = resolvePatterns({
+    ...baseBlueprint,
+    moduleNeeds: [
+      {
+        moduleId: "reveal_surface_case",
+        semanticRole: "reveal_surface",
+        category: "ui",
+        requiredCapabilities: ["ui.reveal.batch_surface"],
+        requiredOutputs: ["card reveal presentation", "ui.surface"],
+      },
+    ],
+  });
+
+  assert.equal(result.unresolvedModuleNeeds.length, 1);
+  assert.equal(result.unresolvedModuleNeeds[0]?.category, "ui");
+}
+
+{
+  const result = resolvePatterns({
+    ...baseBlueprint,
+    status: "weak",
+    implementationStrategy: "exploratory",
+    designDraft: {
+      retrievedFamilyCandidates: [],
+      retrievedPatternCandidates: [],
+      reuseConfidence: "low",
+      chosenImplementationStrategy: "exploratory",
+    },
+    commitDecision: {
+      outcome: "exploratory",
+      canAssemble: true,
+      canWriteHost: true,
+      requiresReview: true,
+      reasons: ["unknown mechanic should continue via exploratory fallback"],
+    },
+    moduleNeeds: [
+      {
+        moduleId: "exploratory_case",
+        semanticRole: "exploratory_case",
+        requiredCapabilities: ["capability.missing.from.catalog"],
+        requiredOutputs: ["server.runtime", "host.runtime.lua", "host.config.kv"],
+        integrationHints: ["ability.execution"],
+      },
+    ],
+  });
+
+  assert.equal(result.patterns.length, 0);
+  assert.equal(result.unresolved.length, 1);
+  assert.equal(result.unresolvedModuleNeeds.length, 1);
+  assert.equal(result.viable, true);
+  assert.equal(result.unresolvedModuleNeeds[0].moduleId, "exploratory_case");
+  assert.equal(result.unresolvedModuleNeeds[0].strategy, "exploratory");
+  assert.match(result.unresolved[0].suggestedAlternative || "", /module synthesis/i);
+  assert.doesNotMatch(result.unresolved[0].reason, /admitted|unsupported|seam/i);
+  assert.ok(
+    result.issues.some((issue) => issue.code === "MODULE_NEED_UNRESOLVED"),
+  );
+  assert.ok(
+    result.issues.some((issue) => issue.code === "NO_PATTERNS_RESOLVED" && issue.severity === "warning"),
+  );
 }
 
 withSyntheticPatterns(() => {
@@ -113,8 +270,11 @@ withSyntheticPatterns(() => {
   });
 
   assert.equal(result.patterns.length, 1);
+  assert.equal(result.moduleRecords.length, 1);
+  assert.equal(result.viable, true);
   assert.equal(result.patterns[0].patternId, "test.synthetic.beta");
   assert.equal(result.patterns[0].source, "hint-tiebreak");
+  assert.equal(result.moduleRecords[0].moduleId, "tie_case");
 });
 
 {
@@ -132,8 +292,11 @@ withSyntheticPatterns(() => {
   });
 
   assert.equal(result.patterns.length, 1);
+  assert.equal(result.moduleRecords.length, 1);
+  assert.equal(result.viable, true);
   assert.equal(result.patterns[0].patternId, "effect.dash");
   assert.equal(result.patterns[0].source, "need");
+  assert.equal(result.moduleRecords[0].selectedPatternIds[0], "effect.dash");
 }
 
 {
@@ -153,8 +316,90 @@ withSyntheticPatterns(() => {
   });
 
   assert.equal(result.patterns.length, 1);
+  assert.equal(result.viable, true);
   assert.equal(result.patterns[0].patternId, "dota2.short_time_buff");
   assert.equal(result.patterns[0].source, "need");
+  assert.equal(result.unresolvedModuleNeeds.length, 0);
+}
+
+{
+  const result = buildBlueprint({
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: "Create one active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies every second. No UI, no inventory, no persistence.",
+      goal: "Create one active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies every second. No UI, no inventory, no persistence.",
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    readiness: "ready",
+    requirements: {
+      functional: [
+        "Create one active skill.",
+        "Summon a fireball near the hero.",
+        "Follow the hero for 5 seconds.",
+        "Burn nearby enemies every second.",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Cast one active skill.",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Track the temporary fireball instance for 5 seconds.",
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Run the 5 second burn cadence with 1 second ticks.",
+          parameters: { durationSeconds: 5, intervalSeconds: 1 },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Spawn the fireball near the hero and burn nearby enemies.",
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    stateModel: {
+      states: [{ id: "fireball_runtime", summary: "Runtime fireball instance", owner: "feature", lifetime: "round" }],
+    },
+    timing: {
+      duration: { kind: "timed", seconds: 5 },
+      intervalSeconds: 1,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  });
+  assert.ok(result.finalBlueprint);
+  const resolution = resolvePatterns(result.finalBlueprint!);
+
+  assert.equal(result.finalBlueprint?.moduleNeeds.length, 1);
+  assert.equal(resolution.unresolvedModuleNeeds.length, 1);
+  assert.equal(resolution.unresolvedModuleNeeds[0]?.backboneKind, "gameplay_ability");
+  assert.equal(resolution.unresolvedModuleNeeds[0]?.coLocatePreferred, true);
+  assert.ok((resolution.unresolvedModuleNeeds[0]?.facetIds || []).length >= 4);
 }
 
 {
@@ -201,8 +446,17 @@ withSyntheticPatterns(() => {
     },
     selection: {
       mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
       cardinality: "single",
       repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal"],
     },
     stateModel: {
       states: [
@@ -215,7 +469,7 @@ withSyntheticPatterns(() => {
       candidatePool: true,
       weightedSelection: true,
       playerChoice: true,
-      uiModal: false,
+      uiModal: true,
       outcomeApplication: false,
       resourceConsumption: false,
     },
@@ -233,6 +487,7 @@ withSyntheticPatterns(() => {
   const selectionFlow = result.patterns.find((pattern) => pattern.patternId === "rule.selection_flow");
 
   assert.equal(result.unresolved.length, 0);
+  assert.equal(result.viable, true);
   assert.ok(selectionFlow);
   assert.deepEqual(selectionFlow?.parameters?.progression, {
     enabled: true,
@@ -302,6 +557,7 @@ withSyntheticPatterns(() => {
   const projectilePattern = result.patterns.find((pattern) => pattern.patternId === "dota2.linear_projectile_emit");
 
   assert.equal(result.unresolved.length, 0);
+  assert.equal(result.viable, true);
   assert.ok(projectilePattern);
   assert.equal(projectilePattern?.parameters?.projectileDistance, 900);
   assert.equal(projectilePattern?.parameters?.projectileSpeed, 1200);

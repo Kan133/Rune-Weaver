@@ -2,7 +2,7 @@
  * Dota2 Adapter - Post-Generation Validator (P0)
  *
  * Validates the state of generated files after code generation.
- * Based on Talent Draw runtime bugs - these are critical checks
+ * Based on selection_pool runtime bugs - these are critical checks
  * that must pass before the game can run correctly.
  */
 
@@ -10,6 +10,17 @@ import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { loadWorkspace } from "../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
+import type { GroundingCheckResult } from "../../../core/schema/types.js";
+import {
+  aggregateModuleGroundingAssessments,
+  buildGroundingReviewReason,
+  validateGroundingAssessmentAgainstChecks,
+} from "../../../core/governance/grounding.js";
+import {
+  GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+  readProviderAbilityExportArtifact,
+} from "../cross-feature/grant-artifacts.js";
+import { extractLuaAbilityRuntimeSymbol } from "../provider-ability-identity.js";
 
 export interface PostGenerationValidationResult {
   valid: boolean;
@@ -34,6 +45,12 @@ export interface PostGenerationCheck {
 interface ParsedAbilityBlock {
   name: string;
   lines: string[];
+}
+
+interface ProviderAbilityExportRecord {
+  featureId: string;
+  artifactPath: string;
+  abilityName: string;
 }
 
 function countBraceDelta(line: string): number {
@@ -127,6 +144,51 @@ function parseDotaAbilityBlocks(content: string): {
   return { hasRoot: true, malformed, abilities };
 }
 
+function collectProviderAbilityExports(hostRoot: string): {
+  records: ProviderAbilityExportRecord[];
+  issues: string[];
+} {
+  const featuresRoot = join(hostRoot, "game/scripts/src/rune_weaver/features");
+  if (!existsSync(featuresRoot)) {
+    return { records: [], issues: [] };
+  }
+
+  const records: ProviderAbilityExportRecord[] = [];
+  const issues: string[] = [];
+
+  for (const entry of readdirSync(featuresRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const artifactPath = join(featuresRoot, entry.name, "dota2-provider-ability-export.json");
+    if (!existsSync(artifactPath)) {
+      continue;
+    }
+
+    const artifact = readProviderAbilityExportArtifact(hostRoot, entry.name);
+    if (!artifact) {
+      issues.push(`${entry.name}: invalid provider export artifact shape`);
+      continue;
+    }
+    const surface = artifact.surfaces.find(
+      (candidate) => candidate.surfaceId === GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+    );
+    if (!surface) {
+      issues.push(`${entry.name}: expected one grantable provider surface`);
+      continue;
+    }
+
+    records.push({
+      featureId: entry.name,
+      artifactPath,
+      abilityName: surface.abilityName.trim(),
+    });
+  }
+
+  return { records, issues };
+}
+
 /**
  * Main validation function - runs all P0 checks
  */
@@ -137,6 +199,7 @@ export function validatePostGeneration(hostRoot: string): PostGenerationValidati
   // Run all P0 checks
   checks.push(checkNpcAbilitiesStructure(hostRoot));
   checks.push(checkLuaScriptFilePaths(hostRoot));
+  checks.push(checkProviderAbilityExports(hostRoot));
   checks.push(checkWorkspaceGeneratedFilesExist(hostRoot));
   checks.push(checkServerIndexReferences(hostRoot));
   checks.push(checkUIGeneratedIndexMounts(hostRoot));
@@ -144,6 +207,7 @@ export function validatePostGeneration(hostRoot: string): PostGenerationValidati
   checks.push(checkRuneWeaverRootCss(hostRoot));
   checks.push(checkActiveKeyBindingConflicts(hostRoot));
   checks.push(checkSelectionPoolSeedData(hostRoot));
+  checks.push(checkSynthesizedGroundingGovernance(hostRoot));
 
   // Collect issues from failed checks
   for (const check of checks) {
@@ -295,6 +359,236 @@ function checkLuaScriptFilePaths(hostRoot: string): PostGenerationCheck {
       check: checkName,
       passed: false,
       message: `Failed to check ScriptFile paths: ${message}`,
+    };
+  }
+}
+
+function normalizeGroundingChecks(rawGrounding: unknown): GroundingCheckResult[] {
+  if (!Array.isArray(rawGrounding)) {
+    return [];
+  }
+
+  return rawGrounding.filter((item): item is GroundingCheckResult =>
+    Boolean(item)
+    && typeof item === "object"
+    && typeof (item as Record<string, unknown>).artifactId === "string"
+    && Array.isArray((item as Record<string, unknown>).verifiedSymbols)
+    && Array.isArray((item as Record<string, unknown>).allowlistedSymbols)
+    && Array.isArray((item as Record<string, unknown>).weakSymbols)
+    && Array.isArray((item as Record<string, unknown>).unknownSymbols)
+    && Array.isArray((item as Record<string, unknown>).warnings),
+  );
+}
+
+function checkSynthesizedGroundingGovernance(hostRoot: string): PostGenerationCheck {
+  const checkName = "synthesized_grounding_governance";
+  const workspaceResult = loadWorkspace(hostRoot);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
+    return {
+      check: checkName,
+      passed: true,
+      message: "Workspace unavailable; grounding governance check skipped",
+    };
+  }
+
+  const structuralIssues: string[] = [];
+  const warnings: string[] = [];
+  let synthesizedFeatureCount = 0;
+
+  for (const feature of workspaceResult.workspace.features) {
+    const synthesizedModules = (feature.modules || []).filter((module) => module.sourceKind === "synthesized");
+    if (synthesizedModules.length === 0) {
+      continue;
+    }
+    synthesizedFeatureCount += 1;
+
+    if (!feature.groundingSummary) {
+      structuralIssues.push(`${feature.featureId}: missing feature groundingSummary`);
+    }
+
+    const featureRawChecks = synthesizedModules.flatMap((module) =>
+      normalizeGroundingChecks((module.metadata as Record<string, unknown> | undefined)?.grounding),
+    );
+    structuralIssues.push(
+      ...validateGroundingAssessmentAgainstChecks(
+        feature.groundingSummary,
+        featureRawChecks,
+        `feature '${feature.featureId}'`,
+      ),
+    );
+
+    const aggregatedFromModules = aggregateModuleGroundingAssessments(synthesizedModules);
+    if (
+      feature.groundingSummary
+      && (
+        feature.groundingSummary.status !== aggregatedFromModules.status
+        || feature.groundingSummary.verifiedSymbolCount !== aggregatedFromModules.verifiedSymbolCount
+        || feature.groundingSummary.allowlistedSymbolCount !== aggregatedFromModules.allowlistedSymbolCount
+        || feature.groundingSummary.weakSymbolCount !== aggregatedFromModules.weakSymbolCount
+        || feature.groundingSummary.unknownSymbolCount !== aggregatedFromModules.unknownSymbolCount
+      )
+    ) {
+      structuralIssues.push(`${feature.featureId}: feature groundingSummary does not match synthesized module assessments`);
+    }
+
+    for (const module of synthesizedModules) {
+      const rawGrounding = normalizeGroundingChecks(
+        (module.metadata as Record<string, unknown> | undefined)?.grounding,
+      );
+      structuralIssues.push(
+        ...validateGroundingAssessmentAgainstChecks(
+          module.groundingAssessment,
+          rawGrounding,
+          `feature '${feature.featureId}' module '${module.moduleId}'`,
+        ),
+      );
+
+      const warning = buildGroundingReviewReason(
+        `feature '${feature.featureId}' module '${module.moduleId}'`,
+        module.groundingAssessment,
+      );
+      if (warning) {
+        warnings.push(warning);
+      }
+    }
+  }
+
+  if (structuralIssues.length > 0) {
+    return {
+      check: checkName,
+      passed: false,
+      message: `${structuralIssues.length} synthesized grounding contract issues found`,
+      details: structuralIssues,
+      suggestion: "Recover canonical workspace grounding from preserved synthesized raw metadata when available; otherwise regenerate the synthesized feature so raw checks and canonical assessments are written together.",
+    };
+  }
+
+  if (warnings.length > 0) {
+    return {
+      check: checkName,
+      passed: true,
+      message: `${warnings.length} synthesized grounding warning(s) require review`,
+      details: warnings,
+      suggestion: "Review the synthesized modules with partial or insufficient grounding before promotion.",
+    };
+  }
+
+  return {
+    check: checkName,
+    passed: true,
+    message:
+      synthesizedFeatureCount > 0
+        ? `Synthesized grounding governance valid across ${synthesizedFeatureCount} feature(s)`
+        : "No synthesized modules require grounding governance validation",
+  };
+}
+
+function checkProviderAbilityExports(hostRoot: string): PostGenerationCheck {
+  const checkName = "provider_ability_exports";
+  const collected = collectProviderAbilityExports(hostRoot);
+  if (collected.records.length === 0 && collected.issues.length === 0) {
+    return {
+      check: checkName,
+      passed: true,
+      message: "No Dota2 provider exports to validate",
+    };
+  }
+
+  const issues = [...collected.issues];
+  const kvPath = join(hostRoot, "game/scripts/npc/npc_abilities_custom.txt");
+  const vscriptsPath = join(hostRoot, "game/scripts/vscripts");
+
+  if (!existsSync(kvPath)) {
+    return {
+      check: checkName,
+      passed: false,
+      message: "Provider exports exist but npc_abilities_custom.txt is missing",
+      details: collected.records.map((record) => `${record.featureId}: ${record.abilityName}`),
+      suggestion: "Regenerate the provider feature so its exported ability block is written to npc_abilities_custom.txt.",
+    };
+  }
+
+  try {
+    const parsed = parseDotaAbilityBlocks(readFileSync(kvPath, "utf-8"));
+    if (!parsed.hasRoot || parsed.malformed.length > 0) {
+      return {
+        check: checkName,
+        passed: false,
+        message: "Cannot validate provider exports because npc_abilities_custom.txt is malformed",
+        details: parsed.hasRoot ? parsed.malformed : ["Missing DOTAAbilities root"],
+        suggestion: "Fix npc_abilities_custom.txt structure before relying on provider export validation.",
+      };
+    }
+
+    const abilitiesByName = new Map(parsed.abilities.map((ability) => [ability.name, ability]));
+
+    for (const record of collected.records) {
+      const abilityBlock = abilitiesByName.get(record.abilityName);
+      if (!abilityBlock) {
+        issues.push(`${record.featureId}: exported ability '${record.abilityName}' not found in npc_abilities_custom.txt`);
+        continue;
+      }
+
+      const blockContent = abilityBlock.lines.join("\n");
+      const scriptFileMatch = blockContent.match(/"ScriptFile"\s+"([^"]+)"/);
+      if (!scriptFileMatch?.[1]) {
+        issues.push(`${record.featureId}: ability '${record.abilityName}' is missing ScriptFile in npc_abilities_custom.txt`);
+        continue;
+      }
+
+      const scriptFile = scriptFileMatch[1];
+      const normalizedScriptPath = scriptFile.endsWith(".lua") ? scriptFile : `${scriptFile}.lua`;
+      const scriptLeaf = normalizedScriptPath.replace(/\\/g, "/").replace(/\.lua$/i, "").split("/").pop();
+      if (scriptLeaf !== record.abilityName) {
+        issues.push(
+          `${record.featureId}: exported ability '${record.abilityName}' points to ScriptFile '${scriptFile}' instead of '${record.abilityName}'`,
+        );
+      }
+
+      const fullScriptPath = join(vscriptsPath, normalizedScriptPath);
+      if (!existsSync(fullScriptPath)) {
+        issues.push(
+          `${record.featureId}: ScriptFile '${normalizedScriptPath}' for exported ability '${record.abilityName}' does not exist`,
+        );
+        continue;
+      }
+
+      const runtimeSymbol = extractLuaAbilityRuntimeSymbol(readFileSync(fullScriptPath, "utf-8"));
+      if (!runtimeSymbol) {
+        issues.push(
+          `${record.featureId}: Lua file '${normalizedScriptPath}' does not define a runtime symbol for exported ability '${record.abilityName}'`,
+        );
+        continue;
+      }
+
+      if (runtimeSymbol !== record.abilityName) {
+        issues.push(
+          `${record.featureId}: Lua runtime symbol '${runtimeSymbol}' does not match exported ability '${record.abilityName}'`,
+        );
+      }
+    }
+
+    if (issues.length > 0) {
+      return {
+        check: checkName,
+        passed: false,
+        message: `${issues.length} provider export identity issue(s) detected`,
+        details: issues,
+        suggestion: "Regenerate the provider feature so export, KV, and Lua all share one authoritative abilityName.",
+      };
+    }
+
+    return {
+      check: checkName,
+      passed: true,
+      message: `All ${collected.records.length} provider export(s) align with KV/Lua identity`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      check: checkName,
+      passed: false,
+      message: `Failed to validate provider exports: ${message}`,
     };
   }
 }
@@ -469,13 +763,14 @@ function checkUIGeneratedIndexMounts(hostRoot: string): PostGenerationCheck {
 
   try {
     const content = readFileSync(indexPath, "utf-8");
-    const importPattern = /from\s+['"]([^'"]+)['"]/g;
-    const missingComponents: string[] = [];
+    const importPattern = /import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/g;
+    const uiIndexIssues: string[] = [];
 
     let match;
     while ((match = importPattern.exec(content)) !== null) {
-      const importPath = match[1];
-      if (!importPath) continue;
+      const importSpecifiers = match[1];
+      const importPath = match[2];
+      if (!importSpecifiers || !importPath) continue;
 
       // Skip node_modules and absolute imports
       if (!importPath.startsWith(".") && !importPath.startsWith("/")) {
@@ -496,19 +791,42 @@ function checkUIGeneratedIndexMounts(hostRoot: string): PostGenerationCheck {
         existsSync(resolvedPath);
 
       if (!exists) {
-        missingComponents.push(importPath);
+        uiIndexIssues.push(`${importPath}: referenced UI module does not exist`);
+        continue;
+      }
+
+      const resolvedFile = extensions
+        .map((ext) => `${resolvedPath}${ext}`)
+        .find((candidatePath) => existsSync(candidatePath))
+        || (existsSync(resolvedPath) ? resolvedPath : undefined);
+      if (!resolvedFile) {
+        uiIndexIssues.push(`${importPath}: referenced UI module does not exist`);
+        continue;
+      }
+
+      const importedNames = importSpecifiers
+        .split(",")
+        .map((specifier) => specifier.trim())
+        .filter(Boolean)
+        .map((specifier) => specifier.split(/\s+as\s+/i)[0]?.trim())
+        .filter((specifier): specifier is string => Boolean(specifier));
+      const exportedContent = readFileSync(resolvedFile, "utf-8");
+      for (const importedName of importedNames) {
+        if (!hasNamedExport(exportedContent, importedName)) {
+          uiIndexIssues.push(`${importPath}: missing named export '${importedName}'`);
+        }
       }
     }
 
-    if (missingComponents.length > 0) {
-    return {
-      check: checkName,
-      passed: false,
-      message: `${missingComponents.length} UI imports reference non-existent components`,
-      details: missingComponents.slice(0, 10),
-      suggestion: "Refresh the bridge so generated/ui/index.tsx only imports existing UI components.",
-    };
-  }
+    if (uiIndexIssues.length > 0) {
+      return {
+        check: checkName,
+        passed: false,
+        message: `${uiIndexIssues.length} UI index imports drift from generated component modules`,
+        details: uiIndexIssues.slice(0, 10),
+        suggestion: "Refresh the bridge so generated/ui/index.tsx imports existing UI modules and their actual named exports.",
+      };
+    }
 
     return {
       check: checkName,
@@ -523,6 +841,23 @@ function checkUIGeneratedIndexMounts(hostRoot: string): PostGenerationCheck {
       message: `Failed to validate UI index: ${message}`,
     };
   }
+}
+
+function hasNamedExport(content: string, exportName: string): boolean {
+  const escapedName = escapeRegExp(exportName);
+  const declarationPattern = new RegExp(
+    `\\bexport\\s+(?:async\\s+)?(?:function|class|const|let|var|type|interface|enum)\\s+${escapedName}\\b`,
+  );
+  if (declarationPattern.test(content)) {
+    return true;
+  }
+
+  const reExportPattern = new RegExp(`\\bexport\\s*\\{[^}]*\\b${escapedName}\\b[^}]*\\}`, "s");
+  return reExportPattern.test(content);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -755,6 +1090,7 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
   }
 
   const keyToFeatures = new Map<string, string[]>();
+  const missingBindingSources: string[] = [];
   for (const feature of workspaceResult.workspace.features) {
     if (feature.status !== "active") {
       continue;
@@ -765,7 +1101,13 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
       continue;
     }
 
-    const content = readFileSync(join(hostRoot, keyBindingFile), "utf8");
+    const keyBindingPath = join(hostRoot, keyBindingFile);
+    if (!existsSync(keyBindingPath)) {
+      missingBindingSources.push(`${feature.featureId}: missing key binding source ${keyBindingFile}`);
+      continue;
+    }
+
+    const content = readFileSync(keyBindingPath, "utf8");
     const match = content.match(/configuredKey:\s*string\s*=\s*"([^"]+)"/);
     if (!match) {
       continue;
@@ -775,6 +1117,16 @@ function checkActiveKeyBindingConflicts(hostRoot: string): PostGenerationCheck {
     const featureIds = keyToFeatures.get(key) || [];
     featureIds.push(feature.featureId);
     keyToFeatures.set(key, featureIds);
+  }
+
+  if (missingBindingSources.length > 0) {
+    return {
+      check: checkName,
+      passed: false,
+      message: `${missingBindingSources.length} active features are missing their key binding sources`,
+      details: missingBindingSources,
+      suggestion: "Regenerate or clean the affected features so workspace.generatedFiles matches the on-disk key binding files.",
+    };
   }
 
   const conflicts = Array.from(keyToFeatures.entries())
@@ -812,6 +1164,7 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
   }
 
   const emptySeedFeatures: string[] = [];
+  const missingPoolSources: string[] = [];
 
   for (const feature of workspaceResult.workspace.features) {
     if (feature.status !== "active") {
@@ -830,7 +1183,13 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
       continue;
     }
 
-    const content = readFileSync(join(hostRoot, poolFile), "utf8");
+    const poolPath = join(hostRoot, poolFile);
+    if (!existsSync(poolPath)) {
+      missingPoolSources.push(`${feature.featureId}: missing weighted pool source ${poolFile}`);
+      continue;
+    }
+
+    const content = readFileSync(poolPath, "utf8");
     const hasTodoMarker = content.includes("TODO: Add initial talent entries");
     const initialEntriesMatch = content.match(/const initialEntries = \[([\s\S]*?)\]\s+as T\[];/);
     const initialEntryCount = initialEntriesMatch ? (initialEntriesMatch[1].match(/\{\s*id:/g) || []).length : 0;
@@ -847,13 +1206,23 @@ function checkSelectionPoolSeedData(hostRoot: string): PostGenerationCheck {
     }
   }
 
+  if (missingPoolSources.length > 0) {
+    return {
+      check: checkName,
+      passed: false,
+      message: `${missingPoolSources.length} active selection features are missing weighted pool sources`,
+      details: missingPoolSources,
+      suggestion: "Regenerate or clean the affected selection-pool features so workspace.generatedFiles matches the on-disk weighted pool files.",
+    };
+  }
+
   if (emptySeedFeatures.length > 0) {
     return {
       check: checkName,
       passed: false,
       message: `${emptySeedFeatures.length} active selection features have empty weighted pools`,
       details: emptySeedFeatures,
-      suggestion: "Regenerate the feature with seeded entries or use the canonical Talent Draw demo fixture before launching the host.",
+      suggestion: "Regenerate the feature with seeded entries or use a seeded selection_pool example fixture before launching the host.",
     };
   }
 
@@ -943,6 +1312,14 @@ export function printPostGenerationReport(result: PostGenerationValidationResult
     lines.push("--- Passed Checks ---");
     for (const check of passedChecks) {
       lines.push(`[PASS] ${check.check}: ${check.message}`);
+      if (check.details && check.details.length > 0) {
+        for (const detail of check.details.slice(0, 5)) {
+          lines.push(`       - ${detail}`);
+        }
+        if (check.details.length > 5) {
+          lines.push(`       ... and ${check.details.length - 5} more`);
+        }
+      }
     }
     lines.push("");
   }

@@ -54,6 +54,7 @@ function routeUnitFromOutputs(unit: HostRealizationUnit): GeneratorRoute[] {
     routes.push({
       id: `route_${unit.id}_${output.kind}_${i}`,
       sourceUnitId: unit.id,
+      sourceKind: unit.sourceKind,
       generatorFamily,
       routeKind,
       hostTarget: output.target,
@@ -88,6 +89,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_ts`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-ts",
         routeKind: "ts",
         hostTarget: unit.hostTargets[0] || "server_ts",
@@ -105,6 +107,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_ts`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-ts",
         routeKind: "ts",
         hostTarget: "server_shared_ts",
@@ -122,6 +125,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_ui`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-ui",
         routeKind: "ui",
         hostTarget: unit.hostTargets[0] || "panorama_ui",
@@ -139,6 +143,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_kv`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-kv",
         routeKind: "kv",
         hostTarget: unit.hostTargets[0] || "kv",
@@ -159,6 +164,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_ts`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-ts",
         routeKind: "ts",
         hostTarget: tsHostTarget,
@@ -176,6 +182,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_kv`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-kv",
         routeKind: "kv",
         hostTarget: kvHostTarget,
@@ -193,6 +200,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_bridge`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "bridge-support",
         routeKind: "bridge",
         hostTarget: unit.hostTargets[0] || "bridge",
@@ -210,6 +218,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_lua`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-lua",
         routeKind: "lua",
         hostTarget: unit.hostTargets[0] || "lua_ability",
@@ -230,6 +239,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_lua`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-lua",
         routeKind: "lua",
         hostTarget: luaHostTarget,
@@ -247,6 +257,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_kv`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-kv",
         routeKind: "kv",
         hostTarget: kvHostTarget,
@@ -265,6 +276,7 @@ function routeUnit(unit: HostRealizationUnit): GeneratorRoute[] {
       routes.push({
         id: `route_${unit.id}_unknown`,
         sourceUnitId: unit.id,
+        sourceKind: unit.sourceKind,
         generatorFamily: "dota2-ts",
         routeKind: "ts",
         hostTarget: "server_ts",

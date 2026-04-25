@@ -22,12 +22,14 @@ export function findMissingLessImports(hostRoot: string): string[] {
   const generatedUiDir = join(hostRoot, "content/panorama/src/rune_weaver/generated/ui");
   const missingImports: string[] = [];
 
-  if (!existsSync(hudStylesPath) || !existsSync(generatedUiDir)) {
+  if (!existsSync(generatedUiDir)) {
     return missingImports;
   }
 
   try {
-    const hudStylesContent = readFileSync(hudStylesPath, "utf-8");
+    const hudStylesContent = existsSync(hudStylesPath)
+      ? readFileSync(hudStylesPath, "utf-8")
+      : "";
     const generatedLessFiles: string[] = [];
 
     // Find all generated LESS files

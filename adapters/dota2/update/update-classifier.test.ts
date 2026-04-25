@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { classifyUpdateDiff } from "./update-classifier.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
 import type { WritePlan } from "../assembler/index.js";
+import {
+  ABILITY_KV_AGGREGATE_TARGET_PATH,
+  buildAbilityKvFragmentPath,
+  resolveAbilityKvScriptFile,
+} from "../kv/contract.js";
 
 const existingFeature: RuneWeaverFeatureRecord = {
   featureId: "standalone_system_test",
@@ -69,14 +74,14 @@ const sourceArtifactDiff = classifyUpdateDiff(
         operation: "create",
         targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
         contentType: "json",
-        contentSummary: "feature_source_model/selection_pool (json) objects:20 kind:talent",
+        contentSummary: "feature_source_model/selection_pool (json) entries:20 kind:talent",
         sourcePattern: "rw.feature_source_model",
         sourceModule: "feature_source_model",
         safe: true,
         metadata: {
           sourceModelRef: {
             adapter: "selection_pool",
-            version: 1,
+            version: 2,
             path: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
           },
         },
@@ -111,14 +116,14 @@ const migratedSourceArtifactDiff = classifyUpdateDiff(
         operation: "create",
         targetPath: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
         contentType: "json",
-        contentSummary: "feature_source_model/selection_pool (json) objects:20 kind:talent",
+        contentSummary: "feature_source_model/selection_pool (json) entries:20 kind:talent",
         sourcePattern: "rw.feature_source_model",
         sourceModule: "feature_source_model",
         safe: true,
         metadata: {
           sourceModelRef: {
             adapter: "selection_pool",
-            version: 1,
+            version: 2,
             path: "game/scripts/src/rune_weaver/features/standalone_system_test/selection-pool.source.json",
           },
         },
@@ -143,5 +148,127 @@ assert.equal(
   migratedSourceArtifactDiff.deletedFiles[0].path,
   "game/scripts/src/rune_weaver/generated/server/standalone_system_test_integration_bridge_integration_state_sync_bridge.ts"
 );
+
+const legacyAbilityName = "rw_standalone_system_test_gameplay";
+const legacyAggregateFeature: RuneWeaverFeatureRecord = {
+  ...existingFeature,
+  generatedFiles: [
+    "game/scripts/vscripts/rune_weaver/abilities/rw_standalone_system_test_gameplay.lua",
+    ABILITY_KV_AGGREGATE_TARGET_PATH,
+  ],
+};
+
+const legacyAggregateDiff = classifyUpdateDiff(
+  legacyAggregateFeature,
+  {
+    entries: [
+      {
+        operation: "create",
+        targetPath: "game/scripts/vscripts/rune_weaver/abilities/rw_standalone_system_test_gameplay.lua",
+        contentType: "lua",
+        contentSummary: "lua gameplay shell",
+        sourcePattern: "dota2.exploratory_ability",
+        sourceModule: "gameplay_core",
+        safe: true,
+        metadata: {
+          abilityName: legacyAbilityName,
+        },
+      },
+      {
+        operation: "create",
+        targetPath: buildAbilityKvFragmentPath("standalone_system_test", legacyAbilityName),
+        contentType: "kv",
+        contentSummary: "ability_kv_fragment",
+        sourcePattern: "dota2.exploratory_ability",
+        sourceModule: "gameplay_core",
+        safe: true,
+        metadata: {
+          abilityName: legacyAbilityName,
+          scriptFile: resolveAbilityKvScriptFile(legacyAbilityName),
+          kvArtifactKind: "fragment",
+          aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
+        },
+      },
+    ],
+  } as WritePlan,
+  "D:\\test-host",
+);
+
+assert.equal(legacyAggregateDiff.requiresRegenerate, false);
+assert.equal(legacyAggregateDiff.deletedFiles.length, 0);
+assert.equal(legacyAggregateDiff.createdFiles.length, 0);
+assert.equal(legacyAggregateDiff.refreshedFiles.length, 3);
+assert.deepEqual(
+  legacyAggregateDiff.refreshedFiles.map((file) => file.path).sort(),
+  [
+    ABILITY_KV_AGGREGATE_TARGET_PATH,
+    "game/scripts/vscripts/rune_weaver/abilities/rw_standalone_system_test_gameplay.lua",
+    buildAbilityKvFragmentPath("standalone_system_test", legacyAbilityName),
+  ].sort(),
+);
+
+const ownedFragmentFeature: RuneWeaverFeatureRecord = {
+  ...legacyAggregateFeature,
+  ownedArtifacts: [
+    {
+      kind: "generated_file",
+      path: "game/scripts/vscripts/rune_weaver/abilities/rw_standalone_system_test_gameplay.lua",
+    },
+    {
+      kind: "ability_kv_fragment",
+      path: buildAbilityKvFragmentPath("standalone_system_test", legacyAbilityName),
+      aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
+      abilityName: legacyAbilityName,
+      scriptFile: resolveAbilityKvScriptFile(legacyAbilityName),
+      managedBy: "dota2-ability-kv-aggregate",
+    },
+    {
+      kind: "materialized_aggregate",
+      path: ABILITY_KV_AGGREGATE_TARGET_PATH,
+      managedBy: "dota2-ability-kv-aggregate",
+    },
+  ],
+};
+
+const ownedFragmentDiff = classifyUpdateDiff(
+  ownedFragmentFeature,
+  {
+    entries: [
+      {
+        operation: "create",
+        targetPath: "game/scripts/vscripts/rune_weaver/abilities/rw_standalone_system_test_gameplay.lua",
+        contentType: "lua",
+        contentSummary: "lua gameplay shell updated",
+        sourcePattern: "dota2.exploratory_ability",
+        sourceModule: "gameplay_core",
+        safe: true,
+        metadata: {
+          abilityName: legacyAbilityName,
+        },
+      },
+      {
+        operation: "create",
+        targetPath: buildAbilityKvFragmentPath("standalone_system_test", legacyAbilityName),
+        contentType: "kv",
+        contentSummary: "ability_kv_fragment updated",
+        sourcePattern: "dota2.exploratory_ability",
+        sourceModule: "gameplay_core",
+        safe: true,
+        metadata: {
+          abilityName: legacyAbilityName,
+          scriptFile: resolveAbilityKvScriptFile(legacyAbilityName),
+          kvArtifactKind: "fragment",
+          aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
+        },
+      },
+    ],
+  } as WritePlan,
+  "D:\\test-host",
+);
+
+assert.equal(ownedFragmentDiff.requiresRegenerate, false);
+assert.equal(ownedFragmentDiff.deletedFiles.length, 0);
+assert.equal(ownedFragmentDiff.createdFiles.length, 0);
+assert.equal(ownedFragmentDiff.refreshedFiles.length, 3);
 
 console.log("adapters/dota2/update/update-classifier.test.ts passed");

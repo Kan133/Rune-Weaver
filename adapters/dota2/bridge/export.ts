@@ -3,8 +3,12 @@
 // Creates a stable, versioned bridge file for workbench-ui consumption
 
 import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import type { RuneWeaverWorkspace } from "../../../core/workspace/types.js";
+import {
+  buildDota2GovernanceReadModel,
+  type Dota2GovernanceReadModel,
+} from "../governance/read-model.js";
 
 // F011: Bridge artifact contract
 export interface BridgeExportConfig {
@@ -46,6 +50,7 @@ interface BridgeMetadata {
 interface BridgeArtifact {
   // Original workspace data
   workspace: RuneWeaverWorkspace;
+  governanceReadModel: Dota2GovernanceReadModel;
   // Bridge metadata
   _bridge: BridgeMetadata;
 }
@@ -77,6 +82,10 @@ export function exportWorkspaceToBridge(
     // Build bridge artifact
     const artifact: BridgeArtifact = {
       workspace,
+      governanceReadModel: buildDota2GovernanceReadModel({
+        hostRoot: config.hostRoot,
+        features: workspace.features,
+      }),
       _bridge: {
         exportedAt,
         exportedBy: "rune-weaver-cli",

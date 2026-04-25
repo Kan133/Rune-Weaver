@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-phase-change
-> Last verified: 2026-04-14
+> Last verified: 2026-04-23
 > Read when: executing validation and recording validation results
 > Do not use for: defining acceptance by itself, changing milestone scope, or replacing the execution baseline
 
@@ -155,6 +155,9 @@ cat "apps/workbench-ui/public/bridge-workspace.json" | ConvertFrom-Json
 - [ ] Feature 绑定存在
 - [ ] Server binding 正确
 - [ ] UI binding 正确（如适用）
+- [ ] `_bridge.exportedBy = rune-weaver-cli`
+- [ ] root-level `governanceReadModel` 存在
+- [ ] `workspace.features.length` 与 `governanceReadModel.workspace.featureCount` 对齐
 
 #### 2.4.4 Host Truth 验证
 
@@ -353,7 +356,7 @@ npm run verify:p0
 | `cli dota2 run` | 运行完整主链路 | `npm run cli -- dota2 run "<prompt>" --host <path>` |
 | `cli dota2 update` | 更新已有 feature | `npm run cli -- dota2 update "<prompt>" --host <path> --feature <id>` |
 | `cli dota2 rollback` | 回滚/删除 feature | `npm run cli -- dota2 rollback --host <path> --feature <id>` |
-| `cli export-bridge` | 导出 workspace 到 UI bridge | `npm run cli -- export-bridge --host <path>` |
+| `cli export-bridge` | 导出 workspace 到 UI bridge；也是唯一 legacy payload refresh lane | `npm run cli -- export-bridge --host <path>` |
 
 ### 7.3 Workbench 命令
 
@@ -413,6 +416,18 @@ npm run workbench -- --list D:\test1
 # 手动触发 bridge 导出
 npm run cli -- export-bridge --host D:\test1
 ```
+
+边界说明:
+- 这里的 `export-bridge` 只负责把 stale legacy payload 刷新为 governed bridge payload
+- 它不是 `doctor` / `validate` / `repair` 的替代，也不引入新的 runtime semantics 或 reusable admission
+
+Refresh cadence (event-driven):
+- 当 feature lifecycle 变化需要反映到 product-facing bridge 时刷新：create / update / rollback / delete / regenerate
+- 当 Dota2 governance read-model schema 或 projection 变化影响 bridge payload 时刷新
+- 当 `apps/workbench-ui/public/bridge-workspace.json` 缺失根级 `governanceReadModel` 时刷新
+- 当 proof host 重新导出，且 checked-in bridge sample 需要跟上新的 proof host 或新的 `_bridge.exportedAt` 时刷新
+- 禁止把 `doctor`、`validate`、`repair`、`workbench --inspect` 或手工 JSON 编辑当作 refresh lane
+- 退役 stale payload 时，只运行 `npm run cli -- export-bridge --host <path>`
 
 ### 9.2 风险标记
 

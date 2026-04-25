@@ -1,5 +1,5 @@
 /**
- * Tests for Selection Flow Generator - GP-2
+ * Tests for Selection Flow Generator
  */
 
 import { generateSelectionFlowCode } from "./selection-flow.js";
@@ -24,9 +24,8 @@ function createMockEntry(params: Record<string, unknown>): WritePlanEntry {
   };
 }
 
-// Test 1: Basic selection flow code generation
 function testBasicGeneration() {
-  console.log("Test 1: Basic selection flow code generation");
+  console.log("Test 1: basic selection flow code generation");
 
   const entry = createMockEntry({
     choiceCount: 3,
@@ -42,7 +41,6 @@ function testBasicGeneration() {
   console.log("✓ Test 1 passed\n");
 }
 
-// Test 2: postSelectionPoolBehavior logic
 function testPostSelectionPoolBehavior() {
   console.log("Test 2: postSelectionPoolBehavior logic");
 
@@ -60,7 +58,6 @@ function testPostSelectionPoolBehavior() {
   console.log("✓ Test 2 passed\n");
 }
 
-// Test 3: trackSelectedItems logic
 function testTrackSelectedItems() {
   console.log("Test 3: trackSelectedItems logic");
 
@@ -73,39 +70,16 @@ function testTrackSelectedItems() {
   const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
 
   assert(code.includes("trackOwned: true"), "Should pass trackOwned through pool commit options");
+  assert(code.includes("const poolCommit = selection.poolCommit;"), "Should lift poolCommit into a standalone function value before invocation");
+  assert(code.includes("poolCommit(selectedOption.id, { trackOwned: true });"), "Should invoke poolCommit without method-call syntax");
+  assert(!code.includes("selection.poolCommit(selectedOption.id"), "Should avoid direct property invocation that TS->Lua may lower to a method call");
   assert(!code.includes("ownedIds"), "Should not store ownedIds in selection_flow");
 
   console.log("✓ Test 3 passed\n");
 }
 
-// Test 4: effectApplication logic
-function testEffectApplication() {
-  console.log("Test 4: effectApplication logic");
-
-  const entry = createMockEntry({
-    choiceCount: 3,
-    effectApplication: {
-      enabled: true,
-      rarityAttributeBonusMap: {
-        R: { attribute: "strength", value: 10 },
-        SR: { attribute: "agility", value: 10 },
-      },
-    },
-  });
-
-  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
-
-  assert(code.includes("applyEffectByRarity"), "Should contain applyEffectByRarity");
-  assert(code.includes("rarityAttributeBonusMap"), "Should contain rarityAttributeBonusMap");
-  assert(code.includes("strength"), "Should contain strength");
-  assert(code.includes("agility"), "Should contain agility");
-
-  console.log("✓ Test 4 passed\n");
-}
-
-// Test 5: player-scoped events
 function testPlayerScopedEvents() {
-  console.log("Test 5: player-scoped events");
+  console.log("Test 4: player-scoped events");
 
   const entry = createMockEntry({
     choiceCount: 3,
@@ -119,12 +93,11 @@ function testPlayerScopedEvents() {
   assert(code.includes("rune_weaver_selection_made"), "Should contain rune_weaver_selection_made");
   assert(code.includes("rune_weaver_selection_confirmed"), "Should contain rune_weaver_selection_confirmed");
 
-  console.log("✓ Test 5 passed\n");
+  console.log("✓ Test 4 passed\n");
 }
 
-// Test 6: remove_selected_and_keep_unselected_eligible behavior
 function testRemoveSelectedAndKeepUnselectedEligible() {
-  console.log("Test 6: remove_selected_and_keep_unselected_eligible behavior");
+  console.log("Test 5: remove_selected_and_keep_unselected_eligible behavior");
 
   const entry = createMockEntry({
     choiceCount: 3,
@@ -138,12 +111,11 @@ function testRemoveSelectedAndKeepUnselectedEligible() {
   assert(code.includes("unselected candidates"), "Should contain unselected candidates");
   assert(code.includes("remain eligible"), "Should contain remain eligible");
 
-  console.log("✓ Test 6 passed\n");
+  console.log("✓ Test 5 passed\n");
 }
 
-// Test 7: event listeners registration
 function testEventListenersRegistration() {
-  console.log("Test 7: event listeners registration");
+  console.log("Test 6: event listeners registration");
 
   const entry = createMockEntry({
     choiceCount: 3,
@@ -156,12 +128,11 @@ function testEventListenersRegistration() {
   assert(code.includes("rune_weaver_player_select"), "Should contain rune_weaver_player_select");
   assert(code.includes("rune_weaver_player_confirm"), "Should contain rune_weaver_player_confirm");
 
-  console.log("✓ Test 7 passed\n");
+  console.log("✓ Test 6 passed\n");
 }
 
-// Test 8: backward compatibility with default parameters
 function testBackwardCompatibility() {
-  console.log("Test 8: backward compatibility with default parameters");
+  console.log("Test 7: backward compatibility with default parameters");
 
   const entry = createMockEntry({});
 
@@ -173,52 +144,27 @@ function testBackwardCompatibility() {
   assert(code.includes('selectionPolicy: "single"'), "Should contain default selectionPolicy");
   assert(code.includes('postSelectionPoolBehavior: "none"'), "Should contain default postSelectionPoolBehavior");
 
-  console.log("✓ Test 8 passed\n");
+  console.log("✓ Test 7 passed\n");
 }
 
-// Test 9: immediate applyMode
-function testImmediateApplyMode() {
-  console.log("Test 9: immediate applyMode");
-
-  const entry = createMockEntry({
-    choiceCount: 3,
-    applyMode: "immediate",
-    effectApplication: {
-      enabled: true,
-    },
-  });
-
-  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
-
-  assert(code.includes('applyMode: "immediate"'), "Should contain applyMode immediate");
-  assert(code.includes("Apply effect immediately"), "Should contain Apply effect immediately");
-
-  console.log("✓ Test 9 passed\n");
-}
-
-// Test 10: deferred applyMode
-function testDeferredApplyMode() {
-  console.log("Test 10: deferred applyMode");
+function testDeferredApplyModeCompatibilityState() {
+  console.log("Test 8: deferred applyMode compatibility state");
 
   const entry = createMockEntry({
     choiceCount: 3,
     applyMode: "deferred",
-    effectApplication: {
-      enabled: true,
-    },
   });
 
   const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
 
   assert(code.includes('applyMode: "deferred"'), "Should contain applyMode deferred");
-  assert(code.includes("deferredEffect"), "Should contain deferredEffect");
+  assert(code.includes("deferredEffect"), "Should keep deferred compatibility state");
 
-  console.log("✓ Test 10 passed\n");
+  console.log("✓ Test 8 passed\n");
 }
 
-// Test 11: inventory extension stays inside selection flow runtime
 function testInventoryExtension() {
-  console.log("Test 11: inventory extension support");
+  console.log("Test 9: inventory extension support");
 
   const entry = createMockEntry({
     choiceCount: 3,
@@ -239,12 +185,11 @@ function testInventoryExtension() {
   assert(code.includes("Talent inventory full"), "Should embed the full-state message");
   assert(code.includes("inventory full for player"), "Should block draw before opening modal when full");
 
-  console.log("✓ Test 11 passed\n");
+  console.log("✓ Test 9 passed\n");
 }
 
-// Test 12: local progression extension stays inside selection flow runtime
 function testLocalProgressionExtension() {
-  console.log("Test 12: local progression extension support");
+  console.log("Test 10: local progression extension support");
 
   const entry = createMockEntry({
     choiceCount: 1,
@@ -265,12 +210,11 @@ function testLocalProgressionExtension() {
   assert(code.includes("progressionState.completedRounds += 1"), "Should increment completed rounds on confirm");
   assert(code.includes("Math.floor(progressionState.completedRounds / this.progressionThreshold)"), "Should derive level from thresholded rounds");
 
-  console.log("✓ Test 12 passed\n");
+  console.log("✓ Test 10 passed\n");
 }
 
-// Test 13: selection flow must not carry weighted-pool session state ownership
 function testNoPoolStateMirroring() {
-  console.log("Test 13: no pool state mirroring");
+  console.log("Test 11: no pool state mirroring");
 
   const entry = createMockEntry({
     choiceCount: 3,
@@ -285,22 +229,57 @@ function testNoPoolStateMirroring() {
   assert(!code.includes("currentChoiceIds"), "Should not declare currentChoiceIds");
   assert(!code.includes("getRemainingTalentIds"), "Should not fallback to talent-specific pool API");
 
+  console.log("✓ Test 11 passed\n");
+}
+
+function testSelectionOutcomeHookEmitsNormalizedRequest() {
+  console.log("Test 12: selection outcome hook emits normalized request");
+
+  const entry = createMockEntry({
+    choiceCount: 3,
+  });
+
+  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
+
+  assert(code.includes("selectionOutcomeHandlers"), "Should contain selection outcome handler registry");
+  assert(code.includes("registerOutcomeHandler"), "Should expose outcome handler registration");
+  assert(code.includes("SelectionOutcomeRequest"), "Should define normalized outcome request shape");
+  assert(code.includes("const outcomeRequest: SelectionOutcomeRequest"), "Should build a normalized outcome request on confirm");
+  assert(code.includes("const result = handler({ ...request, request })"), "Should pass normalized request context to handlers");
+  assert(!code.includes("applyEffectByRarity"), "Should no longer own concrete effect realization");
+  assert(!code.includes("rarityAttributeBonusMap"), "Should not embed legacy rarity outcome tables");
+
+  console.log("✓ Test 12 passed\n");
+}
+
+function testConfirmListenerCapturesOptionalCursorPosition() {
+  console.log("Test 13: confirm listener captures optional cursor position");
+
+  const entry = createMockEntry({
+    choiceCount: 3,
+  });
+
+  const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
+
+  assert(code.includes("cursorX"), "Should read cursorX from confirm payload when present");
+  assert(code.includes("cursorPosition"), "Should include cursorPosition in the normalized outcome request");
+  assert(code.includes("Number.isFinite(Number(event.cursorY))"), "Should defensively validate cursor coordinates");
+
   console.log("✓ Test 13 passed\n");
 }
 
-// Run all tests
 console.log("=== Selection Flow Generator Tests ===\n");
 testBasicGeneration();
 testPostSelectionPoolBehavior();
 testTrackSelectedItems();
-testEffectApplication();
 testPlayerScopedEvents();
 testRemoveSelectedAndKeepUnselectedEligible();
 testEventListenersRegistration();
 testBackwardCompatibility();
-testImmediateApplyMode();
-testDeferredApplyMode();
+testDeferredApplyModeCompatibilityState();
 testInventoryExtension();
 testLocalProgressionExtension();
 testNoPoolStateMirroring();
+testSelectionOutcomeHookEmitsNormalizedRequest();
+testConfirmListenerCapturesOptionalCursorPosition();
 console.log("=== All tests passed ===");

@@ -2,8 +2,9 @@
 // Provides switchable workspace data sources beyond fixed sample file
 // Supports: sample file, local bridge file, query param override
 
-import type { RuneWeaverWorkspace } from "@/types/workspace";
+import type { Dota2GovernanceReadModel, RuneWeaverWorkspace } from "@/types/workspace";
 import { loadWorkspaceWithMeta } from "./workspaceAdapter";
+import { isWorkbenchDevOrTestMode } from "@/lib/runtimeMode";
 
 // F009: Supported workspace source types
 export type WorkspaceSourceType = "sample" | "bridge" | "query-param";
@@ -14,25 +15,45 @@ export interface WorkspaceSourceConfig {
   path: string;
   label: string;
   description?: string;
+  purpose?: 'product' | 'legacy-regression';
 }
 
-// F009: Predefined workspace sources
-// F011: Bridge source now explicitly corresponds to CLI artifact at fixed path
-export const WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
-  {
-    type: "sample",
-    path: "/sample-workspace.json",
-    label: "Sample Workspace",
-    description: "内置示例 workspace 数据",
-  },
+const PRODUCT_WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
   {
     type: "bridge",
     // F011: Bridge artifact path - CLI exports to apps/workbench-ui/public/bridge-workspace.json
     path: "/bridge-workspace.json",
     label: "CLI Bridge Artifact",
+    purpose: "product",
     description: "CLI 导出的 workspace 数据 (npm run cli -- export-bridge --host <path>)",
   },
 ];
+
+const DEV_WORKSPACE_SOURCES: WorkspaceSourceConfig[] = [
+  {
+    type: "sample",
+    path: "/sample-workspace.json",
+    label: "Governed Sample Workspace",
+    purpose: "product",
+    description: "内置 governed sample，使用 bridge-style payload 与 root-level governanceReadModel，仅用于显式 dev/test 模式。",
+  },
+  {
+    type: "sample",
+    path: "/legacy-compatibility-probe.json",
+    label: "Legacy Compatibility Probe",
+    purpose: "legacy-regression",
+    description: "显式 legacy regression fixture：raw workspace payload，无 governanceReadModel，仅用于兼容显示验证。",
+  },
+];
+
+export function buildWorkspaceSources(includeDevSources: boolean): WorkspaceSourceConfig[] {
+  return includeDevSources
+    ? [...PRODUCT_WORKSPACE_SOURCES, ...DEV_WORKSPACE_SOURCES]
+    : [...PRODUCT_WORKSPACE_SOURCES];
+}
+
+// F009: Predefined workspace sources
+export const WORKSPACE_SOURCES: WorkspaceSourceConfig[] = buildWorkspaceSources(isWorkbenchDevOrTestMode());
 
 // F011: Bridge artifact contract
 // CLI produces: apps/workbench-ui/public/bridge-workspace.json
@@ -64,6 +85,7 @@ function getSourceFromQueryParam(): WorkspaceSourceConfig | null {
       type: "query-param",
       path: workspacePath,
       label: "Query Param",
+      purpose: "product",
       description: `从 URL 参数加载: ${workspacePath}`,
     };
   }
@@ -126,6 +148,7 @@ export async function loadWorkspaceFromSource(
   source?: WorkspaceSourceConfig
 ): Promise<{
   workspace: RuneWeaverWorkspace | null;
+  governanceReadModel?: Dota2GovernanceReadModel | null;
   source: WorkspaceSourceConfig;
   issues: string[];
   bridgeMeta?: { exportedAt: string; exportedBy: string; sourceHostRoot: string; version: string } | null;
@@ -134,13 +157,15 @@ export async function loadWorkspaceFromSource(
   const issues: string[] = [];
 
   // F011: Use loadWorkspaceWithMeta to detect bridge artifact format
-  const { workspace, bridgeMeta } = await loadWorkspaceWithMeta(effectiveSource.path);
+  const { workspace, bridgeMeta, governanceReadModel, issues: loadIssues } = await loadWorkspaceWithMeta(effectiveSource.path);
 
   if (!workspace) {
     issues.push(`Failed to load workspace from ${effectiveSource.path}`);
   }
 
-  return { workspace, source: effectiveSource, issues, bridgeMeta };
+  issues.push(...loadIssues);
+
+  return { workspace, governanceReadModel, source: effectiveSource, issues, bridgeMeta };
 }
 
 // F009: Switch to a different source
@@ -149,6 +174,7 @@ export async function switchWorkspaceSource(
   source: WorkspaceSourceConfig
 ): Promise<{
   workspace: RuneWeaverWorkspace | null;
+  governanceReadModel?: Dota2GovernanceReadModel | null;
   source: WorkspaceSourceConfig;
   issues: string[];
   bridgeMeta?: { exportedAt: string; exportedBy: string; sourceHostRoot: string; version: string } | null;

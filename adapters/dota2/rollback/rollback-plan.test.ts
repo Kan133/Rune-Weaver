@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 
 import { generateRollbackPlan } from "./rollback-plan.js";
 import type { RuneWeaverFeatureRecord, RuneWeaverWorkspace } from "../../../core/workspace/types.js";
+import {
+  ABILITY_KV_AGGREGATE_TARGET_PATH,
+  buildAbilityKvFragmentPath,
+  resolveAbilityKvScriptFile,
+} from "../kv/contract.js";
 
 function createFeatureRecord(): RuneWeaverFeatureRecord {
   return {
@@ -22,7 +27,46 @@ function createFeatureRecord(): RuneWeaverFeatureRecord {
       "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
       "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
       "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-      "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
+      "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_selection_outcome_effect_outcome_realizer.lua",
+      ABILITY_KV_AGGREGATE_TARGET_PATH,
+    ],
+    ownedArtifacts: [
+      {
+        kind: "generated_file",
+        path: "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
+      },
+      {
+        kind: "generated_file",
+        path: "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
+      },
+      {
+        kind: "generated_file",
+        path: "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+      },
+      {
+        kind: "generated_file",
+        path: "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+      },
+      {
+        kind: "generated_file",
+        path: "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_selection_outcome_effect_outcome_realizer.lua",
+      },
+      {
+        kind: "ability_kv_fragment",
+        path: buildAbilityKvFragmentPath(
+          "talent_draw_demo",
+          "talent_draw_demo_selection_outcome_effect_outcome_realizer",
+        ),
+        aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
+        abilityName: "talent_draw_demo_selection_outcome_effect_outcome_realizer",
+        scriptFile: resolveAbilityKvScriptFile("talent_draw_demo_selection_outcome_effect_outcome_realizer"),
+        managedBy: "dota2-ability-kv-aggregate",
+      },
+      {
+        kind: "materialized_aggregate",
+        path: ABILITY_KV_AGGREGATE_TARGET_PATH,
+        managedBy: "dota2-ability-kv-aggregate",
+      },
     ],
     entryBindings: [
       { target: "server", file: "game/scripts/src/modules/index.ts", kind: "import" },
@@ -69,6 +113,16 @@ function testRollbackPlanIncludesGeneratedCompanionArtifacts(): void {
     ),
     true,
   );
+  assert.equal(
+    plan.filesToDelete.includes(
+      buildAbilityKvFragmentPath(
+        "talent_draw_demo",
+        "talent_draw_demo_selection_outcome_effect_outcome_realizer",
+      ),
+    ),
+    true,
+  );
+  assert.equal(plan.filesToDelete.includes(ABILITY_KV_AGGREGATE_TARGET_PATH), false);
 }
 
 function runTests(): void {

@@ -146,7 +146,7 @@ function testGenerateFeatureReview(): void {
 
 function testCanonicalGapFillContract(): void {
   assert(
-    TALENT_DRAW_CANONICAL_BOUNDARY === "selection_flow.effect_mapping",
+    TALENT_DRAW_CANONICAL_BOUNDARY === "selection_outcome.realization",
     "canonical boundary should stay frozen",
   );
   assert(

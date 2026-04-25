@@ -5,6 +5,7 @@
  */
 
 import { generateSelectionModalComponent } from "./selection-modal.js";
+import { generateLessStyles } from "./less-styles.js";
 import { WritePlanEntry } from "../../assembler/index.js";
 
 function assert(condition: unknown, message: string): void {
@@ -604,6 +605,51 @@ function testInventoryPanelGeneration() {
   console.log("✓ Test 16 passed\n");
 }
 
+function testSelectionModalCentersDynamicRows() {
+  console.log("Test 17: Selection modal centers dynamic rows");
+
+  const tsxEntry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.tsx",
+    contentType: "tsx",
+    parameters: {
+      choiceCount: 5,
+    },
+  };
+
+  const lessEntry: WritePlanEntry = {
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "test_module",
+    targetPath: "test_selection_modal.less",
+    contentType: "less",
+    parameters: {
+      choiceCount: 5,
+      inventory: {
+        enabled: true,
+        capacity: 16,
+        storeSelectedItems: true,
+        blockDrawWhenFull: true,
+        fullMessage: "Selection inventory full",
+        presentation: "persistent_panel",
+      },
+    },
+  };
+
+  const tsxCode = generateSelectionModalComponent("TestModal", "test_feature", tsxEntry);
+  const lessCode = generateLessStyles("ui.selection_modal", lessEntry, "test_feature");
+
+  assert(tsxCode.includes("computeSelectionColumns"), "Should compute row layout from the live option count");
+  assert(tsxCode.includes("selectionRows"), "Should group options into dynamic rows");
+  assert(tsxCode.includes('className="modal-options-row"'), "Should render dedicated centered option rows");
+  assert(lessCode.includes(".modal-options-row"), "Should style dedicated option rows");
+  assert(lessCode.includes("width: fit-children;"), "Option rows should shrink to their children before centering");
+  assert(lessCode.includes("flow-children: right;"), "Each option row should lay cards out horizontally");
+  assert(lessCode.includes("margin: 0px 8px;"), "Cards should keep horizontal spacing without forcing extra vertical wrap pressure");
+
+  console.log("✓ Test 17 passed\n");
+}
+
 // Run all tests
 console.log("=== Selection Modal Generator Tests ===\n");
 testBasicGeneration();
@@ -626,4 +672,5 @@ testDebugLogs();
 testNoLessImport();
 testPreventDisabledSelection();
 testInventoryPanelGeneration();
+testSelectionModalCentersDynamicRows();
 console.log("=== All tests passed ===");

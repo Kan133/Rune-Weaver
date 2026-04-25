@@ -2,21 +2,23 @@
   "featureId": "talent_draw_demo",
   "revision": 1,
   "selectedPatterns": [
-    "input.key_binding",
-    "data.weighted_pool",
     "rule.selection_flow",
-    "ui.selection_modal",
-    "effect.modifier_applier"
+    "data.weighted_pool",
+    "effect.outcome_realizer",
+    "input.key_binding",
+    "ui.selection_modal"
   ],
   "generatedFiles": [
-    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding_ability.ts",
-    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_input_key_binding.ts",
-    "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_data_data_weighted_pool.ts",
-    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_rule_rule_selection_flow.ts",
-    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.tsx",
-    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_ui_ui_selection_modal.less",
-    "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-    "game/scripts/npc/npc_abilities_custom.txt"
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+    "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
+    "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
+    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+    "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+    "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+    "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json"
   ],
   "entryBindings": [
     {

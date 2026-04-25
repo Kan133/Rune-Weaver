@@ -35,3 +35,7 @@ export {
   formatSelectiveUpdateResult,
   type SelectiveUpdateResult,
 } from "./update-executor.js";
+
+export {
+  adaptDota2UpdateBlueprint,
+} from "./update-blueprint.js";

@@ -17,6 +17,7 @@ interface ExecuteAPIResponse {
     error?: string;
     artifactPath?: string;
     review?: {
+      status?: 'success' | 'warning' | 'failure' | 'info';
       title: string;
       summary: string;
       blockers: string[];
@@ -76,6 +77,14 @@ function normalizePromptForCLI(prompt: string): string {
     .replace(/\r?\n+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function didWriteFeatureToHost(result: ExecuteAPIResponse['result'] | null): boolean {
+  if (!result) {
+    return false;
+  }
+
+  return result.success || result.review?.status === 'warning';
 }
 
 export function WizardDialog() {
@@ -218,7 +227,7 @@ export function WizardDialog() {
         throw new Error('CLI did not return a final result');
       }
 
-      if (!resultPayload.success) {
+      if (!didWriteFeatureToHost(resultPayload)) {
         const detail = summarizeOutput(resultPayload.output || outputLines).join('\n');
         const reviewBlock = resultPayload.review
           ? [
@@ -246,9 +255,12 @@ export function WizardDialog() {
               .map((action) => action.command ? `${action.label}: ${action.command}` : action.label),
           ].filter(Boolean).join('\n')
         : summarizeOutput(outputLines).join('\n');
+      const wroteWithFollowUp = !resultPayload.success && resultPayload.review?.status === 'warning';
       addWizardMessage({
         role: 'assistant',
-        content: `✅ Feature 已写入宿主。\n\n${reviewSummary}`,
+        content: wroteWithFollowUp
+          ? `⚠️ Feature 已写入宿主，但还需要后续处理。\n\n${reviewSummary}`
+          : `✅ Feature 已写入宿主。\n\n${reviewSummary}`,
       });
       setDraftFeature(null);
       setWizardStep('intent');

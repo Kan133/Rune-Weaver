@@ -333,13 +333,11 @@ export function buildWar3CurrentSliceIntentBridge(
       trigger: true,
       outcomeApplication: true,
     },
-    openQuestions: [],
     resolvedAssumptions: [
       "The current slice is treated as a local area-entry micro-feature.",
       "Player gating is limited to human player-controlled units.",
       "The shop target is an existing anchored object, not a generated runtime proxy.",
     ],
-    isReadyForBlueprint: true,
   };
 
   const hostBinding: War3CurrentSliceHostBinding = {

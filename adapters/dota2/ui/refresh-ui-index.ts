@@ -5,7 +5,7 @@
  */
 
 import { UIIndexGenerationOptions, GeneratedUIIndex } from "./types.js";
-import { toPascalCase } from "./utils/template-engine.js";
+import { toGeneratedUiComponentName } from "./component-naming.js";
 
 /**
  * Generate UI index file content
@@ -15,19 +15,19 @@ export function generateUIIndex(options: UIIndexGenerationOptions): GeneratedUII
   
   // Generate imports
   const imports = features.map(f => {
-    const componentName = toPascalCase(f.featureId);
+    const componentName = toGeneratedUiComponentName(f.featureId);
     return `import { ${componentName} } from "./${f.featureId}";`;
   }).join("\n");
   
   // Generate component renders
   const componentRenders = features.map(f => {
-    const componentName = toPascalCase(f.featureId);
+    const componentName = toGeneratedUiComponentName(f.featureId);
     return `      <${componentName} />`;
   }).join("\n");
   
   // Generate exports for individual components
   const exports = features.map(f => {
-    const componentName = toPascalCase(f.featureId);
+    const componentName = toGeneratedUiComponentName(f.featureId);
     return `export { ${componentName} } from "./${f.featureId}";`;
   }).join("\n");
   
@@ -61,7 +61,7 @@ ${exports}
  */
 export function generateSingleFeatureIndex(featureId: string): GeneratedUIIndex {
   return generateUIIndex({
-    features: [{ featureId, componentName: toPascalCase(featureId) }],
+    features: [{ featureId, componentName: toGeneratedUiComponentName(featureId) }],
   });
 }
 
@@ -72,7 +72,7 @@ export function generateComboIndex(featureIds: string[]): GeneratedUIIndex {
   return generateUIIndex({
     features: featureIds.map(id => ({
       featureId: id,
-      componentName: toPascalCase(id),
+      componentName: toGeneratedUiComponentName(id),
     })),
   });
 }

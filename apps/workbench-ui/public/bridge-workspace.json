@@ -2,32 +2,306 @@
   "workspace": {
     "version": "0.1.0",
     "hostType": "dota2-x-template",
-    "hostRoot": "D:\\test3",
-    "addonName": "test3",
-    "initializedAt": "2026-04-14T12:32:20.038Z",
+    "hostRoot": "D:\\rw-test37",
+    "addonName": "rw_test37",
+    "initializedAt": "2026-04-25T07:28:15.311Z",
     "features": [
       {
-        "featureId": "talent_draw_demo",
-        "intentKind": "standalone-system",
+        "featureId": "micro_feature_rdkl",
+        "intentKind": "micro-feature",
         "status": "active",
-        "revision": 15,
-        "blueprintId": "micro_feature_m2gh",
+        "revision": 3,
+        "blueprintId": "standalone_system_zcn2",
+        "modules": [
+          {
+            "moduleId": "selection_input",
+            "role": "gameplay-core",
+            "category": "trigger",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "input.key_binding",
+            "selectedPatternIds": [
+              "input.key_binding"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'input_trigger' resolved to reusable pattern 'input.key_binding'",
+            "requiredOutputs": [
+              "selection_open_request"
+            ],
+            "integrationHints": [
+              "input.binding",
+              "event.dispatch"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 4
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_pool",
+            "role": "shared-support",
+            "category": "data",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "data.weighted_pool",
+            "selectedPatternIds": [
+              "data.weighted_pool"
+            ],
+            "artifactTargets": [
+              "server",
+              "shared"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [
+              "weighted_pool.selection_policy"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server",
+              "shared"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'weighted_pool' resolved to reusable pattern 'data.weighted_pool'",
+            "requiredOutputs": [
+              "candidate_options"
+            ],
+            "integrationHints": [
+              "selection.candidate_source"
+            ],
+            "stateExpectations": [
+              "selection.pool_state"
+            ],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 6
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_flow",
+            "role": "gameplay-core",
+            "category": "rule",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "rule.selection_flow",
+            "selectedPatternIds": [
+              "rule.selection_flow"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [
+              "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_flow_rule_selection_flow.ts"
+            ],
+            "fillContractIds": [],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [
+              "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_flow_rule_selection_flow.ts"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
+            "requiredOutputs": [
+              "ui.surface",
+              "selection_commit",
+              "selection_outcome_request"
+            ],
+            "integrationHints": [
+              "selection.ui_surface",
+              "selection.candidate_source"
+            ],
+            "stateExpectations": [
+              "selection.commit_state"
+            ],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 8
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_outcome",
+            "role": "gameplay-core",
+            "category": "effect",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "effect.outcome_realizer",
+            "selectedPatternIds": [
+              "effect.outcome_realizer"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [
+              "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_outcome_effect_outcome_realizer.ts"
+            ],
+            "fillContractIds": [
+              "selection_outcome.realization"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [
+              "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_outcome_effect_outcome_realizer.ts"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_outcome' resolved to reusable pattern 'effect.outcome_realizer'",
+            "requiredOutputs": [
+              "selection_outcome_realized"
+            ],
+            "integrationHints": [
+              "selection.confirmation",
+              "selection.outcome_handler"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 4
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_modal",
+            "role": "ui-surface",
+            "category": "ui",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "ui.selection_modal",
+            "selectedPatternIds": [
+              "ui.selection_modal"
+            ],
+            "artifactTargets": [
+              "ui"
+            ],
+            "ownedPaths": [
+              "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.less"
+            ],
+            "fillContractIds": [
+              "ui.selection_modal.payload_adapter"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "ui"
+            ],
+            "artifactPaths": [
+              "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.less"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
+            "requiredOutputs": [
+              "selection_confirm"
+            ],
+            "integrationHints": [
+              "selection.ui_surface"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 2
+            },
+            "reviewReasons": []
+          }
+        ],
         "selectedPatterns": [
-          "effect.modifier_applier",
-          "ui.selection_modal",
+          "rule.selection_flow",
           "data.weighted_pool",
+          "effect.outcome_realizer",
           "input.key_binding",
-          "rule.selection_flow"
+          "ui.selection_modal"
         ],
         "generatedFiles": [
-          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-          "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
-          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
-          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-          "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-          "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
-          "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+          "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/generated/shared/micro_feature_rdkl_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_outcome_effect_outcome_realizer.ts",
+          "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_input_trigger_input_key_binding.ts",
+          "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.less",
+          "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/micro_feature_rdkl/selection-pool.source.json",
+          "game/scripts/src/rune_weaver/features/micro_feature_rdkl/content-collections.json"
+        ],
+        "ownedArtifacts": [
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_flow_rule_selection_flow.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/shared/micro_feature_rdkl_weighted_pool_data_weighted_pool.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_selection_outcome_effect_outcome_realizer.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_input_trigger_input_key_binding_ability.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/micro_feature_rdkl_input_trigger_input_key_binding.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.tsx"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_selection_modal_ui_selection_modal.less"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/micro_feature_rdkl_input_trigger_input_key_binding_emitter.tsx"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/features/micro_feature_rdkl/content-collections.json"
+          },
+          {
+            "kind": "rw_source_model",
+            "path": "game/scripts/src/rune_weaver/features/micro_feature_rdkl/selection-pool.source.json",
+            "adapter": "selection_pool",
+            "version": 2
+          }
         ],
         "entryBindings": [
           {
@@ -43,157 +317,323 @@
         ],
         "sourceModel": {
           "adapter": "selection_pool",
-          "version": 1,
-          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
+          "version": 2,
+          "path": "game/scripts/src/rune_weaver/features/micro_feature_rdkl/selection-pool.source.json"
         },
         "featureAuthoring": {
           "mode": "source-backed",
           "profile": "selection_pool",
-          "objectKind": "talent",
           "parameters": {
             "triggerKey": "F4",
             "choiceCount": 3,
-            "objectKind": "talent",
-            "objects": [
+            "localCollections": [
               {
-                "id": "R001",
-                "label": "Strength Boost",
-                "description": "+10 Strength",
+                "collectionId": "default",
+                "visibility": "local",
+                "objects": [
+                  {
+                    "objectId": "SEL_R001",
+                    "label": "Talent Option R001",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_R002",
+                    "label": "Talent Option R002",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_SR003",
+                    "label": "Talent Option SR003",
+                    "description": "Placeholder selection option (SR)"
+                  },
+                  {
+                    "objectId": "SEL_SR004",
+                    "label": "Talent Option SR004",
+                    "description": "Placeholder selection option (SR)"
+                  },
+                  {
+                    "objectId": "SEL_SSR005",
+                    "label": "Talent Option SSR005",
+                    "description": "Placeholder selection option (SSR)"
+                  },
+                  {
+                    "objectId": "SEL_UR006",
+                    "label": "Talent Option UR006",
+                    "description": "Placeholder selection option (UR)"
+                  },
+                  {
+                    "objectId": "SEL_R003",
+                    "label": "Talent Option R003",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_R004",
+                    "label": "Talent Option R004",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_SR005",
+                    "label": "Talent Option SR005",
+                    "description": "Placeholder selection option (SR)"
+                  },
+                  {
+                    "objectId": "SEL_SR006",
+                    "label": "Talent Option SR006",
+                    "description": "Placeholder selection option (SR)"
+                  },
+                  {
+                    "objectId": "SEL_SSR006",
+                    "label": "Talent Option SSR006",
+                    "description": "Placeholder selection option (SSR)"
+                  },
+                  {
+                    "objectId": "SEL_UR007",
+                    "label": "Talent Option UR007",
+                    "description": "Placeholder selection option (UR)"
+                  },
+                  {
+                    "objectId": "SEL_R005",
+                    "label": "Talent Option R005",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_R006",
+                    "label": "Talent Option R006",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_SR007",
+                    "label": "Talent Option SR007",
+                    "description": "Placeholder selection option (SR)"
+                  },
+                  {
+                    "objectId": "SEL_SR008",
+                    "label": "Talent Option SR008",
+                    "description": "Placeholder selection option (SR)"
+                  },
+                  {
+                    "objectId": "SEL_SSR007",
+                    "label": "Talent Option SSR007",
+                    "description": "Placeholder selection option (SSR)"
+                  },
+                  {
+                    "objectId": "SEL_UR008",
+                    "label": "Talent Option UR008",
+                    "description": "Placeholder selection option (UR)"
+                  },
+                  {
+                    "objectId": "SEL_R007",
+                    "label": "Talent Option R007",
+                    "description": "Placeholder selection option (R)"
+                  },
+                  {
+                    "objectId": "SEL_R008",
+                    "label": "Talent Option R008",
+                    "description": "Placeholder selection option (R)"
+                  }
+                ]
+              }
+            ],
+            "poolEntries": [
+              {
+                "entryId": "SEL_R001",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R001"
+                },
                 "weight": 40,
                 "tier": "R"
               },
               {
-                "id": "R002",
-                "label": "Fortitude",
-                "description": "+10 Strength",
+                "entryId": "SEL_R002",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R002"
+                },
                 "weight": 40,
                 "tier": "R"
               },
               {
-                "id": "SR001",
-                "label": "Agility Boost",
-                "description": "+10 Agility",
+                "entryId": "SEL_SR003",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SR003"
+                },
                 "weight": 30,
                 "tier": "SR"
               },
               {
-                "id": "SR002",
-                "label": "Swift Reflexes",
-                "description": "+10 Agility",
+                "entryId": "SEL_SR004",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SR004"
+                },
                 "weight": 30,
                 "tier": "SR"
               },
               {
-                "id": "SSR001",
-                "label": "Intelligence Boost",
-                "description": "+10 Intelligence",
+                "entryId": "SEL_SSR005",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SSR005"
+                },
                 "weight": 20,
                 "tier": "SSR"
               },
               {
-                "id": "UR001",
-                "label": "Ultimate Growth",
-                "description": "+10 All Attributes",
+                "entryId": "SEL_UR006",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_UR006"
+                },
                 "weight": 10,
                 "tier": "UR"
               },
               {
-                "id": "R003",
-                "label": "Strength Boost 03",
-                "description": "+10 Strength",
+                "entryId": "SEL_R003",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R003"
+                },
                 "weight": 40,
                 "tier": "R"
               },
               {
-                "id": "R004",
-                "label": "Strength Boost 04",
-                "description": "+10 Strength",
+                "entryId": "SEL_R004",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R004"
+                },
                 "weight": 40,
                 "tier": "R"
               },
               {
-                "id": "R005",
-                "label": "Strength Boost 05",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "R006",
-                "label": "Strength Boost 06",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "R007",
-                "label": "Strength Boost 07",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "R008",
-                "label": "Strength Boost 08",
-                "description": "+10 Strength",
-                "weight": 40,
-                "tier": "R"
-              },
-              {
-                "id": "SR003",
-                "label": "Agility Boost 03",
-                "description": "+10 Agility",
+                "entryId": "SEL_SR005",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SR005"
+                },
                 "weight": 30,
                 "tier": "SR"
               },
               {
-                "id": "SR004",
-                "label": "Agility Boost 04",
-                "description": "+10 Agility",
+                "entryId": "SEL_SR006",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SR006"
+                },
                 "weight": 30,
                 "tier": "SR"
               },
               {
-                "id": "SR005",
-                "label": "Agility Boost 05",
-                "description": "+10 Agility",
-                "weight": 30,
-                "tier": "SR"
-              },
-              {
-                "id": "SR006",
-                "label": "Agility Boost 06",
-                "description": "+10 Agility",
-                "weight": 30,
-                "tier": "SR"
-              },
-              {
-                "id": "SSR002",
-                "label": "Intelligence Boost 02",
-                "description": "+10 Intelligence",
+                "entryId": "SEL_SSR006",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SSR006"
+                },
                 "weight": 20,
                 "tier": "SSR"
               },
               {
-                "id": "SSR003",
-                "label": "Intelligence Boost 03",
-                "description": "+10 Intelligence",
-                "weight": 20,
-                "tier": "SSR"
-              },
-              {
-                "id": "SSR004",
-                "label": "Intelligence Boost 04",
-                "description": "+10 Intelligence",
-                "weight": 20,
-                "tier": "SSR"
-              },
-              {
-                "id": "UR002",
-                "label": "Ultimate Growth 02",
-                "description": "+10 All Attributes",
+                "entryId": "SEL_UR007",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_UR007"
+                },
                 "weight": 10,
                 "tier": "UR"
+              },
+              {
+                "entryId": "SEL_R005",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R005"
+                },
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "entryId": "SEL_R006",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R006"
+                },
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "entryId": "SEL_SR007",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SR007"
+                },
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "entryId": "SEL_SR008",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SR008"
+                },
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "entryId": "SEL_SSR007",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_SSR007"
+                },
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "entryId": "SEL_UR008",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_UR008"
+                },
+                "weight": 10,
+                "tier": "UR"
+              },
+              {
+                "entryId": "SEL_R007",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R007"
+                },
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "entryId": "SEL_R008",
+                "objectRef": {
+                  "source": "local_collection",
+                  "collectionId": "default",
+                  "objectId": "SEL_R008"
+                },
+                "weight": 40,
+                "tier": "R"
               }
             ],
             "drawMode": "multiple_without_replacement",
@@ -205,45 +645,24 @@
             "trackSelectedItems": true,
             "inventory": {
               "enabled": true,
-              "capacity": 15,
+              "capacity": 16,
               "storeSelectedItems": true,
               "blockDrawWhenFull": true,
-              "fullMessage": "Talent inventory full",
+              "fullMessage": "Selection inventory full",
               "presentation": "persistent_panel"
             },
             "display": {
-              "title": "Choose Your Talent",
-              "description": "Select one of the following talents",
-              "inventoryTitle": "Talent Inventory",
+              "title": "Choose Your Selection",
+              "description": "Select one of the following options",
+              "inventoryTitle": "Selection Inventory",
               "payloadShape": "card_with_rarity",
               "minDisplayCount": 3
             },
             "placeholderConfig": {
-              "id": "empty_talent_slot",
+              "id": "empty_selection_slot",
               "name": "Empty Slot",
-              "description": "No talent available",
+              "description": "No selection available",
               "disabled": true
-            },
-            "effectProfile": {
-              "kind": "tier_attribute_bonus_placeholder",
-              "rarityAttributeBonusMap": {
-                "R": {
-                  "attribute": "strength",
-                  "value": 10
-                },
-                "SR": {
-                  "attribute": "agility",
-                  "value": 10
-                },
-                "SSR": {
-                  "attribute": "intelligence",
-                  "value": 10
-                },
-                "UR": {
-                  "attribute": "all",
-                  "value": 10
-                }
-              }
             }
           },
           "parameterSurface": {
@@ -256,6 +675,7 @@
                 "R",
                 "D",
                 "F",
+                "G",
                 "1",
                 "2",
                 "3",
@@ -280,14 +700,7 @@
               "minimum": 1,
               "maximum": 5
             },
-            "objectKind": {
-              "allowed": [
-                "talent",
-                "equipment",
-                "skill_card_placeholder"
-              ]
-            },
-            "objects": {
+            "poolEntries": {
               "minItems": 1,
               "seededWhenMissing": true
             },
@@ -303,40 +716,921 @@
               "single trigger entry only",
               "weighted pool candidate source",
               "confirm exactly one candidate",
-              "same-feature owned object collection only",
-              "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + ui.selection_modal",
+              "current feature owns pool membership only; object truth may come from local collections, feature exports, or external catalogs",
+              "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + effect.outcome_realizer + ui.selection_modal",
               "no persistence",
               "no cross-feature grants",
-              "no arbitrary custom effect family"
+              "no arbitrary movement/projectile effect family"
             ]
           },
-          "notes": [
-            "selection_pool proposal migrated from existing workspace featureAuthoring.",
-            "selection_pool merged the admitted session-only inventory contract."
-          ],
           "sourceArtifactRef": {
             "adapter": "selection_pool",
-            "version": 1,
-            "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json"
-          }
+            "version": 2,
+            "path": "game/scripts/src/rune_weaver/features/micro_feature_rdkl/selection-pool.source.json"
+          },
+          "notes": [
+            "selection_pool proposal seeded from generic family defaults.",
+            "selection_pool update merge was normalized from current feature truth and UpdateIntent authority.",
+            "selection_pool update merge restored the requested session-only inventory contract from UpdateIntent authority."
+          ]
         },
         "integrationPoints": [
           "input.key_binding:F4"
         ],
         "gapFillBoundaries": [
-          "ui.selection_modal.payload_adapter",
           "weighted_pool.selection_policy",
-          "selection_flow.effect_mapping"
+          "selection_outcome.realization",
+          "ui.selection_modal.payload_adapter"
         ],
-        "createdAt": "2026-04-16T12:18:47.513Z",
-        "updatedAt": "2026-04-17T13:44:15.114Z"
+        "maturity": "templated",
+        "implementationStrategy": "family",
+        "featureContract": {
+          "exports": [],
+          "consumes": [],
+          "integrationSurfaces": [],
+          "stateScopes": []
+        },
+        "validationStatus": {
+          "status": "passed",
+          "warnings": [],
+          "blockers": [],
+          "lastValidatedAt": "2026-04-25T07:36:03.116Z",
+          "blueprint": {
+            "status": "unvalidated",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Blueprint planning-stage validation"
+          },
+          "synthesis": {
+            "status": "unvalidated",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Artifact synthesis",
+            "checkedAt": "2026-04-25T07:36:03.116Z"
+          },
+          "repair": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Local repair / muscle fill",
+            "checkedAt": "2026-04-25T07:36:03.116Z"
+          },
+          "dependency": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Dependency-driven revalidation",
+            "checkedAt": "2026-04-25T07:36:03.116Z"
+          },
+          "host": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Host validation",
+            "checkedAt": "2026-04-25T07:36:03.116Z"
+          },
+          "runtime": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Runtime validation",
+            "checkedAt": "2026-04-25T07:36:03.116Z"
+          }
+        },
+        "dependencyEdges": [],
+        "commitDecision": {
+          "outcome": "committable",
+          "canAssemble": true,
+          "canWriteHost": true,
+          "requiresReview": false,
+          "reasons": [],
+          "stage": "final",
+          "impactedFeatures": [],
+          "dependencyBlockers": [],
+          "downgradedFeatures": [],
+          "reviewModules": []
+        },
+        "groundingSummary": {
+          "status": "none_required",
+          "reviewRequired": false,
+          "verifiedSymbolCount": 0,
+          "allowlistedSymbolCount": 0,
+          "weakSymbolCount": 0,
+          "unknownSymbolCount": 0,
+          "warnings": [],
+          "reasonCodes": [
+            "no_symbols_required"
+          ],
+          "evidenceRefs": []
+        },
+        "createdAt": "2026-04-25T07:29:50.999Z",
+        "updatedAt": "2026-04-25T07:36:03.117Z"
+      },
+      {
+        "featureId": "cross_system_composition_u01v",
+        "intentKind": "cross-system-composition",
+        "status": "active",
+        "revision": 1,
+        "blueprintId": "cross_system_composition_u01v",
+        "modules": [
+          {
+            "moduleId": "selection_input",
+            "role": "gameplay-core",
+            "category": "trigger",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "input.key_binding",
+            "selectedPatternIds": [
+              "input.key_binding"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'input_trigger' resolved to reusable pattern 'input.key_binding'",
+            "requiredOutputs": [
+              "selection_open_request"
+            ],
+            "integrationHints": [
+              "input.binding",
+              "event.dispatch"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 4
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_pool",
+            "role": "shared-support",
+            "category": "data",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "data.weighted_pool",
+            "selectedPatternIds": [
+              "data.weighted_pool"
+            ],
+            "artifactTargets": [
+              "server",
+              "shared"
+            ],
+            "ownedPaths": [],
+            "fillContractIds": [
+              "weighted_pool.selection_policy"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server",
+              "shared"
+            ],
+            "artifactPaths": [],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'weighted_pool' resolved to reusable pattern 'data.weighted_pool'",
+            "requiredOutputs": [
+              "candidate_options"
+            ],
+            "integrationHints": [
+              "selection.candidate_source"
+            ],
+            "stateExpectations": [
+              "selection.pool_state"
+            ],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 6
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_flow",
+            "role": "gameplay-core",
+            "category": "rule",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "rule.selection_flow",
+            "selectedPatternIds": [
+              "rule.selection_flow"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [
+              "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_flow_rule_selection_flow.ts"
+            ],
+            "fillContractIds": [],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [
+              "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_flow_rule_selection_flow.ts"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_flow' resolved to reusable pattern 'rule.selection_flow'",
+            "requiredOutputs": [
+              "ui.surface",
+              "selection_commit",
+              "selection_outcome_request"
+            ],
+            "integrationHints": [
+              "selection.ui_surface",
+              "selection.candidate_source"
+            ],
+            "stateExpectations": [
+              "selection.commit_state"
+            ],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 8
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_outcome",
+            "role": "gameplay-core",
+            "category": "effect",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "effect.outcome_realizer",
+            "selectedPatternIds": [
+              "effect.outcome_realizer"
+            ],
+            "artifactTargets": [
+              "server"
+            ],
+            "ownedPaths": [
+              "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_outcome_effect_outcome_realizer.ts"
+            ],
+            "fillContractIds": [
+              "selection_outcome.realization"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "server"
+            ],
+            "artifactPaths": [
+              "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_outcome_effect_outcome_realizer.ts"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_outcome' resolved to reusable pattern 'effect.outcome_realizer'",
+            "requiredOutputs": [
+              "selection_outcome_realized"
+            ],
+            "integrationHints": [
+              "selection.confirmation",
+              "selection.outcome_handler"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 4
+            },
+            "reviewReasons": []
+          },
+          {
+            "moduleId": "selection_modal",
+            "role": "ui-surface",
+            "category": "ui",
+            "sourceKind": "family",
+            "familyId": "selection_pool",
+            "patternId": "ui.selection_modal",
+            "selectedPatternIds": [
+              "ui.selection_modal"
+            ],
+            "artifactTargets": [
+              "ui"
+            ],
+            "ownedPaths": [
+              "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.less"
+            ],
+            "fillContractIds": [
+              "ui.selection_modal.payload_adapter"
+            ],
+            "reviewRequired": false,
+            "implementationStrategy": "family",
+            "maturity": "templated",
+            "outputKinds": [
+              "ui"
+            ],
+            "artifactPaths": [
+              "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.tsx",
+              "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.less"
+            ],
+            "resolvedFrom": "family",
+            "summary": "Family-backed module 'selection_modal' resolved to reusable pattern 'ui.selection_modal'",
+            "requiredOutputs": [
+              "selection_confirm"
+            ],
+            "integrationHints": [
+              "selection.ui_surface"
+            ],
+            "stateExpectations": [],
+            "synthesizedArtifactIds": [],
+            "requiresReview": false,
+            "metadata": {
+              "resolutionSource": "need",
+              "score": 2
+            },
+            "reviewReasons": []
+          }
+        ],
+        "selectedPatterns": [
+          "rule.selection_flow",
+          "data.weighted_pool",
+          "effect.outcome_realizer",
+          "input.key_binding",
+          "ui.selection_modal"
+        ],
+        "generatedFiles": [
+          "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_flow_rule_selection_flow.ts",
+          "game/scripts/src/rune_weaver/generated/shared/cross_system_composition_u01v_weighted_pool_data_weighted_pool.ts",
+          "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_outcome_effect_outcome_realizer.ts",
+          "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_input_trigger_input_key_binding_ability.ts",
+          "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_input_trigger_input_key_binding.ts",
+          "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.tsx",
+          "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.less",
+          "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_input_trigger_input_key_binding_emitter.tsx",
+          "game/scripts/src/rune_weaver/features/cross_system_composition_u01v/selection-pool.source.json",
+          "game/scripts/src/rune_weaver/features/cross_system_composition_u01v/content-collections.json"
+        ],
+        "ownedArtifacts": [
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_flow_rule_selection_flow.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/shared/cross_system_composition_u01v_weighted_pool_data_weighted_pool.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_selection_outcome_effect_outcome_realizer.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_input_trigger_input_key_binding_ability.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/generated/server/cross_system_composition_u01v_input_trigger_input_key_binding.ts"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.tsx"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_selection_modal_ui_selection_modal.less"
+          },
+          {
+            "kind": "generated_file",
+            "path": "content/panorama/src/rune_weaver/generated/ui/cross_system_composition_u01v_input_trigger_input_key_binding_emitter.tsx"
+          },
+          {
+            "kind": "generated_file",
+            "path": "game/scripts/src/rune_weaver/features/cross_system_composition_u01v/content-collections.json"
+          },
+          {
+            "kind": "rw_source_model",
+            "path": "game/scripts/src/rune_weaver/features/cross_system_composition_u01v/selection-pool.source.json",
+            "adapter": "selection_pool",
+            "version": 2
+          }
+        ],
+        "entryBindings": [
+          {
+            "target": "server",
+            "file": "game/scripts/src/modules/index.ts",
+            "kind": "import"
+          },
+          {
+            "target": "ui",
+            "file": "content/panorama/src/hud/script.tsx",
+            "kind": "mount"
+          }
+        ],
+        "sourceModel": {
+          "adapter": "selection_pool",
+          "version": 2,
+          "path": "game/scripts/src/rune_weaver/features/cross_system_composition_u01v/selection-pool.source.json"
+        },
+        "featureAuthoring": {
+          "mode": "source-backed",
+          "profile": "selection_pool",
+          "objectKind": "equipment",
+          "parameters": {
+            "triggerKey": "G",
+            "choiceCount": 5,
+            "localCollections": [],
+            "poolEntries": [
+              {
+                "entryId": "EQ_R001",
+                "objectRef": {
+                  "source": "external_catalog",
+                  "catalogId": "dota2.native_items.curated",
+                  "objectId": "item_branches"
+                },
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "entryId": "EQ_R002",
+                "objectRef": {
+                  "source": "external_catalog",
+                  "catalogId": "dota2.native_items.curated",
+                  "objectId": "item_magic_stick"
+                },
+                "weight": 40,
+                "tier": "R"
+              },
+              {
+                "entryId": "EQ_SR001",
+                "objectRef": {
+                  "source": "external_catalog",
+                  "catalogId": "dota2.native_items.curated",
+                  "objectId": "item_power_treads"
+                },
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "entryId": "EQ_SR002",
+                "objectRef": {
+                  "source": "external_catalog",
+                  "catalogId": "dota2.native_items.curated",
+                  "objectId": "item_phase_boots"
+                },
+                "weight": 30,
+                "tier": "SR"
+              },
+              {
+                "entryId": "EQ_SSR001",
+                "objectRef": {
+                  "source": "external_catalog",
+                  "catalogId": "dota2.native_items.curated",
+                  "objectId": "item_blink"
+                },
+                "weight": 20,
+                "tier": "SSR"
+              },
+              {
+                "entryId": "EQ_UR001",
+                "objectRef": {
+                  "source": "external_catalog",
+                  "catalogId": "dota2.native_items.curated",
+                  "objectId": "item_black_king_bar"
+                },
+                "weight": 10,
+                "tier": "UR"
+              }
+            ],
+            "drawMode": "multiple_without_replacement",
+            "duplicatePolicy": "forbid",
+            "poolStateTracking": "session",
+            "selectionPolicy": "single",
+            "applyMode": "immediate",
+            "postSelectionPoolBehavior": "remove_selected_from_remaining",
+            "trackSelectedItems": true,
+            "display": {
+              "title": "Choose Your Selection",
+              "description": "Select one of the following options",
+              "inventoryTitle": "Selection Inventory",
+              "payloadShape": "card_with_rarity",
+              "minDisplayCount": 5
+            },
+            "placeholderConfig": {
+              "id": "empty_selection_slot",
+              "name": "Empty Slot",
+              "description": "No selection available",
+              "disabled": true
+            },
+            "objectKind": "equipment"
+          },
+          "parameterSurface": {
+            "triggerKey": {
+              "kind": "single_hotkey",
+              "allowList": [
+                "Q",
+                "W",
+                "E",
+                "R",
+                "D",
+                "F",
+                "G",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "F9",
+                "F10",
+                "F11",
+                "F12"
+              ]
+            },
+            "choiceCount": {
+              "minimum": 1,
+              "maximum": 5
+            },
+            "poolEntries": {
+              "minItems": 1,
+              "seededWhenMissing": true
+            },
+            "inventory": {
+              "supported": true,
+              "capacityRange": {
+                "minimum": 1,
+                "maximum": 30
+              },
+              "fixedPresentation": "persistent_panel"
+            },
+            "invariants": [
+              "single trigger entry only",
+              "weighted pool candidate source",
+              "confirm exactly one candidate",
+              "current feature owns pool membership only; object truth may come from local collections, feature exports, or external catalogs",
+              "same selection skeleton: input.key_binding + data.weighted_pool + rule.selection_flow + effect.outcome_realizer + ui.selection_modal",
+              "no persistence",
+              "no cross-feature grants",
+              "no arbitrary movement/projectile effect family"
+            ]
+          },
+          "sourceArtifactRef": {
+            "adapter": "selection_pool",
+            "version": 2,
+            "path": "game/scripts/src/rune_weaver/features/cross_system_composition_u01v/selection-pool.source.json"
+          },
+          "notes": [
+            "selection_pool seeded the equipment pool from the curated native-item catalog."
+          ]
+        },
+        "integrationPoints": [
+          "input.key_binding:G"
+        ],
+        "gapFillBoundaries": [
+          "weighted_pool.selection_policy",
+          "selection_outcome.realization",
+          "ui.selection_modal.payload_adapter"
+        ],
+        "maturity": "templated",
+        "implementationStrategy": "family",
+        "featureContract": {
+          "exports": [
+            {
+              "id": "current_candidate_set",
+              "kind": "state",
+              "summary": "The currently displayed set of 5 drawn equipment candidates."
+            },
+            {
+              "id": "selection_result",
+              "kind": "state",
+              "summary": "The selected candidate to be granted to the player."
+            },
+            {
+              "id": "draw_entry",
+              "kind": "integration",
+              "summary": "Entry point for G-key activation of the equipment draw flow."
+            },
+            {
+              "id": "item_data_source",
+              "kind": "integration",
+              "summary": "Binding to Dota 2 native item definitions and identifiers."
+            },
+            {
+              "id": "selection_surface",
+              "kind": "integration",
+              "summary": "Surface for displaying 5 candidate cards and receiving one selection."
+            }
+          ],
+          "consumes": [
+            {
+              "id": "draw_trigger",
+              "kind": "event",
+              "summary": "Press G to activate the equipment draw flow."
+            },
+            {
+              "id": "candidate_generation",
+              "kind": "event",
+              "summary": "Generate 5 candidate equipment options from a pool of Dota 2 native items using rarity-influenced probabilities."
+            },
+            {
+              "id": "selection_ui",
+              "kind": "capability",
+              "summary": "Show candidates in a five-choice interface with rarity-based appearance differences."
+            },
+            {
+              "id": "grant_item",
+              "kind": "capability",
+              "summary": "Grant the selected equipment to the player immediately after selection."
+            },
+            {
+              "id": "native_item_resource",
+              "kind": "data",
+              "summary": "Use Dota 2 native item definitions as the candidate source pool."
+            },
+            {
+              "id": "Dota 2 native item definitions",
+              "kind": "capability",
+              "summary": "Consumes dependency via reads"
+            }
+          ],
+          "integrationSurfaces": [
+            "draw_entry",
+            "item_data_source",
+            "selection_surface"
+          ],
+          "stateScopes": [
+            {
+              "stateId": "current_candidate_set",
+              "scope": "local",
+              "owner": "feature",
+              "summary": "The currently displayed set of 5 drawn equipment candidates."
+            },
+            {
+              "stateId": "selection_result",
+              "scope": "local",
+              "owner": "feature",
+              "summary": "The selected candidate to be granted to the player."
+            }
+          ]
+        },
+        "validationStatus": {
+          "status": "passed",
+          "warnings": [],
+          "blockers": [],
+          "lastValidatedAt": "2026-04-25T07:31:53.506Z",
+          "blueprint": {
+            "status": "unvalidated",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Blueprint planning-stage validation"
+          },
+          "synthesis": {
+            "status": "unvalidated",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Artifact synthesis",
+            "checkedAt": "2026-04-25T07:31:53.506Z"
+          },
+          "repair": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Local repair / muscle fill",
+            "checkedAt": "2026-04-25T07:31:53.506Z"
+          },
+          "dependency": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Dependency-driven revalidation",
+            "checkedAt": "2026-04-25T07:31:53.506Z"
+          },
+          "host": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Host validation",
+            "checkedAt": "2026-04-25T07:31:53.506Z"
+          },
+          "runtime": {
+            "status": "passed",
+            "warnings": [],
+            "blockers": [],
+            "summary": "Runtime validation",
+            "checkedAt": "2026-04-25T07:31:53.506Z"
+          }
+        },
+        "dependencyEdges": [
+          {
+            "relation": "reads",
+            "targetSurfaceId": "Dota 2 native item definitions",
+            "required": true,
+            "summary": "external-system:reads:Dota 2 native item definitions"
+          }
+        ],
+        "commitDecision": {
+          "outcome": "committable",
+          "canAssemble": true,
+          "canWriteHost": true,
+          "requiresReview": false,
+          "reasons": [],
+          "stage": "final",
+          "impactedFeatures": [],
+          "dependencyBlockers": [],
+          "downgradedFeatures": [],
+          "reviewModules": []
+        },
+        "groundingSummary": {
+          "status": "none_required",
+          "reviewRequired": false,
+          "verifiedSymbolCount": 0,
+          "allowlistedSymbolCount": 0,
+          "weakSymbolCount": 0,
+          "unknownSymbolCount": 0,
+          "warnings": [],
+          "reasonCodes": [
+            "no_symbols_required"
+          ],
+          "evidenceRefs": []
+        },
+        "createdAt": "2026-04-25T07:31:53.511Z",
+        "updatedAt": "2026-04-25T07:31:53.511Z"
+      }
+    ]
+  },
+  "governanceReadModel": {
+    "schemaVersion": "dota2-governance-read-model/v1",
+    "workspace": {
+      "hostRoot": "D:\\rw-test37",
+      "featureCount": 2
+    },
+    "features": [
+      {
+        "featureId": "micro_feature_rdkl",
+        "status": "active",
+        "revision": 3,
+        "updatedAt": "2026-04-25T07:36:03.117Z",
+        "lifecycle": {
+          "implementationStrategy": "family",
+          "maturity": "templated",
+          "commitOutcome": "committable",
+          "requiresReview": false,
+          "reviewReasons": []
+        },
+        "reusableGovernance": {
+          "familyAdmissions": [
+            {
+              "assetId": "selection_pool",
+              "status": "admitted"
+            }
+          ],
+          "patternAdmissions": [
+            {
+              "assetId": "rule.selection_flow",
+              "status": "untracked"
+            },
+            {
+              "assetId": "data.weighted_pool",
+              "status": "untracked"
+            },
+            {
+              "assetId": "effect.outcome_realizer",
+              "status": "admitted"
+            },
+            {
+              "assetId": "input.key_binding",
+              "status": "untracked"
+            },
+            {
+              "assetId": "ui.selection_modal",
+              "status": "untracked"
+            }
+          ],
+          "seamAdmissions": [],
+          "admittedCount": 2,
+          "attentionCount": 4,
+          "summary": "4 referenced reusable asset(s) still need attention."
+        },
+        "grounding": {
+          "status": "none_required",
+          "reviewRequired": false,
+          "verifiedSymbolCount": 0,
+          "allowlistedSymbolCount": 0,
+          "weakSymbolCount": 0,
+          "unknownSymbolCount": 0,
+          "warningCount": 0,
+          "warnings": [],
+          "reasonCodes": [
+            "no_symbols_required"
+          ],
+          "summary": "Grounding does not require additional review."
+        },
+        "repairability": {
+          "status": "not_checked",
+          "reasons": [],
+          "summary": "This projection was built without running live post-generation validation."
+        },
+        "productVerdict": {
+          "label": "Not checked",
+          "reasons": [
+            "This projection was built without running live post-generation validation."
+          ]
+        }
+      },
+      {
+        "featureId": "cross_system_composition_u01v",
+        "status": "active",
+        "revision": 1,
+        "updatedAt": "2026-04-25T07:31:53.511Z",
+        "lifecycle": {
+          "implementationStrategy": "family",
+          "maturity": "templated",
+          "commitOutcome": "committable",
+          "requiresReview": false,
+          "reviewReasons": []
+        },
+        "reusableGovernance": {
+          "familyAdmissions": [
+            {
+              "assetId": "selection_pool",
+              "status": "admitted"
+            }
+          ],
+          "patternAdmissions": [
+            {
+              "assetId": "rule.selection_flow",
+              "status": "untracked"
+            },
+            {
+              "assetId": "data.weighted_pool",
+              "status": "untracked"
+            },
+            {
+              "assetId": "effect.outcome_realizer",
+              "status": "admitted"
+            },
+            {
+              "assetId": "input.key_binding",
+              "status": "untracked"
+            },
+            {
+              "assetId": "ui.selection_modal",
+              "status": "untracked"
+            }
+          ],
+          "seamAdmissions": [],
+          "admittedCount": 2,
+          "attentionCount": 4,
+          "summary": "4 referenced reusable asset(s) still need attention."
+        },
+        "grounding": {
+          "status": "none_required",
+          "reviewRequired": false,
+          "verifiedSymbolCount": 0,
+          "allowlistedSymbolCount": 0,
+          "weakSymbolCount": 0,
+          "unknownSymbolCount": 0,
+          "warningCount": 0,
+          "warnings": [],
+          "reasonCodes": [
+            "no_symbols_required"
+          ],
+          "summary": "Grounding does not require additional review."
+        },
+        "repairability": {
+          "status": "not_checked",
+          "reasons": [],
+          "summary": "This projection was built without running live post-generation validation."
+        },
+        "productVerdict": {
+          "label": "Not checked",
+          "reasons": [
+            "This projection was built without running live post-generation validation."
+          ]
+        }
       }
     ]
   },
   "_bridge": {
-    "exportedAt": "2026-04-17T13:44:15.117Z",
+    "exportedAt": "2026-04-25T07:36:03.122Z",
     "exportedBy": "rune-weaver-cli",
-    "sourceHostRoot": "D:\\test3",
+    "sourceHostRoot": "D:\\rw-test37",
     "version": "0.1"
   }
 }

@@ -27,6 +27,7 @@ export interface HostValidationResult {
   checks: string[];
   issues: string[];
   details: Record<string, unknown>;
+  skipped?: boolean;
 }
 
 export interface RuntimeValidationResult {
@@ -44,7 +45,8 @@ export function validateHost(
   writePlan: WritePlan,
   writeResult: WriteResult,
   stableFeatureId: string,
-  deferredEntries?: Array<{ pattern: string; reason: string }>
+  deferredEntries?: Array<{ pattern: string; reason: string }>,
+  dryRun: boolean = false,
 ): HostValidationResult {
   console.log("\n" + "=".repeat(70));
   console.log("Stage 7: Host Validation");
@@ -120,15 +122,21 @@ export function validateHost(
 
   const nonDeferredEntries = writePlan.entries.filter((e: WritePlanEntry) => !e.deferred);
   const plannedFiles = nonDeferredEntries.map((e: WritePlanEntry) => e.targetPath);
-  const realizedFiles = [
-    ...writeResult.createdFiles,
-    ...writeResult.modifiedFiles.filter((file: string) => file.startsWith("game/scripts/src/rune_weaver/") || file.startsWith("content/panorama/src/rune_weaver/")),
-  ];
+  const realizedFiles = dryRun
+    ? []
+    : [
+      ...writeResult.createdFiles,
+      ...writeResult.modifiedFiles.filter((file: string) =>
+        file.startsWith("game/scripts/src/rune_weaver/") || file.startsWith("content/panorama/src/rune_weaver/")
+      ),
+    ];
 
-  const missingFiles = plannedFiles.filter((f: string) => !realizedFiles.includes(f));
-  const extraFiles = realizedFiles.filter((f: string) => !plannedFiles.includes(f));
+  const missingFiles = dryRun ? [] : plannedFiles.filter((f: string) => !realizedFiles.includes(f));
+  const extraFiles = dryRun ? [] : realizedFiles.filter((f: string) => !plannedFiles.includes(f));
 
-  if (missingFiles.length === 0) {
+  if (dryRun) {
+    checks.push("⏭️  Planned file creation not executed (dry-run)");
+  } else if (missingFiles.length === 0) {
     checks.push("✅ All planned files were created");
   } else {
     checks.push(`❌ ${missingFiles.length} planned files not created`);
@@ -145,14 +153,16 @@ export function validateHost(
   details.extraFiles = extraFiles;
 
   const featureFiles = realizedFiles.filter((f: string) => f.includes(stableFeatureId));
-  
-  if (featureFiles.length > 0) {
+
+  if (dryRun) {
+    checks.push(`⏭️  Feature file realization not validated in dry-run (${plannedFiles.filter((f) => f.includes(stableFeatureId)).length} planned)`);
+  } else if (featureFiles.length > 0) {
     checks.push(`✅ Feature files created (${featureFiles.length})`);
   } else {
     checks.push("❌ No feature-specific files found");
     issues.push("Cannot identify feature-specific files from write result");
   }
-  
+
   details.featureFilesCount = featureFiles.length;
 
   const workspaceResult = loadWorkspace(hostRoot);
@@ -194,7 +204,7 @@ export function validateHost(
   const success = issues.length === 0;
   console.log(`\n  Overall: ${success ? "✅ PASSED" : "❌ FAILED"}`);
 
-  return { success, checks, issues, details };
+  return { success, checks, issues, details, skipped: dryRun };
 }
 
 export function buildRuntimeValidationResult(

@@ -1,17 +1,151 @@
 {
   "meta": {
-    "generatedAt": "2026-04-17T13:07:17.939Z",
+    "generatedAt": "2026-04-23T02:42:45.643Z",
     "fixtureVersion": "1.0",
-    "pipelineVersion": "3.0",
-    "hostRoot": "D:\\test3",
+    "pipelineVersion": "4.0",
+    "caseId": "talent-draw",
+    "hostRoot": "D:\\rw-test-1",
+    "evidenceDir": "docs/talent-draw-case/demo-evidence",
     "writeMode": "write",
     "stableFeatureId": "talent_draw_demo"
   },
   "fixture": {
-    "prompt": "做一个按 F4 触发的三选一天赋抽取系统。玩家按 F4 后，从加权天赋池抽出 3 个候选天赋，显示卡牌选择 UI。玩家选择 1 个后立即应用效果，并且已选择的天赋后续不再出现。",
+    "prompt": "Create a talent draw system triggered by F4. When the player presses F4, draw 3 candidates from a weighted talent pool, show a card selection UI, let the player confirm one talent, apply it immediately, and make selected talents not appear again in future draws during the same session.",
+    "objectKind": "talent",
     "parameters": {
       "triggerKey": "F4",
       "choiceCount": 3,
+      "objectKind": "talent",
+      "localCollections": [
+        {
+          "collectionId": "talent_pool",
+          "visibility": "exported",
+          "objects": [
+            {
+              "objectId": "R001",
+              "label": "Strength Boost",
+              "description": "+10 Strength",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "strength",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "R002",
+              "label": "Fortitude",
+              "description": "+10 Strength",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "strength",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "SR001",
+              "label": "Agility Boost",
+              "description": "+10 Agility",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "agility",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "SR002",
+              "label": "Swift Reflexes",
+              "description": "+10 Agility",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "agility",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "SSR001",
+              "label": "Intelligence Boost",
+              "description": "+10 Intelligence",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "intelligence",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "UR001",
+              "label": "Ultimate Growth",
+              "description": "+10 All Attributes",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "all",
+                "value": 10
+              }
+            }
+          ]
+        }
+      ],
+      "poolEntries": [
+        {
+          "entryId": "R001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "R001"
+          },
+          "weight": 40,
+          "tier": "R"
+        },
+        {
+          "entryId": "R002",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "R002"
+          },
+          "weight": 40,
+          "tier": "R"
+        },
+        {
+          "entryId": "SR001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "SR001"
+          },
+          "weight": 30,
+          "tier": "SR"
+        },
+        {
+          "entryId": "SR002",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "SR002"
+          },
+          "weight": 30,
+          "tier": "SR"
+        },
+        {
+          "entryId": "SSR001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "SSR001"
+          },
+          "weight": 20,
+          "tier": "SSR"
+        },
+        {
+          "entryId": "UR001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "UR001"
+          },
+          "weight": 10,
+          "tier": "UR"
+        }
+      ],
       "drawMode": "multiple_without_replacement",
       "duplicatePolicy": "forbid",
       "poolStateTracking": "session",
@@ -19,102 +153,172 @@
       "applyMode": "immediate",
       "postSelectionPoolBehavior": "remove_selected_from_remaining",
       "trackSelectedItems": true,
-      "payloadShape": "card_with_rarity",
-      "minDisplayCount": 3,
+      "display": {
+        "title": "Choose Your Talent",
+        "description": "Select one of the following talents",
+        "inventoryTitle": "Talent Inventory",
+        "payloadShape": "card_with_rarity",
+        "minDisplayCount": 3
+      },
       "placeholderConfig": {
         "id": "empty_talent_slot",
         "name": "Empty Slot",
         "description": "No talent available",
         "disabled": true
-      },
-      "effectApplication": {
-        "enabled": true,
-        "rarityAttributeBonusMap": {
-          "R": {
-            "attribute": "strength",
-            "value": 10
-          },
-          "SR": {
-            "attribute": "agility",
-            "value": 10
-          },
-          "SSR": {
-            "attribute": "intelligence",
-            "value": 10
-          },
-          "UR": {
-            "attribute": "all",
-            "value": 10
-          }
-        }
-      },
-      "entries": [
-        {
-          "id": "R001",
-          "label": "Strength Boost",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "R002",
-          "label": "Fortitude",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "SR001",
-          "label": "Agility Boost",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SR002",
-          "label": "Swift Reflexes",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SSR001",
-          "label": "Intelligence Boost",
-          "description": "+10 Intelligence",
-          "weight": 20,
-          "tier": "SSR"
-        },
-        {
-          "id": "UR001",
-          "label": "Ultimate Growth",
-          "description": "+10 All Attributes",
-          "weight": 10,
-          "tier": "UR"
-        }
-      ]
+      }
     }
   },
   "wizardExtraction": {
-    "params": {
-      "triggerKey": "F4"
-    },
-    "talentDrawParamsInjected": false
+    "params": {},
+    "caseSpecificParamsInjected": false,
+    "injectedKeys": []
   },
   "schema": {
-    "id": "talent_draw_schema",
+    "id": "talent_draw_demo_schema",
     "intentKind": "standalone-system",
-    "isReadyForBlueprint": true,
     "normalizedMechanics": {
       "trigger": true,
       "candidatePool": true,
       "weightedSelection": true,
       "playerChoice": true,
       "uiModal": true,
-      "outcomeApplication": false
+      "outcomeApplication": true,
+      "resourceConsumption": false
     },
     "parameters": {
       "triggerKey": "F4",
       "choiceCount": 3,
+      "objectKind": "talent",
+      "localCollections": [
+        {
+          "collectionId": "talent_pool",
+          "visibility": "exported",
+          "objects": [
+            {
+              "objectId": "R001",
+              "label": "Strength Boost",
+              "description": "+10 Strength",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "strength",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "R002",
+              "label": "Fortitude",
+              "description": "+10 Strength",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "strength",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "SR001",
+              "label": "Agility Boost",
+              "description": "+10 Agility",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "agility",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "SR002",
+              "label": "Swift Reflexes",
+              "description": "+10 Agility",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "agility",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "SSR001",
+              "label": "Intelligence Boost",
+              "description": "+10 Intelligence",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "intelligence",
+                "value": 10
+              }
+            },
+            {
+              "objectId": "UR001",
+              "label": "Ultimate Growth",
+              "description": "+10 All Attributes",
+              "outcome": {
+                "kind": "attribute_bonus",
+                "attribute": "all",
+                "value": 10
+              }
+            }
+          ]
+        }
+      ],
+      "poolEntries": [
+        {
+          "entryId": "R001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "R001"
+          },
+          "weight": 40,
+          "tier": "R"
+        },
+        {
+          "entryId": "R002",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "R002"
+          },
+          "weight": 40,
+          "tier": "R"
+        },
+        {
+          "entryId": "SR001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "SR001"
+          },
+          "weight": 30,
+          "tier": "SR"
+        },
+        {
+          "entryId": "SR002",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "SR002"
+          },
+          "weight": 30,
+          "tier": "SR"
+        },
+        {
+          "entryId": "SSR001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "SSR001"
+          },
+          "weight": 20,
+          "tier": "SSR"
+        },
+        {
+          "entryId": "UR001",
+          "objectRef": {
+            "source": "local_collection",
+            "collectionId": "talent_pool",
+            "objectId": "UR001"
+          },
+          "weight": 10,
+          "tier": "UR"
+        }
+      ],
       "drawMode": "multiple_without_replacement",
       "duplicatePolicy": "forbid",
       "poolStateTracking": "session",
@@ -122,87 +326,27 @@
       "applyMode": "immediate",
       "postSelectionPoolBehavior": "remove_selected_from_remaining",
       "trackSelectedItems": true,
-      "payloadShape": "card_with_rarity",
-      "minDisplayCount": 3,
+      "display": {
+        "title": "Choose Your Talent",
+        "description": "Select one of the following talents",
+        "inventoryTitle": "Talent Inventory",
+        "payloadShape": "card_with_rarity",
+        "minDisplayCount": 3
+      },
       "placeholderConfig": {
         "id": "empty_talent_slot",
         "name": "Empty Slot",
         "description": "No talent available",
         "disabled": true
-      },
-      "effectApplication": {
-        "enabled": true,
-        "rarityAttributeBonusMap": {
-          "R": {
-            "attribute": "strength",
-            "value": 10
-          },
-          "SR": {
-            "attribute": "agility",
-            "value": 10
-          },
-          "SSR": {
-            "attribute": "intelligence",
-            "value": 10
-          },
-          "UR": {
-            "attribute": "all",
-            "value": 10
-          }
-        }
-      },
-      "entries": [
-        {
-          "id": "R001",
-          "label": "Strength Boost",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "R002",
-          "label": "Fortitude",
-          "description": "+10 Strength",
-          "weight": 40,
-          "tier": "R"
-        },
-        {
-          "id": "SR001",
-          "label": "Agility Boost",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SR002",
-          "label": "Swift Reflexes",
-          "description": "+10 Agility",
-          "weight": 30,
-          "tier": "SR"
-        },
-        {
-          "id": "SSR001",
-          "label": "Intelligence Boost",
-          "description": "+10 Intelligence",
-          "weight": 20,
-          "tier": "SSR"
-        },
-        {
-          "id": "UR001",
-          "label": "Ultimate Growth",
-          "description": "+10 All Attributes",
-          "weight": 10,
-          "tier": "UR"
-        }
-      ]
+      }
     }
   },
   "blueprint": {
-    "id": "standalone_system_ajog",
+    "id": "standalone_system_mhv6",
     "moduleCount": 5,
     "modules": [
       {
-        "id": "mod_func_0",
+        "id": "selection_input",
         "category": "trigger",
         "role": "input_trigger",
         "patternIds": [
@@ -211,7 +355,7 @@
         "hasParameters": true
       },
       {
-        "id": "mod_func_1",
+        "id": "selection_pool",
         "category": "data",
         "role": "weighted_pool",
         "patternIds": [
@@ -220,7 +364,7 @@
         "hasParameters": true
       },
       {
-        "id": "mod_func_2",
+        "id": "selection_flow",
         "category": "rule",
         "role": "selection_flow",
         "patternIds": [
@@ -229,14 +373,16 @@
         "hasParameters": true
       },
       {
-        "id": "mod_func_3",
+        "id": "selection_outcome",
         "category": "effect",
-        "role": "effect_application",
-        "patternIds": [],
+        "role": "selection_outcome",
+        "patternIds": [
+          "effect.outcome_realizer"
+        ],
         "hasParameters": true
       },
       {
-        "id": "mod_ui_4",
+        "id": "selection_modal",
         "category": "ui",
         "role": "selection_modal",
         "patternIds": [
@@ -247,85 +393,74 @@
     ],
     "connections": [
       {
-        "from": "mod_func_0",
-        "to": "mod_func_2",
-        "purpose": "触发规则执行"
+        "from": "selection_input",
+        "to": "selection_flow",
+        "purpose": "Start the bounded selection flow from the admitted trigger."
       },
       {
-        "from": "mod_func_0",
-        "to": "mod_func_3",
-        "purpose": "触发效果应用"
+        "from": "selection_pool",
+        "to": "selection_flow",
+        "purpose": "Provide weighted candidate data and pool-state inputs."
       },
       {
-        "from": "mod_func_1",
-        "to": "mod_func_2",
-        "purpose": "提供数据输入"
+        "from": "selection_flow",
+        "to": "selection_outcome",
+        "purpose": "Realize the confirmed current-feature outcome without widening selection_flow ownership."
       },
       {
-        "from": "mod_func_1",
-        "to": "mod_func_3",
-        "purpose": "提供效果参数"
+        "from": "selection_flow",
+        "to": "selection_modal",
+        "purpose": "Project draw results into the current-feature selection UI."
       },
       {
-        "from": "mod_func_2",
-        "to": "mod_func_3",
-        "purpose": "规则决策驱动效果"
-      },
-      {
-        "from": "mod_func_3",
-        "to": "mod_ui_4",
-        "purpose": "效果状态驱动 UI 更新"
+        "from": "selection_modal",
+        "to": "selection_flow",
+        "purpose": "Return the player's confirmed choice to the selection flow."
       }
     ],
     "patternHints": [
       {
-        "category": "input",
+        "category": "trigger",
         "suggestedPatterns": [
           "input.key_binding"
         ],
-        "rationale": "需要输入触发机制"
+        "rationale": "selection_pool uses one local input trigger surface."
       },
       {
         "category": "data",
         "suggestedPatterns": [
           "data.weighted_pool"
         ],
-        "rationale": "需要候选项池管理"
+        "rationale": "selection_pool keeps a feature-owned weighted candidate pool."
       },
       {
         "category": "rule",
         "suggestedPatterns": [
           "rule.selection_flow"
         ],
-        "rationale": "需要加权随机选择"
+        "rationale": "selection_pool commits one confirmed candidate per draw and emits a normalized outcome request."
       },
       {
-        "category": "rule",
+        "category": "effect",
         "suggestedPatterns": [
-          "rule.selection_flow"
+          "effect.outcome_realizer"
         ],
-        "rationale": "需要玩家选择处理"
+        "rationale": "selection_pool realizes confirmed outcomes through a bounded host-native outcome module."
       },
       {
         "category": "ui",
         "suggestedPatterns": [
           "ui.selection_modal"
         ],
-        "rationale": "需要模态 UI 界面"
+        "rationale": "selection_pool exposes a current-feature selection modal surface."
       }
     ]
   },
   "patterns": {
     "resolved": [
       {
-        "patternId": "effect.modifier_applier",
-        "role": "effect_application",
-        "priority": "required",
-        "source": "need"
-      },
-      {
-        "patternId": "ui.selection_modal",
-        "role": "selection_modal",
+        "patternId": "rule.selection_flow",
+        "role": "selection_flow",
         "priority": "required",
         "source": "need"
       },
@@ -336,14 +471,20 @@
         "source": "need"
       },
       {
+        "patternId": "effect.outcome_realizer",
+        "role": "selection_outcome",
+        "priority": "required",
+        "source": "need"
+      },
+      {
         "patternId": "input.key_binding",
         "role": "input_trigger",
         "priority": "required",
         "source": "need"
       },
       {
-        "patternId": "rule.selection_flow",
-        "role": "selection_flow",
+        "patternId": "ui.selection_modal",
+        "role": "selection_modal",
         "priority": "required",
         "source": "need"
       }
@@ -352,34 +493,29 @@
     "complete": true
   },
   "assemblyPlan": {
-    "blueprintId": "standalone_system_ajog",
+    "blueprintId": "standalone_system_mhv6",
     "selectedPatterns": [
-      "effect.modifier_applier",
-      "ui.selection_modal",
+      "rule.selection_flow",
       "data.weighted_pool",
+      "effect.outcome_realizer",
       "input.key_binding",
-      "rule.selection_flow"
+      "ui.selection_modal"
     ],
     "writeTargets": [
       {
         "target": "server",
-        "path": "server/standalone_system_ajog.ts",
-        "summary": "[CANDIDATE] Server module for standalone_system_ajog"
+        "path": "server/standalone_system_mhv6.ts",
+        "summary": "[CANDIDATE] Server module for standalone_system_mhv6"
       },
       {
         "target": "shared",
-        "path": "shared/standalone_system_ajog.ts",
-        "summary": "[CANDIDATE] Shared definitions for standalone_system_ajog"
+        "path": "shared/standalone_system_mhv6.ts",
+        "summary": "[CANDIDATE] Shared definitions for standalone_system_mhv6"
       },
       {
         "target": "ui",
-        "path": "ui/standalone_system_ajog.tsx",
-        "summary": "[CANDIDATE] UI component for standalone_system_ajog"
-      },
-      {
-        "target": "config",
-        "path": "config/standalone_system_ajog.txt",
-        "summary": "[CANDIDATE] Configuration for standalone_system_ajog"
+        "path": "ui/standalone_system_mhv6.tsx",
+        "summary": "[CANDIDATE] UI component for standalone_system_mhv6"
       }
     ],
     "bridgeUpdates": [
@@ -419,10 +555,10 @@
   "hostRealization": {
     "version": "1.0",
     "host": "dota2",
-    "sourceBlueprintId": "standalone_system_ajog",
+    "sourceBlueprintId": "standalone_system_mhv6",
     "units": [
       {
-        "id": "mod_func_0",
+        "id": "selection_input",
         "realizationType": "ts",
         "hostTargets": [
           "server_ts"
@@ -433,7 +569,7 @@
         ]
       },
       {
-        "id": "mod_func_1",
+        "id": "selection_pool",
         "realizationType": "shared-ts",
         "hostTargets": [
           "shared_ts"
@@ -444,7 +580,7 @@
         ]
       },
       {
-        "id": "mod_func_2",
+        "id": "selection_flow",
         "realizationType": "ts",
         "hostTargets": [
           "server_ts"
@@ -455,19 +591,18 @@
         ]
       },
       {
-        "id": "mod_func_3",
-        "realizationType": "kv+lua",
+        "id": "selection_outcome",
+        "realizationType": "ts",
         "hostTargets": [
-          "lua_ability",
-          "ability_kv"
+          "server_ts"
         ],
         "confidence": "medium",
         "sourcePatternIds": [
-          "effect.modifier_applier"
+          "effect.outcome_realizer"
         ]
       },
       {
-        "id": "mod_ui_4",
+        "id": "selection_modal",
         "realizationType": "ui",
         "hostTargets": [
           "panorama_tsx",
@@ -484,10 +619,10 @@
   "generatorRouting": {
     "version": "1.0",
     "host": "dota2",
-    "sourceBlueprintId": "standalone_system_ajog",
+    "sourceBlueprintId": "standalone_system_mhv6",
     "routes": [
       {
-        "id": "route_mod_func_0_ts_0",
+        "id": "route_selection_input_ts_0",
         "generatorFamily": "dota2-ts",
         "routeKind": "ts",
         "hostTarget": "server_ts",
@@ -496,7 +631,7 @@
         ]
       },
       {
-        "id": "route_mod_func_1_ts_0",
+        "id": "route_selection_pool_ts_0",
         "generatorFamily": "dota2-ts",
         "routeKind": "ts",
         "hostTarget": "shared_ts",
@@ -505,7 +640,7 @@
         ]
       },
       {
-        "id": "route_mod_func_2_ts_0",
+        "id": "route_selection_flow_ts_0",
         "generatorFamily": "dota2-ts",
         "routeKind": "ts",
         "hostTarget": "server_ts",
@@ -514,25 +649,16 @@
         ]
       },
       {
-        "id": "route_mod_func_3_lua_0",
-        "generatorFamily": "dota2-lua",
-        "routeKind": "lua",
-        "hostTarget": "lua_ability",
+        "id": "route_selection_outcome_ts_0",
+        "generatorFamily": "dota2-ts",
+        "routeKind": "ts",
+        "hostTarget": "server_ts",
         "sourcePatternIds": [
-          "effect.modifier_applier"
+          "effect.outcome_realizer"
         ]
       },
       {
-        "id": "route_mod_func_3_kv_1",
-        "generatorFamily": "dota2-kv",
-        "routeKind": "kv",
-        "hostTarget": "ability_kv",
-        "sourcePatternIds": [
-          "effect.modifier_applier"
-        ]
-      },
-      {
-        "id": "route_mod_ui_4_ui_0",
+        "id": "route_selection_modal_ui_0",
         "generatorFamily": "dota2-ui",
         "routeKind": "ui",
         "hostTarget": "panorama_tsx",
@@ -541,7 +667,7 @@
         ]
       },
       {
-        "id": "route_mod_ui_4_ui_1",
+        "id": "route_selection_modal_ui_1",
         "generatorFamily": "dota2-ui",
         "routeKind": "ui",
         "hostTarget": "panorama_less",
@@ -554,51 +680,24 @@
     "blockers": []
   },
   "writePlan": {
-    "id": "writeplan_standalone_system_ajog_1776431237929",
-    "targetProject": "D:\\test3",
-    "entryCount": 8,
+    "id": "writeplan_standalone_system_mhv6_1776912165632",
+    "targetProject": "D:\\rw-test-1",
+    "entryCount": 10,
     "stats": {
-      "total": 8,
-      "create": 8,
+      "total": 10,
+      "create": 10,
       "update": 0,
       "conflicts": 0,
-      "deferred": 2
+      "deferred": 0
     },
     "entries": [
       {
-        "targetPath": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-        "contentType": "lua",
+        "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+        "contentType": "typescript",
         "operation": "create",
-        "sourcePattern": "effect.modifier_applier",
-        "contentSummary": "effect/effect.modifier_applier (lua) params: {\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}",
-        "generatorFamilyHint": "dota2-lua",
-        "deferred": true
-      },
-      {
-        "targetPath": "game/scripts/npc/npc_abilities_custom.txt",
-        "contentType": "kv",
-        "operation": "create",
-        "sourcePattern": "effect.modifier_applier",
-        "contentSummary": "effect/effect.modifier_applier (kv) params: {\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}",
-        "generatorFamilyHint": "dota2-kv",
-        "deferred": true
-      },
-      {
-        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-        "contentType": "tsx",
-        "operation": "create",
-        "sourcePattern": "ui.selection_modal",
-        "contentSummary": "ui/ui.selection_modal (tsx) params: {\"choiceCount\":3,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_talent_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true}}",
-        "generatorFamilyHint": "dota2-ui",
-        "deferred": false
-      },
-      {
-        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-        "contentType": "less",
-        "operation": "create",
-        "sourcePattern": "ui.selection_modal",
-        "contentSummary": "ui/ui.selection_modal (less) params: {\"choiceCount\":3,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_talent_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true}}",
-        "generatorFamilyHint": "dota2-ui",
+        "sourcePattern": "rule.selection_flow",
+        "contentSummary": "rule/rule.selection_flow (typescript) params: {\"choiceCount\":3,\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true}",
+        "generatorFamilyHint": "dota2-ts",
         "deferred": false
       },
       {
@@ -606,7 +705,16 @@
         "contentType": "typescript",
         "operation": "create",
         "sourcePattern": "data.weighted_pool",
-        "contentSummary": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}",
+        "contentSummary": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"SEL_R001\",\"label\":\"Talent Option R001\",\"description\":\"Placeholder selection option (R)\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SEL_R002\",\"label\":\"Talent Option R002\",\"description\":\"Placeholder selection option (R)\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SEL_SR003\",\"label\":\"Talent Option SR003\",\"description\":\"Placeholder selection option (SR)\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SEL_SR004\",\"label\":\"Talent Option SR004\",\"description\":\"Placeholder selection option (SR)\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SEL_SSR005\",\"label\":\"Talent Option SSR005\",\"description\":\"Placeholder selection option (SSR)\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"SEL_UR006\",\"label\":\"Talent Option UR006\",\"description\":\"Placeholder selection option (UR)\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}",
+        "generatorFamilyHint": "dota2-ts",
+        "deferred": false
+      },
+      {
+        "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
+        "contentType": "typescript",
+        "operation": "create",
+        "sourcePattern": "effect.outcome_realizer",
+        "contentSummary": "effect/effect.outcome_realizer (typescript) params: {\"outcomes\":[]}",
         "generatorFamilyHint": "dota2-ts",
         "deferred": false
       },
@@ -624,67 +732,66 @@
         "contentType": "typescript",
         "operation": "create",
         "sourcePattern": "input.key_binding",
-        "contentSummary": "input/input.key_binding (typescript) params: {\"key\":\"F4\"}",
+        "contentSummary": "input/input.key_binding (typescript) params: {\"triggerKey\":\"F4\",\"key\":\"F4\",\"eventName\":\"rune_weaver_selection_pool_triggered\"}",
         "generatorFamilyHint": "dota2-ts",
         "deferred": false
       },
       {
-        "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-        "contentType": "typescript",
+        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+        "contentType": "tsx",
         "operation": "create",
-        "sourcePattern": "rule.selection_flow",
-        "contentSummary": "rule/rule.selection_flow (typescript) params: {\"choiceCount\":3,\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}",
-        "generatorFamilyHint": "dota2-ts",
+        "sourcePattern": "ui.selection_modal",
+        "contentSummary": "ui/ui.selection_modal (tsx) params: {\"choiceCount\":3,\"title\":\"Choose Your Selection\",\"description\":\"Select one of the following options\",\"inventoryTitle\":\"Selection Inventory\",\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_selection_slot\",\"name\":\"Empty Slot\",\"description\":\"No selection available\",\"disabled\":true},\"layoutPreset\":\"card_tray\",\"selectionMode\":\"single\",\"dismissBehavior\":\"selection_only\"}",
+        "generatorFamilyHint": "dota2-ui",
         "deferred": false
+      },
+      {
+        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+        "contentType": "less",
+        "operation": "create",
+        "sourcePattern": "ui.selection_modal",
+        "contentSummary": "ui/ui.selection_modal (less) params: {\"choiceCount\":3,\"title\":\"Choose Your Selection\",\"description\":\"Select one of the following options\",\"inventoryTitle\":\"Selection Inventory\",\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_selection_slot\",\"name\":\"Empty Slot\",\"description\":\"No selection available\",\"disabled\":true},\"layoutPreset\":\"card_tray\",\"selectionMode\":\"single\",\"dismissBehavior\":\"selection_only\"}",
+        "generatorFamilyHint": "dota2-ui",
+        "deferred": false
+      },
+      {
+        "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+        "contentType": "tsx",
+        "operation": "create",
+        "sourcePattern": "input.key_binding",
+        "contentSummary": "input/input.key_binding (typescript) params: {\"triggerKey\":\"F4\",\"key\":\"F4\",\"eventName\":\"rune_weaver_selection_pool_triggered\"} [ui-emitter]",
+        "generatorFamilyHint": "dota2-ui",
+        "deferred": false
+      },
+      {
+        "targetPath": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+        "contentType": "json",
+        "operation": "create",
+        "sourcePattern": "rw.feature_source_model",
+        "contentSummary": "feature_source_model/selection_pool (json) entries:6 metadata-kind:talent"
+      },
+      {
+        "targetPath": "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json",
+        "contentType": "json",
+        "operation": "create",
+        "sourcePattern": "rw.content_collections",
+        "contentSummary": "rw content collections (0)"
       }
     ],
-    "deferredWarnings": [
-      "[effect.modifier_applier] effect.modifier_applier remains deferred: current lua/kv modifier generation is only honest for specialized same-file ability modifier slices such as dota2.short_time_buff, not broad generic modifier application.",
-      "[effect.modifier_applier] effect.modifier_applier remains deferred: current lua/kv modifier generation is only honest for specialized same-file ability modifier slices such as dota2.short_time_buff, not broad generic modifier application."
-    ]
+    "deferredWarnings": []
   },
   "generatedContent": [
     {
-      "targetPath": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
-      "language": "lua",
+      "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+      "language": "typescript",
       "exports": [
-        "talent_draw_demo_effect_application_effect_modifier_applier"
+        "TalentDrawDemoSelectionFlowRuleSelectionFlow",
+        "registerTalentDrawDemoSelectionFlowRuleSelectionFlow"
       ],
-      "contentPreview": "local ____lualib = require(\"lualib_bundle\") local __TS__Class = ____lualib.__TS__Class local __TS__ClassExtends = ____lualib.__TS__ClassExtends local __TS__DecorateLegacy = ____lualib.__TS__DecorateLe",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
+      "contentPreview": "/**  * TalentDrawDemoSelectionFlowRuleSelectionFlow  * 选择流程管理器 - Generated by Rune Weaver  *  * Features:  * - choiceCount: 3  * - selectionPolicy: \"single\"  * - applyMode: \"immediate\"  * - postSelect",
+      "hasDrawForSelection": true,
+      "hasOutcomeEvidence": false,
       "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "game/scripts/npc/npc_abilities_custom.txt",
-      "language": "kv",
-      "exports": [
-        "talent_draw_demo_effect_application_effect_modifier_applier"
-      ],
-      "contentPreview": "\"talent_draw_demo_effect_application_effect_modifier_applier\" {     \"BaseClass\"              \"ability_datadriven\"     \"AbilityBehavior\"        \"DOTA_ABILITY_BEHAVIOR_NO_TARGET\"     \"AbilityType\"      ",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": false
-    },
-    {
-      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-      "language": "tsx",
-      "exports": [
-        "TalentDrawDemoSelectionModalUiSelectionModal"
-      ],
-      "contentPreview": "/**  * TalentDrawDemoSelectionModalUiSelectionModal  * Generated selection modal  *  * Features:  * - choiceCount: 3  * - payloadShape: \"card_with_rarity\"  * - dismissBehavior: \"selection_only\"  * - l",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": true
-    },
-    {
-      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-      "language": "less",
-      "exports": [],
-      "contentPreview": "/* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .talent_draw_demo_selection_modal_ui_selection_modal-root {   width: 100%;   height: 100%; }  .talent_draw_demo_selection_mo",
-      "hasDrawForSelection": false,
-      "hasRarityBonus": false,
-      "hasPlaceholderEvidence": true
     },
     {
       "targetPath": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
@@ -695,7 +802,19 @@
       ],
       "contentPreview": "/**  * TalentDrawDemoWeightedPoolDataWeightedPool  * 加权随机池 - Generated by Rune Weaver  *  * Features:  * - drawMode: multiple_without_replacement  * - duplicatePolicy: forbid  * - poolStateTracking: s",
       "hasDrawForSelection": true,
-      "hasRarityBonus": false,
+      "hasOutcomeEvidence": false,
+      "hasPlaceholderEvidence": false
+    },
+    {
+      "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
+      "language": "typescript",
+      "exports": [
+        "TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer",
+        "registerTalentDrawDemoSelectionOutcomeEffectOutcomeRealizer"
+      ],
+      "contentPreview": "/**  * TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer  * 选择结果宿主实现层 - Generated by Rune Weaver  */  interface SelectionOption {   id: string;   name: string;   description: string;   icon?: string",
+      "hasDrawForSelection": false,
+      "hasOutcomeEvidence": true,
       "hasPlaceholderEvidence": false
     },
     {
@@ -707,7 +826,7 @@
       ],
       "contentPreview": "/**  * TalentDrawDemoInputTriggerInputKeyBindingAbility  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputTriggerInputKeyBindingAbility {   private static instance: TalentDrawD",
       "hasDrawForSelection": false,
-      "hasRarityBonus": false,
+      "hasOutcomeEvidence": false,
       "hasPlaceholderEvidence": false
     },
     {
@@ -719,19 +838,56 @@
       ],
       "contentPreview": "/**  * TalentDrawDemoInputTriggerInputKeyBinding  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputTriggerInputKeyBinding {   private static instance: TalentDrawDemoInputTrigge",
       "hasDrawForSelection": false,
-      "hasRarityBonus": false,
+      "hasOutcomeEvidence": false,
       "hasPlaceholderEvidence": false
     },
     {
-      "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-      "language": "typescript",
+      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+      "language": "tsx",
       "exports": [
-        "TalentDrawDemoSelectionFlowRuleSelectionFlow",
-        "registerTalentDrawDemoSelectionFlowRuleSelectionFlow"
+        "TalentDrawDemoSelectionModalUiSelectionModal"
       ],
-      "contentPreview": "/**  * TalentDrawDemoSelectionFlowRuleSelectionFlow  * 选择流程管理器 - Generated by Rune Weaver  *  * Features:  * - choiceCount: 3  * - selectionPolicy: \"single\"  * - applyMode: \"immediate\"  * - postSelect",
-      "hasDrawForSelection": true,
-      "hasRarityBonus": true,
+      "contentPreview": "/**  * TalentDrawDemoSelectionModalUiSelectionModal  * Generated selection modal  *  * Features:  * - choiceCount: 3  * - payloadShape: \"card_with_rarity\"  * - dismissBehavior: \"selection_only\"  * - l",
+      "hasDrawForSelection": false,
+      "hasOutcomeEvidence": false,
+      "hasPlaceholderEvidence": true
+    },
+    {
+      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+      "language": "less",
+      "exports": [],
+      "contentPreview": "/* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .talent_draw_demo_selection_modal_ui_selection_modal-root {   width: 100%;   height: 100%; }  .talent_draw_demo_selection_mo",
+      "hasDrawForSelection": false,
+      "hasOutcomeEvidence": false,
+      "hasPlaceholderEvidence": true
+    },
+    {
+      "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+      "language": "tsx",
+      "exports": [
+        "TalentDrawDemoInputTriggerInputKeyBindingEmitter"
+      ],
+      "contentPreview": "/**  * TalentDrawDemoInputTriggerInputKeyBindingEmitter  * Generated input.key_binding Panorama emitter  *  * Current honest slice:  * - input.key_binding owns trigger capture end-to-end  * - UI emitt",
+      "hasDrawForSelection": false,
+      "hasOutcomeEvidence": false,
+      "hasPlaceholderEvidence": false
+    },
+    {
+      "targetPath": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+      "language": "json",
+      "exports": [],
+      "contentPreview": "{   \"adapter\": \"selection_pool\",   \"version\": 2,   \"featureId\": \"talent_draw_demo\",   \"objectKind\": \"talent\",   \"triggerKey\": \"F4\",   \"choiceCount\": 3,   \"drawMode\": \"multiple_without_replacement\",   ",
+      "hasDrawForSelection": false,
+      "hasOutcomeEvidence": false,
+      "hasPlaceholderEvidence": true
+    },
+    {
+      "targetPath": "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json",
+      "language": "json",
+      "exports": [],
+      "contentPreview": "{   \"adapter\": \"rw_content_collections\",   \"version\": 1,   \"featureId\": \"talent_draw_demo\",   \"collections\": [] } ",
+      "hasDrawForSelection": false,
+      "hasOutcomeEvidence": false,
       "hasPlaceholderEvidence": false
     }
   ],
@@ -742,81 +898,113 @@
       "executed": [
         {
           "type": "create",
-          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-          "content": "/**\n * TalentDrawDemoSelectionModalUiSelectionModal\n * Generated selection modal\n *\n * Features:\n * - choiceCount: 3\n * - payloadShape: \"card_with_rarity\"\n * - dismissBehavior: \"selection_only\"\n * - layoutPreset: \"card_tray\"\n * - selectionMode: \"single\"\n * - minDisplayCount: 3\n * \n */\n\nimport React, { useEffect, useRef, useState } from \"react\";\n\ninterface SelectionItem {\n  id: string;\n  name: string;\n  description?: string;\n  icon?: string;\n  tier?: string;\n  rarity?: string;\n  disabled?: boolean;\n  isPlaceholder?: boolean;\n}\n\ninterface InventoryPayload {\n  enabled?: boolean;\n  capacity?: number;\n  items?: unknown;\n  isFull?: boolean;\n  fullMessage?: string;\n  presentation?: string;\n}\n\ninterface TalentDrawDemoSelectionModalUiSelectionModalProps {\n  items?: SelectionItem[];\n  title?: string;\n  description?: string;\n  onSelect?: (index: number) => void;\n  onConfirm?: () => void;\n  onDismiss?: () => void;\n  visible?: boolean;\n}\n\nexport function TalentDrawDemoSelectionModalUiSelectionModal(props: TalentDrawDemoSelectionModalUiSelectionModalProps) {\n  const {\n    items,\n    title = \"Choose Your Selection\",\n    description = \"Select one of the following options\",\n    onSelect,\n    onConfirm,\n    onDismiss,\n    visible = false,\n  } = props;\n\n  const featureId = \"talent_draw_demo\";\n  const sendCustomEvent = (eventName: string, payload: Record<string, unknown>) => {\n    (GameEvents.SendCustomGameEventToServer as any)(eventName, payload);\n  };\n\n  const placeholderConfig = {\n    id: \"empty_talent_slot\",\n    name: \"Empty Slot\",\n    description: \"No talent available\",\n    disabled: true\n  };\n  const minDisplayCount = 3;\n\n  const inventoryEnabled = false;\n  const inventoryCapacity = 0;\n  const inventoryFullMessage = \"Selection inventory full\";\n  const inventoryPresentation = \"persistent_panel\";\n  const inventoryTitle = \"Selection Inventory\";\n\n  // GAP_FILL_BOUNDARY: ui.selection_modal.payload_adapter\n  // Allowed: item normalization, placeholder padding, defensive fallback values, card presentation formatting.\n  // Forbidden: root mount changes, transport event changes, LESS/HUD wiring changes.\n  const normalizeSelectionItems = (rawItems?: unknown): SelectionItem[] => {\n    if (rawItems === undefined || rawItems === null) {\n      return [];\n    }\n\n    const itemsArray: unknown[] = Array.isArray(rawItems) ? rawItems : Object.values(rawItems ?? {});\n\n    return itemsArray\n      .filter((item): item is Record<string, unknown> => {\n        return item !== null && item !== undefined && typeof item === \"object\";\n      })\n      .map((item, index): SelectionItem => {\n        const rarityValue = item.rarity ?? item.tier;\n        const tierValue = item.tier ?? item.rarity;\n        return {\n          id: typeof item.id === \"string\" ? item.id : typeof item.id === \"number\" ? String(item.id) : `unknown_${index}`,\n          name: typeof item.name === \"string\" ? item.name : \"Unknown\",\n          description: typeof item.description === \"string\" ? item.description : undefined,\n          icon: typeof item.icon === \"string\" ? item.icon : undefined,\n          tier: typeof tierValue === \"string\" ? tierValue : undefined,\n          rarity: typeof rarityValue === \"string\" ? rarityValue : undefined,\n          disabled: typeof item.disabled === \"boolean\" ? item.disabled : false,\n          isPlaceholder: typeof item.isPlaceholder === \"boolean\" ? item.isPlaceholder : false,\n        };\n      });\n  };\n\n  const [selectedIndex, setSelectedIndex] = useState<number>(-1);\n  const [isVisible, setIsVisible] = useState(visible);\n  const [modalItems, setModalItems] = useState<SelectionItem[]>(() => normalizeSelectionItems(items));\n  const [modalTitle, setModalTitle] = useState(title);\n  const [modalDescription, setModalDescription] = useState(description);\n  const [inventoryItems, setInventoryItems] = useState<SelectionItem[]>([]);\n  const [inventoryIsFull, setInventoryIsFull] = useState(false);\n\n  const titleRef = useRef(title);\n  const descriptionRef = useRef(description);\n  const featureIdRef = useRef(featureId);\n\n  useEffect(() => {\n    titleRef.current = title;\n    descriptionRef.current = description;\n    featureIdRef.current = featureId;\n  });\n\n  useEffect(() => {\n    setIsVisible(visible);\n  }, [visible]);\n\n  useEffect(() => {\n    setModalItems(normalizeSelectionItems(items));\n  }, [items]);\n\n  useEffect(() => {\n    setModalTitle(title);\n  }, [title]);\n\n  useEffect(() => {\n    setModalDescription(description);\n  }, [description]);\n\n  useEffect(() => {\n    console.log(\"[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal mounted for feature talent_draw_demo\");\n\n    const showSelectionSub = GameEvents.Subscribe(\"rune_weaver_show_selection\", (data: {\n      featureId?: string;\n      options?: unknown;\n      title?: string;\n      description?: string;\n      inventory?: InventoryPayload;\n    }) => {\n      if (data.featureId && data.featureId !== featureIdRef.current) {\n        return;\n      }\n\n      const normalizedItems = normalizeSelectionItems(data.options);\n      console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal received selection event: options=${normalizedItems.length}`);\n      setModalItems(normalizedItems);\n      setModalTitle(data.title || titleRef.current);\n      setModalDescription(data.description || descriptionRef.current);\n      setSelectedIndex(-1);\n      setIsVisible(true);\n    });\n\n    const confirmSub = GameEvents.Subscribe(\"rune_weaver_selection_confirmed\", (data: { featureId?: string }) => {\n      if (data.featureId && data.featureId !== featureIdRef.current) {\n        return;\n      }\n      setIsVisible(false);\n      setSelectedIndex(-1);\n    });\n\n    return () => {\n      GameEvents.Unsubscribe(showSelectionSub);\n      GameEvents.Unsubscribe(confirmSub);\n    };\n  }, []);\n\n  const padWithPlaceholders = (sourceItems: SelectionItem[]): SelectionItem[] => {\n    if (sourceItems.length >= minDisplayCount) {\n      return sourceItems;\n    }\n\n    const paddedItems = [...sourceItems];\n    const placeholderCount = minDisplayCount - sourceItems.length;\n    for (let index = 0; index < placeholderCount; index++) {\n      paddedItems.push({\n        id: `${placeholderConfig.id}_${index}`,\n        name: placeholderConfig.name,\n        description: placeholderConfig.description,\n        disabled: placeholderConfig.disabled,\n        isPlaceholder: true,\n      });\n    }\n    return paddedItems;\n  };\n\n  const displayItems = padWithPlaceholders(modalItems);\n  const inventorySlots = inventoryEnabled\n    ? Array.from({ length: inventoryCapacity }, (_, index) => inventoryItems[index] ?? null)\n    : [];\n\n  const selectedItem = selectedIndex >= 0 && selectedIndex < displayItems.length\n    ? displayItems[selectedIndex]\n    : null;\n  const isConfirmDisabled = selectedIndex === -1 ||\n    selectedItem?.disabled === true ||\n    selectedItem?.isPlaceholder === true;\n  const shouldRenderModal = isVisible && displayItems.length > 0;\n\n  if (!shouldRenderModal && !inventoryEnabled) {\n    return null;\n  }\n\n  const handleSelect = (index: number) => {\n    const item = displayItems[index];\n    if (!item) {\n      return;\n    }\n\n    if (item.disabled || item.isPlaceholder) {\n      return;\n    }\n\n    setSelectedIndex(index);\n    console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal selected item id=${item.id}`);\n    sendCustomEvent(\"rune_weaver_player_select\", {\n      PlayerID: Game.GetLocalPlayerID(),\n      optionIndex: index,\n      featureId: featureIdRef.current,\n    });\n    onSelect?.(index);\n  };\n\n  const handleConfirm = () => {\n    if (selectedIndex === -1) {\n      return;\n    }\n\n    const item = displayItems[selectedIndex];\n    if (!item) {\n      return;\n    }\n\n    if (item.disabled || item.isPlaceholder) {\n      console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal confirm blocked for disabled/placeholder item id=${item.id}`);\n      return;\n    }\n\n    console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal confirmed item id=${item.id}`);\n    sendCustomEvent(\"rune_weaver_player_confirm\", {\n      PlayerID: Game.GetLocalPlayerID(),\n      optionIndex: selectedIndex,\n      featureId: featureIdRef.current,\n    });\n    onConfirm?.();\n    setIsVisible(false);\n  };\n\n  const handleDismiss = () => {\n    // Dismiss not allowed in selection_only mode\n  };\n\n  return (\n    <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-root\">\n      {inventoryEnabled && (\n        <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-inventory-panel\">\n          <Panel className=\"inventory-header\">\n            <Label\n              className={`inventory-title ${inventoryIsFull ? \"full\" : \"\"}`}\n              text={inventoryIsFull ? inventoryFullMessage : inventoryTitle}\n            />\n            <Label className=\"inventory-subtitle\" text={`${inventoryItems.length} / ${inventoryCapacity}`} />\n          </Panel>\n\n          <Panel className=\"inventory-grid\">\n            {inventorySlots.map((item, index) => (\n              <Panel\n                key={item?.id || `inventory_slot_${index}`}\n                className={`inventory-slot ${item ? \"filled\" : \"empty\"}`}\n              >\n                {item ? (\n                  <>\n                    <Label className=\"inventory-slot-name\" text={item.name} />\n                    <Label\n                      className={`inventory-slot-tier ${item.tier ? `tier-${item.tier.toLowerCase()}` : \"tier-none\"}`}\n                      text={item.tier || \"\"}\n                    />\n                  </>\n                ) : (\n                  <Label className=\"inventory-slot-placeholder\" text=\"Empty\" />\n                )}\n              </Panel>\n            ))}\n          </Panel>\n        </Panel>\n      )}\n\n      {shouldRenderModal && (\n        <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-overlay\">\n          <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-modal\">\n            <Panel className=\"modal-header\">\n              <Label text={modalTitle} />\n              <Label className=\"modal-description\" text={modalDescription || \"\"} />\n            </Panel>\n\n            <Panel className=\"modal-content\">\n              {displayItems.map((item, index) => (\n                <Panel\n                  key={item.id}\n                  className={`selection-card ${selectedIndex === index ? \"selected\" : \"\"} ${item.disabled ? \"disabled\" : \"\"} ${item.isPlaceholder ? \"placeholder\" : \"\"}`}\n                  onactivate={() => handleSelect(index)}\n                >\n                  \n                  {item.icon && <Image src={item.icon} />}\n                  <Label className=\"card-name\" text={item.name} />\n                  <Label className=\"card-description\" text={item.description || \"\"} />\n                  <Label className={`card-tier ${item.tier ? `tier-${item.tier.toLowerCase()}` : \"tier-none\"}`} text={item.tier || \"\"} />\n\n                </Panel>\n              ))}\n            </Panel>\n\n            <Panel className=\"modal-footer\">\n              <Panel\n                className={`btn-confirm ${isConfirmDisabled ? \"disabled\" : \"\"}`}\n                onactivate={handleConfirm}\n              >\n                <Label text=\"确认选择\" />\n              </Panel>\n              \n            </Panel>\n          </Panel>\n        </Panel>\n      )}\n    </Panel>\n  );\n}\n\nexport default TalentDrawDemoSelectionModalUiSelectionModal;\n",
+          "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+          "content": "/**\n * TalentDrawDemoSelectionFlowRuleSelectionFlow\n * 选择流程管理器 - Generated by Rune Weaver\n *\n * Features:\n * - choiceCount: 3\n * - selectionPolicy: \"single\"\n * - applyMode: \"immediate\"\n * - postSelectionPoolBehavior: \"remove_selected_from_remaining\"\n * - trackSelectedItems: true\n */\n\ninterface SelectionOption {\n  id: string;\n  name: string;\n  description: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface PoolCandidate {\n  id: string;\n  name?: string;\n  label?: string;\n  description?: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface PoolCommitOptions {\n  trackOwned?: boolean;\n}\n\ninterface SelectionOutcomeHandlerResult {\n  handled: boolean;\n}\n\ninterface SelectionWorldPosition {\n  x: number;\n  y: number;\n  z: number;\n}\n\ninterface SelectionOutcomeRequest {\n  featureId: string;\n  playerId: number;\n  option: SelectionOption;\n  cursorPosition?: SelectionWorldPosition;\n}\n\ninterface PlayerSelection {\n  playerId: number;\n  options: SelectionOption[];\n  selectedIndex: number;\n  isConfirmed: boolean;\n  deferredEffect?: SelectionOption;\n  poolCommit?: (selectedId: string, options?: PoolCommitOptions) => void;\n}\n\nexport class TalentDrawDemoSelectionFlowRuleSelectionFlow {\n  private static instance: TalentDrawDemoSelectionFlowRuleSelectionFlow;\n  private activeSelections: Map<number, PlayerSelection> = new Map();\n  private selectionCallbacks: Map<number, (option: SelectionOption) => void> = new Map();\n  private selectionOutcomeHandlers: Array<\n    (context: SelectionOutcomeRequest & { request: SelectionOutcomeRequest }) => SelectionOutcomeHandlerResult | void\n  > = [];\n\n  static getInstance(): TalentDrawDemoSelectionFlowRuleSelectionFlow {\n    if (!TalentDrawDemoSelectionFlowRuleSelectionFlow.instance) {\n      TalentDrawDemoSelectionFlowRuleSelectionFlow.instance = new TalentDrawDemoSelectionFlowRuleSelectionFlow();\n    }\n    return TalentDrawDemoSelectionFlowRuleSelectionFlow.instance;\n  }\n\n  startSelection(\n    playerId: number,\n    options: SelectionOption[],\n    onSelected: (option: SelectionOption) => void,\n    poolCommit?: (selectedId: string, options?: PoolCommitOptions) => void\n  ): void {\n    if (options.length === 0) {\n      print(\"[Rune Weaver] Cannot start selection with empty options\");\n      return;\n    }\n\n    this.activeSelections.set(playerId, {\n      playerId,\n      options,\n      selectedIndex: -1,\n      isConfirmed: false,\n      poolCommit,\n    });\n    this.selectionCallbacks.set(playerId, onSelected);\n    this.sendToClient(playerId, options);\n  }\n\n  registerOutcomeHandler(\n    handler: (context: SelectionOutcomeRequest & { request: SelectionOutcomeRequest }) => SelectionOutcomeHandlerResult | void\n  ): void {\n    this.selectionOutcomeHandlers.push(handler);\n  }\n\n  onPlayerSelect(playerId: number, optionIndex: number): void {\n    const selection = this.activeSelections.get(playerId);\n    if (!selection) return;\n    if (optionIndex < 0 || optionIndex >= selection.options.length) return;\n\n    selection.selectedIndex = optionIndex;\n    this.fireSelectionEvent(playerId, selection.options[optionIndex]);\n  }\n\n  onPlayerConfirm(playerId: number, confirmContext?: { cursorPosition?: SelectionWorldPosition }): void {\n    const selection = this.activeSelections.get(playerId);\n    if (!selection || selection.selectedIndex === -1) return;\n\n    selection.isConfirmed = true;\n    const selectedOption = selection.options[selection.selectedIndex];\n\n    if (selection.poolCommit) {\n      selection.poolCommit(selectedOption.id, { trackOwned: true });\n    }\n    const outcomeRequest: SelectionOutcomeRequest = {\n      featureId: \"talent_draw_demo\",\n      playerId,\n      option: selectedOption,\n      ...(confirmContext?.cursorPosition ? { cursorPosition: confirmContext.cursorPosition } : {}),\n    };\n    this.handleSelectionOutcome(outcomeRequest);\n\n    const callback = this.selectionCallbacks.get(playerId);\n    if (callback) {\n      callback(selectedOption);\n    }\n\n    this.fireConfirmationEvent(playerId, selectedOption);\n    this.activeSelections.delete(playerId);\n    this.selectionCallbacks.delete(playerId);\n  }\n\n  private fireSelectionEvent(playerId: number, option: SelectionOption): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_selection_made\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          rarity: option.tier || \"R\",\n        }\n      );\n    }\n  }\n\n  private handleSelectionOutcome(request: SelectionOutcomeRequest): boolean {\n    for (const handler of this.selectionOutcomeHandlers) {\n      const result = handler({ ...request, request });\n      if (result && result.handled === true) {\n        return true;\n      }\n    }\n\n    return false;\n  }\n\n  private fireConfirmationEvent(playerId: number, option: SelectionOption): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_selection_confirmed\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          rarity: option.tier || \"R\",\n          timestamp: GameRules.GetGameTime(),\n        }\n      );\n    }\n  }\n\n  private sendToClient(playerId: number, options: SelectionOption[]): void {\n    if ((GameRules as any).XNetTable) {\n      (GameRules as any).XNetTable.SetTableValue(\n        \"rune_weaver_selection\",\n        `player_${playerId}_feature_talent_draw_demo`,\n        {\n          featureId: \"talent_draw_demo\",\n          options,\n          status: \"waiting\",\n        }\n      );\n    }\n\n    if (CustomGameEventManager) {\n      const payload = {\n        featureId: \"talent_draw_demo\",\n        options,\n        choiceCount: 3,\n        selectionPolicy: \"single\",\n      };\n      const player = PlayerResource.GetPlayer(playerId as PlayerID);\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: sending selection UI to player ${playerId}, options=${options.length}, player=${player ? \"ok\" : \"missing\"}`);\n      if (player) {\n        (CustomGameEventManager.Send_ServerToPlayer as any)(\n          player,\n          \"rune_weaver_show_selection\",\n          payload\n        );\n      } else {\n        (CustomGameEventManager.Send_ServerToAllClients as any)(\n          \"rune_weaver_show_selection\",\n          payload\n        );\n      }\n    }\n  }\n\n  generateOptionsFromPool<T extends SelectionOption>(\n    pool: any,\n    count: number\n  ): T[] {\n    const normalizeCandidates = (candidates: PoolCandidate[]): T[] => {\n      return candidates.map((candidate) => ({\n        id: candidate.id,\n        name: candidate.name || candidate.label || candidate.id,\n        description: candidate.description || \"\",\n        icon: candidate.icon,\n        tier: candidate.tier,\n      })) as T[];\n    };\n\n    if (pool && typeof pool.drawForSelection === \"function\") {\n      return normalizeCandidates(pool.drawForSelection(count) as PoolCandidate[]);\n    }\n\n    if (pool && typeof pool.drawMultiple === \"function\") {\n      return normalizeCandidates(pool.drawMultiple(count) as PoolCandidate[]);\n    }\n\n    return [];\n  }\n\n  triggerSelectionFromPool(playerId: number, pool: any): void {\n    if (!pool) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: no pool available`);\n      return;\n    }\n\n    const options = this.generateOptionsFromPool(pool, 3);\n    if (!options || options.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: no options generated for player ${playerId}`);\n      return;\n    }\n\n    this.startSelection(\n      playerId,\n      options,\n      () => {},\n\n      pool && typeof pool.commitSelection === \"function\"\n        ? (selectedId, options) => pool.commitSelection(selectedId, options)\n        : undefined\n    );\n  }\n}\n\nexport function registerTalentDrawDemoSelectionFlowRuleSelectionFlow(): void {\n  const flow = TalentDrawDemoSelectionFlowRuleSelectionFlow.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow registered\");\n\n  if (CustomGameEventManager) {\n    CustomGameEventManager.RegisterListener(\"rune_weaver_player_select\", (_eventSourceIndex: number, event: any) => {\n      if (event.featureId && event.featureId !== \"talent_draw_demo\") {\n        return;\n      }\n      const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n      const optionIndex = Number(event.optionIndex ?? -1);\n      if (playerId >= 0 && optionIndex >= 0) {\n        flow.onPlayerSelect(playerId, optionIndex);\n      }\n    });\n\n    CustomGameEventManager.RegisterListener(\"rune_weaver_player_confirm\", (_eventSourceIndex: number, event: any) => {\n      if (event.featureId && event.featureId !== \"talent_draw_demo\") {\n        return;\n      }\n      const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n      const hasCursorPosition =\n        Number.isFinite(Number(event.cursorX)) &&\n        Number.isFinite(Number(event.cursorY));\n      if (playerId >= 0) {\n        flow.onPlayerConfirm(\n          playerId,\n          hasCursorPosition\n            ? {\n                cursorPosition: {\n                  x: Number(event.cursorX),\n                  y: Number(event.cursorY),\n                  z: Number.isFinite(Number(event.cursorZ)) ? Number(event.cursorZ) : 0,\n                },\n              }\n            : undefined,\n        );\n      }\n    });\n  }\n}\n",
           "rwOwned": true,
-          "description": "ui/ui.selection_modal (tsx) params: {\"choiceCount\":3,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_talent_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true}}"
-        },
-        {
-          "type": "create",
-          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-          "content": "/* Generated by Rune Weaver */\n/* talent_draw_demo - ui.selection_modal */\n\n.talent_draw_demo_selection_modal_ui_selection_modal-root {\n  width: 100%;\n  height: 100%;\n}\n\n.talent_draw_demo_selection_modal_ui_selection_modal-inventory-panel {\n  width: 386px;\n  min-height: 260px;\n  horizontal-align: right;\n  vertical-align: center;\n  margin-right: 36px;\n  flow-children: down;\n  padding: 16px;\n  background-color: #0d1720ee;\n  border: 1px solid #8fd0ff33;\n  box-shadow: #00000088 0px 0px 16px 0px;\n  z-index: 40;\n}\n\n.inventory-header {\n  width: 100%;\n  flow-children: down;\n  margin-bottom: 12px;\n}\n\n.inventory-title {\n  color: #f5fbff;\n  font-size: 24px;\n  font-weight: bold;\n}\n\n.inventory-title.full {\n  color: #ffd76a;\n}\n\n.inventory-subtitle {\n  margin-top: 4px;\n  color: #a9bcc7;\n  font-size: 16px;\n}\n\n.inventory-grid {\n  width: 100%;\n  flow-children: right-wrap;\n}\n\n.inventory-slot {\n  width: 64px;\n  height: 64px;\n  margin: 4px;\n  padding: 6px;\n  flow-children: down;\n  border: 1px solid #6c8b9a66;\n}\n\n.inventory-slot.empty {\n  background-color: #141f28cc;\n}\n\n.inventory-slot.filled {\n  background-color: #1c2a36ee;\n  border-color: #8fd0ff55;\n}\n\n.inventory-slot-name {\n  width: 100%;\n  color: #f5fbff;\n  font-size: 12px;\n  font-weight: semi-bold;\n  text-align: center;\n  white-space: normal;\n}\n\n.inventory-slot-tier {\n  width: 100%;\n  margin-top: 2px;\n  color: #d7e5ec;\n  font-size: 11px;\n  text-align: center;\n}\n\n.inventory-slot-placeholder {\n  width: 100%;\n  vertical-align: center;\n  color: #6f8592;\n  font-size: 12px;\n  text-align: center;\n}\n\n.talent_draw_demo_selection_modal_ui_selection_modal-overlay {\n  width: 100%;\n  height: 100%;\n  horizontal-align: center;\n  vertical-align: center;\n  background-color: #00000099;\n  z-index: 50;\n}\n\n.talent_draw_demo_selection_modal_ui_selection_modal-modal {\n  width: 820px;\n  min-height: 360px;\n  horizontal-align: center;\n  vertical-align: center;\n  flow-children: down;\n  padding: 24px;\n  background-color: #101820ee;\n  border: 2px solid #8fd0ff66;\n  box-shadow: #000000aa 0px 0px 18px 0px;\n}\n\n.modal-header {\n  width: 100%;\n  flow-children: down;\n  margin-bottom: 18px;\n}\n\n.modal-header Label {\n  width: 100%;\n  color: #f2fbff;\n  font-size: 30px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.modal-description {\n  margin-top: 6px;\n  color: #b9ced8;\n  font-size: 18px;\n  font-weight: normal;\n}\n\n.modal-content {\n  width: 100%;\n  flow-children: right;\n  horizontal-align: center;\n}\n\n.selection-card {\n  width: 240px;\n  height: 180px;\n  margin: 0px 8px;\n  padding: 14px;\n  flow-children: down;\n  background-color: #17242dcc;\n  border: 2px solid #6c8b9a66;\n}\n\n.selection-card:hover {\n  brightness: 1.5;\n}\n\n.selection-card.selected {\n  border: 2px solid #ffd76a;\n  background-color: #223849ee;\n}\n\n.selection-card.disabled,\n.selection-card.placeholder {\n  saturation: 0.15;\n  brightness: 0.45;\n}\n\n.card-name {\n  width: 100%;\n  color: #ffffff;\n  font-size: 22px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.card-description {\n  width: 100%;\n  margin-top: 10px;\n  color: #c8d7de;\n  font-size: 16px;\n  text-align: center;\n  white-space: normal;\n}\n\n.card-tier {\n  horizontal-align: center;\n  margin-top: 12px;\n  padding: 2px 10px;\n  color: #ffffff;\n  font-size: 16px;\n  font-weight: bold;\n  background-color: #475569;\n}\n\n.tier-r {\n  background-color: #4f8fba;\n}\n\n.tier-sr {\n  background-color: #3aa66b;\n}\n\n.tier-ssr {\n  background-color: #b06ad9;\n}\n\n.tier-ur {\n  background-color: #d5a43c;\n}\n\n.modal-footer {\n  width: 100%;\n  margin-top: 20px;\n  flow-children: right;\n  horizontal-align: center;\n}\n\n.btn-confirm,\n.btn-dismiss {\n  min-width: 150px;\n  height: 44px;\n  margin: 0px 8px;\n  padding: 8px 20px;\n  background-color: #2f7fa3;\n  border: 1px solid #9fdfff99;\n}\n\n.btn-confirm:hover,\n.btn-dismiss:hover {\n  brightness: 1.4;\n}\n\n.btn-confirm.disabled {\n  saturation: 0.1;\n  brightness: 0.45;\n}\n\n.btn-confirm Label,\n.btn-dismiss Label {\n  horizontal-align: center;\n  vertical-align: center;\n  color: #ffffff;\n  font-size: 20px;\n  font-weight: bold;\n}\n",
-          "rwOwned": true,
-          "description": "ui/ui.selection_modal (less) params: {\"choiceCount\":3,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_talent_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true}}"
+          "description": "rule/rule.selection_flow (typescript) params: {\"choiceCount\":3,\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true}"
         },
         {
           "type": "create",
           "targetPath": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
-          "content": "/**\n * TalentDrawDemoWeightedPoolDataWeightedPool\n * 加权随机池 - Generated by Rune Weaver\n *\n * Features:\n * - drawMode: multiple_without_replacement\n * - duplicatePolicy: forbid\n * - poolStateTracking: session\n */\n\ninterface SelectionPoolEntry {\n  id: string;\n  label: string;\n  description: string;\n  weight: number;\n  tier?: string;\n}\n\ninterface WeightedItem<T> {\n  item: T;\n  weight: number;\n  tier?: number;\n}\n\nexport class TalentDrawDemoWeightedPoolDataWeightedPool<T extends SelectionPoolEntry = SelectionPoolEntry> {\n  private static instance?: TalentDrawDemoWeightedPoolDataWeightedPool<any>;\n  private items: WeightedItem<T>[] = [];\n  private totalWeight: number = 0;\n\n  private sessionState: {\n    remainingObjectIds: string[];\n    ownedObjectIds: string[];\n    currentChoiceIds: string[];\n  } = {\n    remainingObjectIds: [],\n    ownedObjectIds: [],\n    currentChoiceIds: [],\n  };\n\n  static getInstance<U extends SelectionPoolEntry = SelectionPoolEntry>(): TalentDrawDemoWeightedPoolDataWeightedPool<U> {\n    if (!TalentDrawDemoWeightedPoolDataWeightedPool.instance) {\n      TalentDrawDemoWeightedPoolDataWeightedPool.instance = new TalentDrawDemoWeightedPoolDataWeightedPool<U>();\n    }\n    return TalentDrawDemoWeightedPoolDataWeightedPool.instance as TalentDrawDemoWeightedPoolDataWeightedPool<U>;\n  }\n\n  constructor() {\n    const initialEntries = [\n    { id: \"R001\", label: \"Strength Boost\", description: \"+10 Strength\", weight: 40, tier: \"R\" },\n    { id: \"R002\", label: \"Fortitude\", description: \"+10 Strength\", weight: 40, tier: \"R\" },\n    { id: \"SR001\", label: \"Agility Boost\", description: \"+10 Agility\", weight: 30, tier: \"SR\" },\n    { id: \"SR002\", label: \"Swift Reflexes\", description: \"+10 Agility\", weight: 30, tier: \"SR\" },\n    { id: \"SSR001\", label: \"Intelligence Boost\", description: \"+10 Intelligence\", weight: 20, tier: \"SSR\" },\n    { id: \"UR001\", label: \"Ultimate Growth\", description: \"+10 All Attributes\", weight: 10, tier: \"UR\" }\n    ] as T[];\n    for (const entry of initialEntries) {\n      this.add(entry, entry.weight, entry.tier ? this.tierToNumber(entry.tier) : 0);\n    }\n    this.sessionState.remainingObjectIds = initialEntries.map((item) => item.id);\n    this.sessionState.ownedObjectIds = [];\n    this.sessionState.currentChoiceIds = [];\n\n  }\n\n  private tierToNumber(tier: string): number {\n    const tierMap: Record<string, number> = { R: 1, SR: 2, SSR: 4, UR: 7 };\n    return tierMap[tier] || 1;\n  }\n\n  private pickWeightedItem(candidates: WeightedItem<T>[]): WeightedItem<T> | null {\n    if (candidates.length === 0) {\n      return null;\n    }\n\n    const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);\n    if (totalWeight <= 0) {\n      return null;\n    }\n\n    let random = RandomFloat(0, totalWeight);\n    for (const candidate of candidates) {\n      random -= candidate.weight;\n      if (random <= 0) {\n        return candidate;\n      }\n    }\n\n    return candidates[candidates.length - 1] || null;\n  }\n\n  private getAvailableItems(): WeightedItem<T>[] {\n    return this.items.filter((candidate) =>\n      this.sessionState.remainingObjectIds.includes((candidate.item as any).id)\n    );\n  }\n\n  add(item: T, weight: number, tier?: number): void {\n    this.items.push({ item, weight, tier });\n    this.totalWeight += weight;\n  }\n\n  remove(item: T): boolean {\n    const index = this.items.findIndex((candidate) => candidate.item === item);\n    if (index === -1) {\n      return false;\n    }\n\n    this.totalWeight -= this.items[index].weight;\n    this.items.splice(index, 1);\n    return true;\n  }\n\n  clear(): void {\n    this.items = [];\n    this.totalWeight = 0;\n    this.sessionState.remainingObjectIds = [];\n    this.sessionState.ownedObjectIds = [];\n    this.sessionState.currentChoiceIds = [];\n  }\n\n  draw(): T | null {\n    const drawn = this.pickWeightedItem(this.items);\n    return drawn ? drawn.item : null;\n  }\n\n  drawMultiple(count: number): T[] {\n    const requestedCount = Math.max(1, Math.floor(count));\n    const result: T[] = [];\n    const workingItems = [...this.items];\n\n    while (result.length < requestedCount && workingItems.length > 0) {\n      const drawn = this.pickWeightedItem(workingItems);\n      if (!drawn) {\n        break;\n      }\n\n      result.push(drawn.item);\n      const index = workingItems.indexOf(drawn);\n      if (index >= 0) {\n        workingItems.splice(index, 1);\n      }\n    }\n\n    return result;\n  }\n\n  /**\n   * GAP_FILL_BOUNDARY: weighted_pool.selection_policy\n   * Allowed: weighted draw policy details, duplicate handling, session-aware filtering.\n   * Forbidden: pool contract changes, host routing changes, undeclared persistence semantics.\n   */\n  drawForSelection(count: number = 3): T[] {\n    const requestedCount = Math.max(1, Math.floor(count));\n    const result: T[] = [];\n    const allowReplacement =\n      \"multiple_without_replacement\" === \"multiple_with_replacement\" && \"forbid\" === \"allow\";\n    const workingItems = this.getAvailableItems();\n\n    if (workingItems.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool: no available items in pool`);\n      return [];\n    }\n\n    while (result.length < requestedCount && workingItems.length > 0) {\n      const drawn = this.pickWeightedItem(workingItems);\n      if (!drawn) {\n        break;\n      }\n\n      result.push(drawn.item);\n\n      if (\"multiple_without_replacement\" === \"single\") {\n        break;\n      }\n\n      if (!allowReplacement) {\n        const drawnId = (drawn.item as any).id;\n        for (let index = workingItems.length - 1; index >= 0; index -= 1) {\n          if ((workingItems[index].item as any).id === drawnId) {\n            workingItems.splice(index, 1);\n          }\n        }\n      }\n    }\n\n    this.sessionState.currentChoiceIds = result.map((item) => (item as any).id);\n\n    return result;\n  }\n\n  commitSelection(selectedId: string, options?: { trackOwned?: boolean }): void {\n    const remainingIndex = this.sessionState.remainingObjectIds.indexOf(selectedId);\n    if (remainingIndex > -1) {\n      this.sessionState.remainingObjectIds.splice(remainingIndex, 1);\n    }\n\n    if (options?.trackOwned !== false && !this.sessionState.ownedObjectIds.includes(selectedId)) {\n      this.sessionState.ownedObjectIds.push(selectedId);\n    }\n\n    this.sessionState.currentChoiceIds = [];\n\n    print(\n      `[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool: committed selection ${selectedId}, remaining=${this.sessionState.remainingObjectIds.length}`\n    );\n  }\n\n  getRemainingObjectIds(): string[] {\n    return [...this.sessionState.remainingObjectIds];\n  }\n\n  getOwnedObjectIds(): string[] {\n    return [...this.sessionState.ownedObjectIds];\n  }\n\n  getCurrentChoiceIds(): string[] {\n    return [...this.sessionState.currentChoiceIds];\n  }\n\n  resetSessionState(): void {\n    this.sessionState.remainingObjectIds = this.items.map((item) => (item.item as any).id);\n    this.sessionState.ownedObjectIds = [];\n    this.sessionState.currentChoiceIds = [];\n    print(`[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool: session state reset`);\n  }\n\n  drawByTier(tier: number): T | null {\n    const tierItems = this.items.filter((candidate) => candidate.tier === tier);\n    const drawn = this.pickWeightedItem(tierItems);\n    return drawn ? drawn.item : null;\n  }\n\n  getAllItems(): WeightedItem<T>[] {\n    return [...this.items];\n  }\n\n  getCount(): number {\n    return this.items.length;\n  }\n}\n\nexport function registerTalentDrawDemoWeightedPoolDataWeightedPool(): void {\n  TalentDrawDemoWeightedPoolDataWeightedPool.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool registered\");\n}\n",
+          "content": "/**\n * TalentDrawDemoWeightedPoolDataWeightedPool\n * 加权随机池 - Generated by Rune Weaver\n *\n * Features:\n * - drawMode: multiple_without_replacement\n * - duplicatePolicy: forbid\n * - poolStateTracking: session\n */\n\ninterface SelectionPoolEntry {\n  id: string;\n  label: string;\n  description: string;\n  weight: number;\n  tier?: string;\n}\n\ninterface WeightedItem<T> {\n  item: T;\n  weight: number;\n  tier?: number;\n}\n\nexport class TalentDrawDemoWeightedPoolDataWeightedPool<T extends SelectionPoolEntry = SelectionPoolEntry> {\n  private static instance?: TalentDrawDemoWeightedPoolDataWeightedPool<any>;\n  private items: WeightedItem<T>[] = [];\n  private totalWeight: number = 0;\n\n  private sessionState: {\n    remainingObjectIds: string[];\n    ownedObjectIds: string[];\n    currentChoiceIds: string[];\n  } = {\n    remainingObjectIds: [],\n    ownedObjectIds: [],\n    currentChoiceIds: [],\n  };\n\n  static getInstance<U extends SelectionPoolEntry = SelectionPoolEntry>(): TalentDrawDemoWeightedPoolDataWeightedPool<U> {\n    if (!TalentDrawDemoWeightedPoolDataWeightedPool.instance) {\n      TalentDrawDemoWeightedPoolDataWeightedPool.instance = new TalentDrawDemoWeightedPoolDataWeightedPool<U>();\n    }\n    return TalentDrawDemoWeightedPoolDataWeightedPool.instance as TalentDrawDemoWeightedPoolDataWeightedPool<U>;\n  }\n\n  constructor() {\n    const initialEntries = [\n    { id: \"SEL_R001\", label: \"Talent Option R001\", description: \"Placeholder selection option (R)\", weight: 40, tier: \"R\" },\n    { id: \"SEL_R002\", label: \"Talent Option R002\", description: \"Placeholder selection option (R)\", weight: 40, tier: \"R\" },\n    { id: \"SEL_SR003\", label: \"Talent Option SR003\", description: \"Placeholder selection option (SR)\", weight: 30, tier: \"SR\" },\n    { id: \"SEL_SR004\", label: \"Talent Option SR004\", description: \"Placeholder selection option (SR)\", weight: 30, tier: \"SR\" },\n    { id: \"SEL_SSR005\", label: \"Talent Option SSR005\", description: \"Placeholder selection option (SSR)\", weight: 20, tier: \"SSR\" },\n    { id: \"SEL_UR006\", label: \"Talent Option UR006\", description: \"Placeholder selection option (UR)\", weight: 10, tier: \"UR\" }\n    ] as T[];\n    for (const entry of initialEntries) {\n      this.add(entry, entry.weight, entry.tier ? this.tierToNumber(entry.tier) : 0);\n    }\n    this.sessionState.remainingObjectIds = initialEntries.map((item) => item.id);\n    this.sessionState.ownedObjectIds = [];\n    this.sessionState.currentChoiceIds = [];\n\n  }\n\n  private tierToNumber(tier: string): number {\n    const tierMap: Record<string, number> = { R: 1, SR: 2, SSR: 4, UR: 7 };\n    return tierMap[tier] || 1;\n  }\n\n  private pickWeightedItem(candidates: WeightedItem<T>[]): WeightedItem<T> | null {\n    if (candidates.length === 0) {\n      return null;\n    }\n\n    const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);\n    if (totalWeight <= 0) {\n      return null;\n    }\n\n    let random = RandomFloat(0, totalWeight);\n    for (const candidate of candidates) {\n      random -= candidate.weight;\n      if (random <= 0) {\n        return candidate;\n      }\n    }\n\n    return candidates[candidates.length - 1] || null;\n  }\n\n  private getAvailableItems(): WeightedItem<T>[] {\n    return this.items.filter((candidate) =>\n      this.sessionState.remainingObjectIds.includes((candidate.item as any).id)\n    );\n  }\n\n  add(item: T, weight: number, tier?: number): void {\n    this.items.push({ item, weight, tier });\n    this.totalWeight += weight;\n  }\n\n  remove(item: T): boolean {\n    const index = this.items.findIndex((candidate) => candidate.item === item);\n    if (index === -1) {\n      return false;\n    }\n\n    this.totalWeight -= this.items[index].weight;\n    this.items.splice(index, 1);\n    return true;\n  }\n\n  clear(): void {\n    this.items = [];\n    this.totalWeight = 0;\n    this.sessionState.remainingObjectIds = [];\n    this.sessionState.ownedObjectIds = [];\n    this.sessionState.currentChoiceIds = [];\n  }\n\n  draw(): T | null {\n    const drawn = this.pickWeightedItem(this.items);\n    return drawn ? drawn.item : null;\n  }\n\n  drawMultiple(count: number): T[] {\n    const requestedCount = Math.max(1, Math.floor(count));\n    const result: T[] = [];\n    const workingItems = [...this.items];\n\n    while (result.length < requestedCount && workingItems.length > 0) {\n      const drawn = this.pickWeightedItem(workingItems);\n      if (!drawn) {\n        break;\n      }\n\n      result.push(drawn.item);\n      const index = workingItems.indexOf(drawn);\n      if (index >= 0) {\n        workingItems.splice(index, 1);\n      }\n    }\n\n    return result;\n  }\n\n  /**\n   * GAP_FILL_BOUNDARY: weighted_pool.selection_policy\n   * Allowed: weighted draw policy details, duplicate handling, session-aware filtering.\n   * Forbidden: pool contract changes, host routing changes, undeclared persistence semantics.\n   */\n  drawForSelection(count: number = 3): T[] {\n    const requestedCount = Math.max(1, Math.floor(count));\n    const result: T[] = [];\n    const configuredDrawMode: string = \"multiple_without_replacement\";\n    const configuredDuplicatePolicy: string = \"forbid\";\n    const allowReplacement =\n      configuredDrawMode === \"multiple_with_replacement\" && configuredDuplicatePolicy === \"allow\";\n    const workingItems = this.getAvailableItems();\n\n    if (workingItems.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool: no available items in pool`);\n      return [];\n    }\n\n    while (result.length < requestedCount && workingItems.length > 0) {\n      const drawn = this.pickWeightedItem(workingItems);\n      if (!drawn) {\n        break;\n      }\n\n      result.push(drawn.item);\n\n      if (configuredDrawMode === \"single\") {\n        break;\n      }\n\n      if (!allowReplacement) {\n        const drawnId = (drawn.item as any).id;\n        for (let index = workingItems.length - 1; index >= 0; index -= 1) {\n          if ((workingItems[index].item as any).id === drawnId) {\n            workingItems.splice(index, 1);\n          }\n        }\n      }\n    }\n\n    this.sessionState.currentChoiceIds = result.map((item) => (item as any).id);\n\n    return result;\n  }\n\n  commitSelection(selectedId: string, options?: { trackOwned?: boolean }): void {\n    const remainingIndex = this.sessionState.remainingObjectIds.indexOf(selectedId);\n    if (remainingIndex > -1) {\n      this.sessionState.remainingObjectIds.splice(remainingIndex, 1);\n    }\n\n    if (options?.trackOwned !== false && !this.sessionState.ownedObjectIds.includes(selectedId)) {\n      this.sessionState.ownedObjectIds.push(selectedId);\n    }\n\n    this.sessionState.currentChoiceIds = [];\n\n    print(\n      `[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool: committed selection ${selectedId}, remaining=${this.sessionState.remainingObjectIds.length}`\n    );\n  }\n\n  getRemainingObjectIds(): string[] {\n    return [...this.sessionState.remainingObjectIds];\n  }\n\n  getOwnedObjectIds(): string[] {\n    return [...this.sessionState.ownedObjectIds];\n  }\n\n  getCurrentChoiceIds(): string[] {\n    return [...this.sessionState.currentChoiceIds];\n  }\n\n  resetSessionState(): void {\n    this.sessionState.remainingObjectIds = this.items.map((item) => (item.item as any).id);\n    this.sessionState.ownedObjectIds = [];\n    this.sessionState.currentChoiceIds = [];\n    print(`[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool: session state reset`);\n  }\n\n  drawByTier(tier: number): T | null {\n    const tierItems = this.items.filter((candidate) => candidate.tier === tier);\n    const drawn = this.pickWeightedItem(tierItems);\n    return drawn ? drawn.item : null;\n  }\n\n  getAllItems(): WeightedItem<T>[] {\n    return [...this.items];\n  }\n\n  getCount(): number {\n    return this.items.length;\n  }\n}\n\nexport function registerTalentDrawDemoWeightedPoolDataWeightedPool(): void {\n  TalentDrawDemoWeightedPoolDataWeightedPool.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoWeightedPoolDataWeightedPool registered\");\n}\n",
           "rwOwned": true,
-          "description": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}"
+          "description": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"SEL_R001\",\"label\":\"Talent Option R001\",\"description\":\"Placeholder selection option (R)\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SEL_R002\",\"label\":\"Talent Option R002\",\"description\":\"Placeholder selection option (R)\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SEL_SR003\",\"label\":\"Talent Option SR003\",\"description\":\"Placeholder selection option (SR)\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SEL_SR004\",\"label\":\"Talent Option SR004\",\"description\":\"Placeholder selection option (SR)\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SEL_SSR005\",\"label\":\"Talent Option SSR005\",\"description\":\"Placeholder selection option (SSR)\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"SEL_UR006\",\"label\":\"Talent Option UR006\",\"description\":\"Placeholder selection option (UR)\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}"
+        },
+        {
+          "type": "create",
+          "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
+          "content": "/**\n * TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer\n * 选择结果宿主实现层 - Generated by Rune Weaver\n */\n\ninterface SelectionOption {\n  id: string;\n  name: string;\n  description: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface SelectionWorldPosition {\n  x: number;\n  y: number;\n  z: number;\n}\n\ninterface SelectionOutcomeRequest {\n  featureId: string;\n  playerId: number;\n  option: SelectionOption;\n  cursorPosition?: SelectionWorldPosition;\n}\n\ninterface SelectionOutcomeHandlerResult {\n  handled: boolean;\n}\n\ninterface AttributeBonusOutcomeSpec {\n  kind: \"attribute_bonus\";\n  attribute: \"strength\" | \"agility\" | \"intelligence\" | \"all\";\n  value: number;\n}\n\ninterface NativeItemDeliveryOutcomeSpec {\n  kind: \"native_item_delivery\";\n  itemName: string;\n  deliveryMode: \"hero_inventory\" | \"ground_drop\";\n  fallbackWhenInventoryFull: \"drop_to_ground\" | \"skip_delivery\";\n  positionPolicy: \"hero_origin\" | \"hero_forward\" | \"cursor_point\";\n}\n\ninterface SpawnUnitOutcomeSpec {\n  kind: \"spawn_unit\";\n  unitName: string;\n  spawnCount?: number;\n  positionPolicy: \"hero_origin\" | \"hero_forward\" | \"cursor_point\";\n  teamScope?: \"player_team\";\n}\n\ntype OutcomeSpec =\n  | AttributeBonusOutcomeSpec\n  | NativeItemDeliveryOutcomeSpec\n  | SpawnUnitOutcomeSpec;\n\ntype SelectionFlowLike = {\n  registerOutcomeHandler: (\n    handler: (context: SelectionOutcomeRequest & { request?: SelectionOutcomeRequest }) => SelectionOutcomeHandlerResult | void\n  ) => void;\n};\n\nexport class TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer {\n  private static instance: TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer;\n  private attached = false;\n  private outcomesById: Record<string, OutcomeSpec> = {\n\n  };\n\n  static getInstance(): TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer {\n    if (!TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer.instance) {\n      TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer.instance = new TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer();\n    }\n    return TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer.instance;\n  }\n\n  attachToSelectionFlow(selectionFlow: SelectionFlowLike | undefined): void {\n    if (!selectionFlow || typeof selectionFlow.registerOutcomeHandler !== \"function\" || this.attached) {\n      return;\n    }\n\n    selectionFlow.registerOutcomeHandler((context) => {\n      const request = context.request || context;\n      const handled = this.handleOutcomeRequest(request);\n      return { handled };\n    });\n    this.attached = true;\n    print(\"[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: attached to selection flow for feature talent_draw_demo\");\n  }\n\n  private handleOutcomeRequest(request: SelectionOutcomeRequest): boolean {\n    const outcome = this.outcomesById[request.option.id];\n    if (!outcome) {\n      return false;\n    }\n\n    switch (outcome.kind) {\n      case \"attribute_bonus\":\n        this.realizeAttributeBonus(request, outcome);\n        return true;\n      case \"native_item_delivery\":\n        this.realizeNativeItemDelivery(request, outcome);\n        return true;\n      case \"spawn_unit\":\n        this.realizeSpawnUnit(request, outcome);\n        return true;\n      default:\n        print(`[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: unknown outcome kind for ${request.option.id}`);\n        return true;\n    }\n  }\n\n  private resolveHero(playerId: number): CDOTA_BaseNPC_Hero | undefined {\n    const hero = PlayerResource.GetSelectedHeroEntity(playerId as PlayerID);\n    if (!hero) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: no hero found for player ${playerId}`);\n      return undefined;\n    }\n    return hero;\n  }\n\n  private resolveItemOwner(playerId: number): CDOTAPlayerController | undefined {\n    return PlayerResource.GetPlayer(playerId as PlayerID);\n  }\n\n  private emitAttributeBonusEvent(\n    request: SelectionOutcomeRequest,\n    outcome: AttributeBonusOutcomeSpec,\n  ): void {\n    const player = PlayerResource.GetPlayer(request.playerId as PlayerID);\n    if (!player || !CustomGameEventManager) {\n      return;\n    }\n\n    (CustomGameEventManager.Send_ServerToPlayer as any)(\n      player,\n      \"rune_weaver_effect_applied\",\n      {\n        featureId: \"talent_draw_demo\",\n        optionId: request.option.id,\n        optionName: request.option.name,\n        attribute: outcome.attribute,\n        value: outcome.value,\n        rarity: request.option.tier || \"R\",\n      }\n    );\n  }\n\n  private realizeAttributeBonus(\n    request: SelectionOutcomeRequest,\n    outcome: AttributeBonusOutcomeSpec,\n  ): void {\n    const hero = this.resolveHero(request.playerId);\n    if (!hero) {\n      return;\n    }\n\n    switch (outcome.attribute) {\n      case \"strength\":\n        hero.ModifyStrength(outcome.value);\n        break;\n      case \"agility\":\n        hero.ModifyAgility(outcome.value);\n        break;\n      case \"intelligence\":\n        hero.ModifyIntellect(outcome.value);\n        break;\n      case \"all\":\n        hero.ModifyStrength(outcome.value);\n        hero.ModifyAgility(outcome.value);\n        hero.ModifyIntellect(outcome.value);\n        break;\n      default:\n        print(`[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: unknown attribute ${outcome.attribute}`);\n        return;\n    }\n\n    this.emitAttributeBonusEvent(request, outcome);\n  }\n\n  private resolveBoundedPosition(\n    hero: CDOTA_BaseNPC_Hero,\n    request: SelectionOutcomeRequest,\n    positionPolicy: \"hero_origin\" | \"hero_forward\" | \"cursor_point\",\n    index: number = 0,\n  ): Vector {\n    const origin = hero.GetAbsOrigin();\n    const forward = hero.GetForwardVector();\n    const lateralX = -forward.y;\n    const lateralY = forward.x;\n    const spreadCenter =\n      index <= 0\n        ? 0\n        : (index % 2 === 0 ? 1 : -1) * Math.ceil(index / 2) * 96;\n\n    if (positionPolicy === \"cursor_point\" && request.cursorPosition) {\n      return Vector(\n        request.cursorPosition.x + lateralX * spreadCenter,\n        request.cursorPosition.y + lateralY * spreadCenter,\n        request.cursorPosition.z,\n      );\n    }\n\n    if (positionPolicy === \"hero_forward\") {\n      return Vector(\n        origin.x + forward.x * 160 + lateralX * spreadCenter,\n        origin.y + forward.y * 160 + lateralY * spreadCenter,\n        origin.z,\n      );\n    }\n\n    return Vector(\n      origin.x + lateralX * spreadCenter,\n      origin.y + lateralY * spreadCenter,\n      origin.z,\n    );\n  }\n\n  private hasAvailableInventorySlot(hero: CDOTA_BaseNPC_Hero): boolean {\n    for (let slot = 0; slot < 6; slot += 1) {\n      if (!hero.GetItemInSlot(slot)) {\n        return true;\n      }\n    }\n    return false;\n  }\n\n  private dropItemAtPosition(\n    owner: CDOTAPlayerController | undefined,\n    hero: CDOTA_BaseNPC_Hero,\n    itemName: string,\n    position: Vector,\n  ): void {\n    const item = CreateItem(itemName, owner, hero);\n    if (!item) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: failed to create item ${itemName}`);\n      return;\n    }\n    CreateItemOnPositionSync(position, item);\n  }\n\n  private realizeNativeItemDelivery(\n    request: SelectionOutcomeRequest,\n    outcome: NativeItemDeliveryOutcomeSpec,\n  ): void {\n    const hero = this.resolveHero(request.playerId);\n    const owner = this.resolveItemOwner(request.playerId);\n    if (!hero) {\n      return;\n    }\n\n    if (outcome.deliveryMode === \"ground_drop\") {\n      this.dropItemAtPosition(owner, hero, outcome.itemName, this.resolveBoundedPosition(hero, request, outcome.positionPolicy));\n      return;\n    }\n\n    if (this.hasAvailableInventorySlot(hero)) {\n      const item = CreateItem(outcome.itemName, owner, hero);\n      if (!item) {\n        print(`[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: failed to create item ${outcome.itemName}`);\n        return;\n      }\n      hero.AddItem(item);\n      return;\n    }\n\n    if (outcome.fallbackWhenInventoryFull === \"drop_to_ground\") {\n      this.dropItemAtPosition(owner, hero, outcome.itemName, this.resolveBoundedPosition(hero, request, outcome.positionPolicy));\n      return;\n    }\n\n    print(`[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer: inventory full, skipped item delivery for ${outcome.itemName}`);\n  }\n\n  private realizeSpawnUnit(\n    request: SelectionOutcomeRequest,\n    outcome: SpawnUnitOutcomeSpec,\n  ): void {\n    const hero = this.resolveHero(request.playerId);\n    if (!hero) {\n      return;\n    }\n\n    const teamNumber = hero.GetTeamNumber();\n    const spawnCount = Math.max(1, Math.floor(outcome.spawnCount || 1));\n    for (let index = 0; index < spawnCount; index += 1) {\n      CreateUnitByName(\n        outcome.unitName,\n        this.resolveBoundedPosition(hero, request, outcome.positionPolicy, index),\n        true,\n        hero,\n        hero,\n        teamNumber,\n      );\n    }\n  }\n}\n\nexport function registerTalentDrawDemoSelectionOutcomeEffectOutcomeRealizer(): void {\n  TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer registered\");\n}\n",
+          "rwOwned": true,
+          "description": "effect/effect.outcome_realizer (typescript) params: {\"outcomes\":[]}"
         },
         {
           "type": "create",
           "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
-          "content": "/**\n * TalentDrawDemoInputTriggerInputKeyBindingAbility\n * 按键绑定模块 - Generated by Rune Weaver\n */\n\nexport class TalentDrawDemoInputTriggerInputKeyBindingAbility {\n  private static instance: TalentDrawDemoInputTriggerInputKeyBindingAbility;\n  private boundKeys: Set<string> = new Set();\n  private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;\n  private readonly configuredKey: string = \"F4\";\n  private readonly eventName: string = \"rune_weaver_input_triggered\";\n  private readonly featureId: string = \"talent_draw_demo\";\n  private configuredKeyBound = false;\n\n  static getInstance(): TalentDrawDemoInputTriggerInputKeyBindingAbility {\n    if (!TalentDrawDemoInputTriggerInputKeyBindingAbility.instance) {\n      TalentDrawDemoInputTriggerInputKeyBindingAbility.instance = new TalentDrawDemoInputTriggerInputKeyBindingAbility();\n    }\n    return TalentDrawDemoInputTriggerInputKeyBindingAbility.instance;\n  }\n\n  /**\n   * 绑定按键\n   */\n  bindKey(\n    key: string,\n    callback: (playerId: number, event?: { [key: string]: unknown }) => void\n  ): void {\n    if (this.boundKeys.has(key)) {\n      print(`[Rune Weaver] Key ${key} already bound, skipping`);\n      return;\n    }\n\n    this.boundKeys.add(key);\n\n    if (GameRules && (GameRules as any).XNetTable) {\n      CustomGameEventManager.RegisterListener(this.eventName, (_eventSourceIndex: number, event: any) => {\n        if (!event || event.key !== key) {\n          return;\n        }\n\n        if (event.featureId && event.featureId !== this.featureId) {\n          return;\n        }\n\n        const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n        if (playerId < 0) {\n          print(`[Rune Weaver] Ignored key ${key} because player id is missing`);\n          return;\n        }\n\n        callback(playerId, event);\n      });\n    }\n\n    print(`[Rune Weaver] Bound key: ${key} for feature ${this.featureId} via ${this.eventName}`);\n  }\n\n  /**\n   * 解绑按键\n   */\n  unbindKey(key: string): void {\n    this.boundKeys.delete(key);\n    print(`[Rune Weaver] Unbound key: ${key}`);\n  }\n\n  setHandler(handler: (playerId: number, event?: { [key: string]: unknown }) => void): void {\n    this.handler = handler;\n    if (!this.configuredKeyBound) {\n      this.bindConfiguredKey();\n    }\n  }\n\n  bindConfiguredKey(): void {\n    if (this.configuredKeyBound) {\n      return;\n    }\n    this.configuredKeyBound = true;\n    this.bindKey(this.configuredKey, (playerId, event) => {\n      if (!this.handler) {\n        print(`[Rune Weaver] No handler configured for ${this.configuredKey} (${this.featureId})`);\n        return;\n      }\n      this.handler(playerId, event);\n    });\n  }\n\n  getConfiguredKey(): string {\n    return this.configuredKey;\n  }\n\n  getEventName(): string {\n    return this.eventName;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoInputTriggerInputKeyBindingAbility(): void {\n  TalentDrawDemoInputTriggerInputKeyBindingAbility.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoInputTriggerInputKeyBindingAbility registered\");\n}\n",
+          "content": "/**\n * TalentDrawDemoInputTriggerInputKeyBindingAbility\n * 按键绑定模块 - Generated by Rune Weaver\n */\n\nexport class TalentDrawDemoInputTriggerInputKeyBindingAbility {\n  private static instance: TalentDrawDemoInputTriggerInputKeyBindingAbility;\n  private boundKeys: Set<string> = new Set();\n  private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;\n  private readonly configuredKey: string = \"F4\";\n  private readonly eventName: string = \"rune_weaver_selection_pool_triggered\";\n  private readonly featureId: string = \"talent_draw_demo\";\n  private configuredKeyBound = false;\n\n  static getInstance(): TalentDrawDemoInputTriggerInputKeyBindingAbility {\n    if (!TalentDrawDemoInputTriggerInputKeyBindingAbility.instance) {\n      TalentDrawDemoInputTriggerInputKeyBindingAbility.instance = new TalentDrawDemoInputTriggerInputKeyBindingAbility();\n    }\n    return TalentDrawDemoInputTriggerInputKeyBindingAbility.instance;\n  }\n\n  /**\n   * 绑定按键\n   */\n  bindKey(\n    key: string,\n    callback: (playerId: number, event?: { [key: string]: unknown }) => void\n  ): void {\n    if (this.boundKeys.has(key)) {\n      print(`[Rune Weaver] Key ${key} already bound, skipping`);\n      return;\n    }\n\n    this.boundKeys.add(key);\n\n    if (GameRules && (GameRules as any).XNetTable) {\n      CustomGameEventManager.RegisterListener(this.eventName, (_eventSourceIndex: number, event: any) => {\n        if (!event || event.key !== key) {\n          return;\n        }\n\n        if (event.featureId && event.featureId !== this.featureId) {\n          return;\n        }\n\n        const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n        if (playerId < 0) {\n          print(`[Rune Weaver] Ignored key ${key} because player id is missing`);\n          return;\n        }\n\n        callback(playerId, event);\n      });\n    }\n\n    print(`[Rune Weaver] Bound key: ${key} for feature ${this.featureId} via ${this.eventName}`);\n  }\n\n  /**\n   * 解绑按键\n   */\n  unbindKey(key: string): void {\n    this.boundKeys.delete(key);\n    print(`[Rune Weaver] Unbound key: ${key}`);\n  }\n\n  setHandler(handler: (playerId: number, event?: { [key: string]: unknown }) => void): void {\n    this.handler = handler;\n    if (!this.configuredKeyBound) {\n      this.bindConfiguredKey();\n    }\n  }\n\n  bindConfiguredKey(): void {\n    if (this.configuredKeyBound) {\n      return;\n    }\n    this.configuredKeyBound = true;\n    this.bindKey(this.configuredKey, (playerId, event) => {\n      if (!this.handler) {\n        print(`[Rune Weaver] No handler configured for ${this.configuredKey} (${this.featureId})`);\n        return;\n      }\n      this.handler(playerId, event);\n    });\n  }\n\n  getConfiguredKey(): string {\n    return this.configuredKey;\n  }\n\n  getEventName(): string {\n    return this.eventName;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoInputTriggerInputKeyBindingAbility(): void {\n  TalentDrawDemoInputTriggerInputKeyBindingAbility.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoInputTriggerInputKeyBindingAbility registered\");\n}\n",
           "rwOwned": true,
           "description": "Ability 类: input.key_binding"
         },
         {
           "type": "create",
           "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-          "content": "/**\n * TalentDrawDemoInputTriggerInputKeyBinding\n * 按键绑定模块 - Generated by Rune Weaver\n */\n\nexport class TalentDrawDemoInputTriggerInputKeyBinding {\n  private static instance: TalentDrawDemoInputTriggerInputKeyBinding;\n  private boundKeys: Set<string> = new Set();\n  private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;\n  private readonly configuredKey: string = \"F4\";\n  private readonly eventName: string = \"rune_weaver_input_triggered\";\n  private readonly featureId: string = \"talent_draw_demo\";\n  private configuredKeyBound = false;\n\n  static getInstance(): TalentDrawDemoInputTriggerInputKeyBinding {\n    if (!TalentDrawDemoInputTriggerInputKeyBinding.instance) {\n      TalentDrawDemoInputTriggerInputKeyBinding.instance = new TalentDrawDemoInputTriggerInputKeyBinding();\n    }\n    return TalentDrawDemoInputTriggerInputKeyBinding.instance;\n  }\n\n  /**\n   * 绑定按键\n   */\n  bindKey(\n    key: string,\n    callback: (playerId: number, event?: { [key: string]: unknown }) => void\n  ): void {\n    if (this.boundKeys.has(key)) {\n      print(`[Rune Weaver] Key ${key} already bound, skipping`);\n      return;\n    }\n\n    this.boundKeys.add(key);\n\n    if (GameRules && (GameRules as any).XNetTable) {\n      CustomGameEventManager.RegisterListener(this.eventName, (_eventSourceIndex: number, event: any) => {\n        if (!event || event.key !== key) {\n          return;\n        }\n\n        if (event.featureId && event.featureId !== this.featureId) {\n          return;\n        }\n\n        const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n        if (playerId < 0) {\n          print(`[Rune Weaver] Ignored key ${key} because player id is missing`);\n          return;\n        }\n\n        callback(playerId, event);\n      });\n    }\n\n    print(`[Rune Weaver] Bound key: ${key} for feature ${this.featureId} via ${this.eventName}`);\n  }\n\n  /**\n   * 解绑按键\n   */\n  unbindKey(key: string): void {\n    this.boundKeys.delete(key);\n    print(`[Rune Weaver] Unbound key: ${key}`);\n  }\n\n  setHandler(handler: (playerId: number, event?: { [key: string]: unknown }) => void): void {\n    this.handler = handler;\n    if (!this.configuredKeyBound) {\n      this.bindConfiguredKey();\n    }\n  }\n\n  bindConfiguredKey(): void {\n    if (this.configuredKeyBound) {\n      return;\n    }\n    this.configuredKeyBound = true;\n    this.bindKey(this.configuredKey, (playerId, event) => {\n      if (!this.handler) {\n        print(`[Rune Weaver] No handler configured for ${this.configuredKey} (${this.featureId})`);\n        return;\n      }\n      this.handler(playerId, event);\n    });\n  }\n\n  getConfiguredKey(): string {\n    return this.configuredKey;\n  }\n\n  getEventName(): string {\n    return this.eventName;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoInputTriggerInputKeyBinding(): void {\n  TalentDrawDemoInputTriggerInputKeyBinding.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoInputTriggerInputKeyBinding registered\");\n}\n",
+          "content": "/**\n * TalentDrawDemoInputTriggerInputKeyBinding\n * 按键绑定模块 - Generated by Rune Weaver\n */\n\nexport class TalentDrawDemoInputTriggerInputKeyBinding {\n  private static instance: TalentDrawDemoInputTriggerInputKeyBinding;\n  private boundKeys: Set<string> = new Set();\n  private handler?: (playerId: number, event?: { [key: string]: unknown }) => void;\n  private readonly configuredKey: string = \"F4\";\n  private readonly eventName: string = \"rune_weaver_selection_pool_triggered\";\n  private readonly featureId: string = \"talent_draw_demo\";\n  private configuredKeyBound = false;\n\n  static getInstance(): TalentDrawDemoInputTriggerInputKeyBinding {\n    if (!TalentDrawDemoInputTriggerInputKeyBinding.instance) {\n      TalentDrawDemoInputTriggerInputKeyBinding.instance = new TalentDrawDemoInputTriggerInputKeyBinding();\n    }\n    return TalentDrawDemoInputTriggerInputKeyBinding.instance;\n  }\n\n  /**\n   * 绑定按键\n   */\n  bindKey(\n    key: string,\n    callback: (playerId: number, event?: { [key: string]: unknown }) => void\n  ): void {\n    if (this.boundKeys.has(key)) {\n      print(`[Rune Weaver] Key ${key} already bound, skipping`);\n      return;\n    }\n\n    this.boundKeys.add(key);\n\n    if (GameRules && (GameRules as any).XNetTable) {\n      CustomGameEventManager.RegisterListener(this.eventName, (_eventSourceIndex: number, event: any) => {\n        if (!event || event.key !== key) {\n          return;\n        }\n\n        if (event.featureId && event.featureId !== this.featureId) {\n          return;\n        }\n\n        const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n        if (playerId < 0) {\n          print(`[Rune Weaver] Ignored key ${key} because player id is missing`);\n          return;\n        }\n\n        callback(playerId, event);\n      });\n    }\n\n    print(`[Rune Weaver] Bound key: ${key} for feature ${this.featureId} via ${this.eventName}`);\n  }\n\n  /**\n   * 解绑按键\n   */\n  unbindKey(key: string): void {\n    this.boundKeys.delete(key);\n    print(`[Rune Weaver] Unbound key: ${key}`);\n  }\n\n  setHandler(handler: (playerId: number, event?: { [key: string]: unknown }) => void): void {\n    this.handler = handler;\n    if (!this.configuredKeyBound) {\n      this.bindConfiguredKey();\n    }\n  }\n\n  bindConfiguredKey(): void {\n    if (this.configuredKeyBound) {\n      return;\n    }\n    this.configuredKeyBound = true;\n    this.bindKey(this.configuredKey, (playerId, event) => {\n      if (!this.handler) {\n        print(`[Rune Weaver] No handler configured for ${this.configuredKey} (${this.featureId})`);\n        return;\n      }\n      this.handler(playerId, event);\n    });\n  }\n\n  getConfiguredKey(): string {\n    return this.configuredKey;\n  }\n\n  getEventName(): string {\n    return this.eventName;\n  }\n}\n\n/**\n * 注册函数 - 由 Bridge 调用\n */\nexport function registerTalentDrawDemoInputTriggerInputKeyBinding(): void {\n  TalentDrawDemoInputTriggerInputKeyBinding.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoInputTriggerInputKeyBinding registered\");\n}\n",
           "rwOwned": true,
-          "description": "input/input.key_binding (typescript) params: {\"key\":\"F4\"}"
+          "description": "input/input.key_binding (typescript) params: {\"triggerKey\":\"F4\",\"key\":\"F4\",\"eventName\":\"rune_weaver_selection_pool_triggered\"}"
         },
         {
           "type": "create",
-          "targetPath": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
-          "content": "/**\n * TalentDrawDemoSelectionFlowRuleSelectionFlow\n * 选择流程管理器 - Generated by Rune Weaver\n *\n * Features:\n * - choiceCount: 3\n * - selectionPolicy: \"single\"\n * - applyMode: \"immediate\"\n * - postSelectionPoolBehavior: \"remove_selected_from_remaining\"\n * - trackSelectedItems: true\n * - Apply effect immediately\n */\n\ninterface SelectionOption {\n  id: string;\n  name: string;\n  description: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface PoolCandidate {\n  id: string;\n  name?: string;\n  label?: string;\n  description?: string;\n  icon?: string;\n  tier?: string;\n}\n\ninterface PoolCommitOptions {\n  trackOwned?: boolean;\n}\n\ninterface PlayerSelection {\n  playerId: number;\n  options: SelectionOption[];\n  selectedIndex: number;\n  isConfirmed: boolean;\n  deferredEffect?: SelectionOption;\n  poolCommit?: (selectedId: string, options?: PoolCommitOptions) => void;\n}\n\nexport class TalentDrawDemoSelectionFlowRuleSelectionFlow {\n  private static instance: TalentDrawDemoSelectionFlowRuleSelectionFlow;\n  private activeSelections: Map<number, PlayerSelection> = new Map();\n  private selectionCallbacks: Map<number, (option: SelectionOption) => void> = new Map();\n\n  private rarityAttributeBonusMap: Record<string, { attribute: string; value: number }> = {\n      \"R\": { attribute: \"strength\", value: 10 },\n      \"SR\": { attribute: \"agility\", value: 10 },\n      \"SSR\": { attribute: \"intelligence\", value: 10 },\n      \"UR\": { attribute: \"all\", value: 10 }\n  };\n\n\n  static getInstance(): TalentDrawDemoSelectionFlowRuleSelectionFlow {\n    if (!TalentDrawDemoSelectionFlowRuleSelectionFlow.instance) {\n      TalentDrawDemoSelectionFlowRuleSelectionFlow.instance = new TalentDrawDemoSelectionFlowRuleSelectionFlow();\n    }\n    return TalentDrawDemoSelectionFlowRuleSelectionFlow.instance;\n  }\n\n  startSelection(\n    playerId: number,\n    options: SelectionOption[],\n    onSelected: (option: SelectionOption) => void,\n    poolCommit?: (selectedId: string, options?: PoolCommitOptions) => void\n  ): void {\n    if (options.length === 0) {\n      print(\"[Rune Weaver] Cannot start selection with empty options\");\n      return;\n    }\n\n    this.activeSelections.set(playerId, {\n      playerId,\n      options,\n      selectedIndex: -1,\n      isConfirmed: false,\n      poolCommit,\n    });\n    this.selectionCallbacks.set(playerId, onSelected);\n    this.sendToClient(playerId, options);\n  }\n\n  onPlayerSelect(playerId: number, optionIndex: number): void {\n    const selection = this.activeSelections.get(playerId);\n    if (!selection) return;\n    if (optionIndex < 0 || optionIndex >= selection.options.length) return;\n\n    selection.selectedIndex = optionIndex;\n    this.fireSelectionEvent(playerId, selection.options[optionIndex]);\n  }\n\n  onPlayerConfirm(playerId: number): void {\n    const selection = this.activeSelections.get(playerId);\n    if (!selection || selection.selectedIndex === -1) return;\n\n    selection.isConfirmed = true;\n    const selectedOption = selection.options[selection.selectedIndex];\n\n    if (selection.poolCommit) {\n      selection.poolCommit(selectedOption.id, { trackOwned: true });\n    }\n\n    this.applyEffectByRarity(playerId, selectedOption);\n\n    const callback = this.selectionCallbacks.get(playerId);\n    if (callback) {\n      callback(selectedOption);\n    }\n\n    this.fireConfirmationEvent(playerId, selectedOption);\n    this.activeSelections.delete(playerId);\n    this.selectionCallbacks.delete(playerId);\n  }\n\n  private applyEffectByRarity(playerId: number, option: SelectionOption): void {\n    const hero = PlayerResource.GetSelectedHeroEntity(playerId as PlayerID);\n    if (!hero) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: no hero found for player ${playerId}`);\n      return;\n    }\n\n    const rarity = option.tier || \"R\";\n    const bonusConfig = this.rarityAttributeBonusMap[rarity];\n    if (!bonusConfig) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: no bonus config for rarity ${rarity}`);\n      return;\n    }\n\n    const { attribute, value } = bonusConfig;\n    switch (attribute) {\n      case \"strength\":\n        hero.ModifyStrength(value);\n        break;\n      case \"agility\":\n        hero.ModifyAgility(value);\n        break;\n      case \"intelligence\":\n        hero.ModifyIntellect(value);\n        break;\n      case \"all\":\n        hero.ModifyStrength(value);\n        hero.ModifyAgility(value);\n        hero.ModifyIntellect(value);\n        break;\n      default:\n        print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: unknown attribute ${attribute}`);\n    }\n\n    this.fireEffectAppliedEvent(playerId, option, bonusConfig);\n  }\n\n  private fireEffectAppliedEvent(\n    playerId: number,\n    option: SelectionOption,\n    bonusConfig: { attribute: string; value: number }\n  ): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_effect_applied\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          attribute: bonusConfig.attribute,\n          value: bonusConfig.value,\n          rarity: option.tier || \"R\",\n        }\n      );\n    }\n  }\n\n  private fireSelectionEvent(playerId: number, option: SelectionOption): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_selection_made\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          rarity: option.tier || \"R\",\n        }\n      );\n    }\n  }\n\n  private fireConfirmationEvent(playerId: number, option: SelectionOption): void {\n    if (CustomGameEventManager) {\n      (CustomGameEventManager.Send_ServerToPlayer as any)(\n        PlayerResource.GetPlayer(playerId as PlayerID),\n        \"rune_weaver_selection_confirmed\",\n        {\n          featureId: \"talent_draw_demo\",\n          optionId: option.id,\n          optionName: option.name,\n          rarity: option.tier || \"R\",\n          timestamp: GameRules.GetGameTime(),\n        }\n      );\n    }\n  }\n\n  private sendToClient(playerId: number, options: SelectionOption[]): void {\n    if ((GameRules as any).XNetTable) {\n      (GameRules as any).XNetTable.SetTableValue(\n        \"rune_weaver_selection\",\n        `player_${playerId}_feature_talent_draw_demo`,\n        {\n          featureId: \"talent_draw_demo\",\n          options,\n          status: \"waiting\",\n        }\n      );\n    }\n\n    if (CustomGameEventManager) {\n      const payload = {\n        featureId: \"talent_draw_demo\",\n        options,\n        choiceCount: 3,\n        selectionPolicy: \"single\",\n      };\n      const player = PlayerResource.GetPlayer(playerId as PlayerID);\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: sending selection UI to player ${playerId}, options=${options.length}, player=${player ? \"ok\" : \"missing\"}`);\n      if (player) {\n        (CustomGameEventManager.Send_ServerToPlayer as any)(\n          player,\n          \"rune_weaver_show_selection\",\n          payload\n        );\n      } else {\n        (CustomGameEventManager.Send_ServerToAllClients as any)(\n          \"rune_weaver_show_selection\",\n          payload\n        );\n      }\n    }\n  }\n\n  generateOptionsFromPool<T extends SelectionOption>(\n    pool: any,\n    count: number\n  ): T[] {\n    const normalizeCandidates = (candidates: PoolCandidate[]): T[] => {\n      return candidates.map((candidate) => ({\n        id: candidate.id,\n        name: candidate.name || candidate.label || candidate.id,\n        description: candidate.description || \"\",\n        icon: candidate.icon,\n        tier: candidate.tier,\n      })) as T[];\n    };\n\n    if (pool && typeof pool.drawForSelection === \"function\") {\n      return normalizeCandidates(pool.drawForSelection(count) as PoolCandidate[]);\n    }\n\n    if (pool && typeof pool.drawMultiple === \"function\") {\n      return normalizeCandidates(pool.drawMultiple(count) as PoolCandidate[]);\n    }\n\n    return [];\n  }\n\n  triggerSelectionFromPool(playerId: number, pool: any): void {\n    if (!pool) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: no pool available`);\n      return;\n    }\n\n    const options = this.generateOptionsFromPool(pool, 3);\n    if (!options || options.length === 0) {\n      print(`[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow: no options generated for player ${playerId}`);\n      return;\n    }\n\n    this.startSelection(\n      playerId,\n      options,\n      () => {},\n\n      pool && typeof pool.commitSelection === \"function\"\n        ? (selectedId, options) => pool.commitSelection(selectedId, options)\n        : undefined\n    );\n  }\n}\n\nexport function registerTalentDrawDemoSelectionFlowRuleSelectionFlow(): void {\n  const flow = TalentDrawDemoSelectionFlowRuleSelectionFlow.getInstance();\n  print(\"[Rune Weaver] TalentDrawDemoSelectionFlowRuleSelectionFlow registered\");\n\n  if (CustomGameEventManager) {\n    CustomGameEventManager.RegisterListener(\"rune_weaver_player_select\", (_eventSourceIndex: number, event: any) => {\n      if (event.featureId && event.featureId !== \"talent_draw_demo\") {\n        return;\n      }\n      const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n      const optionIndex = Number(event.optionIndex ?? -1);\n      if (playerId >= 0 && optionIndex >= 0) {\n        flow.onPlayerSelect(playerId, optionIndex);\n      }\n    });\n\n    CustomGameEventManager.RegisterListener(\"rune_weaver_player_confirm\", (_eventSourceIndex: number, event: any) => {\n      if (event.featureId && event.featureId !== \"talent_draw_demo\") {\n        return;\n      }\n      const playerId = Number(event.PlayerID ?? event.playerId ?? -1);\n      if (playerId >= 0) {\n        flow.onPlayerConfirm(playerId);\n      }\n    });\n  }\n}\n",
+          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+          "content": "/**\n * TalentDrawDemoSelectionModalUiSelectionModal\n * Generated selection modal\n *\n * Features:\n * - choiceCount: 3\n * - payloadShape: \"card_with_rarity\"\n * - dismissBehavior: \"selection_only\"\n * - layoutPreset: \"card_tray\"\n * - selectionMode: \"single\"\n * - minDisplayCount: 3\n * \n */\n\nimport React, { useEffect, useRef, useState } from \"react\";\n\ninterface SelectionItem {\n  id: string;\n  name: string;\n  description?: string;\n  icon?: string;\n  tier?: string;\n  rarity?: string;\n  disabled?: boolean;\n  isPlaceholder?: boolean;\n}\n\ninterface InventoryPayload {\n  enabled?: boolean;\n  capacity?: number;\n  items?: unknown;\n  isFull?: boolean;\n  fullMessage?: string;\n  presentation?: string;\n}\n\ninterface TalentDrawDemoSelectionModalUiSelectionModalProps {\n  items?: SelectionItem[];\n  title?: string;\n  description?: string;\n  onSelect?: (index: number) => void;\n  onConfirm?: () => void;\n  onDismiss?: () => void;\n  visible?: boolean;\n}\n\nexport function TalentDrawDemoSelectionModalUiSelectionModal(props: TalentDrawDemoSelectionModalUiSelectionModalProps) {\n  const {\n    items,\n    title = \"Choose Your Selection\",\n    description = \"Select one of the following options\",\n    onSelect,\n    onConfirm,\n    onDismiss,\n    visible = false,\n  } = props;\n\n  const featureId = \"talent_draw_demo\";\n  const sendCustomEvent = (eventName: string, payload: Record<string, unknown>) => {\n    (GameEvents.SendCustomGameEventToServer as any)(eventName, payload);\n  };\n\n  const placeholderConfig = {\n    id: \"empty_selection_slot\",\n    name: \"Empty Slot\",\n    description: \"No selection available\",\n    disabled: true\n  };\n  const minDisplayCount = 3;\n\n  const inventoryEnabled = false;\n  const inventoryCapacity = 0;\n  const inventoryFullMessage = \"Selection inventory full\";\n  const inventoryPresentation = \"persistent_panel\";\n  const inventoryTitle = \"Selection Inventory\";\n\n  // GAP_FILL_BOUNDARY: ui.selection_modal.payload_adapter\n  // Allowed: item normalization, placeholder padding, defensive fallback values, card presentation formatting.\n  // Forbidden: root mount changes, transport event changes, LESS/HUD wiring changes.\n  const normalizeSelectionItems = (rawItems?: unknown): SelectionItem[] => {\n    if (rawItems === undefined || rawItems === null) {\n      return [];\n    }\n\n    const itemsArray: unknown[] = Array.isArray(rawItems) ? rawItems : Object.values(rawItems ?? {});\n\n    return itemsArray\n      .filter((item): item is Record<string, unknown> => {\n        return item !== null && item !== undefined && typeof item === \"object\";\n      })\n      .map((item, index): SelectionItem => {\n        const rarityValue = item.rarity ?? item.tier;\n        const tierValue = item.tier ?? item.rarity;\n        return {\n          id: typeof item.id === \"string\" ? item.id : typeof item.id === \"number\" ? String(item.id) : `unknown_${index}`,\n          name: typeof item.name === \"string\" ? item.name : \"Unknown\",\n          description: typeof item.description === \"string\" ? item.description : undefined,\n          icon: typeof item.icon === \"string\" ? item.icon : undefined,\n          tier: typeof tierValue === \"string\" ? tierValue : undefined,\n          rarity: typeof rarityValue === \"string\" ? rarityValue : undefined,\n          disabled: typeof item.disabled === \"boolean\" ? item.disabled : false,\n          isPlaceholder: typeof item.isPlaceholder === \"boolean\" ? item.isPlaceholder : false,\n        };\n      });\n  };\n\n  const [selectedIndex, setSelectedIndex] = useState<number>(-1);\n  const [isVisible, setIsVisible] = useState(visible);\n  const [modalItems, setModalItems] = useState<SelectionItem[]>(() => normalizeSelectionItems(items));\n  const [modalTitle, setModalTitle] = useState(title);\n  const [modalDescription, setModalDescription] = useState(description);\n  const [inventoryItems, setInventoryItems] = useState<SelectionItem[]>([]);\n  const [inventoryIsFull, setInventoryIsFull] = useState(false);\n\n  const titleRef = useRef(title);\n  const descriptionRef = useRef(description);\n  const featureIdRef = useRef(featureId);\n\n  useEffect(() => {\n    titleRef.current = title;\n    descriptionRef.current = description;\n    featureIdRef.current = featureId;\n  });\n\n  useEffect(() => {\n    setIsVisible(visible);\n  }, [visible]);\n\n  useEffect(() => {\n    setModalItems(normalizeSelectionItems(items));\n  }, [items]);\n\n  useEffect(() => {\n    setModalTitle(title);\n  }, [title]);\n\n  useEffect(() => {\n    setModalDescription(description);\n  }, [description]);\n\n  useEffect(() => {\n    console.log(\"[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal mounted for feature talent_draw_demo\");\n\n    const showSelectionSub = GameEvents.Subscribe(\"rune_weaver_show_selection\", (data: {\n      featureId?: string;\n      options?: unknown;\n      title?: string;\n      description?: string;\n      inventory?: InventoryPayload;\n    }) => {\n      if (data.featureId && data.featureId !== featureIdRef.current) {\n        return;\n      }\n\n      const normalizedItems = normalizeSelectionItems(data.options);\n      console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal received selection event: options=${normalizedItems.length}`);\n      setModalItems(normalizedItems);\n      setModalTitle(data.title || titleRef.current);\n      setModalDescription(data.description || descriptionRef.current);\n      setSelectedIndex(-1);\n      setIsVisible(true);\n    });\n\n    const confirmSub = GameEvents.Subscribe(\"rune_weaver_selection_confirmed\", (data: { featureId?: string }) => {\n      if (data.featureId && data.featureId !== featureIdRef.current) {\n        return;\n      }\n      setIsVisible(false);\n      setSelectedIndex(-1);\n    });\n\n    return () => {\n      GameEvents.Unsubscribe(showSelectionSub);\n      GameEvents.Unsubscribe(confirmSub);\n    };\n  }, []);\n\n  const padWithPlaceholders = (sourceItems: SelectionItem[]): SelectionItem[] => {\n    if (sourceItems.length >= minDisplayCount) {\n      return sourceItems;\n    }\n\n    const paddedItems = [...sourceItems];\n    const placeholderCount = minDisplayCount - sourceItems.length;\n    for (let index = 0; index < placeholderCount; index++) {\n      paddedItems.push({\n        id: `${placeholderConfig.id}_${index}`,\n        name: placeholderConfig.name,\n        description: placeholderConfig.description,\n        disabled: placeholderConfig.disabled,\n        isPlaceholder: true,\n      });\n    }\n    return paddedItems;\n  };\n\n  const displayItems = padWithPlaceholders(modalItems);\n  const computeSelectionColumns = (count: number): number => {\n    if (count <= 1) {\n      return 1;\n    }\n\n    const maxColumns = Math.min(3, count);\n    let bestColumns = 1;\n    let bestScore = Number.POSITIVE_INFINITY;\n\n    for (let columns = 1; columns <= maxColumns; columns += 1) {\n      const rowCount = Math.ceil(count / columns);\n      const lastRowCount = count % columns === 0 ? columns : count % columns;\n      const raggedness = columns - lastRowCount;\n      const score = rowCount * 10 + raggedness;\n\n      if (score < bestScore) {\n        bestScore = score;\n        bestColumns = columns;\n      }\n    }\n\n    return bestColumns;\n  };\n  const selectionColumns = computeSelectionColumns(displayItems.length);\n  const selectionRows = Array.from(\n    { length: Math.ceil(displayItems.length / selectionColumns) },\n    (_, rowIndex) => {\n      const rowStart = rowIndex * selectionColumns;\n      return displayItems.slice(rowStart, rowStart + selectionColumns).map((item, itemOffset) => ({\n        item,\n        index: rowStart + itemOffset,\n      }));\n    }\n  );\n  const inventorySlots = inventoryEnabled\n    ? Array.from({ length: inventoryCapacity }, (_, index) => inventoryItems[index] ?? null)\n    : [];\n\n  const selectedItem = selectedIndex >= 0 && selectedIndex < displayItems.length\n    ? displayItems[selectedIndex]\n    : null;\n  const isConfirmDisabled = selectedIndex === -1 ||\n    selectedItem?.disabled === true ||\n    selectedItem?.isPlaceholder === true;\n  const shouldRenderModal = isVisible && displayItems.length > 0;\n\n  if (!shouldRenderModal && !inventoryEnabled) {\n    return null;\n  }\n\n  const handleSelect = (index: number) => {\n    const item = displayItems[index];\n    if (!item) {\n      return;\n    }\n\n    if (item.disabled || item.isPlaceholder) {\n      return;\n    }\n\n    setSelectedIndex(index);\n    console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal selected item id=${item.id}`);\n    sendCustomEvent(\"rune_weaver_player_select\", {\n      PlayerID: Game.GetLocalPlayerID(),\n      optionIndex: index,\n      featureId: featureIdRef.current,\n    });\n    onSelect?.(index);\n  };\n\n  const handleConfirm = () => {\n    if (selectedIndex === -1) {\n      return;\n    }\n\n    const item = displayItems[selectedIndex];\n    if (!item) {\n      return;\n    }\n\n    if (item.disabled || item.isPlaceholder) {\n      console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal confirm blocked for disabled/placeholder item id=${item.id}`);\n      return;\n    }\n\n    console.log(`[Rune Weaver] TalentDrawDemoSelectionModalUiSelectionModal confirmed item id=${item.id}`);\n    sendCustomEvent(\"rune_weaver_player_confirm\", {\n      PlayerID: Game.GetLocalPlayerID(),\n      optionIndex: selectedIndex,\n      featureId: featureIdRef.current,\n    });\n    onConfirm?.();\n    setIsVisible(false);\n  };\n\n  const handleDismiss = () => {\n    // Dismiss not allowed in selection_only mode\n  };\n\n  return (\n    <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-root\">\n      {inventoryEnabled && (\n        <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-inventory-panel\">\n          <Panel className=\"inventory-header\">\n            <Label\n              className={`inventory-title ${inventoryIsFull ? \"full\" : \"\"}`}\n              text={inventoryIsFull ? inventoryFullMessage : inventoryTitle}\n            />\n            <Label className=\"inventory-subtitle\" text={`${inventoryItems.length} / ${inventoryCapacity}`} />\n          </Panel>\n\n          <Panel className=\"inventory-grid\">\n            {inventorySlots.map((item, index) => (\n              <Panel\n                key={item?.id || `inventory_slot_${index}`}\n                className={`inventory-slot ${item ? \"filled\" : \"empty\"}`}\n              >\n                {item ? (\n                  <>\n                    <Label className=\"inventory-slot-name\" text={item.name} />\n                    <Label\n                      className={`inventory-slot-tier ${item.tier ? `tier-${item.tier.toLowerCase()}` : \"tier-none\"}`}\n                      text={item.tier || \"\"}\n                    />\n                  </>\n                ) : (\n                  <Label className=\"inventory-slot-placeholder\" text=\"Empty\" />\n                )}\n              </Panel>\n            ))}\n          </Panel>\n        </Panel>\n      )}\n\n      {shouldRenderModal && (\n        <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-overlay\">\n          <Panel className=\"talent_draw_demo_selection_modal_ui_selection_modal-modal\">\n            <Panel className=\"modal-header\">\n              <Label text={modalTitle} />\n              <Label className=\"modal-description\" text={modalDescription || \"\"} />\n            </Panel>\n\n            <Panel className=\"modal-content\">\n              <Panel className=\"modal-options\">\n                {selectionRows.map((row, rowIndex) => (\n                  <Panel key={`selection_row_${rowIndex}`} className=\"modal-options-row\">\n                    {row.map(({ item, index }) => (\n                      <Panel\n                        key={item.id}\n                        className={`selection-card ${selectedIndex === index ? \"selected\" : \"\"} ${item.disabled ? \"disabled\" : \"\"} ${item.isPlaceholder ? \"placeholder\" : \"\"}`}\n                        onactivate={() => handleSelect(index)}\n                      >\n                        \n                        {item.icon && <Image src={item.icon} />}\n                        <Label className=\"card-name\" text={item.name} />\n                        <Label className=\"card-description\" text={item.description || \"\"} />\n                        <Label className={`card-tier ${item.tier ? `tier-${item.tier.toLowerCase()}` : \"tier-none\"}`} text={item.tier || \"\"} />\n\n                      </Panel>\n                    ))}\n                  </Panel>\n                ))}\n              </Panel>\n            </Panel>\n\n            <Panel className=\"modal-footer\">\n              <Panel\n                className={`btn-confirm ${isConfirmDisabled ? \"disabled\" : \"\"}`}\n                onactivate={handleConfirm}\n              >\n                <Label text=\"确认选择\" />\n              </Panel>\n              \n            </Panel>\n          </Panel>\n        </Panel>\n      )}\n    </Panel>\n  );\n}\n\nexport default TalentDrawDemoSelectionModalUiSelectionModal;\n",
           "rwOwned": true,
-          "description": "rule/rule.selection_flow (typescript) params: {\"choiceCount\":3,\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}"
+          "description": "ui/ui.selection_modal (tsx) params: {\"choiceCount\":3,\"title\":\"Choose Your Selection\",\"description\":\"Select one of the following options\",\"inventoryTitle\":\"Selection Inventory\",\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_selection_slot\",\"name\":\"Empty Slot\",\"description\":\"No selection available\",\"disabled\":true},\"layoutPreset\":\"card_tray\",\"selectionMode\":\"single\",\"dismissBehavior\":\"selection_only\"}"
+        },
+        {
+          "type": "create",
+          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+          "content": "/* Generated by Rune Weaver */\n/* talent_draw_demo - ui.selection_modal */\n\n.talent_draw_demo_selection_modal_ui_selection_modal-root {\n  width: 100%;\n  height: 100%;\n}\n\n.talent_draw_demo_selection_modal_ui_selection_modal-inventory-panel {\n  width: 386px;\n  min-height: 260px;\n  horizontal-align: right;\n  vertical-align: center;\n  margin-right: 36px;\n  flow-children: down;\n  padding: 16px;\n  background-color: #0d1720ee;\n  border: 1px solid #8fd0ff33;\n  box-shadow: #00000088 0px 0px 16px 0px;\n  z-index: 40;\n}\n\n.inventory-header {\n  width: 100%;\n  flow-children: down;\n  margin-bottom: 12px;\n}\n\n.inventory-title {\n  color: #f5fbff;\n  font-size: 24px;\n  font-weight: bold;\n}\n\n.inventory-title.full {\n  color: #ffd76a;\n}\n\n.inventory-subtitle {\n  margin-top: 4px;\n  color: #a9bcc7;\n  font-size: 16px;\n}\n\n.inventory-grid {\n  width: 100%;\n  flow-children: right-wrap;\n}\n\n.inventory-slot {\n  width: 64px;\n  height: 64px;\n  margin: 4px;\n  padding: 6px;\n  flow-children: down;\n  border: 1px solid #6c8b9a66;\n}\n\n.inventory-slot.empty {\n  background-color: #141f28cc;\n}\n\n.inventory-slot.filled {\n  background-color: #1c2a36ee;\n  border-color: #8fd0ff55;\n}\n\n.inventory-slot-name {\n  width: 100%;\n  color: #f5fbff;\n  font-size: 12px;\n  font-weight: semi-bold;\n  text-align: center;\n  white-space: normal;\n}\n\n.inventory-slot-tier {\n  width: 100%;\n  margin-top: 2px;\n  color: #d7e5ec;\n  font-size: 11px;\n  text-align: center;\n}\n\n.inventory-slot-placeholder {\n  width: 100%;\n  vertical-align: center;\n  color: #6f8592;\n  font-size: 12px;\n  text-align: center;\n}\n\n.talent_draw_demo_selection_modal_ui_selection_modal-overlay {\n  width: 100%;\n  height: 100%;\n  horizontal-align: center;\n  vertical-align: center;\n  background-color: #00000099;\n  z-index: 50;\n}\n\n.talent_draw_demo_selection_modal_ui_selection_modal-modal {\n  width: 880px;\n  min-height: 360px;\n  horizontal-align: center;\n  vertical-align: center;\n  flow-children: down;\n  padding: 24px;\n  background-color: #101820ee;\n  border: 2px solid #8fd0ff66;\n  box-shadow: #000000aa 0px 0px 18px 0px;\n}\n\n.modal-header {\n  width: 100%;\n  flow-children: down;\n  margin-bottom: 18px;\n}\n\n.modal-header Label {\n  width: 100%;\n  color: #f2fbff;\n  font-size: 30px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.modal-description {\n  margin-top: 6px;\n  color: #b9ced8;\n  font-size: 18px;\n  font-weight: normal;\n}\n\n.modal-content {\n  width: 100%;\n  flow-children: down;\n}\n\n.modal-options {\n  width: 100%;\n  flow-children: down;\n}\n\n.modal-options-row {\n  width: fit-children;\n  flow-children: right;\n  horizontal-align: center;\n  margin-bottom: 16px;\n}\n\n.selection-card {\n  width: 240px;\n  height: 180px;\n  margin: 0px 8px;\n  padding: 14px;\n  flow-children: down;\n  background-color: #17242dcc;\n  border: 2px solid #6c8b9a66;\n}\n\n.selection-card:hover {\n  brightness: 1.5;\n}\n\n.selection-card.selected {\n  border: 2px solid #ffd76a;\n  background-color: #223849ee;\n}\n\n.selection-card.disabled,\n.selection-card.placeholder {\n  saturation: 0.15;\n  brightness: 0.45;\n}\n\n.card-name {\n  width: 100%;\n  color: #ffffff;\n  font-size: 22px;\n  font-weight: bold;\n  text-align: center;\n}\n\n.card-description {\n  width: 100%;\n  margin-top: 10px;\n  color: #c8d7de;\n  font-size: 16px;\n  text-align: center;\n  white-space: normal;\n}\n\n.card-tier {\n  horizontal-align: center;\n  margin-top: 12px;\n  padding: 2px 10px;\n  color: #ffffff;\n  font-size: 16px;\n  font-weight: bold;\n  background-color: #475569;\n}\n\n.tier-r {\n  background-color: #4f8fba;\n}\n\n.tier-sr {\n  background-color: #3aa66b;\n}\n\n.tier-ssr {\n  background-color: #b06ad9;\n}\n\n.tier-ur {\n  background-color: #d5a43c;\n}\n\n.modal-footer {\n  width: 100%;\n  margin-top: 20px;\n  flow-children: right;\n  horizontal-align: center;\n}\n\n.btn-confirm,\n.btn-dismiss {\n  min-width: 150px;\n  height: 44px;\n  margin: 0px 8px;\n  padding: 8px 20px;\n  background-color: #2f7fa3;\n  border: 1px solid #9fdfff99;\n}\n\n.btn-confirm:hover,\n.btn-dismiss:hover {\n  brightness: 1.4;\n}\n\n.btn-confirm.disabled {\n  saturation: 0.1;\n  brightness: 0.45;\n}\n\n.btn-confirm Label,\n.btn-dismiss Label {\n  horizontal-align: center;\n  vertical-align: center;\n  color: #ffffff;\n  font-size: 20px;\n  font-weight: bold;\n}\n",
+          "rwOwned": true,
+          "description": "ui/ui.selection_modal (less) params: {\"choiceCount\":3,\"title\":\"Choose Your Selection\",\"description\":\"Select one of the following options\",\"inventoryTitle\":\"Selection Inventory\",\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_selection_slot\",\"name\":\"Empty Slot\",\"description\":\"No selection available\",\"disabled\":true},\"layoutPreset\":\"card_tray\",\"selectionMode\":\"single\",\"dismissBehavior\":\"selection_only\"}"
+        },
+        {
+          "type": "create",
+          "targetPath": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+          "content": "/**\n * TalentDrawDemoInputTriggerInputKeyBindingEmitter\n * Generated input.key_binding Panorama emitter\n *\n * Current honest slice:\n * - input.key_binding owns trigger capture end-to-end\n * - UI emitter captures the configured key and forwards a custom event\n * - ui.selection_modal does not register trigger keys\n */\n\nimport React, { useEffect } from \"react\";\nimport { setKeyDownCallback } from \"../../../hooks/useKeyboard\";\nimport { registerCustomKey } from \"../../../utils/keybinding\";\n\ndeclare global {\n  interface CustomUIConfig {\n    RuneWeaverInputBindingRegistry?: Record<string, boolean>;\n  }\n}\n\nexport function TalentDrawDemoInputTriggerInputKeyBindingEmitter() {\n  const featureId = \"talent_draw_demo\";\n  const configuredKey = \"F4\";\n  const eventName = \"rune_weaver_selection_pool_triggered\";\n  const bindingId = `${featureId}:${configuredKey}:${eventName}`;\n\n  useEffect(() => {\n    const customUiConfig = GameUI.CustomUIConfig();\n    if (!customUiConfig.RuneWeaverInputBindingRegistry) {\n      customUiConfig.RuneWeaverInputBindingRegistry = {};\n    }\n\n    if (!customUiConfig.RuneWeaverInputBindingRegistry[bindingId]) {\n      registerCustomKey(configuredKey);\n      customUiConfig.RuneWeaverInputBindingRegistry[bindingId] = true;\n    }\n\n    setKeyDownCallback(configuredKey, () => {\n      const playerId = Game.GetLocalPlayerID();\n      console.log(`[Rune Weaver] Emitting ${configuredKey} for feature ${featureId} via ${eventName}`);\n      (GameEvents.SendCustomGameEventToServer as any)(eventName, {\n        PlayerID: playerId,\n        playerId,\n        key: configuredKey,\n        featureId,\n      });\n    });\n\n    console.log(`[Rune Weaver] Input emitter ready: ${configuredKey} for feature ${featureId} via ${eventName}`);\n\n    return () => {\n      setKeyDownCallback(configuredKey, () => {});\n    };\n  }, []);\n\n  return null;\n}\n\nexport default TalentDrawDemoInputTriggerInputKeyBindingEmitter;\n",
+          "rwOwned": true,
+          "description": "input/input.key_binding (typescript) params: {\"triggerKey\":\"F4\",\"key\":\"F4\",\"eventName\":\"rune_weaver_selection_pool_triggered\"} [ui-emitter]"
+        },
+        {
+          "type": "create",
+          "targetPath": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+          "content": "{\n  \"adapter\": \"selection_pool\",\n  \"version\": 2,\n  \"featureId\": \"talent_draw_demo\",\n  \"objectKind\": \"talent\",\n  \"triggerKey\": \"F4\",\n  \"choiceCount\": 3,\n  \"drawMode\": \"multiple_without_replacement\",\n  \"duplicatePolicy\": \"forbid\",\n  \"poolStateTracking\": \"session\",\n  \"selectionPolicy\": \"single\",\n  \"applyMode\": \"immediate\",\n  \"postSelectionPoolBehavior\": \"remove_selected_from_remaining\",\n  \"trackSelectedItems\": true,\n  \"display\": {\n    \"title\": \"Choose Your Selection\",\n    \"description\": \"Select one of the following options\",\n    \"inventoryTitle\": \"Selection Inventory\",\n    \"payloadShape\": \"card_with_rarity\",\n    \"minDisplayCount\": 3\n  },\n  \"placeholderConfig\": {\n    \"id\": \"empty_selection_slot\",\n    \"name\": \"Empty Slot\",\n    \"description\": \"No selection available\",\n    \"disabled\": true\n  },\n  \"localCollections\": [\n    {\n      \"collectionId\": \"default\",\n      \"visibility\": \"local\",\n      \"objects\": [\n        {\n          \"objectId\": \"SEL_R001\",\n          \"label\": \"Talent Option R001\",\n          \"description\": \"Placeholder selection option (R)\"\n        },\n        {\n          \"objectId\": \"SEL_R002\",\n          \"label\": \"Talent Option R002\",\n          \"description\": \"Placeholder selection option (R)\"\n        },\n        {\n          \"objectId\": \"SEL_SR003\",\n          \"label\": \"Talent Option SR003\",\n          \"description\": \"Placeholder selection option (SR)\"\n        },\n        {\n          \"objectId\": \"SEL_SR004\",\n          \"label\": \"Talent Option SR004\",\n          \"description\": \"Placeholder selection option (SR)\"\n        },\n        {\n          \"objectId\": \"SEL_SSR005\",\n          \"label\": \"Talent Option SSR005\",\n          \"description\": \"Placeholder selection option (SSR)\"\n        },\n        {\n          \"objectId\": \"SEL_UR006\",\n          \"label\": \"Talent Option UR006\",\n          \"description\": \"Placeholder selection option (UR)\"\n        }\n      ]\n    }\n  ],\n  \"poolEntries\": [\n    {\n      \"entryId\": \"SEL_R001\",\n      \"objectRef\": {\n        \"source\": \"local_collection\",\n        \"collectionId\": \"default\",\n        \"objectId\": \"SEL_R001\"\n      },\n      \"weight\": 40,\n      \"tier\": \"R\"\n    },\n    {\n      \"entryId\": \"SEL_R002\",\n      \"objectRef\": {\n        \"source\": \"local_collection\",\n        \"collectionId\": \"default\",\n        \"objectId\": \"SEL_R002\"\n      },\n      \"weight\": 40,\n      \"tier\": \"R\"\n    },\n    {\n      \"entryId\": \"SEL_SR003\",\n      \"objectRef\": {\n        \"source\": \"local_collection\",\n        \"collectionId\": \"default\",\n        \"objectId\": \"SEL_SR003\"\n      },\n      \"weight\": 30,\n      \"tier\": \"SR\"\n    },\n    {\n      \"entryId\": \"SEL_SR004\",\n      \"objectRef\": {\n        \"source\": \"local_collection\",\n        \"collectionId\": \"default\",\n        \"objectId\": \"SEL_SR004\"\n      },\n      \"weight\": 30,\n      \"tier\": \"SR\"\n    },\n    {\n      \"entryId\": \"SEL_SSR005\",\n      \"objectRef\": {\n        \"source\": \"local_collection\",\n        \"collectionId\": \"default\",\n        \"objectId\": \"SEL_SSR005\"\n      },\n      \"weight\": 20,\n      \"tier\": \"SSR\"\n    },\n    {\n      \"entryId\": \"SEL_UR006\",\n      \"objectRef\": {\n        \"source\": \"local_collection\",\n        \"collectionId\": \"default\",\n        \"objectId\": \"SEL_UR006\"\n      },\n      \"weight\": 10,\n      \"tier\": \"UR\"\n    }\n  ]\n}\n",
+          "rwOwned": true,
+          "description": "feature_source_model/selection_pool (json) entries:6 metadata-kind:talent"
+        },
+        {
+          "type": "create",
+          "targetPath": "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json",
+          "content": "{\n  \"adapter\": \"rw_content_collections\",\n  \"version\": 1,\n  \"featureId\": \"talent_draw_demo\",\n  \"collections\": []\n}\n",
+          "rwOwned": true,
+          "description": "rw content collections (0)"
         }
       ],
       "failed": [],
       "skipped": [],
       "createdFiles": [
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
         "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
+        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts"
+        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+        "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json"
       ],
       "modifiedFiles": []
     },
     "review": {
       "version": "1.0",
-      "hostRoot": "D:\\test3",
+      "hostRoot": "D:\\rw-test-1",
       "featureId": "talent_draw_demo",
       "filesToCreate": [
         {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
           "rwOwned": true,
-          "lineCount": 340,
-          "description": "ui/ui.selection_modal (tsx) params: {\"choiceCount\":3,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_talent_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true}}"
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-          "rwOwned": true,
-          "lineCount": 244,
-          "description": "ui/ui.selection_modal (less) params: {\"choiceCount\":3,\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_talent_slot\",\"name\":\"Empty Slot\",\"description\":\"No talent available\",\"disabled\":true}}"
+          "lineCount": 309,
+          "description": "rule/rule.selection_flow (typescript) params: {\"choiceCount\":3,\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true}"
         },
         {
           "path": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
           "rwOwned": true,
-          "lineCount": 246,
-          "description": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"R001\",\"label\":\"Strength Boost\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"R002\",\"label\":\"Fortitude\",\"description\":\"+10 Strength\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SR001\",\"label\":\"Agility Boost\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SR002\",\"label\":\"Swift Reflexes\",\"description\":\"+10 Agility\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SSR001\",\"label\":\"Intelligence Boost\",\"description\":\"+10 Intelligence\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"UR001\",\"label\":\"Ultimate Growth\",\"description\":\"+10 All Attributes\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}"
+          "lineCount": 248,
+          "description": "data/data.weighted_pool (typescript) params: {\"entries\":[{\"id\":\"SEL_R001\",\"label\":\"Talent Option R001\",\"description\":\"Placeholder selection option (R)\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SEL_R002\",\"label\":\"Talent Option R002\",\"description\":\"Placeholder selection option (R)\",\"weight\":40,\"tier\":\"R\"},{\"id\":\"SEL_SR003\",\"label\":\"Talent Option SR003\",\"description\":\"Placeholder selection option (SR)\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SEL_SR004\",\"label\":\"Talent Option SR004\",\"description\":\"Placeholder selection option (SR)\",\"weight\":30,\"tier\":\"SR\"},{\"id\":\"SEL_SSR005\",\"label\":\"Talent Option SSR005\",\"description\":\"Placeholder selection option (SSR)\",\"weight\":20,\"tier\":\"SSR\"},{\"id\":\"SEL_UR006\",\"label\":\"Talent Option UR006\",\"description\":\"Placeholder selection option (UR)\",\"weight\":10,\"tier\":\"UR\"}],\"choiceCount\":3,\"drawMode\":\"multiple_without_replacement\",\"duplicatePolicy\":\"forbid\",\"poolStateTracking\":\"session\"}"
+        },
+        {
+          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
+          "rwOwned": true,
+          "lineCount": 304,
+          "description": "effect/effect.outcome_realizer (typescript) params: {\"outcomes\":[]}"
         },
         {
           "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
@@ -828,13 +1016,37 @@
           "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
           "rwOwned": true,
           "lineCount": 104,
-          "description": "input/input.key_binding (typescript) params: {\"key\":\"F4\"}"
+          "description": "input/input.key_binding (typescript) params: {\"triggerKey\":\"F4\",\"key\":\"F4\",\"eventName\":\"rune_weaver_selection_pool_triggered\"}"
         },
         {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
           "rwOwned": true,
-          "lineCount": 320,
-          "description": "rule/rule.selection_flow (typescript) params: {\"choiceCount\":3,\"selectionPolicy\":\"single\",\"applyMode\":\"immediate\",\"postSelectionPoolBehavior\":\"remove_selected_from_remaining\",\"trackSelectedItems\":true,\"effectApplication\":{\"enabled\":true,\"rarityAttributeBonusMap\":{\"R\":{\"attribute\":\"strength\",\"value\":10},\"SR\":{\"attribute\":\"agility\",\"value\":10},\"SSR\":{\"attribute\":\"intelligence\",\"value\":10},\"UR\":{\"attribute\":\"all\",\"value\":10}}}}"
+          "lineCount": 380,
+          "description": "ui/ui.selection_modal (tsx) params: {\"choiceCount\":3,\"title\":\"Choose Your Selection\",\"description\":\"Select one of the following options\",\"inventoryTitle\":\"Selection Inventory\",\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_selection_slot\",\"name\":\"Empty Slot\",\"description\":\"No selection available\",\"disabled\":true},\"layoutPreset\":\"card_tray\",\"selectionMode\":\"single\",\"dismissBehavior\":\"selection_only\"}"
+        },
+        {
+          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+          "rwOwned": true,
+          "lineCount": 255,
+          "description": "ui/ui.selection_modal (less) params: {\"choiceCount\":3,\"title\":\"Choose Your Selection\",\"description\":\"Select one of the following options\",\"inventoryTitle\":\"Selection Inventory\",\"payloadShape\":\"card_with_rarity\",\"minDisplayCount\":3,\"placeholderConfig\":{\"id\":\"empty_selection_slot\",\"name\":\"Empty Slot\",\"description\":\"No selection available\",\"disabled\":true},\"layoutPreset\":\"card_tray\",\"selectionMode\":\"single\",\"dismissBehavior\":\"selection_only\"}"
+        },
+        {
+          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+          "rwOwned": true,
+          "lineCount": 60,
+          "description": "input/input.key_binding (typescript) params: {\"triggerKey\":\"F4\",\"key\":\"F4\",\"eventName\":\"rune_weaver_selection_pool_triggered\"} [ui-emitter]"
+        },
+        {
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+          "rwOwned": true,
+          "lineCount": 129,
+          "description": "feature_source_model/selection_pool (json) entries:6 metadata-kind:talent"
+        },
+        {
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json",
+          "rwOwned": true,
+          "lineCount": 7,
+          "description": "rw content collections (0)"
         }
       ],
       "filesToRefresh": [],
@@ -842,44 +1054,38 @@
       "skippedItems": [],
       "blockers": [],
       "readyToExecute": true,
-      "generatedAt": "2026-04-17T13:07:17.932Z"
+      "generatedAt": "2026-04-23T02:42:45.634Z"
     },
     "evidence": {
       "filesCreated": [
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
         "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
+        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
         "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding.ts",
-        "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts"
+        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+        "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+        "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+        "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json"
       ],
       "filesModified": [],
       "filesSkipped": [],
       "dryRunArtifacts": [
         {
-          "path": "game/scripts/vscripts/rune_weaver/abilities/talent_draw_demo_effect_application_effect_modifier_applier.lua",
+          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
           "wouldCreate": true,
-          "preview": "local ____lualib = require(\"lualib_bundle\") local __TS__Class = ____lualib.__TS__Class local __TS__ClassExtends = ____lualib.__TS__ClassExtends local __TS__DecorateLegacy = ____lualib.__TS__DecorateLe"
-        },
-        {
-          "path": "game/scripts/npc/npc_abilities_custom.txt",
-          "wouldCreate": true,
-          "preview": "\"talent_draw_demo_effect_application_effect_modifier_applier\" {     \"BaseClass\"              \"ability_datadriven\"     \"AbilityBehavior\"        \"DOTA_ABILITY_BEHAVIOR_NO_TARGET\"     \"AbilityType\"      "
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
-          "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoSelectionModalUiSelectionModal  * Generated selection modal  *  * Features:  * - choiceCount: 3  * - payloadShape: \"card_with_rarity\"  * - dismissBehavior: \"selection_only\"  * - l"
-        },
-        {
-          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
-          "wouldCreate": true,
-          "preview": "/* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .talent_draw_demo_selection_modal_ui_selection_modal-root {   width: 100%;   height: 100%; }  .talent_draw_demo_selection_mo"
+          "preview": "/**  * TalentDrawDemoSelectionFlowRuleSelectionFlow  * 选择流程管理器 - Generated by Rune Weaver  *  * Features:  * - choiceCount: 3  * - selectionPolicy: \"single\"  * - applyMode: \"immediate\"  * - postSelect"
         },
         {
           "path": "game/scripts/src/rune_weaver/generated/shared/talent_draw_demo_weighted_pool_data_weighted_pool.ts",
           "wouldCreate": true,
           "preview": "/**  * TalentDrawDemoWeightedPoolDataWeightedPool  * 加权随机池 - Generated by Rune Weaver  *  * Features:  * - drawMode: multiple_without_replacement  * - duplicatePolicy: forbid  * - poolStateTracking: s"
+        },
+        {
+          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_outcome_effect_outcome_realizer.ts",
+          "wouldCreate": true,
+          "preview": "/**  * TalentDrawDemoSelectionOutcomeEffectOutcomeRealizer  * 选择结果宿主实现层 - Generated by Rune Weaver  */  interface SelectionOption {   id: string;   name: string;   description: string;   icon?: string"
         },
         {
           "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_input_trigger_input_key_binding_ability.ts",
@@ -892,40 +1098,65 @@
           "preview": "/**  * TalentDrawDemoInputTriggerInputKeyBinding  * 按键绑定模块 - Generated by Rune Weaver  */  export class TalentDrawDemoInputTriggerInputKeyBinding {   private static instance: TalentDrawDemoInputTrigge"
         },
         {
-          "path": "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
           "wouldCreate": true,
-          "preview": "/**  * TalentDrawDemoSelectionFlowRuleSelectionFlow  * 选择流程管理器 - Generated by Rune Weaver  *  * Features:  * - choiceCount: 3  * - selectionPolicy: \"single\"  * - applyMode: \"immediate\"  * - postSelect"
+          "preview": "/**  * TalentDrawDemoSelectionModalUiSelectionModal  * Generated selection modal  *  * Features:  * - choiceCount: 3  * - payloadShape: \"card_with_rarity\"  * - dismissBehavior: \"selection_only\"  * - l"
+        },
+        {
+          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.less",
+          "wouldCreate": true,
+          "preview": "/* Generated by Rune Weaver */ /* talent_draw_demo - ui.selection_modal */  .talent_draw_demo_selection_modal_ui_selection_modal-root {   width: 100%;   height: 100%; }  .talent_draw_demo_selection_mo"
+        },
+        {
+          "path": "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_input_trigger_input_key_binding_emitter.tsx",
+          "wouldCreate": true,
+          "preview": "/**  * TalentDrawDemoInputTriggerInputKeyBindingEmitter  * Generated input.key_binding Panorama emitter  *  * Current honest slice:  * - input.key_binding owns trigger capture end-to-end  * - UI emitt"
+        },
+        {
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+          "wouldCreate": true,
+          "preview": "{   \"adapter\": \"selection_pool\",   \"version\": 2,   \"featureId\": \"talent_draw_demo\",   \"objectKind\": \"talent\",   \"triggerKey\": \"F4\",   \"choiceCount\": 3,   \"drawMode\": \"multiple_without_replacement\",   "
+        },
+        {
+          "path": "game/scripts/src/rune_weaver/features/talent_draw_demo/content-collections.json",
+          "wouldCreate": true,
+          "preview": "{   \"adapter\": \"rw_content_collections\",   \"version\": 1,   \"featureId\": \"talent_draw_demo\",   \"collections\": [] } "
         }
       ]
     }
   },
   "smokeAssertions": {
     "passed": true,
-    "total": 23,
-    "passedCount": 23,
+    "total": 26,
+    "passedCount": 26,
     "failed": [],
     "details": [
       {
-        "name": "Wizard does not implicitly provide Talent Draw params",
+        "name": "Wizard does not implicitly provide case-owned params",
         "passed": true,
         "message": "Wizard unexpectedly extracted: "
       },
       {
-        "name": "Schema has fixture parameters merged",
+        "name": "Schema has case fixture parameters merged",
         "passed": true,
-        "message": "triggerKey=F4, choiceCount=3"
+        "message": "triggerKey=F4, choiceCount=3, objectKind=talent"
       },
       {
-        "name": "Blueprint has trigger/data/rule/ui modules",
+        "name": "Blueprint has trigger/data/rule/effect/ui modules",
         "passed": true,
         "message": "Found: trigger, data, rule, effect, ui"
+      },
+      {
+        "name": "Blueprint keeps the selection-first module skeleton",
+        "passed": true,
+        "message": "Found: input_trigger, weighted_pool, selection_flow, selection_outcome, selection_modal"
       },
       {
         "name": "Blueprint modules have parameters",
         "passed": true
       },
       {
-        "name": "Selected patterns include the current Talent Draw pattern set",
+        "name": "Selected patterns include the selection case pattern set",
         "passed": true,
         "message": "Missing: "
       },
@@ -947,6 +1178,10 @@
       },
       {
         "name": "HostRealizationPlan created",
+        "passed": true
+      },
+      {
+        "name": "HostRealizationPlan includes selection_outcome unit",
         "passed": true
       },
       {
@@ -986,8 +1221,14 @@
         "passed": true
       },
       {
-        "name": "Generated content references rarity/bonus mapping",
-        "passed": true
+        "name": "Generated content includes configured outcome kinds",
+        "passed": true,
+        "message": "Outcome kinds: attribute_bonus"
+      },
+      {
+        "name": "Generated content includes configured realization tokens",
+        "passed": true,
+        "message": "Tokens: attribute_bonus, ModifyStrength, ModifyAgility, ModifyIntellect"
       },
       {
         "name": "Generated content has placeholder evidence",
@@ -1005,8 +1246,9 @@
   },
   "knownLimitations": [
     "Generator produces real content but may need refinement for production use",
-    "KV generation for talents produces basic structure - custom implementation may be needed",
+    "Selection outcome realization is still partially deferred when it would require broad generic modifier/KV synthesis",
     "UI card interaction logic is generated but may need manual tuning",
-    "Pool state persistence is session-scoped only"
+    "Pool state persistence is session-scoped only",
+    "Host write readiness gate requires hostRoot to be set (defaults to not ready)"
   ]
 }

@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 
-import { buildBlueprint } from "./builder";
+import { BlueprintBuilder, buildBlueprint } from "./builder";
 import type { IntentSchema } from "../schema/types";
 import {
-  buildSelectionPoolExampleParameters,
   getSelectionPoolParameterSurface,
+  resolveSelectionPoolFamily,
 } from "../../adapters/dota2/families/selection-pool/index.js";
+import {
+  buildSelectionPoolSyntheticParameters,
+} from "../../adapters/dota2/families/selection-pool/__fixtures__/synthetic.js";
+import {
+  TALENT_DRAW_DEMO_CREATE_PROMPT,
+} from "../../adapters/dota2/cases/selection-demo-registry.js";
+import {
+  buildCurrentFeatureContext,
+  createUpdateIntentFromRequestedChange,
+} from "../wizard/index.js";
+import { normalizeIntentSchema } from "../wizard/intent-schema/normalize.js";
 
 const readySchema: IntentSchema = {
   version: "1.0",
@@ -84,7 +95,14 @@ const readySchema: IntentSchema = {
 
 const weakSchema: IntentSchema = {
   ...readySchema,
-  readiness: "weak",
+  uncertainties: [
+    {
+      id: "unc_clear_target",
+      summary: "The exact effect target is still underspecified.",
+      affects: ["intent", "blueprint"],
+      severity: "medium",
+    },
+  ],
   requiredClarifications: [{ id: "clarify_target", question: "What exact effect should be applied?", blocksFinalization: false }],
   openQuestions: ["What exact effect should be applied?"],
   isReadyForBlueprint: false,
@@ -93,6 +111,7 @@ const weakSchema: IntentSchema = {
 function testReadyBuildProducesFinalBlueprint() {
   const result = buildBlueprint(readySchema);
   assert.equal(result.success, true);
+  assert.ok(result.draftBlueprint);
   assert.ok(result.finalBlueprint);
   assert.equal(result.finalBlueprint?.status, "ready");
   assert.ok(result.blueprintProposal);
@@ -103,12 +122,13 @@ function testReadyBuildProducesFinalBlueprint() {
   assert.equal((result.blueprint as any)?.status, "ready");
 }
 
-function testWeakBuildHonorsHonestStatus() {
+function testProposalUncertaintyDoesNotDowngradeFinalBlueprintStatus() {
   const result = buildBlueprint(weakSchema);
-  assert.equal(result.success, false);
+  assert.equal(result.success, true);
   assert.ok(result.finalBlueprint);
-  assert.equal(result.finalBlueprint?.status, "weak");
-  assert.ok(result.normalizationReport?.issues.some((issue) => issue.code === "FINAL_BLUEPRINT_WEAK"));
+  assert.equal(result.blueprintProposal?.status, "needs_review");
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.ok(!result.normalizationReport?.issues.some((issue) => issue.code === "FINAL_BLUEPRINT_WEAK"));
 }
 
 function testMustRequirementWithoutSemanticSupportStaysWeak() {
@@ -135,7 +155,7 @@ function testMustRequirementWithoutSemanticSupportStaysWeak() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, false);
+  assert.equal(result.success, true);
   assert.equal(result.finalBlueprint?.status, "weak");
   assert.ok(
     result.normalizationReport?.issues.some(
@@ -152,19 +172,67 @@ function testFinalBlueprintCarriesCanonicalStateAndIntegrationSemantics() {
   const uiNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "selection_modal");
   const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
 
-  assert.ok(dataNeed?.stateExpectations?.includes("state:draft_choice"));
+  assert.ok(dataNeed?.stateExpectations?.includes("selection.pool_state"));
   assert.ok(dataNeed?.stateExpectations?.some((item) => item.includes("owner:feature")));
   assert.ok(dataNeed?.requiredOutputs?.includes("shared.runtime"));
-  assert.ok(dataNeed?.integrationHints?.includes("selection.candidate_source"));
   assert.ok(dataNeed?.requiredCapabilities.includes("selection.pool.weighted_candidates"));
-  assert.ok(uiNeed?.integrationHints?.includes("binding:ui-surface:ui_surface"));
+  assert.ok(uiNeed?.integrationHints?.includes("binding:ui-surface"));
   assert.ok(uiNeed?.integrationHints?.includes("ui.surface"));
   assert.ok(uiNeed?.integrationHints?.includes("selection.ui_surface"));
-  assert.ok(uiNeed?.integrationHints?.includes("required-binding:ui_surface"));
+  assert.ok(uiNeed?.integrationHints?.includes("required-binding:ui-surface"));
   assert.ok(uiNeed?.requiredCapabilities.includes("ui.selection.modal"));
   assert.ok(uiNeed?.requiredOutputs?.includes("ui.surface"));
   assert.ok(effectNeed?.requiredOutputs?.includes("host.config.kv"));
-  assert.ok(effectNeed?.integrationHints?.includes("ability.execution"));
+  assert.ok(effectNeed?.requiredOutputs?.includes("server.runtime"));
+}
+
+function testSurfaceDetailDriftDoesNotChangeBlueprintPlanning(): void {
+  const variantSchema: IntentSchema = {
+    ...readySchema,
+    stateModel: {
+      states: [
+        {
+          id: "selection_runtime_state",
+          summary: "Visible runtime selection state",
+          owner: "feature",
+          lifetime: "session",
+        },
+      ],
+    },
+    integrations: {
+      expectedBindings: [
+        {
+          id: "selection_surface_runtime",
+          kind: "ui-surface",
+          summary: "Runtime selection surface binding",
+          required: true,
+        },
+      ],
+    },
+    resolvedAssumptions: ["Alternative display copy"],
+  };
+
+  const baseResult = buildBlueprint(readySchema);
+  const variantResult = buildBlueprint(variantSchema);
+  const project = (result: ReturnType<typeof buildBlueprint>) => ({
+    status: result.finalBlueprint?.status,
+    modules: (result.finalBlueprint?.modules || []).map((module) => ({
+      role: module.role,
+      category: module.category,
+      planningKind: module.planningKind,
+      backboneKind: module.backboneKind,
+    })),
+    moduleNeeds: (result.finalBlueprint?.moduleNeeds || []).map((need) => ({
+      role: need.semanticRole,
+      requiredCapabilities: need.requiredCapabilities,
+      optionalCapabilities: need.optionalCapabilities,
+      requiredOutputs: need.requiredOutputs,
+      stateExpectations: need.stateExpectations,
+      integrationHints: need.integrationHints,
+    })),
+  });
+
+  assert.deepEqual(project(variantResult), project(baseResult));
 }
 
 function testBoundedDetailClarificationDoesNotBlockSupportedBlueprint() {
@@ -226,13 +294,11 @@ function testSupportedCapabilitiesUseAdmittedVocabulary() {
   assert.deepEqual(needsByRole.get("effect_application")?.requiredCapabilities, ["effect.modifier.apply"]);
   assert.deepEqual(needsByRole.get("selection_modal")?.requiredCapabilities, ["ui.selection.modal"]);
   assert.ok(needsByRole.get("input_trigger")?.requiredOutputs?.includes("server.runtime"));
-  assert.ok(needsByRole.get("input_trigger")?.integrationHints?.includes("input.binding"));
   assert.ok(needsByRole.get("selection_flow")?.requiredOutputs?.includes("server.runtime"));
   assert.ok(needsByRole.get("selection_flow")?.stateExpectations?.includes("selection.commit_state"));
   assert.ok(needsByRole.get("selection_modal")?.integrationHints?.includes("selection.ui_surface"));
   assert.ok(needsByRole.get("effect_application")?.requiredOutputs?.includes("server.runtime"));
   assert.ok(needsByRole.get("effect_application")?.requiredOutputs?.includes("host.config.kv"));
-  assert.ok(needsByRole.get("effect_application")?.integrationHints?.includes("ability.execution"));
 }
 
 function testExplicitPatternHintsOnlyEmitSchemaConstrainedPatterns() {
@@ -281,29 +347,313 @@ function testStandaloneStateAskHonestBlocksInsteadOfStayingWeak() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  const sessionStateModule = result.finalBlueprint?.modules.find((module) => module.role === "session_state");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.ok(sessionStateModule);
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("Standalone entity/session state semantics")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("feature-owned session state")
     )
   );
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
-        issue.message.includes("selection.flow.resolve")
+        issue.message.includes("state.session.feature_owned")
     )
   );
-  assert.ok(
-    result.normalizationReport?.issues.some(
-      (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
-        issue.message.includes("state.session.snapshot")
-    )
+}
+
+function testGenericTimedRuleDoesNotInventSelectionUiModules() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离，并在终点留下一个持续2秒的火焰区域，每0.5秒对附近敌人造成一次伤害。",
+      goal: "Create a Q-triggered fire dash with timed periodic damage and no UI or persistence.",
+    },
+    requirements: {
+      functional: ["Press Q to dash 400 units toward the cursor and apply timed periodic fire damage at the endpoint."],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture a Q key press to activate the ability.",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Schedule a 2-second periodic fire-area damage sequence with 0.5-second ticks.",
+          parameters: { durationSeconds: 2, intervalSeconds: 0.5 },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Dash the caster 400 units toward the cursor and damage nearby enemies.",
+          parameters: { distance: 400 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    stateModel: undefined,
+    integrations: undefined,
+    uiRequirements: undefined,
+    timing: {
+      duration: { kind: "timed", seconds: 2 },
+      intervalSeconds: 0.5,
+    },
+    spatial: {
+      motion: { kind: "dash", distance: 400, direction: "cursor" },
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+  const patternHints = new Set(
+    (result.finalBlueprint?.patternHints || []).flatMap((hint) => hint.suggestedPatterns || []),
   );
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const backboneNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "gameplay_ability");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(roles.has("selection_flow"), false);
+  assert.equal(roles.has("selection_modal"), false);
+  assert.equal(patternHints.has("ui.selection_modal"), false);
+  assert.equal(patternHints.has("rule.selection_flow"), false);
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.ok(backboneNeed?.requiredCapabilities?.includes("timing.interval.local"));
+}
+
+function testNegativeFunctionalConstraintsDoNotCreateUiModules() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "Create a fire dash with no UI, inventory, or persistence.",
+      goal: "Create a fire dash with no UI, inventory, or persistence.",
+    },
+    requirements: {
+      functional: [
+        "Press Q to activate the skill.",
+        "Dash the caster 400 units toward the cursor.",
+        "The feature must not add UI.",
+        "The feature must not add inventory.",
+        "The feature must not add persistence.",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Activate the skill when Q is pressed.",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "periodic_fire_damage",
+          kind: "rule",
+          summary: "Deal damage every 0.5 seconds while the fire area exists.",
+          parameters: { intervalSeconds: 0.5 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+
+  assert.equal(roles.has("selection_modal"), false);
+  assert.equal(roles.has("selection_flow"), false);
+  assert.equal(result.finalBlueprint?.patternHints.some((hint) => (hint.suggestedPatterns || []).includes("ui.selection_modal")), false);
+}
+
+function testInlineNegativeConstraintClausesDoNotTriggerGovernanceBlocks() {
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: "做一个主动技能：施放后在英雄身边召唤一个跟随自己的火球，持续5秒，每秒灼烧附近敌人。不要 UI，不要 inventory，不要 persistence，不要跨 feature，只需要一个技能。",
+      goal: "Create a single active skill that summons a fireball near the hero for 5 seconds, burns nearby enemies every second, with no UI, no inventory, no persistence, and no cross-feature coupling.",
+    },
+    requirements: {
+      functional: [
+        "Create a single active skill that summons a fireball near the hero for 5 seconds, burns nearby enemies every second, with no UI, no inventory, no persistence, and no cross-feature coupling.",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Cast a single active skill.",
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Track the temporary fireball instance for 5 seconds.",
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Apply burn damage every second for 5 seconds.",
+          parameters: { intervalSeconds: 1, durationSeconds: 5 },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Spawn the fireball near the hero and burn nearby enemies.",
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    stateModel: {
+      states: [{ id: "fireball_runtime", summary: "Runtime fireball instance", owner: "feature", lifetime: "round" }],
+    },
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  const issues = result.normalizationReport?.issues || [];
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(
+    issues.some((issue) => issue.message.includes("persistent/economy/inventory scope")),
+    false,
+  );
+  assert.equal(roles.has("selection_modal"), false);
+  assert.equal(roles.has("selection_flow"), false);
+}
+
+function testWizardStyleNegativeScopePhrasesDoNotTriggerGovernanceBlocks() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "做一个主动技能：施放后在英雄身边召唤一个跟随自己的火球，持续5秒，每秒灼烧附近敌人。不要 UI，不要 inventory，不要 persistence，不要跨 feature，只需要一个技能。",
+      goal: "Create a single active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies once per second, with no UI, no inventory, no persistence, and no cross-feature composition.",
+    },
+    requirements: {
+      functional: [
+        "The feature is a single active skill.",
+        "On cast, the skill summons a fireball near the casting hero.",
+        "The summoned fireball follows the hero after being created.",
+        "The fireball lasts exactly 5 seconds.",
+        "While active, the fireball burns nearby enemies once every second.",
+        "The feature must not require UI.",
+        "The feature must not use inventory mechanics.",
+        "The feature must not use persistence.",
+        "The feature must not depend on cross-feature composition.",
+      ],
+      typed: [
+        {
+          id: "trigger_cast_skill",
+          kind: "trigger",
+          summary: "Casting the active skill creates the following fireball.",
+          inputs: ["skill cast"],
+          outputs: ["fireball spawned"],
+        },
+        {
+          id: "state_fireball_active",
+          kind: "state",
+          summary: "Temporary active fireball state exists for 5 seconds after cast.",
+          inputs: ["fireball spawned"],
+          outputs: ["active timed aura-like presence"],
+          invariants: ["State is not persistent."],
+          parameters: { durationSeconds: 5 },
+        },
+        {
+          id: "rule_follow_caster",
+          kind: "rule",
+          summary: "The fireball stays with or follows the caster while active.",
+          inputs: ["caster position"],
+          outputs: ["fireball position updated"],
+        },
+        {
+          id: "effect_periodic_burn",
+          kind: "effect",
+          summary: "Every second, nearby enemies are burned while the fireball is active.",
+          inputs: ["1-second interval", "enemy proximity to fireball"],
+          outputs: ["burn applied to nearby enemies"],
+          parameters: { intervalSeconds: 1, durationSeconds: 5 },
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    stateModel: {
+      states: [
+        { id: "fireball_instance", summary: "Temporary summoned fireball linked to the caster.", owner: "feature", lifetime: "ephemeral" },
+        { id: "fireball_expiration", summary: "Timed removal of the fireball after 5 seconds.", owner: "feature", lifetime: "ephemeral" },
+      ],
+    },
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    integrations: {
+      expectedBindings: [
+        { id: "skill_cast_entry", kind: "entry-point", summary: "Bind to the active skill cast event.", required: true },
+        { id: "nearby_enemy_query", kind: "bridge-point", summary: "Resolve enemy units near the active fireball during each periodic pulse.", required: true },
+      ],
+    },
+    timing: {
+      intervalSeconds: 1,
+      duration: { kind: "timed", seconds: 5 },
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  const issues = result.normalizationReport?.issues || [];
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(
+    issues.some((issue) => issue.message.includes("persistent/economy/inventory scope")),
+    false,
+  );
+  assert.equal(roles.has("selection_modal"), false);
+  assert.equal(roles.has("selection_flow"), false);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.planningKind === "backbone"), true);
 }
 
 function testSelectionLocalProgressionSliceStaysReady() {
@@ -457,7 +807,7 @@ function testBroaderRewardProgressionFrameworkStaysBlocked() {
     result.normalizationReport?.issues.some(
       (issue) =>
         issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("selection-local threshold progression slice")
+        issue.message.includes("persistent/economy/inventory scope")
     )
   );
 }
@@ -519,7 +869,7 @@ function testForwardLinearProjectileSliceStaysReady() {
   assert.ok(effectNeed?.requiredOutputs?.includes("host.config.kv"));
 }
 
-function testHelperUnitSpawnChoreographyStaysBlocked() {
+function testHelperUnitSpawnChoreographyBuildsGameplayBackbone() {
   const result = buildBlueprint({
     ...readySchema,
     request: {
@@ -571,13 +921,27 @@ function testHelperUnitSpawnChoreographyStaysBlocked() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const need = result.finalBlueprint?.moduleNeeds[0];
+  const facetKinds = new Set((result.finalBlueprint?.moduleFacets || []).map((facet) => facet.kind));
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.finalBlueprint?.modules.length, 1);
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(need?.semanticRole, "gameplay_ability");
+  assert.ok(need?.requiredCapabilities.includes("emission.spawn.feature_owned"));
+  assert.ok(need?.requiredCapabilities.includes("ability.buff.short_duration"));
+  assert.ok(need?.optionalCapabilities?.includes("entity.motion.follow_owner"));
+  assert.ok(facetKinds.has("spawn"));
+  assert.ok(facetKinds.has("effect"));
+  assert.ok(facetKinds.has("motion"));
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.category === "ui"), false);
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("forward-linear-projectile slice")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Spawn/emission semantics require synthesis")
     )
   );
 }
@@ -623,10 +987,14 @@ function testSupportedLifecycleClarificationDoesNotBlockPersistentBuffFlow() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, true);
-  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
   assert.ok(
-    !result.normalizationReport?.issues.some((issue) => issue.code === "REQUIRED_CLARIFICATION_BLOCKS_FINALIZATION")
+    result.normalizationReport?.issues.some(
+      (issue) =>
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
+        issue.message.includes("persistent/external/shared ownership")
+    )
   );
 }
 
@@ -702,7 +1070,7 @@ function testTimedSelfBuffWithLocalCooldownStaysReady() {
   assert.ok(effectNeed?.optionalCapabilities?.includes("timing.cooldown.local"));
 }
 
-function testInitialDelaySchedulerAskStaysBlocked() {
+function testInitialDelaySchedulerAskBuildsTimingFacetBackbone() {
   const result = buildBlueprint({
     ...readySchema,
     classification: {
@@ -749,18 +1117,27 @@ function testInitialDelaySchedulerAskStaysBlocked() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const gameplayNeed = result.finalBlueprint?.moduleNeeds[0];
+  const timingFacet = result.finalBlueprint?.moduleFacets?.find((facet) => facet.role === "timed_rule");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(gameplayNeed?.semanticRole, "gameplay_ability");
+  assert.deepEqual(timingFacet?.requiredCapabilities, ["timing.delay.local"]);
+  assert.ok(gameplayNeed?.requiredCapabilities.includes("timing.delay.local"));
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.category === "ui"), false);
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("cooldown-local effect slice")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Scheduler/timer semantics need synthesis")
     )
   );
 }
 
-function testPeriodicSchedulerAskStaysBlocked() {
+function testPeriodicSchedulerAskBuildsIntervalFacetBackbone() {
   const result = buildBlueprint({
     ...readySchema,
     classification: {
@@ -807,13 +1184,22 @@ function testPeriodicSchedulerAskStaysBlocked() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const gameplayNeed = result.finalBlueprint?.moduleNeeds[0];
+  const timingFacet = result.finalBlueprint?.moduleFacets?.find((facet) => facet.role === "timed_rule");
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(gameplayNeed?.semanticRole, "gameplay_ability");
+  assert.deepEqual(timingFacet?.requiredCapabilities, ["timing.interval.local"]);
+  assert.ok(gameplayNeed?.requiredCapabilities.includes("timing.interval.local"));
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.category === "ui"), false);
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("delay/periodic")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Scheduler/timer semantics need synthesis")
     )
   );
 }
@@ -902,18 +1288,18 @@ function testCooldownCoupledToSelectionFlowStaysBlocked() {
     isReadyForBlueprint: true,
   });
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("cross-module/post-selection")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Scheduler/timer semantics need synthesis")
     )
   );
 }
 
-function testNonSelfCooldownBuffStaysBlockedAtCurrentBoundary() {
+function testNonSelfCooldownBuffBuildsBackboneWithSeparateTimingFacet() {
   const result = buildBlueprint({
     ...readySchema,
     classification: {
@@ -959,17 +1345,25 @@ function testNonSelfCooldownBuffStaysBlockedAtCurrentBoundary() {
     stateModel: undefined,
     isReadyForBlueprint: true,
   });
-  const effectNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "effect_application");
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const gameplayNeed = result.finalBlueprint?.moduleNeeds[0];
+  const effectFacet = result.finalBlueprint?.moduleFacets?.find((facet) => facet.role === "effect_application");
+  const timingFacet = result.finalBlueprint?.moduleFacets?.find((facet) => facet.role === "timed_rule");
 
-  assert.equal(result.success, false);
-  assert.equal(result.finalBlueprint?.status, "blocked");
-  assert.deepEqual(effectNeed?.requiredCapabilities, ["effect.modifier.apply"]);
-  assert.ok(!effectNeed?.optionalCapabilities?.includes("timing.cooldown.local"));
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(gameplayNeed?.semanticRole, "gameplay_ability");
+  assert.deepEqual(effectFacet?.requiredCapabilities, ["effect.modifier.apply"]);
+  assert.deepEqual(timingFacet?.requiredCapabilities, ["timing.cooldown.local"]);
+  assert.ok(!effectFacet?.optionalCapabilities?.includes("timing.cooldown.local"));
+  assert.ok(gameplayNeed?.requiredCapabilities.includes("effect.modifier.apply"));
+  assert.ok(gameplayNeed?.requiredCapabilities.includes("timing.cooldown.local"));
   assert.ok(
     result.normalizationReport?.issues.some(
       (issue) =>
-        issue.code === "FINAL_BLUEPRINT_SEMANTIC_BLOCKER" &&
-        issue.message.includes("cooldown-local effect slice")
+        issue.code === "FINAL_BLUEPRINT_SEMANTIC_WARNING" &&
+        issue.message.includes("Scheduler/timer semantics need synthesis")
     )
   );
 }
@@ -1025,46 +1419,11 @@ function testInventoryExtensionStaysOnExistingRuleAndUiModules() {
 }
 
 function testSelectionPoolFeatureAuthoringFlowsThroughFinalBlueprint() {
-  const selectionPoolParameters = buildSelectionPoolExampleParameters("talent");
-  const result = buildBlueprint({
-    ...readySchema,
-    featureAuthoringProposal: {
-      mode: "source-backed",
-      profile: "selection_pool",
-      objectKind: "talent",
-      parameters: selectionPoolParameters,
-      parameterSurface: getSelectionPoolParameterSurface(),
-      proposalSource: "fallback",
-    },
-    fillIntentCandidates: [
-      {
-        boundaryId: "weighted_pool.selection_policy",
-        summary: "Shape weighted candidate draw policy from authored objects.",
-        source: "fallback",
-      },
-      {
-        boundaryId: "selection_flow.effect_mapping",
-        summary: "Map authored effect profile into immediate apply behavior.",
-        source: "fallback",
-      },
-      {
-        boundaryId: "ui.selection_modal.payload_adapter",
-        summary: "Adapt authored display fields into modal payload.",
-        source: "fallback",
-      },
-    ],
-  });
+  const result = buildBlueprint(readySchema);
 
   assert.equal(result.success, true);
-  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
-  assert.deepEqual(
-    result.finalBlueprint?.fillContracts?.map((contract) => contract.boundaryId),
-    [
-      "weighted_pool.selection_policy",
-      "selection_flow.effect_mapping",
-      "ui.selection_modal.payload_adapter",
-    ],
-  );
+  assert.equal(result.finalBlueprint?.featureAuthoring, undefined);
+  assert.equal(result.finalBlueprint?.fillContracts, undefined);
   assert.equal(
     Object.prototype.hasOwnProperty.call(result.finalBlueprint?.parameters || {}, "rwFeatureAuthoring"),
     false,
@@ -1072,65 +1431,1031 @@ function testSelectionPoolFeatureAuthoringFlowsThroughFinalBlueprint() {
 }
 
 function testSelectionPoolBoundedFieldsStayInsideSameSkeleton() {
-  const result = buildBlueprint({
-    ...readySchema,
-    featureAuthoringProposal: {
-      mode: "source-backed",
-      profile: "selection_pool",
-      objectKind: "talent",
-      parameters: {
-        ...buildSelectionPoolExampleParameters("talent"),
-        triggerKey: "F5",
-        choiceCount: 5,
-        display: {
-          title: "Choose Your Selection",
-          description: "Select one of the following options",
-          inventoryTitle: "Selection Inventory",
-          payloadShape: "card_with_rarity",
-          minDisplayCount: 5,
-        },
-      },
-      parameterSurface: getSelectionPoolParameterSurface(),
-      proposalSource: "fallback",
-    },
-  });
+  const result = buildBlueprint(readySchema);
 
   const inputModule = result.finalBlueprint?.modules.find((module) => module.role === "input_trigger");
   const flowModule = result.finalBlueprint?.modules.find((module) => module.role === "selection_flow");
   const modalModule = result.finalBlueprint?.modules.find((module) => module.role === "selection_modal");
 
   assert.equal(result.success, true);
-  assert.equal(inputModule?.parameters?.triggerKey, "F5");
-  assert.equal(flowModule?.parameters?.choiceCount, 5);
-  assert.equal(modalModule?.parameters?.title, "Choose Your Selection");
-  assert.equal(modalModule?.parameters?.minDisplayCount, 5);
+  assert.equal(inputModule?.parameters?.triggerKey, "F4");
+  assert.equal(flowModule?.parameters?.choiceCount, 1);
+  assert.equal(modalModule?.parameters?.title, undefined);
+  assert.equal(modalModule?.parameters?.minDisplayCount, undefined);
+}
+
+function testSchemaOwnedImplementationCandidatesAreIgnored() {
+  const pollutedSchema = {
+    ...readySchema,
+    featureAuthoringProposal: {
+      mode: "source-backed",
+      profile: "selection_pool",
+      objectKind: "talent",
+      parameters: buildSelectionPoolSyntheticParameters("talent"),
+      parameterSurface: getSelectionPoolParameterSurface(),
+      proposalSource: "fallback",
+    },
+    fillIntentCandidates: [
+      {
+        boundaryId: "weighted_pool.selection_policy",
+        summary: "Legacy schema-owned fill candidate",
+        source: "fallback",
+      },
+    ],
+  } as IntentSchema & Record<string, unknown>;
+
+  const result = buildBlueprint(pollutedSchema as IntentSchema);
+
+  assert.equal(result.finalBlueprint?.featureAuthoring, undefined);
+  assert.equal(result.finalBlueprint?.fillContracts, undefined);
+}
+
+function testBlockedExternalCandidatesBlockBlueprintWithoutMutatingSchema() {
+  const schema: IntentSchema = {
+    ...readySchema,
+    requiredClarifications: [],
+    openQuestions: [],
+    uncertainties: [],
+    readiness: "ready",
+    isReadyForBlueprint: true,
+  };
+
+  const result = buildBlueprint(schema);
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.equal(schema.readiness, "ready");
+  assert.equal(
+    result.normalizationReport?.issues.some(
+      (issue) => issue.code === "FINAL_BLUEPRINT_IMPLEMENTATION_CANDIDATE_BLOCKER",
+    ),
+    false,
+  );
+}
+
+function testContentModelEvidenceSurfacesInNormalizationNotes() {
+  const result = buildBlueprint({
+    ...readySchema,
+    contentModel: {
+      collections: [
+        {
+          id: "draft_candidates",
+          role: "candidate-options",
+          ownership: "feature",
+          updateMode: "merge",
+          itemSchema: [
+            { name: "label", type: "string", required: true },
+            { name: "weight", type: "number", required: true },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.ok(
+    result.normalizationReport?.notes.some((note) =>
+      note.includes("feature-owned content collection"),
+    ),
+  );
+}
+
+function testUpdateBlueprintKeepsWorkspaceContextGenericUntilAdapterLayer() {
+  const createResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  const currentFeature = {
+    featureId: "talent_draw_demo",
+    intentKind: "standalone-system",
+    status: "active" as const,
+    revision: 1,
+    blueprintId: "bp_talent_draw",
+    selectedPatterns: [
+      "input.key_binding",
+      "data.weighted_pool",
+      "rule.selection_flow",
+      "ui.selection_modal",
+    ],
+    modules: [
+      {
+        moduleId: "selection_input",
+        role: "input_trigger",
+        category: "trigger",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["input.key_binding"],
+      },
+      {
+        moduleId: "selection_pool",
+        role: "weighted_pool",
+        category: "data",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["data.weighted_pool"],
+      },
+      {
+        moduleId: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["rule.selection_flow"],
+      },
+      {
+        moduleId: "selection_modal",
+        role: "selection_modal",
+        category: "ui",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["ui.selection_modal"],
+      },
+    ],
+    generatedFiles: [],
+    entryBindings: [],
+    sourceModel: {
+      adapter: "selection_pool",
+      version: 1,
+      path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+    },
+    featureAuthoring: {
+      mode: "source-backed" as const,
+      profile: "selection_pool" as const,
+      objectKind: createResolution.proposal?.objectKind,
+      parameters: createResolution.proposal!.parameters,
+      parameterSurface: createResolution.proposal!.parameterSurface,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const currentFeatureContext = buildCurrentFeatureContext(currentFeature, "D:\\test3");
+  const requestedChange: IntentSchema = {
+    ...readySchema,
+    request: {
+      rawPrompt: "Add a persistent 15-slot inventory panel that stores confirmed selections.",
+      goal: "Add a persistent 15-slot inventory panel that stores confirmed selections.",
+    },
+    selection: {
+      mode: "user-chosen",
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      inventory: {
+        enabled: true,
+        capacity: 15,
+        storeSelectedItems: true,
+        blockDrawWhenFull: true,
+        fullMessage: "Talent inventory full",
+        presentation: "persistent_panel",
+      },
+    },
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  };
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+  const builder = new BlueprintBuilder();
+  const result = builder.buildUpdate(updateIntent);
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.equal(result.finalBlueprint?.featureAuthoring, undefined);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "selection_flow"), true);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "selection_modal"), true);
+}
+
+function testUpdateBlueprintDoesNotRebuildSelectionFromLegacyPatternIds() {
+  const currentFeatureContext = buildCurrentFeatureContext({
+    featureId: "dash_generic",
+    intentKind: "micro-feature",
+    status: "active" as const,
+    revision: 2,
+    blueprintId: "bp_dash_generic",
+    selectedPatterns: [
+      "input.key_binding",
+      "data.weighted_pool",
+      "rule.selection_flow",
+      "ui.selection_modal",
+    ],
+    generatedFiles: [],
+    entryBindings: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }, "D:\\test3");
+  const requestedChange: IntentSchema = {
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Rebind the dash trigger to G. No UI.",
+      goal: "Rebind the dash trigger to G. No UI.",
+    },
+    requirements: {
+      functional: ["Rebind the dash trigger to G.", "The feature must not add UI."],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Capture G to trigger the existing dash.",
+          parameters: { triggerKey: "G" },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Keep the existing dash effect.",
+          parameters: { distance: 400 },
+        },
+      ],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  };
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+  const builder = new BlueprintBuilder();
+  const result = builder.buildUpdate(updateIntent);
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+
+  assert.equal(result.success, true);
+  assert.equal(roles.has("selection_flow"), false);
+  assert.equal(roles.has("selection_modal"), false);
+}
+
+function testUpdateBlueprintBlocksSourceBackedInvariantRemoval() {
+  const createResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_DEMO_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+  const currentFeatureContext = buildCurrentFeatureContext({
+    featureId: "talent_draw_demo",
+    intentKind: "standalone-system",
+    status: "active" as const,
+    revision: 1,
+    blueprintId: "bp_talent_draw",
+    selectedPatterns: [
+      "input.key_binding",
+      "data.weighted_pool",
+      "rule.selection_flow",
+      "ui.selection_modal",
+    ],
+    modules: [
+      {
+        moduleId: "selection_input",
+        role: "input_trigger",
+        category: "trigger",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["input.key_binding"],
+      },
+      {
+        moduleId: "selection_pool",
+        role: "weighted_pool",
+        category: "data",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["data.weighted_pool"],
+      },
+      {
+        moduleId: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["rule.selection_flow"],
+      },
+      {
+        moduleId: "selection_modal",
+        role: "selection_modal",
+        category: "ui",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["ui.selection_modal"],
+      },
+    ],
+    generatedFiles: [],
+    entryBindings: [],
+    sourceModel: {
+      adapter: "selection_pool",
+      version: 1,
+      path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+    },
+    featureAuthoring: {
+      mode: "source-backed" as const,
+      profile: "selection_pool" as const,
+      objectKind: createResolution.proposal?.objectKind,
+      parameters: createResolution.proposal!.parameters,
+      parameterSurface: createResolution.proposal!.parameterSurface,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }, "D:\\rw_test_missing");
+  const requestedChange: IntentSchema = {
+    ...readySchema,
+    request: {
+      rawPrompt: "Remove the modal UI and auto-apply immediately.",
+      goal: "Remove the modal UI and auto-apply immediately.",
+    },
+    requirements: {
+      functional: ["Remove the modal UI and auto-apply immediately."],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    normalizedMechanics: {
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  };
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+  const builder = new BlueprintBuilder();
+  const result = builder.buildUpdate(updateIntent);
+
+  assert.equal(result.success, false);
+  assert.equal(result.finalBlueprint?.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.code === "UPDATE_INVARIANT_CONFLICT"));
+}
+
+function testBoundedSourceBackedUpdateUsesAuthoritativeProjectionInsteadOfPreserveEchoModules() {
+  const currentFeatureContext = buildCurrentFeatureContext({
+    featureId: "talent_draw_projection_demo",
+    intentKind: "standalone-system",
+    status: "active" as const,
+    revision: 2,
+    blueprintId: "bp_talent_draw_projection_demo",
+    selectedPatterns: [
+      "input.key_binding",
+      "data.weighted_pool",
+      "rule.selection_flow",
+      "ui.selection_modal",
+    ],
+    modules: [
+      {
+        moduleId: "gameplay_core",
+        role: "gameplay-core",
+        category: "effect",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["effect.modifier_applier"],
+      },
+      {
+        moduleId: "shared_support",
+        role: "shared-support",
+        category: "data",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["data.weighted_pool"],
+      },
+      {
+        moduleId: "ui_surface",
+        role: "ui-surface",
+        category: "ui",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["ui.selection_modal"],
+      },
+    ],
+    generatedFiles: [],
+    entryBindings: [],
+    sourceModel: {
+      adapter: "selection_pool",
+      version: 1,
+      path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+    },
+    featureAuthoring: {
+      mode: "source-backed" as const,
+      profile: "selection_pool" as const,
+      parameters: {
+        triggerKey: "F4",
+        choiceCount: 3,
+      },
+      parameterSurface: {
+        invariants: ["same selection skeleton"],
+      },
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }, "D:\\rw_test_missing");
+  const requestedChange: IntentSchema = {
+    ...readySchema,
+    request: {
+      rawPrompt: "把天赋抽取的触发键从 F4 改成 F5",
+      goal: "Only change the trigger key from F4 to F5 while preserving everything else.",
+    },
+    requirements: {
+      functional: [
+        "Rebind the existing talent draw trigger key from F4 to F5.",
+        "Keep all other selection, pool, UI, effect, and state behavior unchanged.",
+      ],
+      typed: [
+        {
+          id: "req_trigger_rebind",
+          kind: "trigger",
+          summary: "Change the single hotkey activation from F4 to F5.",
+          inputs: ["F5 key press"],
+          outputs: ["existing talent draw flow activation"],
+          invariants: ["preserve existing selection flow and outcome behavior"],
+          parameters: {
+            oldKey: "F4",
+            newKey: "F5",
+          },
+          priority: "must",
+        },
+        {
+          id: "req_preserve_flow",
+          kind: "rule",
+          summary: "Preserve the current weighted draw, single confirmation, and immediate apply flow.",
+          outputs: ["unchanged talent selection behavior"],
+          parameters: {
+            choiceCount: 3,
+            selectionPolicy: "single",
+            applyMode: "immediate",
+          },
+          priority: "must",
+        },
+      ],
+    },
+    interaction: {
+      activations: [
+        {
+          kind: "key",
+          input: "F5",
+          phase: "press",
+          repeatability: "repeatable",
+        },
+      ],
+    },
+    parameters: {
+      triggerKey: "F5",
+    },
+    selection: {
+      mode: "user-chosen",
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  };
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+  const builder = new BlueprintBuilder();
+  const result = builder.buildUpdate(updateIntent);
+  const moduleIds = (result.finalBlueprint?.modules || []).map((module) => module.id);
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+
+  assert.equal(result.success, true);
+  assert.equal(moduleIds.some((moduleId) => moduleId.includes("req_preserve_flow")), false);
+  assert.equal(moduleIds.some((moduleId) => moduleId.includes("req_trigger_rebind")), false);
+  assert.ok(roles.has("input_trigger"));
+  assert.ok(roles.has("weighted_pool"));
+  assert.ok(roles.has("selection_flow"));
+  assert.ok(roles.has("selection_modal"));
+}
+
+function testSourceBackedUpdateKeepsBoundedChoiceCountWithoutExplicitDelta() {
+  const currentFeatureContext = buildCurrentFeatureContext({
+    featureId: "talent_draw_inventory_demo",
+    intentKind: "standalone-system",
+    status: "active" as const,
+    revision: 2,
+    blueprintId: "bp_talent_draw_inventory_demo",
+    selectedPatterns: [
+      "input.key_binding",
+      "data.weighted_pool",
+      "rule.selection_flow",
+      "ui.selection_modal",
+    ],
+    modules: [
+      {
+        moduleId: "selection_input",
+        role: "input_trigger",
+        category: "trigger",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["input.key_binding"],
+      },
+      {
+        moduleId: "selection_pool",
+        role: "weighted_pool",
+        category: "data",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["data.weighted_pool"],
+      },
+      {
+        moduleId: "selection_flow",
+        role: "selection_flow",
+        category: "rule",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["rule.selection_flow"],
+      },
+      {
+        moduleId: "selection_modal",
+        role: "selection_modal",
+        category: "ui",
+        sourceKind: "family" as const,
+        selectedPatternIds: ["ui.selection_modal"],
+      },
+    ],
+    generatedFiles: [],
+    entryBindings: [],
+    sourceModel: {
+      adapter: "selection_pool",
+      version: 1,
+      path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+    },
+    featureAuthoring: {
+      mode: "source-backed" as const,
+      profile: "selection_pool" as const,
+      parameters: {
+        triggerKey: "F4",
+        choiceCount: 3,
+        inventory: {
+          enabled: true,
+          capacity: 15,
+          storeSelectedItems: true,
+          blockDrawWhenFull: true,
+          fullMessage: "Talent inventory full",
+          presentation: "persistent_panel",
+        },
+      },
+      parameterSurface: {
+        invariants: ["same selection skeleton"],
+      },
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }, "D:\\rw_test_missing");
+  const requestedChange: IntentSchema = {
+    ...readySchema,
+    request: {
+      rawPrompt: "16格的天赋仓库，如果满了则按F4不能继续抽取天赋。",
+      goal: "Expand the current inventory capacity to 16 and stop drawing when full.",
+    },
+    requirements: {
+      functional: ["Expand the inventory capacity to 16 and stop drawing when full."],
+      typed: [
+        {
+          id: "inventory_req",
+          kind: "ui",
+          summary: "Keep the current inventory panel but expand it to 16 slots.",
+          priority: "must",
+        },
+      ],
+    },
+    selection: {
+      mode: "user-chosen",
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      choiceCount: 1,
+      inventory: {
+        enabled: true,
+        capacity: 16,
+        storeSelectedItems: true,
+        blockDrawWhenFull: true,
+        fullMessage: "Talent inventory full",
+        presentation: "persistent_panel",
+      },
+    },
+    normalizedMechanics: {
+      playerChoice: true,
+      uiModal: true,
+    },
+    isReadyForBlueprint: true,
+  };
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+  const builder = new BlueprintBuilder();
+  const result = builder.buildUpdate(updateIntent);
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.parameters?.choiceCount, 3);
+}
+
+function testSelectionFamilyBlueprintDoesNotCollapseIntoGameplayBackbone() {
+  const result = buildBlueprint(readySchema);
+
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.planningKind === "backbone"), false);
+  assert.equal((result.finalBlueprint?.moduleFacets || []).length, 0);
+}
+
+function testSingleAbilityExploratoryPlanningBuildsGameplayBackbone() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Create one active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies every second. No UI, no inventory, no persistence.",
+      goal: "Create one active skill that summons a fireball near the hero, follows the hero for 5 seconds, and burns nearby enemies every second. No UI, no inventory, no persistence.",
+    },
+    requirements: {
+      functional: [
+        "Create one active skill.",
+        "Summon a fireball near the hero.",
+        "Follow the hero for 5 seconds.",
+        "Burn nearby enemies every second.",
+        "The feature must not include UI.",
+        "The feature must not include inventory mechanics.",
+        "The feature must not include persistence.",
+        "The feature must not couple to other features.",
+        "Only a single skill is required.",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Cast one active skill.",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "state_req",
+          kind: "state",
+          summary: "Track the temporary fireball instance for 5 seconds.",
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Run the 5 second burn cadence with 1 second ticks.",
+          parameters: { durationSeconds: 5, intervalSeconds: 1 },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Spawn the fireball near the hero and burn nearby enemies.",
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: false,
+      surfaces: [],
+    },
+    integrations: {
+      expectedBindings: [
+        { id: "skill_cast_entry", kind: "entry-point", summary: "Ability cast entry point.", required: true },
+        { id: "periodic_tick", kind: "event-hook", summary: "Recurring 1-second tick while active.", required: true },
+        { id: "nearby_enemy_query", kind: "bridge-point", summary: "Resolve nearby enemies during each burn pulse.", required: true },
+      ],
+    },
+    stateModel: {
+      states: [{ id: "fireball_runtime", summary: "Runtime fireball instance", owner: "feature", lifetime: "round" }],
+    },
+    timing: {
+      duration: { kind: "timed", seconds: 5 },
+      intervalSeconds: 1,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const need = result.finalBlueprint?.moduleNeeds[0];
+  const facetKinds = new Set((result.finalBlueprint?.moduleFacets || []).map((facet) => facet.kind));
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.modules.length, 1);
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(backbone?.backboneKind, "gameplay_ability");
+  assert.ok((backbone?.facetIds || []).length >= 4);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "selection_flow"), false);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "selection_modal"), false);
+  assert.equal(result.finalBlueprint?.moduleNeeds.length, 1);
+  assert.equal(need?.backboneKind, "gameplay_ability");
+  assert.equal(need?.coLocatePreferred, true);
+  assert.ok(facetKinds.has("trigger"));
+  assert.ok(facetKinds.has("timing"));
+  assert.ok(facetKinds.has("state"));
+  assert.ok(facetKinds.has("motion"));
+  assert.ok(facetKinds.has("spawn") || facetKinds.has("effect"));
+  assert.equal(
+    (result.normalizationReport?.issues || []).some((issue) =>
+      issue.message.includes("Missing canonical ModuleNeed"),
+    ),
+    false,
+  );
+}
+
+function testSingleAbilityPlanningKeepsExplicitUiAsSeparateSurface() {
+  const result = buildBlueprint({
+    ...readySchema,
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    request: {
+      rawPrompt: "Create one active fireball skill and show a key hint UI. The fireball follows the hero for 5 seconds and burns nearby enemies every second.",
+      goal: "Create one active fireball skill and show a key hint UI. The fireball follows the hero for 5 seconds and burns nearby enemies every second.",
+    },
+    requirements: {
+      functional: [
+        "Create one active fireball skill.",
+        "Show a key hint UI.",
+      ],
+      typed: [
+        {
+          id: "trigger_req",
+          kind: "trigger",
+          summary: "Cast one active skill.",
+          parameters: { triggerKey: "Q" },
+        },
+        {
+          id: "rule_req",
+          kind: "rule",
+          summary: "Run the 5 second burn cadence with 1 second ticks.",
+          parameters: { durationSeconds: 5, intervalSeconds: 1 },
+        },
+        {
+          id: "effect_req",
+          kind: "effect",
+          summary: "Spawn the fireball near the hero and burn nearby enemies.",
+        },
+        {
+          id: "ui_req",
+          kind: "ui",
+          summary: "Show a key hint UI surface.",
+          outputs: ["key_hint"],
+        },
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    selection: undefined,
+    uiRequirements: {
+      needed: true,
+      surfaces: ["key_hint"],
+    },
+    integrations: undefined,
+    stateModel: undefined,
+    timing: {
+      duration: { kind: "timed", seconds: 5 },
+      intervalSeconds: 1,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      outcomeApplication: true,
+    },
+    isReadyForBlueprint: true,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.planningKind === "backbone"), true);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.category === "ui"), true);
+  assert.equal(result.finalBlueprint?.modules.some((module) => module.role === "selection_modal"), false);
+}
+
+function testRevealBatchImmediatePlanningStaysExploratoryAndAvoidsSelectionPoolModules() {
+  const prompt =
+    "Create a reveal-only weighted card system. Press F4 to reveal 3 weighted cards from a feature-owned pool, show their rarity-styled UI, and resolve all 3 revealed results immediately as one batch without letting the player choose any card. No follow-up selection, no inventory panel, no persistence, no cross-feature grants.";
+  const result = buildBlueprint({
+    ...readySchema,
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    requirements: {
+      functional: [
+        "Press F4 to reveal 3 weighted cards from a feature-owned pool.",
+        "Resolve all revealed results immediately as one batch.",
+        "Show a rarity-styled reveal UI without any follow-up choice.",
+      ],
+    },
+    constraints: {
+      requiredPatterns: [],
+    },
+    interaction: {
+      activations: [{ kind: "key", input: "F4", phase: "press", repeatability: "repeatable" }],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "none",
+      resolutionMode: "reveal_batch_immediate",
+      cardinality: "multiple",
+      choiceCount: 3,
+      repeatability: "repeatable",
+      commitment: "immediate",
+    },
+    effects: undefined,
+    outcomes: undefined,
+    stateModel: undefined,
+    integrations: {
+      expectedBindings: [
+        { id: "f4_entry", kind: "entry-point", summary: "Reveal entry point", required: true },
+        { id: "feature_pool_source", kind: "data-source", summary: "Feature-owned weighted pool", required: true },
+        { id: "reveal_surface", kind: "ui-surface", summary: "Reveal-only card surface", required: true },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["card_reveal_surface", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: true,
+      outcomeApplication: false,
+    },
+    parameters: {
+      triggerKey: "F4",
+      choiceCount: 3,
+      resolutionMode: "reveal_batch_immediate",
+    },
+    uncertainties: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  });
+
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+  const patternHints = new Set(
+    (result.finalBlueprint?.patternHints || []).flatMap((hint) => hint.suggestedPatterns || []),
+  );
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const backboneNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "gameplay_ability");
+  const revealUiNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "reveal_surface");
+  const facetRoles = new Set((result.finalBlueprint?.moduleFacets || []).map((facet) => facet.role));
+
+  assert.equal(result.success, true);
+  assert.equal(roles.has("gameplay_ability"), true);
+  assert.equal(roles.has("reveal_surface"), true);
+  assert.equal(backbone?.backboneKind, "gameplay_ability");
+  assert.equal(roles.has("selection_flow"), false);
+  assert.equal(roles.has("selection_modal"), false);
+  assert.equal(patternHints.has("rule.selection_flow"), false);
+  assert.equal(patternHints.has("ui.selection_modal"), false);
+  assert.equal(result.finalBlueprint?.implementationStrategy, "exploratory");
+  assert.equal(result.finalBlueprint?.maturity, "exploratory");
+  assert.equal(result.finalBlueprint?.commitDecision?.outcome, "exploratory");
+  assert.equal(result.finalBlueprint?.commitDecision?.requiresReview, true);
+  assert.equal(backboneNeed?.backboneKind, "gameplay_ability");
+  assert.equal(backboneNeed?.coLocatePreferred, true);
+  assert.equal(backboneNeed?.category, "effect");
+  assert.ok(facetRoles.has("input_trigger"));
+  assert.ok(facetRoles.has("weighted_pool"));
+  assert.ok(facetRoles.has("reveal_batch_runtime"));
+  assert.ok(facetRoles.has("effect_application"));
+  assert.deepEqual(revealUiNeed?.requiredCapabilities, ["ui.reveal.batch_surface"]);
+  assert.equal(revealUiNeed?.category, "ui");
+}
+
+function testDefinitionOnlyProviderShellDropsDriftedTriggerAndEffectModules() {
+  const prompt =
+    "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: { rawPrompt: prompt, goal: prompt },
+      classification: { intentKind: "cross-system-composition", confidence: "high" },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "Press Q to activate the shell.",
+          "Apply the modifier when granted.",
+        ],
+        typed: [
+          {
+            id: "ability_shell_definition",
+            kind: "resource",
+            summary: "Define one primary hero ability shell for later external granting.",
+            outputs: ["ability shell definition"],
+            priority: "must",
+          },
+          {
+            id: "trigger_req",
+            kind: "trigger",
+            summary: "Capture a Q key press to activate the ability shell.",
+            parameters: { triggerKey: "Q" },
+            priority: "must",
+          },
+          {
+            id: "effect_req",
+            kind: "effect",
+            summary: "Apply a modifier when the shell is granted.",
+            priority: "must",
+          },
+        ],
+      },
+      interaction: {
+        activations: [{ kind: "key", input: "Q", phase: "press", repeatability: "repeatable" }],
+      },
+      effects: {
+        operations: ["apply"],
+        durationSemantics: "instant",
+      },
+      outcomes: {
+        operations: ["grant-feature"],
+      },
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+        triggerKey: "Q",
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    { kind: "dota2-x-template" },
+  );
+  const result = buildBlueprint(schema);
+
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+  const patternHints = new Set(
+    (result.finalBlueprint?.patternHints || []).flatMap((hint) => hint.suggestedPatterns || []),
+  );
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const backboneNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "gameplay_ability");
+
+  assert.equal(result.success, true);
+  assert.equal(schema.interaction, undefined);
+  assert.equal(schema.effects, undefined);
+  assert.equal(schema.outcomes, undefined);
+  assert.equal(schema.parameters?.triggerKey, undefined);
+  assert.equal(roles.has("input_trigger"), false);
+  assert.equal(roles.has("effect_application"), false);
+  assert.equal(roles.has("gameplay_ability"), true);
+  assert.equal(patternHints.has("input.key_binding"), false);
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(backboneNeed?.semanticRole, "gameplay_ability");
+  assert.deepEqual(backboneNeed?.requiredCapabilities, ["ability.definition.shell"]);
 }
 
 function runTests() {
   testReadyBuildProducesFinalBlueprint();
-  testWeakBuildHonorsHonestStatus();
+  testProposalUncertaintyDoesNotDowngradeFinalBlueprintStatus();
   testMustRequirementWithoutSemanticSupportStaysWeak();
   testFinalBlueprintCarriesCanonicalStateAndIntegrationSemantics();
+  testSurfaceDetailDriftDoesNotChangeBlueprintPlanning();
   testBoundedDetailClarificationDoesNotBlockSupportedBlueprint();
   testBoundedDraftCatalogClarificationDoesNotBlockExistingSeamBlueprint();
   testSupportedCapabilitiesUseAdmittedVocabulary();
   testExplicitPatternHintsOnlyEmitSchemaConstrainedPatterns();
   testStandaloneStateAskHonestBlocksInsteadOfStayingWeak();
-  testSelectionLocalProgressionSliceStaysReady();
+testGenericTimedRuleDoesNotInventSelectionUiModules();
+testNegativeFunctionalConstraintsDoNotCreateUiModules();
+testInlineNegativeConstraintClausesDoNotTriggerGovernanceBlocks();
+testWizardStyleNegativeScopePhrasesDoNotTriggerGovernanceBlocks();
+testSelectionLocalProgressionSliceStaysReady();
   testBroaderRewardProgressionFrameworkStaysBlocked();
   testSupportedLifecycleClarificationDoesNotBlockPersistentBuffFlow();
   testTimedSelfBuffSteersToShortDurationCapability();
   testTimedSelfBuffWithLocalCooldownStaysReady();
-  testInitialDelaySchedulerAskStaysBlocked();
-  testPeriodicSchedulerAskStaysBlocked();
+  testInitialDelaySchedulerAskBuildsTimingFacetBackbone();
+  testPeriodicSchedulerAskBuildsIntervalFacetBackbone();
   testTimedNonSelfBuffKeepsGenericModifierCapability();
   testCooldownCoupledToSelectionFlowStaysBlocked();
-  testNonSelfCooldownBuffStaysBlockedAtCurrentBoundary();
+  testNonSelfCooldownBuffBuildsBackboneWithSeparateTimingFacet();
   testForwardLinearProjectileSliceStaysReady();
-  testHelperUnitSpawnChoreographyStaysBlocked();
+  testHelperUnitSpawnChoreographyBuildsGameplayBackbone();
   testInventoryExtensionStaysOnExistingRuleAndUiModules();
   testSelectionPoolFeatureAuthoringFlowsThroughFinalBlueprint();
   testSelectionPoolBoundedFieldsStayInsideSameSkeleton();
+  testSchemaOwnedImplementationCandidatesAreIgnored();
+  testBlockedExternalCandidatesBlockBlueprintWithoutMutatingSchema();
+  testContentModelEvidenceSurfacesInNormalizationNotes();
+  testUpdateBlueprintKeepsWorkspaceContextGenericUntilAdapterLayer();
+  testUpdateBlueprintDoesNotRebuildSelectionFromLegacyPatternIds();
+  testUpdateBlueprintBlocksSourceBackedInvariantRemoval();
+  testBoundedSourceBackedUpdateUsesAuthoritativeProjectionInsteadOfPreserveEchoModules();
+  testSourceBackedUpdateKeepsBoundedChoiceCountWithoutExplicitDelta();
+  testSelectionFamilyBlueprintDoesNotCollapseIntoGameplayBackbone();
+  testSingleAbilityExploratoryPlanningBuildsGameplayBackbone();
+  testSingleAbilityPlanningKeepsExplicitUiAsSeparateSurface();
+  testDefinitionOnlyProviderShellDropsDriftedTriggerAndEffectModules();
+  testRevealBatchImmediatePlanningStaysExploratoryAndAvoidsSelectionPoolModules();
   console.log("builder.test.ts: PASS");
 }
 

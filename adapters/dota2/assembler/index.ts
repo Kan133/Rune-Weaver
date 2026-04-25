@@ -9,7 +9,12 @@
 
 import { posix as pathPosix } from "path";
 
-import { AssemblyPlan, HostRealizationPlan, SelectedPattern, GeneratorRoutingPlan } from "../../../core/schema/types";
+import { AssemblyPlan, GeneratorRoutingPlan, HostRealizationPlan, ModuleSourceKind, SelectedPattern, SynthesizedArtifact } from "../../../core/schema/types";
+import {
+  ABILITY_KV_AGGREGATE_TARGET_PATH,
+  buildAbilityKvFragmentPath,
+  resolveAbilityKvScriptFile,
+} from "../kv/contract.js";
 import {
   calculateHostWriteExecutionOrder,
   type HostWriteOperation,
@@ -124,9 +129,8 @@ function getNamespacePath(
   featureId: string,
   contentType: string
 ): string {
-  // T118: Special handling for KV content type
   if (contentType === "kv") {
-    return `game/scripts/npc/npc_abilities_custom.txt`;
+    return buildAbilityKvFragmentPath(featureId, featureId);
   }
 
   // T125-R1: Lua ability/modifier files go to vscripts directory
@@ -201,6 +205,10 @@ export function createWritePlan(
     entries.push(...patternEntries);
   }
 
+  if (plan.synthesizedArtifacts && plan.synthesizedArtifacts.length > 0) {
+    entries.push(...generateEntriesForSynthesizedArtifacts(plan.synthesizedArtifacts));
+  }
+
   appendInputKeyBindingEmitterEntries(entries);
   applyResourceCostHonestyDeferrals(entries);
   applyResourceCostComposition(entries);
@@ -268,6 +276,59 @@ export function createWritePlan(
   return writePlan;
 }
 
+function generatorFamilyFromSynthesizedArtifact(
+  artifact: SynthesizedArtifact,
+): GeneratorFamilyHint {
+  switch (artifact.outputKind) {
+    case "kv":
+      return "dota2-kv";
+    case "ui":
+      return "dota2-ui";
+    case "lua":
+      return "dota2-lua";
+    case "bridge":
+      return "bridge-support";
+    default:
+      return "dota2-ts";
+  }
+}
+
+function generateEntriesForSynthesizedArtifacts(
+  artifacts: SynthesizedArtifact[],
+): WritePlanEntry[] {
+  return artifacts.map((artifact) => ({
+    operation: "create",
+    targetPath: artifact.targetPath,
+    contentType: artifact.contentType,
+    contentSummary: artifact.summary,
+    sourcePattern: `synthesized.${artifact.moduleId}.${artifact.outputKind}`,
+    sourceModule: artifact.moduleId,
+    safe: true,
+    generatorFamilyHint: generatorFamilyFromSynthesizedArtifact(artifact),
+    metadata: {
+      ...(artifact.metadata || {}),
+      bundleId: artifact.bundleId,
+      sourceKind: artifact.sourceKind,
+      synthesizedArtifactId: artifact.id,
+      synthesizedContent: artifact.content,
+    },
+  }));
+}
+
+function resolveKvArtifactAbilityName(entry: WritePlanEntry, fallbackAbilityName: string): string {
+  const metadataAbilityName = entry.metadata?.abilityName;
+  if (typeof metadataAbilityName === "string" && metadataAbilityName.trim().length > 0) {
+    return metadataAbilityName.trim();
+  }
+
+  const parameterAbilityName = entry.parameters?.abilityName;
+  if (typeof parameterAbilityName === "string" && parameterAbilityName.trim().length > 0) {
+    return parameterAbilityName.trim();
+  }
+
+  return fallbackAbilityName;
+}
+
 function appendInputKeyBindingEmitterEntries(entries: WritePlanEntry[]): void {
   const emitterEntries: WritePlanEntry[] = [];
 
@@ -324,6 +385,7 @@ export interface RouteContext extends HostRouteContext {
 
 export interface RouteContextUnit extends HostRouteContextUnit {
   // T143: Added dota2-lua for formal lua routing
+  sourceKind: ModuleSourceKind;
   generatorFamily: "dota2-kv" | "dota2-ts" | "dota2-ui" | "dota2-lua" | "bridge-support";
   routeKind: "kv" | "ts" | "ui" | "lua" | "bridge";
 }
@@ -351,6 +413,7 @@ function createRouteContext(
     routes: plan.routes.map(r => ({
       id: r.id,
       sourceUnitId: r.sourceUnitId,
+      sourceKind: r.sourceKind,
       generatorFamily: r.generatorFamily,
       routeKind: r.routeKind,
       hostTarget: r.hostTarget,
@@ -371,6 +434,7 @@ export interface RealizationContext extends HostRealizationContext {
 }
 
 export interface RealizationContextUnit extends HostRealizationContextUnit {
+  sourceKind: ModuleSourceKind;
   realizationType: string;
 }
 
@@ -386,6 +450,7 @@ function createRealizationContext(plan: HostRealizationPlan): RealizationContext
     units: plan.units.map((u) => ({
       id: u.id,
       sourcePatternIds: u.sourcePatternIds,
+      sourceKind: u.sourceKind,
       realizationType: u.realizationType,
       hostTargets: u.hostTargets,
       confidence: u.confidence,
@@ -709,6 +774,128 @@ function resolveLinearProjectileConfig(
   };
 }
 
+function resolveExploratoryAbilityConfig(
+  binding: SelectedPattern,
+  targetId: string,
+): {
+  abilityName: string;
+  scriptFile: string;
+  abilityBehavior: string;
+  onSpellStart: string;
+  additionalMethods: string;
+} {
+  const bindingParameters = binding.parameters || {};
+  const abilityName = (bindingParameters.abilityName as string)
+    || targetId.replace(/[^a-zA-Z0-9_]/g, "_");
+  const behaviorHint = (bindingParameters.exploratoryBehaviorHint as string) || "";
+  const abilityBehavior =
+    (bindingParameters.abilityBehavior as string)
+    || mapExploratoryBehaviorHintToAbilityBehavior(behaviorHint);
+  const exploratorySummary = stringifyExploratoryValue(
+    bindingParameters.exploratoryGoal
+      ?? bindingParameters.exploratoryIntentSummary
+      ?? bindingParameters.summary,
+  );
+  const exploratoryCapabilities = normalizeExploratoryStringArray(
+    bindingParameters.exploratoryCapabilities,
+  );
+  const capabilitySummary =
+    exploratoryCapabilities.length > 0
+      ? exploratoryCapabilities.join(", ")
+      : "none captured";
+
+  return {
+    abilityName,
+    scriptFile: `rune_weaver/abilities/${targetId}.lua`,
+    abilityBehavior,
+    onSpellStart: buildExploratoryAbilityOnSpellStart(
+      abilityBehavior,
+      exploratorySummary,
+      capabilitySummary,
+    ),
+    additionalMethods: buildExploratoryAbilityAdditionalMethods(
+      abilityName,
+      exploratorySummary,
+      capabilitySummary,
+    ),
+  };
+}
+
+function buildExploratoryAbilityOnSpellStart(
+  abilityBehavior: string,
+  summary: string,
+  capabilitySummary: string,
+): string {
+  const targetPrelude =
+    abilityBehavior === "DOTA_ABILITY_BEHAVIOR_UNIT_TARGET"
+      ? "    local target = self:GetCursorTarget()\n"
+      : abilityBehavior === "DOTA_ABILITY_BEHAVIOR_POINT"
+        ? "    local point = self:GetCursorPosition()\n"
+        : "";
+
+  return `    local caster = self:GetCaster()
+${targetPrelude}    -- Exploratory scaffold generated by Rune Weaver V2.
+    -- Intent: ${sanitizeLuaComment(summary)}
+    -- Required capabilities: ${sanitizeLuaComment(capabilitySummary)}
+    -- Replace this block with host-native gameplay logic for the feature.
+
+    if not IsServer() then
+        return
+    end
+
+    -- TODO: implement exploratory ability behavior here.`;
+}
+
+function buildExploratoryAbilityAdditionalMethods(
+  abilityName: string,
+  summary: string,
+  capabilitySummary: string,
+): string {
+  return `
+function ${abilityName}:DescribeExploratoryIntent()
+    return "${escapeLuaString(`${summary} | capabilities: ${capabilitySummary}`)}"
+end`;
+}
+
+function mapExploratoryBehaviorHintToAbilityBehavior(hint: string): string {
+  switch (hint) {
+    case "passive":
+      return "DOTA_ABILITY_BEHAVIOR_PASSIVE";
+    case "point_target":
+      return "DOTA_ABILITY_BEHAVIOR_POINT";
+    case "unit_target":
+      return "DOTA_ABILITY_BEHAVIOR_UNIT_TARGET";
+    default:
+      return "DOTA_ABILITY_BEHAVIOR_NO_TARGET";
+  }
+}
+
+function normalizeExploratoryStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function stringifyExploratoryValue(value: unknown): string {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  return "Exploratory ability scaffold";
+}
+
+function sanitizeLuaComment(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").replace(/--/g, "").trim();
+}
+
+function escapeLuaString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 function buildLinearProjectileOnSpellStart(): string {
   return `    local caster = self:GetCaster()
     local origin = caster:GetAbsOrigin()
@@ -1000,6 +1187,11 @@ function generateEntriesForPattern(
     // T115: Use route family hint as primary if available, fallback to realization-based hint
     const generatorFamilyHint = routeFamilyHint || determineGeneratorFamilyHint(matchingUnit, patternMeta);
 
+    const mergedParameters = {
+      ...(binding.parameters || {}),
+      ...(matchingRoute?.parameters || {}),
+    };
+
     const entry: WritePlanEntry = {
       operation: "create",
       targetPath,
@@ -1013,8 +1205,8 @@ function generateEntriesForPattern(
       // T115: Mark as deferred if route blocked or KV side not implementable
       deferred: entryDeferred,
       deferredReason: entryDeferredReason,
-      // T172-R1: Attach parameters from route for case-specific fill
-      parameters: matchingRoute?.parameters,
+      // Preserve binding-level parameters while allowing route metadata to refine them.
+      parameters: Object.keys(mergedParameters).length > 0 ? mergedParameters : undefined,
     };
 
     // T138-R1: Attach ability parameters to KV entries for proper generation
@@ -1046,6 +1238,25 @@ function generateEntriesForPattern(
             { index: "02", varType: "FIELD_INTEGER", key: "projectile_speed", value: projectileConfig.projectileSpeed },
             { index: "03", varType: "FIELD_INTEGER", key: "projectile_radius", value: projectileConfig.projectileRadius },
           ],
+        };
+      }
+    }
+
+    if ((outputType === "kv" || outputType === "lua") && binding.patternId === "dota2.exploratory_ability") {
+      const exploratoryConfig = resolveExploratoryAbilityConfig(binding, targetId);
+      entry.metadata = {
+        ...(entry.metadata || {}),
+        abilityName: exploratoryConfig.abilityName,
+        abilityBaseClass: "ability_lua",
+        abilityBehavior: exploratoryConfig.abilityBehavior,
+        scriptFile: exploratoryConfig.scriptFile,
+      };
+
+      if (outputType === "lua") {
+        entry.metadata = {
+          ...(entry.metadata || {}),
+          onSpellStart: exploratoryConfig.onSpellStart,
+          additionalMethods: exploratoryConfig.additionalMethods,
         };
       }
     }
@@ -1142,6 +1353,24 @@ function generateEntriesForPattern(
           additionalMethods: buildLinearProjectileAdditionalMethods(projectileConfig.abilityName),
         };
       }
+    }
+
+    if (outputType === "kv") {
+      const abilityName = resolveKvArtifactAbilityName(
+        entry,
+        targetId.replace(/[^a-zA-Z0-9_]/g, "_"),
+      );
+      entry.targetPath = buildAbilityKvFragmentPath(featureId, abilityName);
+      entry.metadata = {
+        ...(entry.metadata || {}),
+        abilityName,
+        scriptFile:
+          typeof entry.metadata?.scriptFile === "string" && entry.metadata.scriptFile.trim().length > 0
+            ? entry.metadata.scriptFile
+            : resolveAbilityKvScriptFile(abilityName),
+        kvArtifactKind: "fragment",
+        aggregateTargetPath: ABILITY_KV_AGGREGATE_TARGET_PATH,
+      };
     }
 
     // 检查是否需要额外文件

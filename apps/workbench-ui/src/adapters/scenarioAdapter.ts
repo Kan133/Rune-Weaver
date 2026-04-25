@@ -1,14 +1,13 @@
 // F006: Scenario Adapter - Clean Adapter Orchestration Layer
-// Provides a unified interface for mock scenarios, shared fixtures, local backend, and local bridge
+// Provides a unified interface for explicitly selected sources without hidden fallback chains.
 // 
 // RESPONSIBILITIES:
 // - Mode-based scenario selection
-// - Orchestrating calls to loader and adapter
-// - Fallback orchestration (when primary sources fail)
+// - Orchestrating calls to exactly one selected source
 // - Re-exporting types for convenience
 //
 // NOT RESPONSIBILITIES:
-// - Fallback data definition (moved to data/fallbackFixtures.ts)
+// - Cascading fallback across unrelated sources
 // - Source loading logic (handled by loader layer)
 // - Type transformation (handled by workbenchResultAdapter)
 
@@ -17,10 +16,7 @@ import { getMockScenario } from "../mocks/scenarios";
 import { adaptWorkbenchResult } from "./workbenchResultAdapter";
 
 // F005-R2: Import fallback fixtures from separate source layer
-import {
-  getFallbackFixture,
-  getFallbackScenarios,
-} from "../data/fallbackFixtures";
+import { getFallbackFixture, getFallbackScenarios } from "../data/fallbackFixtures";
 
 // F006: Import loader layer
 import {
@@ -28,6 +24,7 @@ import {
   type DataSourceMode as LoaderDataSourceMode,
   type ResultMetadata,
 } from "../services/workbenchResultLoader";
+import { isWorkbenchDevOrTestMode } from "../lib/runtimeMode";
 
 // F006: Re-export DataSourceMode from loader (source of truth)
 export type DataSourceMode = LoaderDataSourceMode;
@@ -38,8 +35,27 @@ export type { ResultMetadata };
 // F006: Import shared fixture types for loading
 import type { AdapterInput } from "./workbenchResultAdapter";
 
-// F006: Load shared fixture data dynamically from apps/workbench/fixtures
-// This is the PRIMARY source - fallback fixtures are only used if this fails
+function assertDevOnlyScenarioSource(mode: "shared-fixture" | "fallback-fixture"): void {
+  if (!isWorkbenchDevOrTestMode()) {
+    throw new Error(`[F006] ${mode} is only available in explicit dev/test environments`);
+  }
+}
+
+function requireLoadedScenario(
+  scenario: MockScenario,
+  mode: Exclude<DataSourceMode, "mock">,
+): Promise<WorkbenchState> {
+  return loadWorkbenchResult(scenario, mode).then((loaded) => {
+    if (!loaded) {
+      throw new Error(`[F006] Failed to load scenario '${scenario}' from source '${mode}'`);
+    }
+
+    return adaptWorkbenchResult(loaded.result);
+  });
+}
+
+// F006: Load shared fixture data dynamically from apps/workbench/fixtures.
+// This is an explicit dev/test helper, not a silent fallback path.
 async function loadSharedFixture(scenario: MockScenario): Promise<AdapterInput | null> {
   try {
     // Map scenario names to fixture file names
@@ -110,23 +126,24 @@ async function loadSharedFixture(scenario: MockScenario): Promise<AdapterInput |
         return null;
     }
   } catch (error) {
-    console.warn("[F006] Failed to load shared fixture, using fallback:", error);
+    console.warn("[F006] Failed to load shared fixture:", error);
     return null;
   }
 }
 
-// F006: Create adapted scenario from shared fixture source
-// Primary: Load from apps/workbench/fixtures via dynamic import
-// Fallback: Use minimal fallback fixtures if import fails
+// F006: Create adapted scenario from explicit fixture sources.
+// Shared fixtures are preferred in dev/test mode, with fallback fixtures as a deliberate
+// adapter-owned escape hatch for fixture-driven UI work only.
 export async function createAdaptedScenarioAsync(scenario: MockScenario): Promise<WorkbenchState> {
-  // Try to load from shared fixtures first
+  assertDevOnlyScenarioSource("shared-fixture");
+
   const sharedFixture = await loadSharedFixture(scenario);
   if (sharedFixture) {
     console.log("[F006] Using shared fixture from apps/workbench/fixtures for scenario:", scenario);
     return adaptWorkbenchResult(sharedFixture);
   }
 
-  // Fallback to minimal fixtures
+  assertDevOnlyScenarioSource("fallback-fixture");
   console.log("[F006] Using fallback fixture for scenario:", scenario);
   const fallback = getFallbackFixture(scenario);
   if (!fallback) {
@@ -135,10 +152,10 @@ export async function createAdaptedScenarioAsync(scenario: MockScenario): Promis
   return adaptWorkbenchResult(fallback);
 }
 
-// F006: Synchronous version for backward compatibility
-// Uses fallback fixtures directly (shared fixtures require async import)
+// F006: Synchronous version for backward compatibility.
+// Uses explicit fallback fixtures only in dev/test mode.
 export function createAdaptedScenario(scenario: MockScenario): WorkbenchState {
-  // Use fallback fixtures (synchronous)
+  assertDevOnlyScenarioSource("fallback-fixture");
   const fallback = getFallbackFixture(scenario);
   if (!fallback) {
     throw new Error(`[F006] No fallback available for scenario: ${scenario}`);
@@ -152,86 +169,60 @@ export function getScenarioState(
   mode: DataSourceMode
 ): WorkbenchState {
   if (mode === "mock") {
-    // Use existing mock scenario (F001-F003 path)
     return getMockScenario(scenario);
-  } else {
-    // Use adapted backend result (F004+ path)
-    return createAdaptedScenario(scenario);
   }
+
+  return createAdaptedScenario(scenario);
 }
 
-// F006: Get scenario based on data source mode (asynchronous)
-// Supports all modes: mock, local-bridge, local-backend, shared-fixture
+// F006: Get scenario based on data source mode (asynchronous).
+// Each request resolves through exactly one declared source.
 export async function getScenarioStateAsync(
   scenario: MockScenario,
   mode: DataSourceMode
 ): Promise<WorkbenchState> {
-  if (mode === "mock") {
-    // Use existing mock scenario (F001-F003 path) - still synchronous
-    return getMockScenario(scenario);
-  } else if (mode === "local-bridge") {
-    // F006: Use local bridge loading path (most realistic dev source)
-    const loaded = await loadWorkbenchResult(scenario, mode);
-    if (loaded) {
-      return adaptWorkbenchResult(loaded.result);
-    }
-    // Fallback to shared fixture if local bridge fails
-    console.warn("[F006] Local bridge failed, falling back to shared fixture");
-    return createAdaptedScenarioAsync(scenario);
-  } else if (mode === "local-backend") {
-    // F005: Use local backend-like result loading path
-    const loaded = await loadWorkbenchResult(scenario, mode);
-    if (loaded) {
-      return adaptWorkbenchResult(loaded.result);
-    }
-    // Fallback to shared fixture if local backend fails
-    console.warn("[F006] Local backend failed, falling back to shared fixture");
-    return createAdaptedScenarioAsync(scenario);
-  } else {
-    // F006: Use async shared fixture loading as default path
-    // Falls back to synchronous fallback only if async loading fails
-    return createAdaptedScenarioAsync(scenario);
+  switch (mode) {
+    case "mock":
+      return getMockScenario(scenario);
+    case "shared-fixture":
+      return createAdaptedScenarioAsync(scenario);
+    case "local-bridge":
+    case "local-backend":
+      return requireLoadedScenario(scenario, mode);
+    default:
+      throw new Error(`[F006] Unsupported data source mode: ${mode}`);
   }
 }
 
-// F006: Get scenario with metadata (for tracking source)
+// F006: Get scenario with metadata (for tracking source).
 export async function getScenarioStateWithMetadata(
   scenario: MockScenario,
   mode: DataSourceMode
 ): Promise<{ state: WorkbenchState; metadata?: ResultMetadata }> {
   if (mode === "mock") {
     return { state: getMockScenario(scenario) };
-  } else if (mode === "local-bridge") {
-    const loaded = await loadWorkbenchResult(scenario, mode);
-    if (loaded) {
-      return {
-        state: adaptWorkbenchResult(loaded.result),
-        metadata: loaded.metadata,
-      };
-    }
-    // Fallback
-    return { state: await createAdaptedScenarioAsync(scenario) };
-  } else if (mode === "local-backend") {
-    const loaded = await loadWorkbenchResult(scenario, mode);
-    if (loaded) {
-      return {
-        state: adaptWorkbenchResult(loaded.result),
-        metadata: loaded.metadata,
-      };
-    }
-    // Fallback
-    return { state: await createAdaptedScenarioAsync(scenario) };
-  } else {
-    // shared-fixture mode
-    const loaded = await loadWorkbenchResult(scenario, mode);
-    if (loaded) {
-      return {
-        state: adaptWorkbenchResult(loaded.result),
-        metadata: loaded.metadata,
-      };
-    }
-    return { state: await createAdaptedScenarioAsync(scenario) };
   }
+
+  if (mode === "shared-fixture") {
+    return {
+      state: await createAdaptedScenarioAsync(scenario),
+      metadata: {
+        source: mode,
+        loadedAt: new Date().toISOString(),
+        scenario,
+      },
+    };
+  }
+
+  const loaded = await loadWorkbenchResult(scenario, mode);
+  if (!loaded) {
+    throw new Error(`[F006] Failed to load scenario '${scenario}' from source '${mode}'`);
+  }
+
+  return {
+    state: adaptWorkbenchResult(loaded.result),
+    metadata: loaded.metadata,
+  };
 }
 
 // F006: Check if a scenario is available in adapted mode

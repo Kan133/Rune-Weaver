@@ -1,27 +1,22 @@
-// F007: WorkbenchResult to Feature Adapter
-// Bridges backend WorkbenchResult to frontend Feature type
-// Allows UI to consume real structured data from workbench layer
+import type { WorkbenchResult } from '../../../workbench/contract';
+import type { Feature, Group, FeatureStatus } from '@/types/feature';
+import { deriveFeatureGroupFromWorkbenchResult } from '@/data/featureGroupProjection';
 
-import type { WorkbenchResult } from "../../../workbench/contract";
-import type { Feature, Group, FeatureStatus } from "@/types/feature";
-
-// F007: Convert backend FeatureCard status to frontend FeatureStatus
 function mapStatus(status: string): FeatureStatus {
   switch (status) {
-    case "ready":
-    case "active":
-      return "active";
-    case "draft":
-    case "needs_clarification":
-      return "draft";
-    case "blocked":
-      return "error";
+    case 'ready':
+    case 'active':
+      return 'active';
+    case 'draft':
+    case 'needs_clarification':
+      return 'draft';
+    case 'blocked':
+      return 'error';
     default:
-      return "draft";
+      return 'unknown';
   }
 }
 
-// F007: Convert a single WorkbenchResult to Feature
 export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature | null {
   if (!result.featureCard || !result.featureDetail) {
     return null;
@@ -29,12 +24,29 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
 
   const card = result.featureCard;
   const detail = result.featureDetail;
-
-  // Extract patterns from patternBindings
   const patterns = detail.patternBindings?.patterns || [];
-
-  // Extract generated files from updateWriteResult if available
   const generatedFiles: string[] = [];
+  const governanceWarnings =
+    result.governanceRelease?.status === 'blocked'
+      ? result.governanceRelease.requiredConfirmations?.map((confirmation) => confirmation.description) || []
+      : [];
+  const proposalMessage =
+    result.governanceRelease?.blockedReason ||
+    detail.status?.lastConflictSummary ||
+    detail.basicInfo?.intentSummary ||
+    null;
+  const updatedAt =
+    card.updatedAt instanceof Date
+      ? card.updatedAt
+      : typeof card.updatedAt === 'string' || typeof card.updatedAt === 'number'
+      ? new Date(card.updatedAt)
+      : null;
+  const hasWrittenOutputs = result.updateWriteResult?.writeStatus === 'written';
+  const compatibilityWarnings = [
+    'Legacy workbench result payload has no governance read-model; UI is using the compatibility-only display boundary.',
+    ...governanceWarnings,
+  ];
+
   if (result.updateWriteResult?.touchedOutputs) {
     result.updateWriteResult.touchedOutputs.forEach((output) => {
       if (output.outputPath) {
@@ -43,16 +55,33 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
     });
   }
 
-  // Build review signals from available data
   const reviewSignals = {
+    lifecycle: {
+      featureStatus: hasWrittenOutputs ? 'active' as const : card.status === 'blocked' ? 'rolled_back' as const : 'unknown' as const,
+      maturity: null,
+      implementationStrategy: null,
+      commitOutcome:
+        result.governanceRelease?.status === 'blocked'
+          ? 'blocked' as const
+          : null,
+      canAssemble: null,
+      canWriteHost: null,
+      requiresReview: governanceWarnings.length > 0,
+      reasons: governanceWarnings,
+      summary: proposalMessage || 'Legacy workbench result adapter compatibility view.',
+    },
+    reusableGovernance: {
+      admittedCount: 0,
+      attentionCount: 0,
+      familyAdmissions: [],
+      patternAdmissions: [],
+      seamAdmissions: [],
+      summary: 'Legacy workbench result adapter does not carry reusable-governance admissions.',
+    },
     proposalStatus: {
-      ready: card.status === "ready",
-      percentage: card.status === "ready" ? 100 : 50,
-      message: result.governanceRelease?.status === "blocked"
-        ? "存在治理阻塞需要确认"
-        : card.status === "ready"
-        ? "所有 pattern 验证通过"
-        : "需要进一步澄清",
+      ready: card.status === 'ready',
+      percentage: card.status === 'ready' ? 100 : null,
+      message: proposalMessage,
     },
     gapFillSummary: {
       autoFilled: result.gapFillResult?.filledGaps?.length || 0,
@@ -60,17 +89,37 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
     },
     categoryEClarification: {
       count: result.gapFillResult?.categoryEGaps?.length || 0,
-      items: result.gapFillResult?.categoryEGaps
-        ?.map((g) => g.targetField) || [],
+      items: result.gapFillResult?.categoryEGaps?.map((gap) => gap.targetField) || [],
     },
     invalidPatternIds: result.failureCorpus?.invalidPatternIds
       ? Object.values(result.failureCorpus.invalidPatternIds).flat()
       : [],
     readiness: {
-      score: card.status === "ready" ? 95 : card.status === "blocked" ? 30 : 60,
-      warnings: result.governanceRelease?.status === "blocked"
-        ? result.governanceRelease.requiredConfirmations?.map((c) => c.description) || []
-        : [],
+      score: null,
+      warnings: compatibilityWarnings,
+    },
+    compatibilitySource: 'compatibility-only' as const,
+    grounding: {
+      status: 'none_required' as const,
+      reviewRequired: false,
+      verifiedSymbolCount: 0,
+      allowlistedSymbolCount: 0,
+      weakSymbolCount: 0,
+      unknownSymbolCount: 0,
+      warningCount: 0,
+      warnings: [],
+      reasonCodes: [],
+      summary: 'Legacy workbench result adapter does not carry grounding detail.',
+    },
+    repairability: {
+      status: 'not_checked' as const,
+      reasons: [
+        ...governanceWarnings,
+        ...(result.governanceRelease?.blockedReason ? [result.governanceRelease.blockedReason] : []),
+      ],
+      summary: hasWrittenOutputs
+        ? 'Legacy workbench result reports generated outputs, but canonical repairability is unavailable without a governance read-model.'
+        : 'Legacy workbench result does not carry validation-stage repairability detail.',
     },
   };
 
@@ -78,62 +127,63 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
     id: card.id,
     displayName: card.displayLabel,
     systemId: card.systemLabel,
-    group: "skill", // Default group - can be inferred from patterns
+    group: deriveFeatureGroupFromWorkbenchResult(result),
     parentId: null,
     childrenIds: [],
     status: mapStatus(card.status),
-    revision: 1,
-    updatedAt: card.updatedAt instanceof Date ? card.updatedAt : new Date(card.updatedAt),
+    revision: null,
+    updatedAt,
     patterns,
     generatedFiles,
     hostRealization: {
-      host: card.host || "Dota2",
-      context: detail.hostOutput?.outputSummary || "",
-      syncStatus: generatedFiles.length > 0 ? "synced" : "pending",
+      host: card.host || null,
+      context: detail.hostOutput?.outputSummary || null,
+      syncStatus: hasWrittenOutputs ? 'synced' : 'unknown',
     },
     reviewSignals,
   };
 }
 
-// F007: Convert multiple WorkbenchResults to Feature array
 export function adaptWorkbenchResultsToFeatures(results: WorkbenchResult[]): Feature[] {
   return results
     .map((result) => adaptWorkbenchResultToFeature(result))
-    .filter((f): f is Feature => f !== null);
+    .filter((feature): feature is Feature => feature !== null);
 }
 
-// F007: Derive groups from features
 export function deriveGroupsFromFeatures(features: Feature[]): Group[] {
   const groupCounts = new Map<string, number>();
 
   features.forEach((feature) => {
-    const count = groupCounts.get(feature.group) || 0;
-    groupCounts.set(feature.group, count + 1);
+    const groupId = feature.group || 'unknown';
+    const count = groupCounts.get(groupId) || 0;
+    groupCounts.set(groupId, count + 1);
   });
 
   const groupNames: Record<string, string> = {
-    skill: "技能",
-    hero: "英雄",
-    system: "系统",
-    item: "物品",
+    skill: '技能',
+    hero: '英雄',
+    system: '系统',
+    item: '物品',
+    unknown: '未知',
   };
 
   const groupIcons: Record<string, string> = {
-    skill: "Zap",
-    hero: "User",
-    system: "Settings",
-    item: "Package",
+    skill: 'Zap',
+    hero: 'User',
+    system: 'Settings',
+    item: 'Package',
+    unknown: 'CircleHelp',
   };
 
   const groups: Group[] = [
-    { id: "all", name: "全部 Features", icon: "Layers", count: features.length },
+    { id: 'all', name: '全部 Features', icon: 'Layers', count: features.length },
   ];
 
   groupCounts.forEach((count, groupId) => {
     groups.push({
       id: groupId,
       name: groupNames[groupId] || groupId,
-      icon: groupIcons[groupId] || "Layers",
+      icon: groupIcons[groupId] || 'Layers',
       count,
     });
   });

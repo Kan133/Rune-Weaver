@@ -11,8 +11,6 @@ import {
   BlueprintModule,
   BlueprintConnection,
   FinalBlueprint,
-  ModuleNeed,
-  NormalizedBlueprintStatus,
   ValidationIssue,
 } from "../schema/types";
 import { BlueprintValidationResult, BlueprintStats } from "./types";

@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "fs";
-import { isAbsolute, normalize, relative, resolve } from "path";
+import { normalize, relative, resolve } from "path";
 
 import type {
   GapFillBoundaryInfo,

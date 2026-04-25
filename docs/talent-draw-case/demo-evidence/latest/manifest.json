@@ -1,11 +1,12 @@
 {
-  "generatedAt": "2026-04-14T10:59:55.627Z",
-  "host": "D:\\RN",
+  "generatedAt": "2026-04-22T16:45:37.126Z",
+  "host": "D:\\rw-test-3",
   "status": "WARN",
+  "acceptanceSummaryPath": "acceptance-summary.json",
   "canonicalDemo": {
     "classification": "canonical-acceptance",
     "prompt": "把稀有度映射改成 R / SR / SSR / UR 分别提供 1 / 2 / 4 / 7 点全属性，并保留现有触发键、桥接、事件通道和 UI 交互。",
-    "boundary": "selection_flow.effect_mapping",
+    "boundary": "selection_outcome.realization",
     "continuationOrder": [
       "create skeleton",
       "gap-fill review",
@@ -27,7 +28,8 @@
       "screenshots/05-second-draw.png",
       "screenshots/06-gap-fill-review.png",
       "screenshots/07-gap-fill-approval-unit.png",
-      "screenshots/08-gap-fill-continuation.png"
+      "screenshots/08-gap-fill-continuation.png",
+      "talent-draw-demo-runtime.mp4"
     ],
     "missingAutoEvidence": [],
     "requiredManualEvidence": [
@@ -58,22 +60,22 @@
     {
       "path": "demo-prepare-output.txt",
       "status": "written",
-      "sizeBytes": 3044
+      "sizeBytes": 3171
     },
     {
       "path": "doctor-output.txt",
       "status": "written",
-      "sizeBytes": 2535
+      "sizeBytes": 2721
     },
     {
       "path": "validate-output.txt",
       "status": "written",
-      "sizeBytes": 1649
+      "sizeBytes": 1793
     },
     {
       "path": "generated-files.json",
       "status": "written",
-      "sizeBytes": 1245
+      "sizeBytes": 1547
     },
     {
       "path": "review-artifact.json",
@@ -97,6 +99,11 @@
       "path": "canonical-gap-fill-contract.json",
       "status": "written",
       "sizeBytes": 763
+    },
+    {
+      "path": "acceptance-summary.json",
+      "status": "written",
+      "sizeBytes": 2110
     }
   ]
 }

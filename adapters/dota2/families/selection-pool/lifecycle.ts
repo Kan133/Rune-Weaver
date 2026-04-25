@@ -1,7 +1,34 @@
-import type { FeatureAuthoring } from "../../../../core/schema/types.js";
+import type { FeatureAuthoring as CoreFeatureAuthoring } from "../../../../core/schema/types.js";
+import { calculateHostWriteExecutionOrder } from "../../../../core/host/write-plan.js";
 import type { FeatureSourceModelRef, FeatureWriteResult } from "../../../../core/workspace/types.js";
 import type { WritePlan, WritePlanEntry } from "../../assembler/index.js";
-import { createSelectionPoolLifecycleState } from "./authoring.js";
+import {
+  buildFeatureContentCollectionsArtifact,
+} from "../../content-collections/artifact.js";
+import {
+  appendFeatureContentCollectionsEntry,
+} from "../../content-collections/write-plan.js";
+import {
+  compileSelectionPoolModuleParameters,
+  createSelectionPoolLifecycleState,
+} from "./materialization.js";
+import {
+  isSelectionPoolFeatureAuthoring,
+} from "./shared.js";
+import {
+  buildExportedContentCollectionsFromParameters,
+  countSelectionPoolEntries,
+} from "./source-model.js";
+
+const SELECTION_POOL_PATTERN_PARAMETER_KEYS = {
+  "input.key_binding": "input_trigger",
+  "data.weighted_pool": "weighted_pool",
+  "rule.selection_flow": "selection_flow",
+  "effect.outcome_realizer": "selection_outcome",
+  "ui.selection_modal": "selection_modal",
+} as const;
+
+type SelectionPoolPatternSource = keyof typeof SELECTION_POOL_PATTERN_PARAMETER_KEYS;
 
 function isFeatureSourceModelRef(value: unknown): value is FeatureSourceModelRef {
   return Boolean(
@@ -16,7 +43,7 @@ function isFeatureSourceModelRef(value: unknown): value is FeatureSourceModelRef
 export function appendSelectionPoolSourceModelEntry(
   writePlan: WritePlan,
   featureId: string,
-  featureAuthoring: FeatureAuthoring | undefined,
+  featureAuthoring: CoreFeatureAuthoring | undefined,
 ): void {
   const lifecycleState = createSelectionPoolLifecycleState(featureId, featureAuthoring);
   if (!lifecycleState) {
@@ -29,7 +56,9 @@ export function appendSelectionPoolSourceModelEntry(
     operation: "create",
     targetPath: lifecycleState.sourceArtifactRef.path,
     contentType: "json",
-    contentSummary: `feature_source_model/selection_pool (json) objects:${lifecycleState.sourceArtifact.objects.length} kind:${lifecycleState.sourceArtifact.objectKind}`,
+    contentSummary: `feature_source_model/selection_pool (json) entries:${countSelectionPoolEntries(lifecycleState.featureAuthoring.parameters)}${
+      lifecycleState.sourceArtifact.objectKind ? ` metadata-kind:${lifecycleState.sourceArtifact.objectKind}` : ""
+    }`,
     sourcePattern: "rw.feature_source_model",
     sourceModule: "feature_source_model",
     safe: true,
@@ -40,6 +69,15 @@ export function appendSelectionPoolSourceModelEntry(
       adapter: "selection_pool",
     },
   });
+  appendFeatureContentCollectionsEntry(
+    writePlan,
+    featureId,
+    buildFeatureContentCollectionsArtifact(
+      featureId,
+      buildExportedContentCollectionsFromParameters(lifecycleState.featureAuthoring.parameters),
+    ),
+    recomputeWritePlanDerivedFields,
+  );
   writePlan.executionOrder = [...writePlan.executionOrder, writePlan.entries.length - 1];
   writePlan.stats = {
     total: writePlan.entries.length,
@@ -48,6 +86,100 @@ export function appendSelectionPoolSourceModelEntry(
     conflicts: writePlan.entries.filter((entry) => !entry.safe || (entry.conflicts && entry.conflicts.length > 0)).length,
     deferred: writePlan.entries.filter((entry) => entry.deferred).length,
   };
+}
+
+function recomputeWritePlanDerivedFields(writePlan: WritePlan): void {
+  writePlan.executionOrder = calculateHostWriteExecutionOrder(writePlan.entries);
+  writePlan.stats = {
+    total: writePlan.entries.length,
+    create: writePlan.entries.filter((entry) => entry.operation === "create").length,
+    update: writePlan.entries.filter((entry) => entry.operation === "update").length,
+    conflicts: writePlan.entries.filter((entry) => !entry.safe || (entry.conflicts && entry.conflicts.length > 0)).length,
+    deferred: writePlan.entries.filter((entry) => entry.deferred).length,
+  };
+}
+
+function buildPatternEntryContentSummary(
+  entry: WritePlanEntry,
+  parameters: Record<string, unknown> | undefined,
+): string {
+  return `${entry.sourcePattern} (${entry.contentType}) params: ${JSON.stringify(parameters || {})}`;
+}
+
+function isSelectionPoolPatternSource(value: string): value is SelectionPoolPatternSource {
+  return value in SELECTION_POOL_PATTERN_PARAMETER_KEYS;
+}
+
+export function refreshSelectionPoolWritePlanEntries(
+  writePlan: WritePlan,
+  featureId: string,
+  featureAuthoring: CoreFeatureAuthoring | undefined,
+): void {
+  const lifecycleState = createSelectionPoolLifecycleState(featureId, featureAuthoring);
+  if (!lifecycleState) {
+    return;
+  }
+
+  const compiledParameters = compileSelectionPoolModuleParameters(lifecycleState.featureAuthoring, {
+    hostRoot: writePlan.targetProject,
+  });
+  for (const entry of writePlan.entries) {
+    if (!isSelectionPoolPatternSource(entry.sourcePattern)) {
+      continue;
+    }
+
+    const compiledKey = SELECTION_POOL_PATTERN_PARAMETER_KEYS[entry.sourcePattern];
+    const nextParameters = compiledParameters[compiledKey];
+    entry.parameters = nextParameters;
+    entry.contentSummary = buildPatternEntryContentSummary(entry, nextParameters);
+    entry.metadata = {
+      ...(entry.metadata || {}),
+      featureAuthoring: lifecycleState.featureAuthoring,
+    };
+  }
+
+  const sourceEntryIndex = writePlan.entries.findIndex((entry) => entry.sourcePattern === "rw.feature_source_model");
+  const existingSourceEntry = sourceEntryIndex >= 0 ? writePlan.entries[sourceEntryIndex] : undefined;
+  const nextSourceEntry: WritePlanEntry = {
+    operation: existingSourceEntry?.operation || "create",
+    targetPath: lifecycleState.sourceArtifactRef.path,
+    contentType: "json",
+    contentSummary: `feature_source_model/selection_pool (json) entries:${countSelectionPoolEntries(lifecycleState.featureAuthoring.parameters)}${
+      lifecycleState.sourceArtifact.objectKind ? ` metadata-kind:${lifecycleState.sourceArtifact.objectKind}` : ""
+    }`,
+    sourcePattern: "rw.feature_source_model",
+    sourceModule: "feature_source_model",
+    safe: existingSourceEntry?.safe ?? true,
+    conflicts: existingSourceEntry?.conflicts,
+    generatorFamilyHint: existingSourceEntry?.generatorFamilyHint,
+    deferred: existingSourceEntry?.deferred,
+    deferredReason: existingSourceEntry?.deferredReason,
+    parameters: lifecycleState.sourceArtifact as unknown as Record<string, unknown>,
+    metadata: {
+      ...(existingSourceEntry?.metadata || {}),
+      sourceModelRef: lifecycleState.sourceArtifactRef,
+      featureAuthoring: lifecycleState.featureAuthoring,
+      adapter: "selection_pool",
+    },
+  };
+
+  if (sourceEntryIndex >= 0) {
+    writePlan.entries[sourceEntryIndex] = nextSourceEntry;
+  } else {
+    writePlan.entries.push(nextSourceEntry);
+  }
+
+  appendFeatureContentCollectionsEntry(
+    writePlan,
+    featureId,
+    buildFeatureContentCollectionsArtifact(
+      featureId,
+      buildExportedContentCollectionsFromParameters(lifecycleState.featureAuthoring.parameters),
+    ),
+    recomputeWritePlanDerivedFields,
+  );
+
+  recomputeWritePlanDerivedFields(writePlan);
 }
 
 export function extractSourceModelRefFromWritePlan(writePlan: WritePlan): FeatureSourceModelRef | undefined {
@@ -61,13 +193,13 @@ export function extractSourceModelRefFromWritePlan(writePlan: WritePlan): Featur
     : undefined;
 }
 
-export function extractFeatureAuthoringFromWritePlan(writePlan: WritePlan): FeatureAuthoring | undefined {
+export function extractFeatureAuthoringFromWritePlan(writePlan: WritePlan): CoreFeatureAuthoring | undefined {
   const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
   const candidate = sourceEntry?.metadata?.featureAuthoring;
-  if (!candidate || typeof candidate !== "object") {
+  if (!isSelectionPoolFeatureAuthoring(candidate)) {
     return undefined;
   }
-  return candidate as FeatureAuthoring;
+  return candidate;
 }
 
 export function isFeatureSourceModelEntry(entry: WritePlanEntry | undefined): boolean {
@@ -85,7 +217,7 @@ export function resolveSelectionPoolWorkspaceFields(
   writePlan: WritePlan,
   featureId: string,
   mode: "create" | "update" | "regenerate",
-  blueprintFeatureAuthoring?: FeatureAuthoring,
+  blueprintFeatureAuthoring?: CoreFeatureAuthoring,
 ): Pick<FeatureWriteResult, "sourceModel" | "featureAuthoring"> {
   const sourceModel = extractSourceModelRefFromWritePlan(writePlan);
   const featureAuthoring = extractFeatureAuthoringFromWritePlan(writePlan);

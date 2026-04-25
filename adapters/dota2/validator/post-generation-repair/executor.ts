@@ -4,8 +4,13 @@
  * Executes repair actions based on their kind.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import type { GroundingCheckResult, ModuleImplementationRecord } from "../../../../core/schema/types.js";
+import {
+  aggregateGroundingChecks,
+  aggregateModuleGroundingAssessments,
+} from "../../../../core/governance/grounding.js";
 import type {
   PostGenerationRepairAction,
   RepairActionResult,
@@ -14,7 +19,24 @@ import type {
 } from "./types.js";
 import { findMissingLessImports } from "./helpers.js";
 import { refreshBridge } from "../../bridge/index.js";
-import { loadWorkspace } from "../../../../core/workspace/index.js";
+import { loadWorkspace, saveWorkspace } from "../../../../core/workspace/index.js";
+
+function normalizeGroundingChecks(rawGrounding: unknown): GroundingCheckResult[] {
+  if (!Array.isArray(rawGrounding)) {
+    return [];
+  }
+
+  return rawGrounding.filter((item): item is GroundingCheckResult =>
+    Boolean(item)
+    && typeof item === "object"
+    && typeof (item as Record<string, unknown>).artifactId === "string"
+    && Array.isArray((item as Record<string, unknown>).verifiedSymbols)
+    && Array.isArray((item as Record<string, unknown>).allowlistedSymbols)
+    && Array.isArray((item as Record<string, unknown>).weakSymbols)
+    && Array.isArray((item as Record<string, unknown>).unknownSymbols)
+    && Array.isArray((item as Record<string, unknown>).warnings),
+  );
+}
 
 /**
  * Execute a single repair action
@@ -50,6 +72,10 @@ export async function executeRepairAction(
         return await executeRefreshBridge(hostRoot, action);
       }
 
+      case "upgrade_workspace_grounding": {
+        return await executeUpgradeWorkspaceGrounding(hostRoot, action);
+      }
+
       default: {
         result.message = `Cannot execute action of kind: ${action.kind}`;
         return result;
@@ -60,6 +86,99 @@ export async function executeRepairAction(
     result.errors = [result.message];
     return result;
   }
+}
+
+async function executeUpgradeWorkspaceGrounding(
+  hostRoot: string,
+  action: PostGenerationRepairAction,
+): Promise<RepairActionResult> {
+  const result: RepairActionResult = {
+    action,
+    success: false,
+    message: "",
+  };
+
+  const upgradePlan = action.data?.groundingUpgrade;
+  if (!upgradePlan || upgradePlan.featureIds.length === 0) {
+    result.message = "Missing grounding upgrade targets";
+    result.errors = [result.message];
+    return result;
+  }
+
+  const workspaceResult = loadWorkspace(hostRoot);
+  if (!workspaceResult.success || !workspaceResult.workspace) {
+    result.message = "Failed to load workspace for grounding upgrade";
+    result.errors = workspaceResult.issues;
+    return result;
+  }
+
+  const workspace = workspaceResult.workspace;
+  const upgradedFeatures: string[] = [];
+  const upgradedModules: string[] = [];
+
+  const updatedWorkspace = {
+    ...workspace,
+    features: workspace.features.map((feature) => {
+      if (!upgradePlan.featureIds.includes(feature.featureId)) {
+        return feature;
+      }
+
+      const targetModuleIds = new Set(upgradePlan.modulesByFeature[feature.featureId] || []);
+      const synthesizedModules = (feature.modules || []).filter(
+        (module): module is ModuleImplementationRecord => module.sourceKind === "synthesized",
+      );
+      if (synthesizedModules.length === 0) {
+        throw new Error(`Feature '${feature.featureId}' has no synthesized modules to upgrade`);
+      }
+
+      const modules = (feature.modules || []).map((module) => {
+        if (module.sourceKind !== "synthesized") {
+          return module;
+        }
+
+        const rawGrounding = normalizeGroundingChecks((module.metadata as Record<string, unknown> | undefined)?.grounding);
+        if (targetModuleIds.has(module.moduleId)) {
+          if (rawGrounding.length === 0) {
+            throw new Error(
+              `Feature '${feature.featureId}' module '${module.moduleId}' is missing raw metadata.grounding`,
+            );
+          }
+
+          upgradedModules.push(`${feature.featureId}:${module.moduleId}`);
+          return {
+            ...module,
+            groundingAssessment: aggregateGroundingChecks(rawGrounding),
+          };
+        }
+
+        return module;
+      });
+
+      upgradedFeatures.push(feature.featureId);
+      return {
+        ...feature,
+        modules,
+        groundingSummary: aggregateModuleGroundingAssessments(
+          modules.filter((module): module is ModuleImplementationRecord => module.sourceKind === "synthesized"),
+        ),
+        updatedAt: new Date().toISOString(),
+      };
+    }),
+  };
+
+  const saveResult = saveWorkspace(hostRoot, updatedWorkspace);
+  if (!saveResult.success) {
+    result.message = "Failed to save upgraded workspace grounding";
+    result.errors = saveResult.issues;
+    return result;
+  }
+
+  result.success = true;
+  result.modifiedFile = join(hostRoot, "game/scripts/src/rune_weaver/rune-weaver.workspace.json");
+  result.message = upgradedModules.length > 0
+    ? `Upgraded workspace grounding for ${upgradedModules.length} synthesized module(s) across ${upgradedFeatures.length} feature(s)`
+    : `Recomputed feature groundingSummary for ${upgradedFeatures.length} feature(s)`;
+  return result;
 }
 
 /**
@@ -77,12 +196,6 @@ async function fixLessImports(
 
   const hudStylesPath = join(hostRoot, "content/panorama/src/hud/styles.less");
 
-  if (!existsSync(hudStylesPath)) {
-    result.message = `hud/styles.less not found at ${hudStylesPath}`;
-    result.errors = [result.message];
-    return result;
-  }
-
   try {
     const missingImports = action.data?.missingImports || findMissingLessImports(hostRoot);
 
@@ -92,9 +205,16 @@ async function fixLessImports(
       return result;
     }
 
-    const existingContent = readFileSync(hudStylesPath, "utf-8");
+    const existingContent = existsSync(hudStylesPath)
+      ? readFileSync(hudStylesPath, "utf-8")
+      : "";
+    if (!existsSync(hudStylesPath)) {
+      mkdirSync(join(hostRoot, "content/panorama/src/hud"), { recursive: true });
+    }
     const newImports = missingImports.join("\n");
-    const updatedContent = `${newImports}\n${existingContent}`;
+    const updatedContent = existingContent.trim().length > 0
+      ? `${newImports}\n${existingContent}`
+      : `${newImports}\n`;
 
     writeFileSync(hudStylesPath, updatedContent, "utf-8");
 

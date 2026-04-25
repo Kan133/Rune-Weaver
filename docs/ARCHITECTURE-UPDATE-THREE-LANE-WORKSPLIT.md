@@ -86,7 +86,7 @@ To avoid collision:
 
 ### Lane B may edit
 
-- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
+- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
 - proposal docs specifically created for schema / blueprint changes
 
 ### Lane C may edit

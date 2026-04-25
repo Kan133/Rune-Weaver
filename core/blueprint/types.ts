@@ -49,11 +49,17 @@ export interface BlueprintBuilderConfig {
  */
 export interface BlueprintBuildResult {
   success: boolean;
+  draftBlueprint?: Blueprint;
   blueprint?: Blueprint;
   finalBlueprint?: FinalBlueprint;
   blueprintProposal?: BlueprintProposal;
   normalizationReport?: BlueprintNormalizationReport;
   issues: ValidationIssue[];
+}
+
+export interface BlueprintNormalizationOutcome {
+  finalBlueprint: FinalBlueprint;
+  report: BlueprintNormalizationReport;
 }
 
 /**
@@ -89,7 +95,7 @@ export interface BlueprintReviewArtifact {
   sourceSchema: {
     goal: string;
     intentKind: string;
-    isReadyForBlueprint: boolean;
+    uncertaintyCount: number;
   };
   blueprint: {
     id: string;

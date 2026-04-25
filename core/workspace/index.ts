@@ -6,3 +6,5 @@
 
 export * from "./types.js";
 export * from "./manager.js";
+export * from "./semantic-context.js";
+export * from "./dependency-revalidation.js";

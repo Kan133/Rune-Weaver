@@ -1,12 +1,13 @@
 
 > rune-weaver@0.1.0 cli
-> tsx apps/cli/index.ts dota2 doctor --host D:\RN
+> tsx apps/cli/index.ts dota2 doctor --host D:\rw-test-3
 
+core/validation/schema-validator.test.ts passed
 ======================================================================
 Rune Weaver - Runtime Doctor
 ======================================================================
 
-Host: D:\RN
+Host: D:\rw-test-3
 Mode: Read-only health check (safe)
 
 ----------------------------------------------------------------------
@@ -14,25 +15,25 @@ Check Results
 ----------------------------------------------------------------------
 
 [PASS] Addon Config
-   addon_name: "rn"
+   addon_name: "talent_draw_demo"
 
 [PASS] Dota Directories
-   game/ and content/ outputs exist for "rn"
-      - game -> E:\Steam\steamapps\common\dota 2 beta\game\dota_addons\x_template
-      - content -> E:\Steam\steamapps\common\dota 2 beta\content\dota_addons\x_template
+   game/ and content/ outputs exist for "talent_draw_demo"
+      - game -> E:\Steam\steamapps\common\dota 2 beta\game\dota_addons\talent_draw_demo
+      - content -> E:\Steam\steamapps\common\dota 2 beta\content\dota_addons\talent_draw_demo
 
 [PASS] Package Scripts
    Found 3/3 key scripts
 
 [PASS] Rune Weaver Workspace
    Workspace exists (1 features)
-      - workspace.hostRoot: D:\RN
-      - workspace.addonName: rn
+      - workspace.hostRoot: D:\rw-test-3
+      - workspace.addonName: talent_draw_demo
       - active features: 1
       - gap-fill ready features: 1
 
 [PASS] Post-Generation Validation
-   All 9 checks passed
+   All 10 checks passed
 
 [PASS] Runtime Assets
    Bridge entry files and generated asset roots exist
@@ -43,8 +44,8 @@ Check Results
 [WARN] Host Build Artifacts
    2 build artifacts are missing or stale
       Fix: Run yarn dev in the host so Panorama rebuilds the missing HUD artifacts.
-      - Missing: game/panorama/layout/custom_game/hud/script.js
-      - Missing: game/panorama/layout/custom_game/hud/styles.css
+      - Missing: content/panorama/layout/custom_game/hud/script.js
+      - Missing: content/panorama/layout/custom_game/hud/styles.css
       - Fix: run yarn dev in the host before launching Dota2.
 
 [PASS] Gap Fill Boundaries
@@ -57,9 +58,9 @@ WARN
 
 Action Summary: Rebuild host scripts and Panorama assets
 Reason: The host is missing compiled build artifacts needed at runtime.
-Command: cd D:\RN && yarn dev
+Command: cd D:\rw-test-3 && yarn dev
 
-Next Command: cd D:\RN && yarn dev
+Next Command: cd D:\rw-test-3 && yarn dev
 
 ----------------------------------------------------------------------
 Next Steps
@@ -68,9 +69,9 @@ Next Steps
 
 Suggested Commands
 ----------------------------------------------------------------------
-  - npm run cli -- dota2 init --host D:\RN --addon-name RN
-  - npm run cli -- dota2 repair --host D:\RN --safe
-  - cd D:\RN && yarn dev
-  - cd D:\RN && yarn launch RN temp
+  - npm run cli -- dota2 init --host D:\rw-test-3 --addon-name rw-test-3
+  - npm run cli -- dota2 repair --host D:\rw-test-3 --safe
+  - cd D:\rw-test-3 && yarn dev
+  - cd D:\rw-test-3 && yarn launch rw-test-3 temp
 
 ======================================================================

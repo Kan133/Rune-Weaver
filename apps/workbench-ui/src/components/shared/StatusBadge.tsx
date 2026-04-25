@@ -1,4 +1,3 @@
-import React from 'react';
 import { cn } from '@/lib/utils';
 import type { FeatureStatus } from '@/types/feature';
 
@@ -24,6 +23,10 @@ const statusConfig: Record<FeatureStatus, { label: string; color: string }> = {
     label: '错误',
     color: 'bg-[#ef4444]/20 text-[#ef4444] border-[#ef4444]/30',
   },
+  unknown: {
+    label: '未知',
+    color: 'bg-white/10 text-white/55 border-white/15',
+  },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
@@ -33,7 +36,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
       className={cn(
         'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border',
         config.color,
-        className
+        className,
       )}
     >
       {config.label}

@@ -11,7 +11,7 @@
  * Both repairs are idempotent and safe to re-run.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   RuneWeaverFeatureRecord,
@@ -19,6 +19,11 @@ import {
   getActiveFeatures,
 } from "../../../core/workspace/index.js";
 import { migrateBaselineAbilities } from "../kv/baseline-migrator.js";
+import {
+  buildSelectionGrantRuntimePlans,
+  readProviderAbilityExportArtifact,
+} from "../cross-feature/index.js";
+import { toGeneratedUiComponentName } from "../ui/component-naming.js";
 
 export interface BridgeRefreshResult {
   success: boolean;
@@ -87,6 +92,10 @@ function isGeneratedWeightedPoolModule(fileName: string): boolean {
 
 function isGeneratedSelectionFlowModule(fileName: string): boolean {
   return fileName.endsWith("_rule_selection_flow");
+}
+
+function isGeneratedSelectionOutcomeModule(fileName: string): boolean {
+  return fileName.endsWith("_effect_outcome_realizer");
 }
 
 export function ensureBridgeFiles(projectPath: string): EnsureBridgeFilesResult {
@@ -318,6 +327,9 @@ function generateServerIndexContent(
     selectionFlowFile?: string;
     selectionFlowClass?: string;
   }> = [];
+  const autoAttachAbilityNames = new Set<string>();
+  const preloadedAbilityNames = new Set<string>();
+  const selectionGrantPlans = buildSelectionGrantRuntimePlans(hostRoot, activeFeatures);
 
   for (const feature of activeFeatures) {
     const wiringPlan: {
@@ -328,7 +340,10 @@ function generateServerIndexContent(
       poolClass?: string;
       selectionFlowFile?: string;
       selectionFlowClass?: string;
+      selectionOutcomeFile?: string;
+      selectionOutcomeClass?: string;
     } = { featureId: feature.featureId };
+    const featureGeneratedAbilityNames = new Set<string>();
 
     const featureKvFiles = feature.generatedFiles.filter(
       (file) => file.includes("npc_abilities_custom") && file.endsWith(".txt")
@@ -343,13 +358,31 @@ function generateServerIndexContent(
           for (const match of abilityNameMatches) {
             const nameMatch = match.match(/"([^"]+)"/);
             if (nameMatch && nameMatch[1] && nameMatch[1].startsWith("rw_")) {
-              const abilityName = nameMatch[1];
-              if (!generatedAbilityNames.includes(abilityName)) {
-                generatedAbilityNames.push(abilityName);
-              }
+              featureGeneratedAbilityNames.add(nameMatch[1]);
             }
           }
         }
+      }
+    }
+
+    const providerExportArtifact = readProviderAbilityExportArtifact(hostRoot, feature.featureId);
+    if (providerExportArtifact?.surfaces?.length) {
+      for (const surface of providerExportArtifact.surfaces) {
+        featureGeneratedAbilityNames.add(surface.abilityName);
+        if (surface.attachmentMode === "auto_on_activate") {
+          autoAttachAbilityNames.add(surface.abilityName);
+        }
+      }
+    } else {
+      for (const abilityName of featureGeneratedAbilityNames) {
+        autoAttachAbilityNames.add(abilityName);
+      }
+    }
+
+    for (const abilityName of featureGeneratedAbilityNames) {
+      preloadedAbilityNames.add(abilityName);
+      if (!generatedAbilityNames.includes(abilityName)) {
+        generatedAbilityNames.push(abilityName);
       }
     }
 
@@ -392,16 +425,29 @@ function generateServerIndexContent(
       } else if (isGeneratedSelectionFlowModule(fileName)) {
         wiringPlan.selectionFlowFile = fileName;
         wiringPlan.selectionFlowClass = className;
+      } else if (isGeneratedSelectionOutcomeModule(fileName)) {
+        wiringPlan.selectionOutcomeFile = fileName;
+        wiringPlan.selectionOutcomeClass = className;
       }
     }
 
     if (wiringPlan.keyBindingFile && wiringPlan.poolFile && wiringPlan.selectionFlowFile) {
       runtimeWiringPlans.push(wiringPlan);
     }
+
+  }
+
+  for (const plan of selectionGrantPlans) {
+    for (const binding of plan.bindings) {
+      preloadedAbilityNames.add(binding.abilityName);
+      if (!generatedAbilityNames.includes(binding.abilityName)) {
+        generatedAbilityNames.push(binding.abilityName);
+      }
+    }
   }
 
   const abilityBlocks: string[] = [];
-  for (const name of generatedAbilityNames) {
+  for (const name of autoAttachAbilityNames) {
     const safeName = name.replace(/-/g, "_");
     abilityBlocks.push(`    const abilityName_${safeName} = "${name}";
     if (hero.HasAbility(abilityName_${safeName})) {
@@ -418,7 +464,7 @@ function generateServerIndexContent(
     }`);
   }
 
-  const heroAttachmentCode = generatedAbilityNames.length > 0 ? `
+  const heroAttachmentCode = autoAttachAbilityNames.size > 0 ? `
   // ========================================================================
   // Hero Attachment - Rune Weaver Phase 1 Minimal Implementation
   // Defers attachment until hero spawns via npc_spawned hook
@@ -457,6 +503,7 @@ ${abilityBlocks.join("\n")}
 // Dynamic module loading to avoid Lua local variable limit
 const moduleDescriptors = ${JSON.stringify(moduleDescriptors, null, 2)};
 const runtimeWiringPlans = ${JSON.stringify(runtimeWiringPlans, null, 2)};
+const selectionGrantPlans = ${JSON.stringify(selectionGrantPlans, null, 2)};
 
 function isGeneratedKeyBindingAbilityModule(fileName: string): boolean {
   return fileName.endsWith("_input_key_binding_ability");
@@ -522,6 +569,14 @@ function wireRuntimeFeatures(loadedModules: Record<string, any>): void {
       "rune_weaver.generated.server." + plan.selectionFlowFile,
       plan.selectionFlowClass
     );
+    const selectionOutcome =
+      plan.selectionOutcomeFile && plan.selectionOutcomeClass
+        ? getRwSingleton(
+            loadedModules,
+            "rune_weaver.generated.server." + plan.selectionOutcomeFile,
+            plan.selectionOutcomeClass
+          )
+        : undefined;
 
     if (
       keyBinding &&
@@ -529,6 +584,9 @@ function wireRuntimeFeatures(loadedModules: Record<string, any>): void {
       selectionFlow &&
       typeof selectionFlow.triggerSelectionFromPool === "function"
     ) {
+      if (selectionOutcome && typeof selectionOutcome.attachToSelectionFlow === "function") {
+        selectionOutcome.attachToSelectionFlow(selectionFlow);
+      }
       keyBinding.setHandler((playerId: number) => {
         selectionFlow.triggerSelectionFromPool(playerId, pool);
       });
@@ -537,24 +595,69 @@ function wireRuntimeFeatures(loadedModules: Record<string, any>): void {
   }
 }
 
+function registerSelectionGrantHandlers(loadedModules: Record<string, any>): void {
+  for (const plan of selectionGrantPlans) {
+    const selectionFlow = getRwSingleton(
+      loadedModules,
+      "rune_weaver.generated.server." + plan.selectionFlowFile,
+      plan.selectionFlowClass
+    );
+
+    if (!selectionFlow || typeof selectionFlow.registerOutcomeHandler !== "function") {
+      continue;
+    }
+
+    selectionFlow.registerOutcomeHandler((context: { playerId: number; option: { id: string } }) => {
+      const binding = plan.bindings.find((candidate) => candidate.entryId === context.option.id);
+      if (!binding) {
+        return { handled: false };
+      }
+
+      const hero = PlayerResource.GetSelectedHeroEntity(context.playerId as PlayerID);
+      if (!hero) {
+        print("[Rune Weaver] Selection grant: no hero found for player " + context.playerId);
+        return { handled: false };
+      }
+
+      const abilityPath = "rune_weaver.abilities." + binding.abilityName;
+      require(abilityPath);
+
+      if (!hero.HasAbility(binding.abilityName)) {
+        hero.AddAbility(binding.abilityName);
+      }
+
+      const ability = hero.FindAbilityByName(binding.abilityName);
+      if (!ability) {
+        print("[Rune Weaver] Selection grant: failed to resolve ability " + binding.abilityName);
+        return { handled: false };
+      }
+
+      ability.SetLevel(1);
+      print("[Rune Weaver] Selection grant: granted " + binding.abilityName + " from feature " + binding.targetFeatureId);
+      return { handled: true };
+    });
+  }
+}
+
 // Rune Weaver Generated Ability Names for Hero Attachment
 // These abilities will be automatically attached to heroes by the host addon
 // Format: abilityName = "rw_xxx"
-${generatedAbilityNames.map((name) => `const ${name.replace(/-/g, "_").toUpperCase()}_ABILITY = "${name}";`).join("\n")}
+${Array.from(preloadedAbilityNames).map((name) => `const ${name.replace(/-/g, "_").toUpperCase()}_ABILITY = "${name}";`).join("\n")}
 
 export function activateRwGeneratedServer(): void {
   const loadedModules = loadRwGeneratedModules();
 
   // Preload ability wrappers to ensure registerAbility() executes before AddAbility()
   // Using dynamic require path to avoid TSTL compile-time resolution
-${generatedAbilityNames.map((name) => `  { const abilityPath = "rune_weaver.abilities.${name}"; require(abilityPath); }`).join("\n")}
+${Array.from(preloadedAbilityNames).map((name) => `  { const abilityPath = "rune_weaver.abilities.${name}"; require(abilityPath); }`).join("\n")}
 
   wireRuntimeFeatures(loadedModules);
+  registerSelectionGrantHandlers(loadedModules);
 
   // Mount ${activeFeatures.length} active features
 ${heroAttachmentCode}
   print("[Rune Weaver] ${activeFeatures.length} server modules activated");
-  print("[Rune Weaver] Hero attachment abilities registered: ${generatedAbilityNames.length}");
+  print("[Rune Weaver] Hero attachment abilities registered: ${autoAttachAbilityNames.size}");
 }
 `;
 }
@@ -575,7 +678,7 @@ function generateUIIndexContent(features: RuneWeaverFeatureRecord[]): string {
         continue;
       }
 
-      const componentName = toPascalCase(fileName);
+      const componentName = toGeneratedUiComponentName(fileName);
       imports.push(`import { ${componentName} } from "./${fileName}";`);
       componentUsages.push(`      <${componentName} />`);
     }
@@ -600,12 +703,7 @@ export default RuneWeaverGeneratedUIRoot;
 `;
 }
 
-function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeatureRecord[]): void {
-  const hudStylesPath = join(projectPath, BRIDGE_PATHS.hudStyles);
-  if (!existsSync(hudStylesPath)) {
-    return;
-  }
-
+export function collectGeneratedUiLessImports(features: RuneWeaverFeatureRecord[]): string[] {
   const activeFeatures = features.filter((feature) => feature.status === "active");
   const styleImports = new Set<string>();
   for (const feature of activeFeatures) {
@@ -620,7 +718,63 @@ function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeature
     }
   }
 
-  const existingContent = readFileSync(hudStylesPath, "utf-8");
+  return Array.from(styleImports);
+}
+
+function collectGeneratedUiLessImportsFromDisk(projectPath: string): string[] {
+  const generatedUiRoot = join(projectPath, "content/panorama/src/rune_weaver/generated/ui");
+  if (!existsSync(generatedUiRoot)) {
+    return [];
+  }
+
+  const styleImports = new Set<string>();
+  const stack = [generatedUiRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || !existsSync(current)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.name.endsWith(".less")) {
+        continue;
+      }
+      const relativePath = fullPath
+        .slice(generatedUiRoot.length + 1)
+        .replace(/\\/g, "/");
+      styleImports.add(`@import "../rune_weaver/generated/ui/${relativePath}";`);
+    }
+  }
+
+  return Array.from(styleImports);
+}
+
+export function shouldMaintainHudStyles(features: RuneWeaverFeatureRecord[]): boolean {
+  return collectGeneratedUiLessImports(features).length > 0;
+}
+
+function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeatureRecord[]): void {
+  const hudStylesPath = join(projectPath, BRIDGE_PATHS.hudStyles);
+  const styleImports = Array.from(
+    new Set([
+      ...collectGeneratedUiLessImports(features),
+      ...collectGeneratedUiLessImportsFromDisk(projectPath),
+    ]),
+  ).sort();
+  const maintainHudStyles = styleImports.length > 0;
+
+  if (!existsSync(hudStylesPath) && !maintainHudStyles) {
+    return;
+  }
+
+  const existingContent = existsSync(hudStylesPath)
+    ? readFileSync(hudStylesPath, "utf-8")
+    : "";
   const contentWithoutGeneratedImports = existingContent
     .replace(/^@import "\.\.\/rune_weaver\/generated\/ui\/[^"]+\.less";\s*$/gm, "")
     .replace(/^\s+/, "");
@@ -628,17 +782,26 @@ function refreshHudStyleImports(projectPath: string, features: RuneWeaverFeature
     width: 100%;
     height: 100%;
 }`;
-  const styleImportBlock = Array.from(styleImports).join("\n");
-  const missingRootStyle = !contentWithoutGeneratedImports.includes(".rune-weaver-root");
+
+  const hasMeaningfulUserContent = contentWithoutGeneratedImports.trim().length > 0;
+  if (!maintainHudStyles && !hasMeaningfulUserContent) {
+    return;
+  }
+
+  if (!existsSync(hudStylesPath)) {
+    mkdirSync(join(projectPath, "content", "panorama", "src", "hud"), { recursive: true });
+  }
+
+  const missingRootStyle = !/\.rune-weaver-root\s*\{/.test(contentWithoutGeneratedImports);
   const nextContent = [
-    styleImportBlock,
+    styleImports.join("\n"),
     missingRootStyle ? rootStyleBlock : undefined,
     contentWithoutGeneratedImports.trim(),
   ]
     .filter((section): section is string => !!section && section.trim().length > 0)
     .join("\n\n");
 
-  const normalizedNextContent = `${nextContent}\n`;
+  const normalizedNextContent = nextContent.length > 0 ? `${nextContent}\n` : "";
   if (normalizedNextContent === existingContent) {
     return;
   }
@@ -828,6 +991,52 @@ export interface HostEntryInjectionResult {
   errors: string[];
 }
 
+function ensureServerHostEntry(projectPath: string): void {
+  const serverEntryPath = join(projectPath, "game/scripts/src/modules/index.ts");
+  if (existsSync(serverEntryPath)) {
+    return;
+  }
+
+  mkdirSync(join(projectPath, "game/scripts/src/modules"), { recursive: true });
+  writeFileSync(
+    serverEntryPath,
+    `import { activateRuneWeaverModules } from "../rune_weaver";
+
+export function ActivateModules() {
+  activateRuneWeaverModules();
+}
+`,
+    "utf-8",
+  );
+}
+
+function ensureUIHostEntry(projectPath: string): void {
+  const uiEntryPath = join(projectPath, "content/panorama/src/hud/script.tsx");
+  if (existsSync(uiEntryPath)) {
+    return;
+  }
+
+  mkdirSync(join(projectPath, "content/panorama/src/hud"), { recursive: true });
+  writeFileSync(
+    uiEntryPath,
+    `import React from "react";
+import { render } from "react-panorama-x";
+import { RuneWeaverHUDRoot } from "../rune_weaver";
+
+function Root() {
+  return (
+    <>
+      <RuneWeaverHUDRoot />
+    </>
+  );
+}
+
+render(<Root />, $.GetContextPanel());
+`,
+    "utf-8",
+  );
+}
+
 export function injectHostEntryBridge(projectPath: string): HostEntryInjectionResult {
   const result: HostEntryInjectionResult = {
     success: false,
@@ -838,6 +1047,18 @@ export function injectHostEntryBridge(projectPath: string): HostEntryInjectionRe
 
   const serverEntryPath = join(projectPath, "game/scripts/src/modules/index.ts");
   const uiEntryPath = join(projectPath, "content/panorama/src/hud/script.tsx");
+
+  try {
+    ensureServerHostEntry(projectPath);
+    ensureUIHostEntry(projectPath);
+  } catch (error) {
+    result.errors.push(
+      `Failed to ensure host entry shells: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return result;
+  }
 
   if (existsSync(serverEntryPath)) {
     try {

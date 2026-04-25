@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-17
+> Last verified: 2026-04-20
 > Read when: deciding the minimum doc set for a task
 > Do not use for: subsystem truth by itself; this file routes readers to the right docs
 
@@ -90,18 +90,23 @@ Read baseline first:
 
 1. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
 2. [SCHEMA.md](/D:/Rune%20Weaver/docs/SCHEMA.md)
-3. [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
-4. [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+3. [WIZARD-BLUEPRINT-CHAIN.md](/D:/Rune%20Weaver/docs/WIZARD-BLUEPRINT-CHAIN.md)
+4. [LLM-INTEGRATION.md](/D:/Rune%20Weaver/docs/LLM-INTEGRATION.md)
+
+If the task is Dota2-specific blueprint/synthesis/repair work or is checking whether older grammar-era wording still applies, add these before proposal docs:
+
+- latest Dota2 mainline session-sync note under `docs/session-sync/`
+- [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)
+- [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md)
+  - Dota2-specific implementation reference; do not let it override cross-host baseline docs by itself
 
 Then read proposal docs only if the task is explicitly planning/proposal work:
 
-- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
+- [INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-BLUEPRINT-UPDATE-PLAN.md)
 - [MODULE-NEED-SEAM-PROPOSAL.md](/D:/Rune%20Weaver/docs/MODULE-NEED-SEAM-PROPOSAL.md)
-- [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/INTENT-SCHEMA-VNEXT-PROPOSAL.md)
-- [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md)
-- [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/BLUEPRINT-NORMALIZER-PROPOSAL.md)
-- [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md)
-  - only for migration comparison; do not let it override current proposal/baseline wording
+- [INTENT-SCHEMA-VNEXT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/INTENT-SCHEMA-VNEXT-PROPOSAL.md)
+- [BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-PROPOSAL-CONTRACT-PROPOSAL.md)
+- [BLUEPRINT-NORMALIZER-PROPOSAL.md](/D:/Rune%20Weaver/docs/planning/intent-blueprint/BLUEPRINT-NORMALIZER-PROPOSAL.md)
 - [ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md](/D:/Rune%20Weaver/docs/ARCHITECTURE-UPDATE-THREE-LANE-WORKSPLIT.md)
   - only when checking lane boundaries or proposal merge ownership
 
@@ -111,9 +116,12 @@ Add when relevant:
 - [BLUEPRINT-PATTERN-RESOLUTION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-PATTERN-RESOLUTION.md)
 - [BLUEPRINT-VALIDATION.md](/D:/Rune%20Weaver/docs/BLUEPRINT-VALIDATION.md)
 
+Do not use redirect stubs such as [WIZARD-INTENT-CONTRACT.md](/D:/Rune%20Weaver/docs/WIZARD-INTENT-CONTRACT.md) or [BLUEPRINT-ORCHESTRATION-CONTRACT.md](/D:/Rune%20Weaver/docs/BLUEPRINT-ORCHESTRATION-CONTRACT.md) for execution work; they exist only to route archive readers.
+
 Stop when you reach docs tagged `planning` or `needs-refresh`; this route exists to inspect proposal work, not to override the authoritative lifecycle truth specified in §3.
 
 Do not use planning docs to override current lifecycle truth.
+For Dota2 blueprint work, treat old grammar-era docs as historical or planning input only when they conflict with the current baseline.
 
 ---
 
@@ -258,10 +266,18 @@ Read in this order:
 7. [DOTA2-TS-GENERATOR-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-GENERATOR-BOUNDARY.md)
 8. [DOTA2-TS-LUA-AUTHORING-PATHS.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-TS-LUA-AUTHORING-PATHS.md)
 
+If the task is Dota2-specific synthesis, repair, dependency, or lifecycle behavior work, also read:
+
+- latest Dota2 mainline session-sync note under `docs/session-sync/`
+- [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md)
+- [DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-V2-GOVERNANCE-FIRST-ARCHITECTURE.md)
+  - use as the Dota2-specific implementation companion after reading root baseline docs
+
 Add when relevant:
 
 - [ASSEMBLY-HOST-MAPPING.md](/D:/Rune%20Weaver/docs/hosts/dota2/ASSEMBLY-HOST-MAPPING.md)
 - [DOTA2-GAP-FILL-BOUNDARY.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-BOUNDARY.md)
+  - read when the task changes bounded local repair / muscle-fill behavior
 - [DOTA2-GAP-FILL-E2E-CHECKLIST.md](/D:/Rune%20Weaver/docs/hosts/dota2/DOTA2-GAP-FILL-E2E-CHECKLIST.md)
   - use when executing the frozen Talent Draw acceptance pass or checking the expected evidence pack
 - [TALENT-DRAW-E2E-LESSONS.md](/D:/Rune%20Weaver/docs/hosts/dota2/TALENT-DRAW-E2E-LESSONS.md)

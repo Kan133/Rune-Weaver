@@ -32,6 +32,7 @@ export function printRepairPlan(plan: PostGenerationRepairPlan): string {
   // Group by kind
   const safeFixes = plan.actions.filter((a) => a.kind === "safe_fix");
   const refreshBridgeActions = plan.actions.filter((a) => a.kind === "refresh_bridge");
+  const upgradeWorkspaceGroundingActions = plan.actions.filter((a) => a.kind === "upgrade_workspace_grounding");
   const requiresRegenerateActions = plan.actions.filter((a) => a.kind === "requires_regenerate");
   const manualActions = plan.actions.filter((a) => a.kind === "manual");
 
@@ -48,6 +49,15 @@ export function printRepairPlan(plan: PostGenerationRepairPlan): string {
     lines.push(`[Refresh Bridge] (${refreshBridgeActions.length})`);
     for (const action of refreshBridgeActions) {
       lines.push(`  [${action.executable ? "AUTO" : "MANUAL"}] ${action.title}`);
+    }
+    lines.push("");
+  }
+
+  if (upgradeWorkspaceGroundingActions.length > 0) {
+    lines.push(`[Upgrade Workspace Grounding] (${upgradeWorkspaceGroundingActions.length})`);
+    for (const action of upgradeWorkspaceGroundingActions) {
+      lines.push(`  [${action.executable ? "AUTO" : "MANUAL"}] ${action.title}`);
+      lines.push(`    ${action.description}`);
     }
     lines.push("");
   }
@@ -73,6 +83,7 @@ export function printRepairPlan(plan: PostGenerationRepairPlan): string {
   lines.push("--- Summary ---");
   lines.push(`Total Actions: ${plan.summary.total}`);
   lines.push(`  Executable (auto): ${plan.summary.executable}`);
+  lines.push(`  Upgrade Workspace Grounding: ${plan.summary.upgradeWorkspaceGrounding}`);
   lines.push(`  Requires Regenerate: ${plan.summary.requiresRegenerate}`);
   lines.push(`  Manual Fix Required: ${plan.summary.manual}`);
   lines.push("");

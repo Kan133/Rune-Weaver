@@ -1,0 +1,1 @@
+export const WIZARD_PROVIDER_TIMEOUT_MS = 120_000;

@@ -1,6 +1,10 @@
-import { join } from "path";
-
-import { deleteFeature, findFeatureById, initializeWorkspace, saveWorkspace } from "../../../../core/workspace/index.js";
+import {
+  analyzeDependencyRevalidation,
+  deleteFeature,
+  findFeatureById,
+  initializeWorkspace,
+  saveWorkspace,
+} from "../../../../core/workspace/index.js";
 import { exportWorkspaceToBridge, refreshBridge } from "../../../../adapters/dota2/bridge/index.js";
 import { executeRollback, formatRollbackPlan, formatRollbackResult, generateRollbackPlan } from "../../../../adapters/dota2/rollback/index.js";
 import { performRollbackHostValidation } from "../../helpers/index.js";
@@ -13,6 +17,55 @@ import {
   runDota2RuntimeValidation,
 } from "./lifecycle-runner.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
+import { calculateFinalCommitDecision } from "../../../../core/pipeline/final-commit-gate.js";
+
+function buildMaintenanceGateBlueprint(existingFeature: {
+  featureId: string;
+  implementationStrategy?: string;
+  maturity?: string;
+  validationStatus?: unknown;
+  commitDecision?: unknown;
+}): any {
+  return {
+    id: `maintenance.${existingFeature.featureId}`,
+    version: "1.0",
+    summary: `Maintenance lifecycle gate for ${existingFeature.featureId}`,
+    sourceIntent: {
+      intentKind: "unknown",
+      goal: `maintenance ${existingFeature.featureId}`,
+      normalizedMechanics: {},
+    },
+    modules: [],
+    connections: [],
+    patternHints: [],
+    assumptions: [],
+    validations: [],
+    readyForAssembly: true,
+    implementationStrategy: existingFeature.implementationStrategy ?? "pattern",
+    maturity: existingFeature.maturity ?? "templated",
+    validationStatus: existingFeature.validationStatus,
+    commitDecision: existingFeature.commitDecision,
+  };
+}
+
+function setBlockedCommitDecision(
+  artifact: ReturnType<typeof createDeleteReviewArtifact>,
+  reasons: string[],
+  impactedFeatures: string[] = [],
+  dependencyBlockers: string[] = [],
+  downgradedFeatures: string[] = [],
+): void {
+  artifact.stages.finalCommitDecision = {
+    success: false,
+    outcome: "blocked",
+    requiresReview: false,
+    reasons,
+    impactedFeatures,
+    dependencyBlockers,
+    downgradedFeatures,
+    skipped: false,
+  };
+}
 
 export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolean> {
   console.log("=".repeat(70));
@@ -32,7 +85,13 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
   const workspaceResult = initializeWorkspace(options.hostRoot);
   if (!workspaceResult.success || !workspaceResult.workspace) {
     console.error(`\n❌ Failed to load workspace: ${workspaceResult.issues.join(", ")}`);
-    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: 0, error: workspaceResult.issues.join(", ") };
+    artifact.stages.workspaceState = {
+      success: false,
+      featureId: options.featureId,
+      totalFeatures: 0,
+      error: workspaceResult.issues.join(", "),
+      skipped: false,
+    };
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks.push("Failed to load workspace");
@@ -43,7 +102,13 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
   const existingFeature = findFeatureById(workspaceResult.workspace, options.featureId);
   if (!existingFeature) {
     console.error(`\n❌ Feature '${options.featureId}' not found in workspace`);
-    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: workspaceResult.workspace.features.length, error: "Feature not found" };
+    artifact.stages.workspaceState = {
+      success: false,
+      featureId: options.featureId,
+      totalFeatures: workspaceResult.workspace.features.length,
+      error: "Feature not found",
+      skipped: false,
+    };
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks.push(`Feature '${options.featureId}' not found`);
@@ -54,7 +119,13 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
   if (existingFeature.status !== "active") {
     console.error(`\n❌ Feature '${options.featureId}' has status '${existingFeature.status}' and cannot be deleted`);
     console.error("   Only features with status 'active' can be deleted");
-    artifact.stages.workspaceState = { success: false, featureId: options.featureId, totalFeatures: workspaceResult.workspace.features.length, error: `Feature status is '${existingFeature.status}', not 'active'` };
+    artifact.stages.workspaceState = {
+      success: false,
+      featureId: options.featureId,
+      totalFeatures: workspaceResult.workspace.features.length,
+      error: `Feature status is '${existingFeature.status}', not 'active'`,
+      skipped: false,
+    };
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "workspaceState";
     artifact.finalVerdict.remainingRisks.push(`Feature status is '${existingFeature.status}', only 'active' features can be deleted`);
@@ -72,47 +143,60 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
   console.log("Stage 0: Dependency Risk Check");
   console.log("=".repeat(70));
 
-  if (options.force) {
-    console.log("  ⚠️  Force mode: skipping dependency risk check");
-    console.log("     This may break features that depend on this feature.");
-  } else {
-    const dependencyConflicts = checkDeleteDependencyRisk(options.featureId, workspaceResult.workspace);
+  const dependencyConflicts = checkDeleteDependencyRisk(options.featureId, workspaceResult.workspace);
+  const dependencyRevalidation = analyzeDependencyRevalidation({
+    workspace: workspaceResult.workspace,
+    providerFeatureId: options.featureId,
+    lifecycleAction: "delete",
+  });
+  artifact.stages.dependencyRevalidation = {
+    success: dependencyRevalidation.success,
+    impactedFeatures: dependencyRevalidation.impactedFeatures,
+    blockers: dependencyRevalidation.blockers,
+    downgradedFeatures: dependencyRevalidation.downgradedFeatures,
+    compatibleFeatures: dependencyRevalidation.compatibleFeatures,
+    skipped: dependencyRevalidation.impactedFeatures.length === 0,
+  };
 
-    if (dependencyConflicts.length > 0) {
-      console.error("\n❌ Cannot delete feature: other features depend on it");
-      console.error("\n  Dependent features:");
-      for (const conflict of dependencyConflicts) {
-        console.error(`    - ${conflict.existingFeatureLabel} (${conflict.existingFeatureId})`);
-      }
-      console.error("\n  Recommendation:");
-      console.error("    1. Remove the dependency from dependent features first");
-      console.error("    2. Or use 'dota2 rollback' instead to keep the feature record");
-      console.error("    3. Or use --force to force delete (not recommended)");
-
-      artifact.stages.governanceCheck = {
-        success: false,
-        hasConflict: true,
-        conflicts: dependencyConflicts,
-        recommendedAction: "block",
-        status: "blocked",
-        summary: `Cannot delete feature: ${dependencyConflicts.length} dependent feature(s) found.`,
-      };
-      artifact.finalVerdict.pipelineComplete = false;
-      artifact.finalVerdict.weakestStage = "governanceCheck";
-      artifact.finalVerdict.remainingRisks.push(...dependencyConflicts.map((conflict) => conflict.explanation));
-      saveDefaultReviewArtifact(artifact);
-      return false;
+  if (dependencyConflicts.length > 0) {
+    console.error("\n❌ Cannot delete feature: other features depend on it");
+    console.error("\n  Dependent features:");
+    for (const conflict of dependencyConflicts) {
+      console.error(`    - ${conflict.existingFeatureLabel} (${conflict.existingFeatureId})`);
+    }
+    if (options.force) {
+      console.error("\n  Force mode does not bypass V2 dependency governance.");
     }
 
-    console.log("  ✅ No dependency conflicts detected");
+    artifact.stages.governanceCheck = {
+      success: false,
+      hasConflict: true,
+      conflicts: dependencyConflicts,
+      recommendedAction: "block",
+      status: "blocked",
+      summary: `Cannot delete feature: ${dependencyConflicts.length} dependent feature(s) found.`,
+    };
+    setBlockedCommitDecision(
+      artifact,
+      dependencyRevalidation.blockers,
+      dependencyRevalidation.impactedFeatures.map((impact) => impact.featureId),
+      dependencyRevalidation.blockers,
+      dependencyRevalidation.downgradedFeatures,
+    );
+    artifact.finalVerdict.pipelineComplete = false;
+    artifact.finalVerdict.weakestStage = "dependencyRevalidation";
+    artifact.finalVerdict.remainingRisks.push(...dependencyConflicts.map((conflict) => conflict.explanation));
+    saveDefaultReviewArtifact(artifact);
+    return false;
   }
+
+  console.log("  ✅ No dependency conflicts detected");
 
   console.log("\n" + "=".repeat(70));
   console.log("Stage 1: Delete Plan");
   console.log("=".repeat(70));
 
   const deletePlan = generateRollbackPlan(existingFeature, workspaceResult.workspace, options.hostRoot);
-
   console.log(formatRollbackPlan(deletePlan));
 
   if (!deletePlan.canExecute) {
@@ -133,6 +217,7 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
       skippedDeletes: [],
       indexRefreshSuccess: false,
     };
+    setBlockedCommitDecision(artifact, deletePlan.safetyIssues);
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "rollbackPlan";
     artifact.finalVerdict.remainingRisks.push(...deletePlan.safetyIssues);
@@ -169,6 +254,15 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
 
   if (!deleteResult.success) {
     console.error("\n❌ Delete execution failed");
+    setBlockedCommitDecision(
+      artifact,
+      deleteResult.failed.map((failure) => `${failure.file}: ${failure.error}`).length > 0
+        ? deleteResult.failed.map((failure) => `${failure.file}: ${failure.error}`)
+        : ["Delete execution failed"],
+      dependencyRevalidation.impactedFeatures.map((impact) => impact.featureId),
+      dependencyRevalidation.blockers,
+      dependencyRevalidation.downgradedFeatures,
+    );
     artifact.finalVerdict.pipelineComplete = false;
     artifact.finalVerdict.weakestStage = "rollbackPlan";
     artifact.finalVerdict.remainingRisks.push("Delete execution failed");
@@ -180,13 +274,76 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
   }
 
   console.log("\n" + "=".repeat(70));
-  console.log("Stage 3: Workspace State Update");
+  console.log("Stage 3: Host Validation");
   console.log("=".repeat(70));
 
-  let workspaceStateResult: { success: boolean; featureId: string; totalFeatures: number; error?: string; skipped?: boolean } =
-    { success: true, featureId: options.featureId, totalFeatures: 0, skipped: true };
+  const hostValidationResult = performRollbackHostValidation(options.hostRoot, deletePlan, deleteResult);
+  artifact.stages.hostValidation = hostValidationResult;
+  printHostValidationStage(hostValidationResult);
 
-  if (!options.dryRun) {
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 4: Runtime Validation");
+  console.log("=".repeat(70));
+
+  const runtimeValidationResult = await runDota2RuntimeValidation(
+    options,
+    !options.dryRun && deleteResult.success,
+    "dry-run mode or delete failure",
+  );
+  artifact.stages.runtimeValidation = runtimeValidationResult;
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 5: Final Commit Decision");
+  console.log("=".repeat(70));
+
+  const finalCommitDecision = calculateFinalCommitDecision({
+    blueprint: buildMaintenanceGateBlueprint(existingFeature),
+    dependencyRevalidation,
+    hostValidation: {
+      success: hostValidationResult.success,
+      issues: hostValidationResult.issues,
+    },
+    runtimeValidation: {
+      success: runtimeValidationResult.success,
+      limitations: runtimeValidationResult.limitations,
+      skipped: runtimeValidationResult.skipped,
+    },
+    dryRun: options.dryRun,
+  });
+  artifact.stages.finalCommitDecision = {
+    success: finalCommitDecision.outcome !== "blocked",
+    outcome: finalCommitDecision.outcome,
+    requiresReview: finalCommitDecision.requiresReview,
+    reasons: finalCommitDecision.reasons,
+    impactedFeatures: finalCommitDecision.impactedFeatures || [],
+    dependencyBlockers: finalCommitDecision.dependencyBlockers || [],
+    downgradedFeatures: finalCommitDecision.downgradedFeatures || [],
+    skipped: false,
+  };
+  console.log(`  Outcome: ${finalCommitDecision.outcome}`);
+  console.log(`  Requires Review: ${finalCommitDecision.requiresReview ? "yes" : "no"}`);
+  for (const reason of finalCommitDecision.reasons) {
+    console.log(`    - ${reason}`);
+  }
+
+  console.log("\n" + "=".repeat(70));
+  console.log("Stage 6: Workspace State Update");
+  console.log("=".repeat(70));
+
+  let workspaceStateResult: {
+    success: boolean;
+    featureId: string;
+    totalFeatures: number;
+    error?: string;
+    skipped?: boolean;
+  } = {
+    success: true,
+    featureId: options.featureId,
+    totalFeatures: 0,
+    skipped: true,
+  };
+
+  if (!options.dryRun && finalCommitDecision.outcome !== "blocked") {
     const deleteFeatureResult = deleteFeature(workspaceResult.workspace, options.featureId);
 
     if (!deleteFeatureResult.success) {
@@ -237,7 +394,11 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
       }
     }
   } else {
-    console.log("🔍 DRY-RUN MODE - Workspace state would be updated to remove feature completely");
+    console.log(
+      options.dryRun
+        ? "🔍 DRY-RUN MODE - Workspace state would be updated to remove feature completely"
+        : "⚠️ Workspace update skipped because final commit decision is blocked",
+    );
     workspaceStateResult = {
       success: true,
       featureId: options.featureId,
@@ -248,36 +409,21 @@ export async function runDeleteCommand(options: Dota2CLIOptions): Promise<boolea
 
   artifact.stages.workspaceState = workspaceStateResult;
 
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 4: Host Validation");
-  console.log("=".repeat(70));
-
-  const hostValidationResult = performRollbackHostValidation(options.hostRoot, deletePlan, deleteResult);
-
-  artifact.stages.hostValidation = hostValidationResult;
-  printHostValidationStage(hostValidationResult);
-
-  console.log("\n" + "=".repeat(70));
-  console.log("Stage 5: Runtime Validation");
-  console.log("=".repeat(70));
-
-  const runtimeValidationResult = await runDota2RuntimeValidation(
-    options,
-    !options.dryRun && deleteResult.success,
-    "dry-run mode or delete failure"
-  );
-  artifact.stages.runtimeValidation = runtimeValidationResult;
   const { pipelineComplete } = finalizeDota2MaintenanceArtifact({
     artifact,
     options,
     stageStatuses: [
+      { name: "dependencyRevalidation", success: artifact.stages.dependencyRevalidation?.success ?? true },
       { name: "rollbackPlan", success: artifact.stages.rollbackPlan?.canExecute ?? false },
+      { name: "finalCommitDecision", success: artifact.stages.finalCommitDecision?.success ?? false },
       { name: "workspaceState", success: artifact.stages.workspaceState.success },
       { name: "hostValidation", success: artifact.stages.hostValidation.success },
       { name: "runtimeValidation", success: artifact.stages.runtimeValidation.success },
     ],
     stageRiskMessages: {
+      dependencyRevalidation: "Dependency revalidation blocked the delete.",
       rollbackPlan: "Delete plan has safety issues",
+      finalCommitDecision: "Final commit decision blocked the delete.",
       workspaceState: "Workspace state update failed",
       hostValidation: "Host validation failed",
       runtimeValidation: "Runtime validation failed",
