@@ -16,6 +16,7 @@ import {
   buildCurrentFeatureContext,
   createUpdateIntentFromRequestedChange,
 } from "../wizard/index.js";
+import { normalizeIntentSchema } from "../wizard/intent-schema/normalize.js";
 
 const readySchema: IntentSchema = {
   version: "1.0",
@@ -121,12 +122,13 @@ function testReadyBuildProducesFinalBlueprint() {
   assert.equal((result.blueprint as any)?.status, "ready");
 }
 
-function testWeakBuildHonorsHonestStatus() {
+function testProposalUncertaintyDoesNotDowngradeFinalBlueprintStatus() {
   const result = buildBlueprint(weakSchema);
   assert.equal(result.success, true);
   assert.ok(result.finalBlueprint);
-  assert.equal(result.finalBlueprint?.status, "weak");
-  assert.ok(result.normalizationReport?.issues.some((issue) => issue.code === "FINAL_BLUEPRINT_WEAK"));
+  assert.equal(result.blueprintProposal?.status, "needs_review");
+  assert.equal(result.finalBlueprint?.status, "ready");
+  assert.ok(!result.normalizationReport?.issues.some((issue) => issue.code === "FINAL_BLUEPRINT_WEAK"));
 }
 
 function testMustRequirementWithoutSemanticSupportStaysWeak() {
@@ -2328,9 +2330,92 @@ function testRevealBatchImmediatePlanningStaysExploratoryAndAvoidsSelectionPoolM
   assert.equal(revealUiNeed?.category, "ui");
 }
 
+function testDefinitionOnlyProviderShellDropsDriftedTriggerAndEffectModules() {
+  const prompt =
+    "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: { rawPrompt: prompt, goal: prompt },
+      classification: { intentKind: "cross-system-composition", confidence: "high" },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "Press Q to activate the shell.",
+          "Apply the modifier when granted.",
+        ],
+        typed: [
+          {
+            id: "ability_shell_definition",
+            kind: "resource",
+            summary: "Define one primary hero ability shell for later external granting.",
+            outputs: ["ability shell definition"],
+            priority: "must",
+          },
+          {
+            id: "trigger_req",
+            kind: "trigger",
+            summary: "Capture a Q key press to activate the ability shell.",
+            parameters: { triggerKey: "Q" },
+            priority: "must",
+          },
+          {
+            id: "effect_req",
+            kind: "effect",
+            summary: "Apply a modifier when the shell is granted.",
+            priority: "must",
+          },
+        ],
+      },
+      interaction: {
+        activations: [{ kind: "key", input: "Q", phase: "press", repeatability: "repeatable" }],
+      },
+      effects: {
+        operations: ["apply"],
+        durationSemantics: "instant",
+      },
+      outcomes: {
+        operations: ["grant-feature"],
+      },
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+        triggerKey: "Q",
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    { kind: "dota2-x-template" },
+  );
+  const result = buildBlueprint(schema);
+
+  const roles = new Set((result.finalBlueprint?.modules || []).map((module) => module.role));
+  const patternHints = new Set(
+    (result.finalBlueprint?.patternHints || []).flatMap((hint) => hint.suggestedPatterns || []),
+  );
+  const backbone = result.finalBlueprint?.modules.find((module) => module.planningKind === "backbone");
+  const backboneNeed = result.finalBlueprint?.moduleNeeds.find((need) => need.semanticRole === "gameplay_ability");
+
+  assert.equal(result.success, true);
+  assert.equal(schema.interaction, undefined);
+  assert.equal(schema.effects, undefined);
+  assert.equal(schema.outcomes, undefined);
+  assert.equal(schema.parameters?.triggerKey, undefined);
+  assert.equal(roles.has("input_trigger"), false);
+  assert.equal(roles.has("effect_application"), false);
+  assert.equal(roles.has("gameplay_ability"), true);
+  assert.equal(patternHints.has("input.key_binding"), false);
+  assert.equal(backbone?.role, "gameplay_ability");
+  assert.equal(backboneNeed?.semanticRole, "gameplay_ability");
+  assert.deepEqual(backboneNeed?.requiredCapabilities, ["ability.definition.shell"]);
+}
+
 function runTests() {
   testReadyBuildProducesFinalBlueprint();
-  testWeakBuildHonorsHonestStatus();
+  testProposalUncertaintyDoesNotDowngradeFinalBlueprintStatus();
   testMustRequirementWithoutSemanticSupportStaysWeak();
   testFinalBlueprintCarriesCanonicalStateAndIntegrationSemantics();
   testSurfaceDetailDriftDoesNotChangeBlueprintPlanning();
@@ -2369,6 +2454,7 @@ testSelectionLocalProgressionSliceStaysReady();
   testSelectionFamilyBlueprintDoesNotCollapseIntoGameplayBackbone();
   testSingleAbilityExploratoryPlanningBuildsGameplayBackbone();
   testSingleAbilityPlanningKeepsExplicitUiAsSeparateSurface();
+  testDefinitionOnlyProviderShellDropsDriftedTriggerAndEffectModules();
   testRevealBatchImmediatePlanningStaysExploratoryAndAvoidsSelectionPoolModules();
   console.log("builder.test.ts: PASS");
 }

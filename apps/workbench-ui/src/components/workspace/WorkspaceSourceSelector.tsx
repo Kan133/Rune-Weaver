@@ -13,10 +13,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { WorkspaceSourceConfig } from "@/data/workspaceSource";
+import { WorkspaceRefreshAdvisory } from "@/components/workspace/WorkspaceRefreshAdvisory";
 
 export function WorkspaceSourceSelector() {
   const workspaceSource = useFeatureStore((state) => state.workspaceSource);
   const workspaceIssues = useFeatureStore((state) => state.workspaceIssues);
+  const workspaceRefreshHint = useFeatureStore((state) => state.workspaceRefreshHint);
   const availableSources = useFeatureStore((state) => state.availableSources);
   const switchSource = useFeatureStore((state) => state.switchWorkspaceSource);
   const reloadSource = useFeatureStore((state) => state.reloadCurrentSource);
@@ -97,6 +99,11 @@ export function WorkspaceSourceSelector() {
                   >
                     {source.label}
                   </span>
+                  {source.purpose === "legacy-regression" && (
+                    <span className="rounded border border-amber-400/30 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-300">
+                      Legacy
+                    </span>
+                  )}
                   {workspaceSource?.path === source.path && (
                     <span className="ml-auto text-[10px] text-[#6366f1]">当前</span>
                   )}
@@ -138,6 +145,9 @@ export function WorkspaceSourceSelector() {
               : `${workspaceSource.type === "sample" ? "示例" : workspaceSource.type === "bridge" ? "桥接" : "自定义"}数据已加载`}
           </span>
         </div>
+      )}
+      {workspaceRefreshHint && (
+        <WorkspaceRefreshAdvisory hint={workspaceRefreshHint} className="mt-2" />
       )}
     </div>
   );

@@ -6,6 +6,10 @@ import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { validatePostGeneration } from "../../../../adapters/dota2/validator/post-generation-validator.js";
 import { planPostGenerationRepairs } from "../../../../adapters/dota2/validator/post-generation-repair.js";
+import {
+  buildDota2RepairabilityReadModel,
+  type Dota2GovernanceRepairabilityKind,
+} from "./dota2-governance-read-model.js";
 import type { DoctorCheck } from "./doctor-checks.js";
 
 function readAddonName(hostRoot: string): string | null {
@@ -166,13 +170,14 @@ export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
   const groundingCheck = result.checks.find((check) => check.check === "synthesized_grounding_governance");
 
   if (result.valid && groundingCheck?.details?.length) {
+    const repairability = buildDota2RepairabilityReadModel("review_required");
     return {
       name: "Post-Generation Validation",
       status: "warn",
       remediationKind: "review_required",
-      message: `All ${result.summary.total} checks passed, but ${groundingCheck.details.length} synthesized grounding warning(s) still require review`,
+      message: `All ${result.summary.total} checks passed, but ${groundingCheck.details.length} ${repairability.label} warning(s) remain`,
       details: groundingCheck.details.slice(0, 5),
-      suggestion: "Review synthesized modules with partial or insufficient grounding before promotion.",
+      suggestion: repairability.buildSuggestion(hostRoot),
     };
   }
 
@@ -209,7 +214,7 @@ export function checkPostGenerationValidation(hostRoot: string): DoctorCheck {
 
 function resolvePostGenerationRemediationKind(
   repairPlan: ReturnType<typeof planPostGenerationRepairs>,
-): DoctorCheck["remediationKind"] {
+): Dota2GovernanceRepairabilityKind {
   if (repairPlan.summary.requiresRegenerate > 0 && repairPlan.executableActions.length === 0) {
     return "requires_regenerate";
   }
@@ -224,14 +229,14 @@ function buildPostGenerationFailureMessage(
   totalCount: number,
   remediationKind: DoctorCheck["remediationKind"],
 ): string {
-  switch (remediationKind) {
-    case "upgrade_workspace_grounding":
-      return `${failedCount}/${totalCount} checks failed (upgradeable legacy grounding state detected)`;
-    case "requires_regenerate":
-      return `${failedCount}/${totalCount} checks failed (stale synthesized grounding requires regenerate)`;
-    default:
-      return `${failedCount}/${totalCount} checks failed`;
+  if (!remediationKind) {
+    return `${failedCount}/${totalCount} checks failed`;
   }
+
+  const repairability = buildDota2RepairabilityReadModel(remediationKind);
+  return repairability.failureQualifier
+    ? `${failedCount}/${totalCount} checks failed (${repairability.failureQualifier})`
+    : `${failedCount}/${totalCount} checks failed`;
 }
 
 function resolvePostGenerationSuggestion(
@@ -239,14 +244,11 @@ function resolvePostGenerationSuggestion(
   remediationKind: DoctorCheck["remediationKind"],
   fallback?: string,
 ): string | undefined {
-  switch (remediationKind) {
-    case "upgrade_workspace_grounding":
-      return `Run npm run cli -- dota2 repair --host ${hostRoot} --safe to upgrade canonical workspace grounding from preserved raw metadata.`;
-    case "requires_regenerate":
-      return "Regenerate the affected synthesized feature with the current pipeline; this host predates the canonical grounding contract and preserved raw grounding is missing.";
-    default:
-      return fallback;
+  if (!remediationKind) {
+    return fallback;
   }
+
+  return buildDota2RepairabilityReadModel(remediationKind).buildSuggestion(hostRoot) || fallback;
 }
 
 export function checkProjectStructure(hostRoot: string): DoctorCheck {

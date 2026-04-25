@@ -40,11 +40,12 @@ import { generateGeneratorRoutingPlan, getRoutesByFamily, getUnblockedRoutes } f
 import type { AssemblyPlan, HostRealizationPlan, GeneratorRoutingPlan } from "../../core/schema/types.js";
 import type {
   CurrentFeatureContext,
+  ExecutionAuthorityDecision,
   IntentSchema as ReviewIntentSchema,
   RelationCandidate,
   UpdateIntent,
   SelectionPoolAdmissionDiagnostics,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../core/schema/types.js";
@@ -60,6 +61,7 @@ import type { RollbackPlan, RollbackExecutionResult } from "../../adapters/dota2
 import { shouldUseArtifactSynthesis } from "../../adapters/dota2/synthesis/index.js";
 import { applyDota2GrantSeam } from "../../adapters/dota2/cross-feature/index.js";
 import { resolveReviewArtifactOutputDir } from "./dota2/review-artifacts.js";
+import { reconcileClarificationArtifactTruth } from "./dota2/clarification-artifact-reconciliation.js";
 import { createRollbackReviewArtifact } from "./dota2/rollback-artifact.js";
 import {
   createPendingSemanticExportStatus,
@@ -97,12 +99,14 @@ import {
   createIntentSchema,
   createUpdateIntent,
   createWritePlan,
+  getCreateSemanticPosture,
   getFeatureMode,
   resolveStableFeatureId,
   resolveExistingFeatureContext,
   resolvePatternsFromBlueprint,
 } from "./dota2/planning.js";
 import type { Dota2BlueprintBuildResult } from "./dota2/planning.js";
+import { reconcileClarificationForReviewArtifact } from "./dota2/review-clarification.js";
 import { executeWrite } from "./dota2/write-executor.js";
 import { runLocalRepairWithLLM } from "../../core/local-repair/index.js";
 
@@ -168,7 +172,7 @@ export interface Dota2ReviewArtifact {
     usedFallback: boolean;
     intentKind: string;
     uiNeeded: boolean;
-    readiness?: string;
+    semanticPosture?: string;
     mechanics: string[];
     promptPackageId?: string;
     promptConstraints?: {
@@ -189,7 +193,8 @@ export interface Dota2ReviewArtifact {
     updateIntent: UpdateIntent;
   };
   clarificationPlan?: WizardClarificationPlan;
-  clarificationAuthority?: WizardClarificationAuthority;
+  clarificationSignals?: WizardClarificationSignals;
+  executionAuthority?: ExecutionAuthorityDecision;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   semanticArtifacts?: SemanticArtifactSummary;
@@ -551,20 +556,6 @@ export async function runDota2CLI(options: Dota2CLIOptions): Promise<boolean> {
   );
 }
 
-function getCreateSemanticPosture(
-  semanticAnalysis: { openSemanticResidue?: Array<{ class: string }> } | undefined,
-): "ready" | "weak" {
-  if (!semanticAnalysis?.openSemanticResidue) {
-    return "weak";
-  }
-
-  return semanticAnalysis.openSemanticResidue.some(
-    (item) => item.disposition === "open" && item.class !== "bounded_detail_only",
-  )
-    ? "weak"
-    : "ready";
-}
-
 function summarizeModuleSources(
   moduleRecords: Array<{ sourceKind?: string }> | undefined,
 ): { family: number; pattern: number; synthesized: number } {
@@ -702,13 +693,14 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     semanticAnalysis,
     usedFallback,
     clarificationPlan,
-    clarificationAuthority,
+    clarificationSignals,
     relationCandidates,
     workspaceSemanticContext,
   } = intentSchemaResult;
+  const semanticPosture = getCreateSemanticPosture(semanticAnalysis || undefined);
   artifact.stages.intentSchema = {
     success: schema !== null,
-    summary: schema ? `${schema.request.goal} [${getCreateSemanticPosture(semanticAnalysis || undefined)}]` : "",
+    summary: schema ? `${schema.request.goal} [${semanticPosture}]` : "",
     issues: schema ? [`IntentSchema uncertainties: ${schema.uncertainties?.length || 0}`] : [],
     usedFallback,
   };
@@ -717,7 +709,7 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     usedFallback,
     intentKind: schema?.classification.intentKind || "unknown",
     uiNeeded: schema?.uiRequirements?.needed || false,
-    readiness: schema ? getCreateSemanticPosture(semanticAnalysis || undefined) : undefined,
+    semanticPosture: schema ? semanticPosture : undefined,
     mechanics: schema ? Object.entries(schema.normalizedMechanics)
       .filter(([, v]) => v === true)
       .map(([k]) => k) : [],
@@ -742,8 +734,6 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
         }
       : undefined,
   };
-  artifact.clarificationPlan = clarificationPlan;
-  artifact.clarificationAuthority = clarificationAuthority;
   artifact.relationCandidates = relationCandidates;
   artifact.workspaceSemanticContext = workspaceSemanticContext;
 
@@ -756,24 +746,13 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     return artifact;
   }
 
-  if (clarificationAuthority.blocksBlueprint) {
-    artifact.semanticExportStatus = createPendingSemanticExportStatus(
-      "Semantic artifacts were not written because clarification blocked blueprint generation.",
-    );
-    artifact.finalVerdict.weakestStage = "intentSchema";
-    artifact.finalVerdict.remainingRisks = clarificationAuthority.reasons.length > 0
-      ? clarificationAuthority.reasons
-      : ["IntentSchema requires clarification before Blueprint generation can continue."];
-    artifact.finalVerdict.nextSteps = ["Answer the clarification questions and rerun the command."];
-    return artifact;
-  }
-
   // Stage 2: Blueprint
   const {
     blueprint: blueprintDraft,
     finalBlueprint,
     issues: blueprintIssues,
     status: blueprintStatus,
+    executionAuthority,
     moduleNeedsCount,
     admissionDiagnostics,
     createReadinessDecision,
@@ -788,17 +767,32 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       existingFeature: existingFeatureContext.feature,
       proposalSource: usedFallback ? "fallback" : "llm",
     },
-    clarificationAuthority,
+    clarificationSignals,
   );
   let blueprint = finalBlueprint;
   const blueprintView = finalBlueprint || blueprintDraft;
-  const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
+  const canContinueBlueprint = !executionAuthority.blocksBlueprint;
+  const reconciledClarification = reconcileClarificationForReviewArtifact({
+    clarificationPlan,
+    clarificationSignals,
+    executionAuthority,
+  });
+  artifact.clarificationPlan = reconciledClarification.clarificationPlan;
+  artifact.clarificationSignals = reconciledClarification.clarificationSignals;
+  artifact.executionAuthority = executionAuthority;
+  ({
+    clarificationPlan: artifact.clarificationPlan,
+    clarificationSignals: artifact.clarificationSignals,
+  } = reconcileClarificationArtifactTruth({
+    clarificationPlan: artifact.clarificationPlan,
+    clarificationSignals: artifact.clarificationSignals,
+    executionAuthority,
+  }));
   artifact.stages.blueprint = {
     success: blueprint !== null && canContinueBlueprint,
     summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
     moduleCount: blueprintView?.modules.length || 0,
     patternHints: blueprintView?.patternHints.flatMap((h) => h.suggestedPatterns) || [],
-    issues: blueprintIssues,
     modulePlanning: blueprintView?.modules.map((module) => ({
       moduleId: module.id,
       role: module.role,
@@ -814,6 +808,9 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     })),
     moduleSourceBreakdown: summarizeModuleSources(blueprintView?.moduleRecords),
     familyAdmission: admissionDiagnostics,
+    issues: executionAuthority.blocksBlueprint || executionAuthority.blocksWrite
+      ? [...new Set([...blueprintIssues, ...executionAuthority.reasons])]
+      : blueprintIssues,
   };
 
   if (!blueprint || !canContinueBlueprint) {
@@ -822,8 +819,10 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
     );
     artifact.finalVerdict.weakestStage = "blueprint";
     artifact.finalVerdict.remainingRisks = blueprintIssues.length > 0
-      ? blueprintIssues
-      : [`FinalBlueprint ${blueprintStatus}`];
+      ? [...new Set([...blueprintIssues, ...executionAuthority.reasons])]
+      : executionAuthority.reasons.length > 0
+        ? executionAuthority.reasons
+        : [`FinalBlueprint ${blueprintStatus}`];
     return artifact;
   }
 
@@ -1026,7 +1025,8 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
       blueprint,
       writePlan,
       relationCandidates,
-      clarificationAuthority,
+      clarificationSignals,
+      executionAuthority,
       currentFeature: existingFeatureContext.feature,
       workspaceFeatures: workspaceForGrantSeam.success && workspaceForGrantSeam.workspace
         ? workspaceForGrantSeam.workspace.features
@@ -1176,6 +1176,26 @@ async function runPipeline(options: Dota2CLIOptions): Promise<Dota2ReviewArtifac
   if (!dependencyRevalidation.success) {
     artifact.finalVerdict.weakestStage = "dependencyRevalidation";
     artifact.finalVerdict.remainingRisks = dependencyRevalidation.blockers;
+    return artifact;
+  }
+
+  if (!options.dryRun && options.write && !options.force && executionAuthority.blocksWrite) {
+    const readinessBlockers = executionAuthority.reasons.length > 0
+      ? executionAuthority.reasons
+      : ["Host write is blocked by unresolved execution authority."];
+    artifact.stages.writeExecutor = {
+      success: false,
+      executedActions: 0,
+      skippedActions: 0,
+      failedActions: 0,
+      createdFiles: [],
+      modifiedFiles: [],
+      blockedByReadinessGate: true,
+      readinessBlockers,
+    };
+    artifact.finalVerdict.weakestStage = "writeExecutor";
+    artifact.finalVerdict.remainingRisks = readinessBlockers;
+    artifact.finalVerdict.nextSteps = ["Resolve the unresolved provider/binding dependency before rerunning the command."];
     return artifact;
   }
 

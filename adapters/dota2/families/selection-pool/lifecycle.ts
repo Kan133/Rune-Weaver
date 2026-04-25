@@ -14,7 +14,6 @@ import {
 } from "./materialization.js";
 import {
   isSelectionPoolFeatureAuthoring,
-  type FeatureAuthoring as SelectionPoolFeatureAuthoring,
 } from "./shared.js";
 import {
   buildExportedContentCollectionsFromParameters,
@@ -114,7 +113,7 @@ function isSelectionPoolPatternSource(value: string): value is SelectionPoolPatt
 export function refreshSelectionPoolWritePlanEntries(
   writePlan: WritePlan,
   featureId: string,
-  featureAuthoring: SelectionPoolFeatureAuthoring,
+  featureAuthoring: CoreFeatureAuthoring | undefined,
 ): void {
   const lifecycleState = createSelectionPoolLifecycleState(featureId, featureAuthoring);
   if (!lifecycleState) {

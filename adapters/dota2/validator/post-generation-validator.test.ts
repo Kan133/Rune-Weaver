@@ -248,6 +248,23 @@ async function runTests(): Promise<void> {
     assert(result6.summary.failed === result6.checks.filter((check) => !check.passed).length);
     console.log("  PASS");
 
+    console.log("\nTest 7.1: UI index named export drift is detected...");
+    writeFileSync(
+      join(testHost, "content/panorama/src/rune_weaver/generated/ui/index.tsx"),
+      `import { TestFeatureWrongName } from "./test_feature_1";\nexport function RuneWeaverGeneratedUIRoot() { return <TestFeatureWrongName />; }\n`,
+      "utf-8"
+    );
+    const result71 = validatePostGeneration(testHost);
+    const uiIndexCheck71 = result71.checks.find((check) => check.check === "ui_index_mounts");
+    assert(uiIndexCheck71 && !uiIndexCheck71.passed);
+    assert(uiIndexCheck71.details?.some((detail) => detail.includes("missing named export 'TestFeatureWrongName'")));
+    writeFileSync(
+      join(testHost, "content/panorama/src/rune_weaver/generated/ui/index.tsx"),
+      `import { TestFeature1 } from "./test_feature_1";\nexport function RuneWeaverGeneratedUIRoot() { return <TestFeature1 />; }\n`,
+      "utf-8"
+    );
+    console.log("  PASS");
+
     console.log("\nTest 8: Missing key binding source is reported without throwing...");
     const workspacePath = join(testHost, "game/scripts/src/rune_weaver/rune-weaver.workspace.json");
     const workspace = JSON.parse(readFileSync(workspacePath, "utf-8"));

@@ -32,6 +32,7 @@ import { useFeatureStore } from "@/hooks/useFeatureStore";
 import { useHostScanner } from "@/hooks/useHostScanner";
 import { useCLIExecutor } from "@/hooks/useCLIExecutor";
 import { ExecutionOutputPanel } from "./ExecutionOutputPanel";
+import { WorkspaceRefreshAdvisory } from "@/components/workspace/WorkspaceRefreshAdvisory";
 
 function normalizeAddonName(value: string): string {
   return value
@@ -419,7 +420,6 @@ function IntegrationStatusSection({
             </ul>
           </div>
         )}
-        
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
             <RefreshCw className={cn("h-3 w-3 text-[#6366f1]", isRefreshingConnection && "animate-spin")} />
@@ -769,6 +769,7 @@ export function ProjectSetupPanel() {
   const { scan, checkStatus, isScanning, isCheckingStatus } = hostScanner;
   const hostConfig = useFeatureStore((state) => state.hostConfig);
   const connectedHostRoot = useFeatureStore((state) => state.connectedHostRoot);
+  const workspaceRefreshHint = useFeatureStore((state) => state.workspaceRefreshHint);
   const setHostScanResult = useFeatureStore((state) => state.setHostScanResult);
   const connectHostWorkspace = useFeatureStore((state) => state.connectHostWorkspace);
   const clearConnectedWorkspace = useFeatureStore((state) => state.clearConnectedWorkspace);
@@ -834,6 +835,10 @@ export function ProjectSetupPanel() {
               当前演示路径只读取已连接宿主的真实 workspace；Create / Update / Delete 全部通过 dota2-cli 执行
             </span>
           </div>
+
+          {!connectedHostRoot && workspaceRefreshHint && (
+            <WorkspaceRefreshAdvisory hint={workspaceRefreshHint} />
+          )}
 
           {/* Configuration Sections */}
           <div className="space-y-2">

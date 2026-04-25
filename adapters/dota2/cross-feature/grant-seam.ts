@@ -1,5 +1,6 @@
 import type {
   Blueprint,
+  ExecutionAuthorityDecision,
   FeatureContract,
   FeatureDependencyEdge,
   FeatureContractSurface,
@@ -7,7 +8,8 @@ import type {
   IntentSchema,
   RelationCandidate,
   UpdateIntent,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
+  WizardUnresolvedDependency,
 } from "../../../core/schema/types.js";
 import { calculateHostWriteExecutionOrder } from "../../../core/host/write-plan.js";
 import type { RuneWeaverFeatureRecord } from "../../../core/workspace/types.js";
@@ -47,8 +49,31 @@ export interface ApplyDota2GrantSeamResult {
   notes: string[];
 }
 
+interface GrantSeamClarificationInput {
+  clarificationSignals?: WizardClarificationSignals;
+  executionAuthority?: ExecutionAuthorityDecision;
+}
+
+interface GrantSeamClarificationState {
+  unresolvedCrossFeatureDependencies: WizardUnresolvedDependency[];
+  writeBlockRequested: boolean;
+}
+
 function dedupeStrings(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value && value.trim().length > 0)))];
+}
+
+function resolveGrantSeamClarificationState(
+  input: GrantSeamClarificationInput,
+): GrantSeamClarificationState {
+  const unresolvedDependencies = input.clarificationSignals?.unresolvedDependencies || [];
+
+  return {
+    unresolvedCrossFeatureDependencies: unresolvedDependencies.filter(
+      (dependency) => dependency.kind === "cross-feature-target",
+    ),
+    writeBlockRequested: input.executionAuthority?.blocksWrite === true,
+  };
 }
 
 function normalizeFeatureContract(contract?: FeatureContract): FeatureContract {
@@ -228,46 +253,35 @@ function resolveCrossFeatureTargetCandidate(
     : undefined;
 }
 
+function hasCrossFeatureDependency(
+  dependencies: Array<{ kind?: string }> | undefined,
+): boolean {
+  return (dependencies || []).some((dependency) => dependency.kind === "cross-feature");
+}
+
 function hasSelectionGrantSemantics(
   input: {
     schema: IntentSchema;
-    clarificationAuthority: WizardClarificationAuthority;
-    relationCandidates?: RelationCandidate[];
     updateIntent?: UpdateIntent;
   },
 ): boolean {
-  const { schema, clarificationAuthority, relationCandidates, updateIntent } = input;
+  const { schema, updateIntent } = input;
   const governedComposition = updateIntent?.governedChange?.composition?.dependencies || [];
-  const governedOutcomes = updateIntent?.governedChange?.outcomes?.operations || [];
   const governanceScope = updateIntent?.semanticAnalysis?.governanceDecisions.scope.value;
-
-  if (governedOutcomes.includes("grant-feature")) {
-    return true;
-  }
 
   if (governanceScope === "cross_feature_mutation") {
     return true;
   }
 
-  if (governedComposition.some((dependency) => dependency.kind === "cross-feature")) {
+  if (hasCrossFeatureDependency(governedComposition)) {
     return true;
   }
 
-  if ((schema.outcomes?.operations || []).includes("grant-feature")) {
+  if (hasCrossFeatureDependency(schema.composition?.dependencies)) {
     return true;
   }
 
-  if (schema.classification?.intentKind === "cross-system-composition") {
-    return true;
-  }
-
-  if ((schema.composition?.dependencies || []).some((dependency) => dependency.kind === "cross-feature")) {
-    return true;
-  }
-
-  return clarificationAuthority.unresolvedDependencies.some(
-    (dependency) => dependency.kind === "cross-feature-target",
-  );
+  return false;
 }
 
 function hasResolvedRelationCandidate(relationCandidates: RelationCandidate[] | undefined): boolean {
@@ -277,7 +291,7 @@ function hasResolvedRelationCandidate(relationCandidates: RelationCandidate[] | 
 }
 
 function promptRequestsSelectionGrantBinding(prompt: string): boolean {
-  return /(?:grant(?:s|ed|ing)?|bind(?:s|ing)?|wire(?:s|d|ing)?|reward|on selection|when selected|primary hero ability|provider)/iu.test(
+  return /(?:grant(?:s|ed|ing)?|bind(?:s|ing)?|wire(?:s|d|ing)?|reward|on selection|when selected|primary hero ability|provider|授予|绑定|连到|连接到|接到|提供器|选择后|选中后|获得技能|给英雄技能)/iu.test(
     prompt,
   );
 }
@@ -370,7 +384,6 @@ function hasSelectionGrantRemovalDelta(updateIntent: UpdateIntent | undefined): 
 
 function hasSelectionGrantMutationRequest(input: {
   updateIntent?: UpdateIntent;
-  clarificationAuthority: WizardClarificationAuthority;
   prompt: string;
   relationCandidates?: RelationCandidate[];
   featureAuthoring?: SelectionPoolFeatureAuthoring;
@@ -380,9 +393,6 @@ function hasSelectionGrantMutationRequest(input: {
     explicitPromptBindingRequest
     || hasSelectionGrantUpdateDelta(input.updateIntent)
     || hasSelectionGrantRemovalDelta(input.updateIntent)
-    || input.clarificationAuthority.unresolvedDependencies.some(
-      (dependency) => dependency.kind === "cross-feature-target",
-    )
   );
 }
 
@@ -555,13 +565,18 @@ export function applyDota2GrantSeam(input: {
   blueprint: Blueprint;
   writePlan: WritePlan;
   relationCandidates?: RelationCandidate[];
-  clarificationAuthority: WizardClarificationAuthority;
+  clarificationSignals?: WizardClarificationSignals;
+  executionAuthority?: ExecutionAuthorityDecision;
   currentFeature?: RuneWeaverFeatureRecord;
   workspaceFeatures?: RuneWeaverFeatureRecord[];
 }): ApplyDota2GrantSeamResult {
   const notes: string[] = [];
   const writeBlockers: string[] = [];
   let blueprint = input.blueprint;
+  const clarificationState = resolveGrantSeamClarificationState({
+    clarificationSignals: input.clarificationSignals,
+    executionAuthority: input.executionAuthority,
+  });
 
   const grantableProvider = isGrantableAbilityProvider({ schema: input.schema, blueprint });
   if (grantableProvider) {
@@ -592,8 +607,6 @@ export function applyDota2GrantSeam(input: {
 
   const selectionGrantSemantics = hasSelectionGrantSemantics({
     schema: input.schema,
-    clarificationAuthority: input.clarificationAuthority,
-    relationCandidates: input.relationCandidates,
     updateIntent: input.updateIntent,
   });
   const selectionGrantFallbackAuthority = hasSelectionGrantFallbackAuthority({
@@ -606,7 +619,6 @@ export function applyDota2GrantSeam(input: {
   });
   const selectionGrantMutationRequest = hasSelectionGrantMutationRequest({
     updateIntent: input.updateIntent,
-    clarificationAuthority: input.clarificationAuthority,
     prompt: input.prompt,
     relationCandidates: input.relationCandidates,
     featureAuthoring: isSelectionPoolFeatureAuthoring(blueprint.featureAuthoring)
@@ -660,9 +672,18 @@ export function applyDota2GrantSeam(input: {
     `Published Dota2 selection grant contract for ${grantContractArtifact.slots.length} local selection pool slot(s).`,
   );
 
-  if (input.clarificationAuthority.unresolvedDependencies.length > 0 && input.clarificationAuthority.blocksWrite) {
+  if (clarificationState.unresolvedCrossFeatureDependencies.length > 0) {
+    if (clarificationState.writeBlockRequested) {
+      notes.push(
+        "Grant seam honored unresolved cross-feature dependency blocking at host write without widening Stage 1 clarification power.",
+      );
+    } else {
+      notes.push(
+        "Grant seam kept unresolved cross-feature dependency blocking at host write even without a broader write-block decision.",
+      );
+    }
     writeBlockers.push(
-      ...input.clarificationAuthority.unresolvedDependencies.map(
+      ...clarificationState.unresolvedCrossFeatureDependencies.map(
         (dependency) => `Unresolved dependency blocks host write: ${dependency.summary}`,
       ),
     );

@@ -24,6 +24,7 @@ import {
   getLocalBridgeResult,
   getLocalBridgeScenarios,
 } from "../data/localResultBridge";
+import { isWorkbenchDevOrTestMode } from "../lib/runtimeMode";
 
 export type DataSourceMode = "mock" | "local-bridge" | "shared-fixture" | "local-backend";
 
@@ -128,16 +129,12 @@ const DEV_ONLY_SOURCE_MODES: ReadonlySet<DataSourceMode> = new Set([
   "shared-fixture",
 ]);
 
-function isExplicitDevOrTestMode(): boolean {
-  return Boolean(import.meta.env.DEV || import.meta.env.MODE === "test");
-}
-
 function isSourceModeAllowed(mode: DataSourceMode): boolean {
   if (!DEV_ONLY_SOURCE_MODES.has(mode)) {
     return true;
   }
 
-  return isExplicitDevOrTestMode();
+  return isWorkbenchDevOrTestMode();
 }
 
 function buildMetadata(source: DataSourceMode, scenario: string): ResultMetadata {

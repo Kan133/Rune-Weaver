@@ -1,6 +1,15 @@
-import type { RuneWeaverWorkspace, RuneWeaverFeatureRecord } from '@/types/workspace';
+import type {
+  Dota2GovernanceReadModel,
+  Dota2GovernanceReadModelFeature,
+  RuneWeaverWorkspace,
+  RuneWeaverFeatureRecord,
+} from '@/types/workspace';
 import type { Feature, Group, FeatureStatus } from '@/types/feature';
 import { deriveFeatureGroupFromWorkspaceRecord } from '@/data/featureGroupProjection';
+import {
+  buildLegacyCompatibilityReviewSignals,
+  buildLegacyGovernanceIssues,
+} from '@/data/workspaceGovernanceCompatibility';
 
 function mapWorkspaceStatus(status: string): FeatureStatus {
   switch (status) {
@@ -16,66 +25,81 @@ function mapWorkspaceStatus(status: string): FeatureStatus {
   }
 }
 
-function deriveWorkspaceStatusMessage(status: RuneWeaverFeatureRecord['status']): string | null {
-  switch (status) {
-    case 'active':
-      return '功能已激活';
-    case 'disabled':
-      return '功能已禁用';
-    case 'archived':
-      return '功能已归档';
-    case 'rolled_back':
-      return '功能已回滚';
+function buildLifecycleSummary(readModel: Dota2GovernanceReadModelFeature): string {
+  const parts = [
+    readModel.lifecycle.implementationStrategy ? `strategy=${readModel.lifecycle.implementationStrategy}` : '',
+    readModel.lifecycle.maturity ? `maturity=${readModel.lifecycle.maturity}` : '',
+    readModel.lifecycle.commitOutcome ? `commit=${readModel.lifecycle.commitOutcome}` : '',
+  ].filter(Boolean);
+  if (parts.length === 0) {
+    return readModel.lifecycle.requiresReview
+      ? 'Lifecycle still requires manual review.'
+      : 'Lifecycle has no explicit governance markers recorded.';
+  }
+  return `${parts.join(' | ')}${readModel.lifecycle.requiresReview ? ' | review=yes' : ''}`;
+}
+
+function deriveReadinessFromReadModel(readModel: Dota2GovernanceReadModelFeature): Feature['reviewSignals']['readiness'] {
+  switch (readModel.repairability.status) {
+    case 'requires_regenerate':
+      return {
+        score: 10,
+        warnings: [...readModel.repairability.reasons],
+      };
+    case 'upgrade_workspace_grounding':
+      return {
+        score: 35,
+        warnings: [...readModel.repairability.reasons],
+      };
+    case 'repair_safe':
+      return {
+        score: 45,
+        warnings: [...readModel.repairability.reasons],
+      };
+    case 'review_required':
+      return {
+        score: readModel.grounding.status === 'insufficient' ? 45 : 65,
+        warnings: [...readModel.repairability.reasons],
+      };
+    case 'clean':
+      return {
+        score: readModel.lifecycle.requiresReview ? 60 : readModel.grounding.reviewRequired ? 80 : 100,
+        warnings: readModel.lifecycle.requiresReview ? [...readModel.lifecycle.reviewReasons] : [],
+      };
+    case 'not_checked':
     default:
-      return null;
+      return {
+        score: readModel.lifecycle.requiresReview ? 55 : null,
+        warnings: readModel.lifecycle.reviewReasons,
+      };
   }
 }
 
-function deriveWorkspaceWarnings(status: RuneWeaverFeatureRecord['status']): string[] {
-  switch (status) {
-    case 'disabled':
-      return ['功能当前处于禁用状态'];
-    case 'rolled_back':
-      return ['功能当前处于回滚状态'];
-    default:
-      return [];
-  }
-}
-
-function deriveReadinessScore(record: RuneWeaverFeatureRecord): number | null {
-  const validationStatus = record.validationStatus?.status;
-  switch (validationStatus) {
-    case 'passed':
-      return record.groundingSummary?.reviewRequired ? 80 : 100;
-    case 'needs_review':
-      return record.groundingSummary?.status === 'insufficient' ? 45 : 65;
-    case 'failed':
-      return 20;
-    case 'unvalidated':
-      return 50;
-    default:
-      return record.commitDecision?.requiresReview ? 60 : null;
-  }
-}
-
-function deriveGroundingWarnings(record: RuneWeaverFeatureRecord): string[] {
-  const warnings = [...deriveWorkspaceWarnings(record.status)];
-  if (record.groundingSummary?.reviewRequired) {
-    warnings.push(
-      `Grounding is ${record.groundingSummary.status} (weak=${record.groundingSummary.weakSymbolCount}, unknown=${record.groundingSummary.unknownSymbolCount}).`,
-    );
-  }
-  return warnings;
-}
-
-export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord, hostType?: string | null): Feature {
-  const isActive = record.status === 'active';
-
-  const reviewSignals = {
+function buildReviewSignalsFromReadModel(readModel: Dota2GovernanceReadModelFeature): Feature['reviewSignals'] {
+  return {
+    lifecycle: {
+      featureStatus: readModel.status,
+      maturity: readModel.lifecycle.maturity || null,
+      implementationStrategy: readModel.lifecycle.implementationStrategy || null,
+      commitOutcome: readModel.lifecycle.commitOutcome || null,
+      canAssemble: null,
+      canWriteHost: null,
+      requiresReview: readModel.lifecycle.requiresReview,
+      reasons: readModel.lifecycle.reviewReasons,
+      summary: buildLifecycleSummary(readModel),
+    },
+    reusableGovernance: {
+      admittedCount: readModel.reusableGovernance.admittedCount,
+      attentionCount: readModel.reusableGovernance.attentionCount,
+      familyAdmissions: readModel.reusableGovernance.familyAdmissions,
+      patternAdmissions: readModel.reusableGovernance.patternAdmissions,
+      seamAdmissions: readModel.reusableGovernance.seamAdmissions,
+      summary: readModel.reusableGovernance.summary,
+    },
     proposalStatus: {
-      ready: isActive,
-      percentage: isActive ? 100 : null,
-      message: deriveWorkspaceStatusMessage(record.status),
+      ready: readModel.status === 'active',
+      percentage: readModel.status === 'active' ? 100 : null,
+      message: readModel.productVerdict.label,
     },
     gapFillSummary: {
       autoFilled: 0,
@@ -86,20 +110,42 @@ export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord, h
       items: [],
     },
     invalidPatternIds: [],
-    readiness: {
-      score: deriveReadinessScore(record),
-      warnings: deriveGroundingWarnings(record),
-    },
+    readiness: deriveReadinessFromReadModel(readModel),
+    compatibilitySource: 'governance-read-model',
     grounding: {
-      status: record.groundingSummary?.status || 'none_required',
-      reviewRequired: record.groundingSummary?.reviewRequired || false,
-      verifiedSymbolCount: record.groundingSummary?.verifiedSymbolCount || 0,
-      allowlistedSymbolCount: record.groundingSummary?.allowlistedSymbolCount || 0,
-      weakSymbolCount: record.groundingSummary?.weakSymbolCount || 0,
-      unknownSymbolCount: record.groundingSummary?.unknownSymbolCount || 0,
-      warningCount: record.groundingSummary?.warnings.length || 0,
+      status: readModel.grounding.status,
+      reviewRequired: readModel.grounding.reviewRequired,
+      verifiedSymbolCount: readModel.grounding.verifiedSymbolCount,
+      allowlistedSymbolCount: readModel.grounding.allowlistedSymbolCount,
+      weakSymbolCount: readModel.grounding.weakSymbolCount,
+      unknownSymbolCount: readModel.grounding.unknownSymbolCount,
+      warningCount: readModel.grounding.warningCount,
+      warnings: readModel.grounding.warnings,
+      reasonCodes: readModel.grounding.reasonCodes,
+      summary: readModel.grounding.summary,
+    },
+    repairability: {
+      status: readModel.repairability.status,
+      reasons: readModel.repairability.reasons,
+      summary: readModel.repairability.summary,
     },
   };
+}
+
+function buildGovernanceReadModelIndex(
+  governanceReadModel?: Dota2GovernanceReadModel | null,
+): Map<string, Dota2GovernanceReadModelFeature> {
+  return new Map((governanceReadModel?.features || []).map((feature) => [feature.featureId, feature]));
+}
+
+export function adaptWorkspaceRecordToFeature(
+  record: RuneWeaverFeatureRecord,
+  hostType?: string | null,
+  governanceReadModel?: Dota2GovernanceReadModelFeature | null,
+): Feature {
+  const reviewSignals = governanceReadModel
+    ? buildReviewSignalsFromReadModel(governanceReadModel)
+    : buildLegacyCompatibilityReviewSignals(record);
 
   return {
     id: record.featureId,
@@ -124,12 +170,21 @@ export function adaptWorkspaceRecordToFeature(record: RuneWeaverFeatureRecord, h
   };
 }
 
-export function adaptWorkspaceToFeatures(workspace: RuneWeaverWorkspace): Feature[] {
-  return workspace.features.map((record: RuneWeaverFeatureRecord) => adaptWorkspaceRecordToFeature(record, workspace.hostType));
+export function adaptWorkspaceToFeatures(
+  workspace: RuneWeaverWorkspace,
+  governanceReadModel?: Dota2GovernanceReadModel | null,
+): Feature[] {
+  const governanceIndex = buildGovernanceReadModelIndex(governanceReadModel);
+  return workspace.features.map((record: RuneWeaverFeatureRecord) =>
+    adaptWorkspaceRecordToFeature(record, workspace.hostType, governanceIndex.get(record.featureId)),
+  );
 }
 
-export function deriveGroupsFromWorkspace(workspace: RuneWeaverWorkspace): Group[] {
-  const features = adaptWorkspaceToFeatures(workspace);
+export function deriveGroupsFromWorkspace(
+  workspace: RuneWeaverWorkspace,
+  governanceReadModel?: Dota2GovernanceReadModel | null,
+): Group[] {
+  const features = adaptWorkspaceToFeatures(workspace, governanceReadModel);
   const groupCounts = new Map<string, number>();
 
   features.forEach((feature) => {
@@ -172,6 +227,7 @@ export function deriveGroupsFromWorkspace(workspace: RuneWeaverWorkspace): Group
 
 export interface BridgeArtifact {
   workspace: RuneWeaverWorkspace;
+  governanceReadModel?: Dota2GovernanceReadModel;
   _bridge: {
     exportedAt: string;
     exportedBy: string;
@@ -181,26 +237,8 @@ export interface BridgeArtifact {
 }
 
 export async function loadWorkspaceFromFile(path: string): Promise<RuneWeaverWorkspace | null> {
-  try {
-    const response = await fetch(path);
-    if (!response.ok) {
-      console.warn(`[F008] Failed to load workspace from ${path}: ${response.status}`);
-      return null;
-    }
-    const data = await response.json();
-
-    if (data._bridge && data.workspace) {
-      console.log('[F011] Loaded bridge artifact from CLI export:');
-      console.log(`  - Exported at: ${data._bridge.exportedAt}`);
-      console.log(`  - Source host: ${data._bridge.sourceHostRoot}`);
-      return data.workspace as RuneWeaverWorkspace;
-    }
-
-    return data as RuneWeaverWorkspace;
-  } catch (error) {
-    console.warn(`[F008] Error loading workspace: ${error}`);
-    return null;
-  }
+  const { workspace } = await loadWorkspaceWithMeta(path);
+  return workspace;
 }
 
 export async function loadWorkspaceWithMeta(
@@ -208,26 +246,36 @@ export async function loadWorkspaceWithMeta(
 ): Promise<{
   workspace: RuneWeaverWorkspace | null;
   bridgeMeta: { exportedAt: string; exportedBy: string; sourceHostRoot: string; version: string } | null;
+  governanceReadModel: Dota2GovernanceReadModel | null;
+  issues: string[];
 }> {
   try {
     const response = await fetch(path);
     if (!response.ok) {
       console.warn(`[F011] Failed to load workspace from ${path}: ${response.status}`);
-      return { workspace: null, bridgeMeta: null };
+      return { workspace: null, bridgeMeta: null, governanceReadModel: null, issues: [] };
     }
     const data = await response.json();
 
     if (data._bridge && data.workspace) {
+      const governanceReadModel = data.governanceReadModel || null;
       return {
         workspace: data.workspace as RuneWeaverWorkspace,
         bridgeMeta: data._bridge,
+        governanceReadModel,
+        issues: governanceReadModel ? [] : buildLegacyGovernanceIssues('bridge-payload-missing-read-model'),
       };
     }
 
-    return { workspace: data as RuneWeaverWorkspace, bridgeMeta: null };
+    return {
+      workspace: data as RuneWeaverWorkspace,
+      bridgeMeta: null,
+      governanceReadModel: null,
+      issues: buildLegacyGovernanceIssues('raw-workspace-payload'),
+    };
   } catch (error) {
     console.warn(`[F011] Error loading workspace: ${error}`);
-    return { workspace: null, bridgeMeta: null };
+    return { workspace: null, bridgeMeta: null, governanceReadModel: null, issues: [] };
   }
 }
 

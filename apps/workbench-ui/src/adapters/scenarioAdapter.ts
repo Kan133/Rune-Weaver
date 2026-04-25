@@ -24,6 +24,7 @@ import {
   type DataSourceMode as LoaderDataSourceMode,
   type ResultMetadata,
 } from "../services/workbenchResultLoader";
+import { isWorkbenchDevOrTestMode } from "../lib/runtimeMode";
 
 // F006: Re-export DataSourceMode from loader (source of truth)
 export type DataSourceMode = LoaderDataSourceMode;
@@ -34,12 +35,8 @@ export type { ResultMetadata };
 // F006: Import shared fixture types for loading
 import type { AdapterInput } from "./workbenchResultAdapter";
 
-function isExplicitDevOrTestMode(): boolean {
-  return Boolean(import.meta.env.DEV || import.meta.env.MODE === "test");
-}
-
 function assertDevOnlyScenarioSource(mode: "shared-fixture" | "fallback-fixture"): void {
-  if (!isExplicitDevOrTestMode()) {
+  if (!isWorkbenchDevOrTestMode()) {
     throw new Error(`[F006] ${mode} is only available in explicit dev/test environments`);
   }
 }

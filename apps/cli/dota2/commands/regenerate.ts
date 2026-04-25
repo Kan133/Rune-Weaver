@@ -1,22 +1,21 @@
-import { join } from "path";
-
 import { executeCleanup, formatCleanupPlan, formatCleanupResult, generateCleanupPlan } from "../../../../adapters/dota2/regenerate/index.js";
 import { generateGeneratorRoutingPlan } from "../../../../adapters/dota2/routing/index.js";
 import { shouldUseArtifactSynthesis } from "../../../../adapters/dota2/synthesis/index.js";
 import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dota2/realization/index.js";
 import { findFeatureById, initializeWorkspace } from "../../../../core/workspace/index.js";
 import type { RuneWeaverFeatureRecord } from "../../../../core/workspace/index.js";
-import { saveReviewArtifact } from "../review-artifacts.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
 import type {
   AssemblyPlan,
   Blueprint,
   IntentSchema,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
+  WizardClarificationPlan,
 } from "../../../../core/schema/types.js";
 import type { PatternResolutionResult } from "../../../../core/patterns/resolver.js";
 import type { HostRealizationPlan, GeneratorRoutingPlan } from "../../../../core/schema/types.js";
 import type { Dota2BlueprintBuildResult, FeatureMode } from "../planning.js";
+import { persistDota2ReviewArtifact } from "../pipeline/review-artifact.js";
 
 export interface RegenerateCommandDeps {
   createIntentSchema: (
@@ -26,13 +25,13 @@ export interface RegenerateCommandDeps {
   ) => Promise<{
     schema: IntentSchema | null;
     usedFallback: boolean;
-    clarificationAuthority: WizardClarificationAuthority;
-    requiresClarification: boolean;
+    clarificationPlan?: WizardClarificationPlan;
+    clarificationSignals: WizardClarificationSignals;
   }>;
   buildBlueprint: (
     schema: IntentSchema,
     context: { prompt: string; hostRoot: string; mode?: FeatureMode; featureId?: string; existingFeature?: RuneWeaverFeatureRecord | null; proposalSource?: "llm" | "fallback" },
-    clarificationAuthority?: WizardClarificationAuthority,
+    clarificationSignals?: WizardClarificationSignals,
   ) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
@@ -56,10 +55,6 @@ export async function runRegenerateCommand(
   options: Dota2CLIOptions,
   deps: RegenerateCommandDeps,
 ): Promise<boolean> {
-  const getIntentSemanticPosture = (schema: { uncertainties?: Array<unknown> }): "ready" | "weak" => {
-    return (schema.uncertainties?.length || 0) > 0 ? "weak" : "ready";
-  };
-
   console.log("=".repeat(70));
   console.log("🧙 Rune Weaver - Regenerate Feature");
   console.log("=".repeat(70));
@@ -95,7 +90,7 @@ export async function runRegenerateCommand(
   console.log(`   Generated Files: ${existingFeature.generatedFiles.length}`);
   console.log(`   Status: ${existingFeature.status}`);
 
-  const { schema, usedFallback, clarificationAuthority } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
+  const { schema, usedFallback, clarificationSignals } = await deps.createIntentSchema(options.prompt, options.hostRoot, {
     mode: "regenerate",
     featureId: existingFeature.featureId,
     existingFeature,
@@ -105,20 +100,14 @@ export async function runRegenerateCommand(
     console.error("\n❌ Failed to create IntentSchema");
     return false;
   }
-  if (clarificationAuthority.blocksBlueprint) {
-    console.error("\n❌ Regenerate requires clarification before Blueprint generation can continue");
-    for (const reason of clarificationAuthority.reasons) {
-      console.error(`   - ${reason}`);
-    }
-    return false;
-  }
-  console.log(`   IntentSchema Semantic Posture: ${getIntentSemanticPosture(schema)}`);
+  console.log(`   IntentSchema Semantic Posture: ${clarificationSignals.semanticPosture}`);
   console.log(`   IntentSchema Uncertainties: ${schema.uncertainties?.length || 0}`);
 
   const {
     finalBlueprint,
     issues: blueprintIssues,
     status: blueprintStatus,
+    executionAuthority,
     moduleNeedsCount,
   } = deps.buildBlueprint(
     schema,
@@ -130,16 +119,23 @@ export async function runRegenerateCommand(
       existingFeature,
       proposalSource: usedFallback ? "fallback" : "llm",
     },
-    clarificationAuthority,
+    clarificationSignals,
   );
   const blueprint = finalBlueprint;
-  const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
+  const canContinueBlueprint = !executionAuthority.blocksBlueprint;
   if (!blueprint || !canContinueBlueprint) {
     console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
     return false;
   }
   console.log(`   FinalBlueprint Status: ${blueprintStatus}`);
   console.log(`   FinalBlueprint ModuleNeeds: ${moduleNeedsCount}`);
+  if (!options.dryRun && options.write && !options.force && executionAuthority.blocksWrite) {
+    console.error("\n❌ Regenerate is blocked by execution authority");
+    for (const reason of executionAuthority.reasons) {
+      console.error(`   - ${reason}`);
+    }
+    return false;
+  }
 
   const resolutionResult = deps.resolvePatternsFromBlueprint(blueprint);
   if (resolutionResult.patterns.length === 0 && !shouldUseArtifactSynthesis(blueprint, resolutionResult)) {
@@ -255,7 +251,7 @@ export async function runRegenerateCommand(
     skippedDeletes: cleanupResult.skipped,
   };
 
-  const outputPath = saveReviewArtifact(artifact, join(process.cwd(), "tmp", "cli-review"));
+  const outputPath = persistDota2ReviewArtifact(artifact, regenerateOptions, "dota2-regenerate-review");
 
   console.log("\n" + "=".repeat(70));
   console.log("Final Verdict");

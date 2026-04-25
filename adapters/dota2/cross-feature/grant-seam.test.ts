@@ -5,10 +5,12 @@ import { dirname, join } from "node:path";
 
 import type {
   Blueprint,
+  ExecutionAuthorityDecision,
   IntentSchema,
   SelectionPoolFeatureAuthoringParameters,
   UpdateIntent,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
+  WizardUnresolvedDependency,
 } from "../../../core/schema/types.js";
 import type { WritePlan, WritePlanEntry } from "../assembler/index.js";
 import {
@@ -393,6 +395,39 @@ function createDriftedSelectionRewardSchema(prompt: string): IntentSchema {
   } as IntentSchema;
 }
 
+function createEquipmentExternalCatalogSchema(prompt: string): IntentSchema {
+  return {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "cross-system-composition", confidence: "high" },
+    requirements: { functional: [prompt] },
+    constraints: {},
+    outcomes: { operations: ["apply-effect", "grant-feature"] },
+    composition: {
+      dependencies: [
+        { kind: "external-system", relation: "reads", required: true },
+      ],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 5,
+      cardinality: "single",
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+  } as IntentSchema;
+}
+
 function createSelectionGrantUpdateIntent(featureId: string, requestedChange: IntentSchema): UpdateIntent {
   return {
     version: "1.0",
@@ -547,13 +582,28 @@ function createLocalSelectionUpdateIntent(featureId: string, requestedChange: In
   };
 }
 
-function createClarificationAuthority(overrides: Partial<WizardClarificationAuthority> = {}): WizardClarificationAuthority {
+function createExecutionAuthorityDecision(
+  overrides: Partial<ExecutionAuthorityDecision> = {},
+): ExecutionAuthorityDecision {
   return {
     blocksBlueprint: false,
     blocksWrite: false,
     requiresReview: false,
-    unresolvedDependencies: [],
     reasons: [],
+    remainingStructuralContracts: [],
+    unresolvedDependencies: [],
+    ...overrides,
+  };
+}
+
+function createClarificationSignals(
+  overrides: Partial<WizardClarificationSignals> = {},
+): WizardClarificationSignals {
+  return {
+    semanticPosture: "bounded",
+    reasons: [],
+    openStructuralContracts: [],
+    unresolvedDependencies: [],
     ...overrides,
   };
 }
@@ -589,7 +639,7 @@ function testGameplayAbilityProviderExportsGrantSurfaceWithoutSelectionPoolLeak(
       } as IntentSchema,
       blueprint: providerBlueprint,
       writePlan: providerWritePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [],
     });
 
@@ -640,7 +690,7 @@ function testGameplayAbilityProviderExportsGrantSurfaceWithoutSelectionPoolLeak(
       } as IntentSchema,
       blueprint: selectionBlueprint,
       writePlan: selectionWritePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [],
     });
 
@@ -715,7 +765,7 @@ function testDefinitionOnlyProviderSchemaStillExportsGrantSurfaceWithoutBackbone
       } as IntentSchema,
       blueprint: providerBlueprint,
       writePlan: providerWritePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [],
     });
 
@@ -768,7 +818,7 @@ function testGameplayAbilityBackboneDoesNotExportGrantSurfaceWhenCrossFeatureGra
       } as IntentSchema,
       blueprint,
       writePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [],
     });
 
@@ -806,7 +856,7 @@ function testProviderExportRequiresClosedLuaAndKvIdentity() {
       } as IntentSchema,
       blueprint: providerBlueprint,
       writePlan: providerWritePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [],
     });
 
@@ -854,7 +904,7 @@ function testProviderExportRejectsDriftedLuaKvIdentity() {
       } as IntentSchema,
       blueprint: providerBlueprint,
       writePlan: providerWritePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [],
     });
 
@@ -879,6 +929,14 @@ function testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell() {
   try {
     const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
     const writePlan = createWritePlan([]);
+    const unresolvedDependencies: WizardUnresolvedDependency[] = [
+      {
+        id: "cross-feature-target",
+        kind: "cross-feature-target",
+        summary: "Cross-feature semantics are present, but the target feature boundary is not explicit.",
+        questionIds: ["clarify-cross-feature-target"],
+      },
+    ];
     const result = applyDota2GrantSeam({
       hostRoot,
       featureId: "consumer_draw_demo",
@@ -886,18 +944,15 @@ function testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell() {
       schema: createCrossFeatureSelectionSchema("Add one skill feature as a reward in the current draw feature."),
       blueprint,
       writePlan,
-      clarificationAuthority: createClarificationAuthority({
+      clarificationSignals: createClarificationSignals({
+        semanticPosture: "open",
+        unresolvedDependencies,
+        reasons: ["Cross-feature semantics are present, but the target feature boundary is not explicit."],
+      }),
+      executionAuthority: createExecutionAuthorityDecision({
         blocksWrite: true,
         requiresReview: true,
-        unresolvedDependencies: [
-          {
-            id: "cross-feature-target",
-            kind: "cross-feature-target",
-            summary: "Cross-feature semantics are present, but the target feature boundary is not explicit.",
-            questionIds: ["clarify-cross-feature-target"],
-          },
-        ],
-        reasons: ["Cross-feature semantics are present, but the target feature boundary is not explicit."],
+        unresolvedDependencies,
       }),
       workspaceFeatures: [],
     });
@@ -918,6 +973,69 @@ function testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell() {
       writePlan.entries.some((entry) => entry.targetPath.endsWith("selection-grant-bindings.json")),
       false,
       "binding sidecar must not be written while the provider target is unresolved",
+    );
+  } finally {
+    rmSync(hostRoot, { recursive: true, force: true });
+  }
+}
+
+function testObservationalSignalsDoNotTriggerGrantSeamForLocalSelectionOnlyFlow() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
+  try {
+    const blueprint = createSelectionPoolBlueprint("consumer_draw_demo", hostRoot);
+    const writePlan = createWritePlan([]);
+
+    applyDota2GrantSeam({
+      hostRoot,
+      featureId: "consumer_draw_demo",
+      prompt: "Increase the displayed candidate option count from 3 to 5.",
+      schema: createLocalSelectionUpdateSchema("Increase the displayed candidate option count from 3 to 5."),
+      blueprint,
+      writePlan,
+      clarificationSignals: createClarificationSignals({
+        semanticPosture: "open",
+        reasons: ["The trigger wording is still structurally noisy."],
+        openStructuralContracts: [
+          {
+            id: "clarify-trigger-authority",
+            kind: "activation-boundary",
+            surface: "activation",
+            summary: "The trigger wording is still structurally noisy.",
+            targetPaths: ["interaction.activations"],
+            questionIds: ["clarify-trigger-authority"],
+          },
+        ],
+      }),
+      executionAuthority: createExecutionAuthorityDecision({
+        blocksBlueprint: true,
+        blocksWrite: true,
+        requiresReview: true,
+        reasons: ["The trigger wording is still structurally noisy."],
+        remainingStructuralContracts: [
+          {
+            id: "clarify-trigger-authority",
+            kind: "activation-boundary",
+            surface: "activation",
+            summary: "The trigger wording is still structurally noisy.",
+            targetPaths: ["interaction.activations"],
+            questionIds: ["clarify-trigger-authority"],
+          },
+        ],
+      }),
+      workspaceFeatures: [],
+    });
+
+    assert.equal(writePlan.readyForHostWrite, true);
+    assert.deepEqual(writePlan.readinessBlockers || [], []);
+    assert.equal(
+      writePlan.entries.some((entry) => entry.targetPath.endsWith("selection-grant-contract.json")),
+      false,
+      "observational clarification signals alone must not activate the grant seam",
+    );
+    assert.equal(
+      writePlan.entries.some((entry) => entry.targetPath.endsWith("selection-grant-bindings.json")),
+      false,
+      "observational clarification signals alone must not emit binding sidecars",
     );
   } finally {
     rmSync(hostRoot, { recursive: true, force: true });
@@ -984,7 +1102,7 @@ function testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSele
           reason: "Prompt references the provider feature directly.",
         },
       ],
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [
         {
           featureId: "skill_provider_demo",
@@ -1060,7 +1178,7 @@ function testBindingWithoutExplicitLocalObjectBecomesRealBlocker() {
           reason: "Prompt references the provider feature directly.",
         },
       ],
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [
         {
           featureId: "skill_provider_demo",
@@ -1081,6 +1199,56 @@ function testBindingWithoutExplicitLocalObjectBecomesRealBlocker() {
     assert.ok(
       (writePlan.readinessBlockers || []).some((blocker) => blocker.includes("cannot mutate selection_pool local authoring")),
     );
+  } finally {
+    rmSync(hostRoot, { recursive: true, force: true });
+  }
+}
+
+function testExternalCatalogEquipmentDoesNotTriggerGrantSeamWriteBlocker() {
+  const hostRoot = mkdtempSync(join(tmpdir(), "rw-grant-seam-"));
+  try {
+    const prompt =
+      "创建一个装备抽取功能，按下G键弹出五选一的界面，选择一个后获得装备。装备来源于dota2原生装备。分R/SR/SSR/UR四个等级，等级影响抽取权重和界面的外观";
+    const blueprint = createSelectionPoolBlueprint("equipment_draw_demo", hostRoot);
+    const equipmentBlueprint: Blueprint = {
+      ...blueprint,
+      summary: "External-catalog native item selection shell",
+      sourceIntent: {
+        ...blueprint.sourceIntent,
+        intentKind: "cross-system-composition",
+        goal: prompt,
+      },
+      featureAuthoring: {
+        ...(blueprint.featureAuthoring as any),
+        objectKind: "equipment",
+      },
+    };
+    const writePlan = createWritePlan([]);
+
+    const result = applyDota2GrantSeam({
+      hostRoot,
+      featureId: "equipment_draw_demo",
+      prompt,
+      schema: createEquipmentExternalCatalogSchema(prompt),
+      blueprint: equipmentBlueprint,
+      writePlan,
+      relationCandidates: [],
+      clarificationSignals: createClarificationSignals(),
+      workspaceFeatures: [],
+    });
+
+    const contractEntry = writePlan.entries.find((entry) =>
+      entry.targetPath.endsWith("selection-grant-contract.json"),
+    );
+    const bindingEntry = writePlan.entries.find((entry) =>
+      entry.targetPath.endsWith("selection-grant-bindings.json"),
+    );
+    assert.equal(writePlan.readyForHostWrite, true);
+    assert.deepEqual(writePlan.readinessBlockers || [], []);
+    assert.equal(contractEntry, undefined);
+    assert.equal(bindingEntry, undefined);
+    assert.equal(result.writeBlockers.length, 0);
+    assert.equal(result.blueprint.status === "blocked", false);
   } finally {
     rmSync(hostRoot, { recursive: true, force: true });
   }
@@ -1130,7 +1298,7 @@ function testDriftedSelectionUpdateStopsAtContractInsteadOfAppendingLocalObject(
           reason: "Prompt references the resolved provider feature directly.",
         },
       ],
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [
         {
           featureId: "skill_provider_demo",
@@ -1274,7 +1442,7 @@ function testPromptResolvedGrantBindingSurvivesGovernanceDriftWithoutExplicitCro
           reason: "Prompt references the resolved provider feature directly.",
         },
       ],
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       workspaceFeatures: [
         {
           featureId: "skill_provider_demo",
@@ -1384,7 +1552,7 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
       updateIntent: localUpdateIntent,
       blueprint,
       writePlan,
-      clarificationAuthority: createClarificationAuthority(),
+      clarificationSignals: createClarificationSignals(),
       currentFeature,
       workspaceFeatures: [currentFeature],
     });
@@ -1454,8 +1622,10 @@ function testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth() 
   testProviderExportRequiresClosedLuaAndKvIdentity();
 testProviderExportRejectsDriftedLuaKvIdentity();
 testUnresolvedCrossFeatureBindingBlocksWriteButKeepsLocalShell();
+testObservationalSignalsDoNotTriggerGrantSeamForLocalSelectionOnlyFlow();
 testResolvedProviderBindingWritesBindingSidecarWithoutMutatingLocalSelectionAuthoring();
 testBindingWithoutExplicitLocalObjectBecomesRealBlocker();
+testExternalCatalogEquipmentDoesNotTriggerGrantSeamWriteBlocker();
 testDriftedSelectionUpdateStopsAtContractInsteadOfAppendingLocalObject();
 testPromptResolvedGrantBindingSurvivesGovernanceDriftWithoutExplicitCrossFeatureDelta();
 testLocalOnlyUpdatePreservesExistingBindingSidecarAndDependencyTruth();

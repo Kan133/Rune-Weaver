@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-meaningful-implementation-change
-> Last verified: 2026-04-20
+> Last verified: 2026-04-23
 > Read when: doing Dota2 planning, source-backed update, cross-feature dependency, synthesis, or runtime grant work
 > Do not use for: overriding the root baseline docs on cross-host architecture by itself
 
@@ -191,6 +191,48 @@ Current rule:
 
 - only provider exports with `attachmentMode = auto_on_activate` are auto-attached on activation
 - `grant_only` providers stay loadable but are not mounted until a consumer runtime grants them
+
+## Governance Product Read-Model Boundary
+
+Step 7 adds a Dota2 product read-model for bridge, CLI, and workbench display.
+
+Current owner:
+
+- [read-model.ts](/D:/Rune%20Weaver/adapters/dota2/governance/read-model.ts)
+- builder: `buildDota2GovernanceReadModel(...)`
+- schema version: `dota2-governance-read-model/v1`
+
+Current boundary:
+
+- the builder is Dota2 adapter-owned
+- the read-model projects existing canonical Dota2/workspace truth for product surfaces
+- it does not create new lifecycle authority
+- it does not admit reusable assets
+- it does not define new runtime semantics
+- it does not belong in `core/**` until another host proves the same axes without Dota2-specific seam or doctor semantics
+
+Current axes:
+
+- lifecycle
+- reusable governance
+- grounding
+- repairability
+- product verdict derived from those axes
+
+Repairability rule:
+
+- repairability is observational
+- live validation and repair planning may inform product display
+- bridge export and connected-host status may carry a read-only snapshot
+- repairability must not be persisted back as workspace authority
+- `not_checked` is an honest state when no live observation was requested
+
+Core genericization gate:
+
+- do not introduce a generic core governance read-model from this Dota2 proof alone
+- do not move Dota2 seam, provider-export, or doctor wording semantics into core
+- do not rename the Dota2 schema to a host-agnostic schema until second-host evidence exists
+- a future extraction needs evidence from another host that the same axes can be projected without importing Dota2-specific semantics
 
 ## Update Preservation Rule
 

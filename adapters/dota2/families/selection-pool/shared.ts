@@ -183,6 +183,7 @@ export interface SelectionPoolPromptMergeResult {
 export interface SelectionPoolProposalBuildResult {
   proposal: FeatureAuthoringProposal;
   baseSource:
+    | "catalog_seed"
     | "generic_seed"
     | "existing_feature"
     | "existing_source_artifact"
@@ -201,7 +202,7 @@ export const SELECTION_POOL_SOURCE_ADAPTER: SelectionPoolSourceAdapter = "select
 export const SELECTION_POOL_SOURCE_VERSION = 2;
 export const SELECTION_POOL_FAMILY_ID = "selection_pool";
 export const SELECTION_POOL_ALLOWED_HOTKEYS = [
-  "Q", "W", "E", "R", "D", "F",
+  "Q", "W", "E", "R", "D", "F", "G",
   "1", "2", "3", "4", "5", "6",
   "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
 ] as const;
@@ -333,6 +334,19 @@ export function deepClone<T>(value: T): T {
 export function normalizePrompt(prompt: string): string {
   return prompt.replace(/\s+/g, " ").trim().toLowerCase();
 }
+
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildAllowedHotkeyPattern(allowedKeys: readonly string[]): string {
+  return [...allowedKeys]
+    .sort((left, right) => right.length - left.length)
+    .map((key) => escapeRegexLiteral(key))
+    .join("|");
+}
+
+const SELECTION_POOL_ALLOWED_HOTKEY_PATTERN = buildAllowedHotkeyPattern(SELECTION_POOL_ALLOWED_HOTKEYS);
 
 function parseCountToken(value: string | undefined): number | undefined {
   if (!value) {
@@ -737,7 +751,7 @@ export function inferObjectKind(
 export function looksLikeSelectionPoolPrompt(prompt: string): boolean {
   const normalized = normalizePrompt(prompt);
   const signals = [
-    /\b(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i.test(normalized),
+    new RegExp(`\\b(?:${SELECTION_POOL_ALLOWED_HOTKEY_PATTERN})\\b`, "i").test(normalized),
     /choose|选择|抽取|抽卡|draft|draw/.test(normalized),
     /weighted|权重|稀有度|rarity/.test(normalized),
     /modal|ui|cards?|卡牌|卡片|界面/.test(normalized),
@@ -748,29 +762,29 @@ export function looksLikeSelectionPoolPrompt(prompt: string): boolean {
 
 export function parseTriggerKey(prompt: string): string | undefined {
   const explicitChange = prompt.match(
-    /(?:from|从)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\s*(?:to|改成|改为|换成|切换为)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
+    /(?:from|从)\s*(F(?:1[0-2]|[1-9])|[QWERDFG]|[1-6])\s*(?:to|改成|改为|换成|切换为)\s*(F(?:1[0-2]|[1-9])|[QWERDFG]|[1-6])\b/i,
   );
   if (explicitChange?.[2]) {
     return explicitChange[2].toUpperCase();
   }
 
   const targetOnly = prompt.match(
-    /(?:trigger\s*key|hotkey|key(?:\s*binding)?|触发键|按键|快捷键|热键)[^\n]{0,12}?(?:to|as|is|改成|改为|换成|切换为)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
+    /(?:trigger\s*key|hotkey|key(?:\s*binding)?|触发键|按键|快捷键|热键)[^\n]{0,12}?(?:to|as|is|改成|改为|换成|切换为)\s*(F(?:1[0-2]|[1-9])|[QWERDFG]|[1-6])\b/i,
   );
   if (targetOnly?.[1]) {
     return targetOnly[1].toUpperCase();
   }
 
   const contextualMatch = prompt.match(
-    /(?:按(?:下)?|触发键|按键|快捷键|hotkey|trigger key|press(?:es)?|hit|tap|bind(?:ing)?|bound to|triggered by|when(?:\s+the)?\s+player\s+presses?)\s*(F(?:1[0-2]|[1-9])|[QWERDF]|\d)\b/i,
+    /(?:按(?:下)?|触发键|按键|快捷键|hotkey|trigger key|press(?:es)?|hit|tap|bind(?:ing)?|bound to|triggered by|when(?:\s+the)?\s+player\s+presses?)\s*(F(?:1[0-2]|[1-9])|[QWERDFG]|[1-6])\b/i,
   );
   if (contextualMatch?.[1]) {
     return contextualMatch[1].toUpperCase();
   }
 
-  const functionKeys = Array.from(prompt.matchAll(/\bF(?:1[0-2]|[1-9])\b/ig));
-  if (functionKeys.length === 1) {
-    return functionKeys[0]?.[0]?.toUpperCase();
+  const hotkeyMatches = Array.from(prompt.matchAll(/\b(F(?:1[0-2]|[1-9])|[QWERDFG]|[1-6])\b/ig));
+  if (hotkeyMatches.length === 1) {
+    return hotkeyMatches[0]?.[1]?.toUpperCase();
   }
 
   return undefined;
@@ -876,8 +890,8 @@ export function promptRequestsFullBlock(prompt: string): boolean {
 export function promptRequestsStoredSelections(prompt: string): boolean {
   const normalized = normalizePrompt(prompt);
   return (
-    /inventory|storage|stash|库存|仓库|存储/.test(normalized) &&
-    /store|stored|加入|进入|存入|出现在|显示在/.test(normalized)
+    /inventory|storage|stash|panel|库存|仓库|存储|面板/.test(normalized) &&
+    /store|stored|加入|进入|存入|出现在|显示在|放到|放入|存到/.test(normalized)
   );
 }
 

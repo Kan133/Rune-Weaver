@@ -7,13 +7,15 @@ import {
   GeneratorRoutingPlan,
   IntentReadiness,
   CurrentFeatureContext,
+  ExecutionAuthorityDecision,
   RelationCandidate,
   PromptConstraintBundle,
   RetrievalBundle,
   SelectionPoolAdmissionDiagnostics,
   UpdateIntent,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
   WizardClarificationPlan,
+  WizardSemanticPosture,
   WorkspaceSemanticContext,
 } from "../../../core/schema/types.js";
 import { BlueprintBuilder } from "../../../core/blueprint/builder.js";
@@ -26,7 +28,7 @@ import {
   buildCurrentFeatureContext,
   createFallbackIntentSchema as createGenericFallbackIntentSchema,
   createUpdateIntentFromRequestedChange,
-  deriveWizardClarificationAuthority,
+  deriveWizardClarificationSignals,
   finalizeCreateIntentSchema,
   resolveRelationCandidates,
 } from "../../../core/wizard/index.js";
@@ -48,6 +50,9 @@ import {
 import { refreshWeightedPoolWritePlan } from "../../../adapters/dota2/weighted-pool/index.js";
 import { alignWritePlanWithExistingFeature } from "../helpers/index.js";
 import { resolveCreateWizardFlow, resolveUpdateWizardFlow } from "../helpers/wizard-flow.js";
+import {
+  resolveExecutionAuthorityAfterBlueprint,
+} from "./execution-authority.js";
 
 export type FeatureMode = "create" | "update" | "regenerate";
 
@@ -63,7 +68,7 @@ export interface CreateIntentSchemaResult {
   semanticAnalysis: IntentSemanticAnalysis | null;
   usedFallback: boolean;
   clarificationPlan?: WizardClarificationPlan;
-  clarificationAuthority: WizardClarificationAuthority;
+  clarificationSignals: WizardClarificationSignals;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   promptPackageId?: string;
@@ -78,7 +83,7 @@ export interface CreateUpdateIntentResult {
   updateIntent: UpdateIntent | null;
   usedFallback: boolean;
   clarificationPlan?: WizardClarificationPlan;
-  clarificationAuthority: WizardClarificationAuthority;
+  clarificationSignals: WizardClarificationSignals;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   promptPackageId?: string;
@@ -91,6 +96,7 @@ export interface Dota2BlueprintBuildResult {
   blueprint: Blueprint | null;
   finalBlueprint: FinalBlueprint | null;
   status: IntentReadiness | "error";
+  executionAuthority: ExecutionAuthorityDecision;
   issues: string[];
   moduleNeedsCount: number;
   admissionDiagnostics?: SelectionPoolAdmissionDiagnostics;
@@ -109,21 +115,21 @@ export interface Dota2BlueprintBuildContext {
 
 export function getCreateSemanticPosture(
   semanticAnalysis: Pick<IntentSemanticAnalysis, "openSemanticResidue"> | null | undefined,
-): "ready" | "weak" {
+): WizardSemanticPosture {
   if (!semanticAnalysis) {
-    return "weak";
+    return "open";
   }
 
   return semanticAnalysis.openSemanticResidue.some(
     (item) => item.disposition === "open" && item.class !== "bounded_detail_only",
   )
-    ? "weak"
-    : "ready";
+    ? "open"
+    : "bounded";
 }
 
-function getUpdateIntentSemanticPosture(updateIntent: UpdateIntent): "ready" | "weak" {
+export function getUpdateIntentSemanticPosture(updateIntent: UpdateIntent): WizardSemanticPosture {
   if (!updateIntent.semanticAnalysis) {
-    return "weak";
+    return "open";
   }
 
   const scope = updateIntent.semanticAnalysis.governanceDecisions.scope.value;
@@ -133,8 +139,8 @@ function getUpdateIntentSemanticPosture(updateIntent: UpdateIntent): "ready" | "
   );
 
   return scope === "ambiguous" || blocked.length > 0 || hasRelevantResidue
-    ? "weak"
-    : "ready";
+    ? "open"
+    : "bounded";
 }
 
 function resolveClarificationState(
@@ -145,7 +151,7 @@ function resolveClarificationState(
   currentFeatureContext?: CurrentFeatureContext,
 ): {
   clarificationPlan?: WizardClarificationPlan;
-  clarificationAuthority: WizardClarificationAuthority;
+  clarificationSignals: WizardClarificationSignals;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   requiresClarification: boolean;
@@ -168,7 +174,7 @@ function resolveClarificationState(
 
   return {
     ...(clarificationPlan ? { clarificationPlan } : {}),
-    clarificationAuthority: deriveWizardClarificationAuthority(clarificationPlan),
+    clarificationSignals: deriveWizardClarificationSignals(clarificationPlan),
     ...(relationCandidates.length > 0 ? { relationCandidates } : {}),
     ...(workspaceSemanticContext ? { workspaceSemanticContext } : {}),
     requiresClarification: Boolean(clarificationPlan?.questions.length),
@@ -499,7 +505,7 @@ export async function createUpdateIntent(
             updateIntent: result.updateIntent,
             usedFallback: result.usedFallback,
             clarificationPlan: result.clarificationPlan,
-            clarificationAuthority: result.clarificationAuthority,
+            clarificationSignals: result.clarificationSignals,
             relationCandidates: result.relationCandidates,
             workspaceSemanticContext: result.workspaceSemanticContext,
             promptPackageId: result.promptPackageId,
@@ -576,7 +582,7 @@ function createFallbackIntentSchema(
 export function buildBlueprint(
   schema: IntentSchema,
   context: Dota2BlueprintBuildContext,
-  clarificationAuthority?: WizardClarificationAuthority,
+  clarificationSignals?: WizardClarificationSignals,
 ): Dota2BlueprintBuildResult {
   console.log("\n" + "=".repeat(70));
   console.log("Stage 2: Blueprint");
@@ -590,7 +596,7 @@ export function buildBlueprint(
     kind: "dota2-x-template",
     projectRoot: context.hostRoot,
   });
-  const baseStatus = baseFinalBlueprint?.status || getCreateSemanticPosture(semanticAnalysis);
+  const baseStatus = baseFinalBlueprint?.status || (result.success ? "ready" : "weak");
   const rawBaseIssues = result.issues.map((issue) => `${issue.code}: ${issue.message}`);
   const enrichedBlueprint = baseBlueprint
     ? enrichDota2CreateBlueprint(baseBlueprint, {
@@ -616,32 +622,29 @@ export function buildBlueprint(
         proposalSource: context.proposalSource,
       })
     : { blueprint: null, status: baseStatus, issues: [] };
-  const stagedBlueprint = applyWriteBlockingClarificationWeakness(
-    enrichedBlueprint.blueprint,
-    clarificationAuthority,
-  );
-  const stagedFinalBlueprint = applyWriteBlockingClarificationWeakness(
-    enrichedFinalBlueprint.blueprint,
-    clarificationAuthority,
-  );
-  const blueprint = stagedBlueprint.blueprint;
-  const finalBlueprint = stagedFinalBlueprint.blueprint;
+  const blueprint = enrichedBlueprint.blueprint;
+  const finalBlueprint = enrichedFinalBlueprint.blueprint;
   const admissionDiagnostics = enrichedFinalBlueprint.admissionDiagnostics || enrichedBlueprint.admissionDiagnostics;
   const createReadinessDecision =
     enrichedFinalBlueprint.createReadinessDecision || enrichedBlueprint.createReadinessDecision;
   const baseIssues = filterSupersededBlueprintIssues(rawBaseIssues, admissionDiagnostics);
   const status = finalBlueprint?.status || enrichedFinalBlueprint.status || baseStatus;
+  const executionAuthority = resolveExecutionAuthorityAfterBlueprint({
+    schema,
+    blueprint: finalBlueprint || blueprint,
+    clarificationSignals,
+    currentFeatureContext: null,
+    createReadinessDecision,
+  });
   const issues = [
     ...new Set([
       ...baseIssues,
       ...enrichedBlueprint.issues,
       ...enrichedFinalBlueprint.issues,
-      ...stagedBlueprint.issues,
-      ...stagedFinalBlueprint.issues,
     ]),
   ];
   const moduleNeedsCount = countModuleNeeds(finalBlueprint || blueprint);
-  const canContinue = finalBlueprint?.commitDecision?.canAssemble ?? result.success;
+  const canContinue = !executionAuthority.blocksBlueprint;
 
   if (!finalBlueprint) {
     console.log("  ❌ Blueprint build failed");
@@ -655,6 +658,7 @@ export function buildBlueprint(
       blueprint,
       finalBlueprint: null,
       status: baseBlueprint ? status : "error",
+      executionAuthority,
       issues,
       moduleNeedsCount,
       admissionDiagnostics,
@@ -671,7 +675,16 @@ export function buildBlueprint(
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics, createReadinessDecision };
+    return {
+      blueprint,
+      finalBlueprint,
+      status,
+      executionAuthority,
+      issues,
+      moduleNeedsCount,
+      admissionDiagnostics,
+      createReadinessDecision,
+    };
   }
 
   if (!result.success) {
@@ -710,12 +723,21 @@ export function buildBlueprint(
     }
   }
 
-  return { blueprint, finalBlueprint, status, issues, moduleNeedsCount, admissionDiagnostics, createReadinessDecision };
+  return {
+    blueprint,
+    finalBlueprint,
+    status,
+    executionAuthority,
+    issues,
+    moduleNeedsCount,
+    admissionDiagnostics,
+    createReadinessDecision,
+  };
 }
 
 export function buildUpdateBlueprint(
   updateIntent: UpdateIntent,
-  clarificationAuthority?: WizardClarificationAuthority,
+  clarificationSignals?: WizardClarificationSignals,
 ): Dota2BlueprintBuildResult {
   console.log("\n" + "=".repeat(70));
   console.log("Stage 2: Blueprint");
@@ -725,35 +747,31 @@ export function buildUpdateBlueprint(
   const result = builder.buildUpdate(updateIntent);
   const baseBlueprint = result.draftBlueprint || result.blueprint || null;
   const baseFinalBlueprint = result.finalBlueprint || null;
-  const baseStatus = baseFinalBlueprint?.status || getUpdateIntentSemanticPosture(updateIntent);
+  const baseStatus = baseFinalBlueprint?.status || (result.success ? "ready" : "weak");
   const enrichedBlueprint = baseBlueprint
     ? enrichDota2UpdateBlueprint(baseBlueprint, updateIntent)
     : { blueprint: null, status: baseStatus, issues: [] };
   const enrichedFinalBlueprint = baseFinalBlueprint
     ? enrichDota2UpdateBlueprint(baseFinalBlueprint, updateIntent)
     : { blueprint: null, status: baseStatus, issues: [] };
-  const stagedBlueprint = applyWriteBlockingClarificationWeakness(
-    enrichedBlueprint.blueprint,
-    clarificationAuthority,
-  );
-  const stagedFinalBlueprint = applyWriteBlockingClarificationWeakness(
-    enrichedFinalBlueprint.blueprint,
-    clarificationAuthority,
-  );
-  const blueprint = stagedBlueprint.blueprint;
-  const finalBlueprint = stagedFinalBlueprint.blueprint;
+  const blueprint = enrichedBlueprint.blueprint;
+  const finalBlueprint = enrichedFinalBlueprint.blueprint;
   const status = finalBlueprint?.status || enrichedFinalBlueprint.status || baseStatus;
+  const executionAuthority = resolveExecutionAuthorityAfterBlueprint({
+    schema: updateIntent.requestedChange,
+    blueprint: finalBlueprint || blueprint,
+    clarificationSignals,
+    currentFeatureContext: updateIntent.currentFeatureContext,
+  });
   const issues = [
     ...new Set([
       ...result.issues.map((issue) => `${issue.code}: ${issue.message}`),
       ...enrichedBlueprint.issues,
       ...enrichedFinalBlueprint.issues,
-      ...stagedBlueprint.issues,
-      ...stagedFinalBlueprint.issues,
     ]),
   ];
   const moduleNeedsCount = countModuleNeeds(finalBlueprint || blueprint);
-  const canContinue = finalBlueprint?.commitDecision?.canAssemble ?? result.success;
+  const canContinue = !executionAuthority.blocksBlueprint;
 
   if (!finalBlueprint) {
     console.log("  ❌ Update Blueprint build failed");
@@ -767,6 +785,7 @@ export function buildUpdateBlueprint(
       blueprint,
       finalBlueprint: null,
       status: baseBlueprint ? status : "error",
+      executionAuthority,
       issues,
       moduleNeedsCount,
     };
@@ -781,7 +800,7 @@ export function buildUpdateBlueprint(
     for (const issue of result.issues) {
       console.log(`     - ${issue.code}: ${issue.message}`);
     }
-    return { blueprint, finalBlueprint, status, issues, moduleNeedsCount };
+    return { blueprint, finalBlueprint, status, executionAuthority, issues, moduleNeedsCount };
   }
 
   if (!result.success) {
@@ -817,7 +836,7 @@ export function buildUpdateBlueprint(
     }
   }
 
-  return { blueprint, finalBlueprint, status, issues, moduleNeedsCount };
+  return { blueprint, finalBlueprint, status, executionAuthority, issues, moduleNeedsCount };
 }
 
 export function resolvePatternsFromBlueprint(blueprint: Blueprint): PatternResolutionResult {
@@ -1006,68 +1025,6 @@ function filterSupersededBlueprintIssues(
   return issues.filter((issue) => !issue.startsWith("FINAL_BLUEPRINT_"));
 }
 
-function applyWriteBlockingClarificationWeakness(
-  blueprint: Blueprint | null,
-  clarificationAuthority?: WizardClarificationAuthority,
-): { blueprint: Blueprint | null; issues: string[] } {
-  if (
-    !blueprint
-    || !clarificationAuthority
-    || clarificationAuthority.blocksBlueprint
-    || !clarificationAuthority.blocksWrite
-  ) {
-    return { blueprint, issues: [] };
-  }
-
-  const unresolvedDependencies = clarificationAuthority.unresolvedDependencies.filter(
-    (dependency) =>
-      dependency.kind === "cross-feature-target"
-      || dependency.kind === "existing-feature-target",
-  );
-  if (unresolvedDependencies.length === 0) {
-    return { blueprint, issues: [] };
-  }
-
-  const note =
-    "Cross-feature planning can continue, but host write remains blocked until the target feature/provider surface is resolved.";
-  const reasons = [
-    ...(blueprint.commitDecision?.reasons || []),
-    ...unresolvedDependencies.map((dependency) => dependency.summary),
-    note,
-  ];
-
-  return {
-    blueprint: {
-      ...blueprint,
-      status: blueprint.status === "blocked" ? "blocked" : "weak",
-      commitDecision: blueprint.commitDecision
-        ? {
-            ...blueprint.commitDecision,
-            outcome: blueprint.commitDecision.outcome === "blocked" ? "blocked" : "exploratory",
-            canAssemble: blueprint.commitDecision.outcome === "blocked"
-              ? blueprint.commitDecision.canAssemble
-              : true,
-            canWriteHost: false,
-            requiresReview: true,
-            reasons: [...new Set(reasons)],
-          }
-        : undefined,
-      validationStatus: blueprint.validationStatus
-        ? {
-            ...blueprint.validationStatus,
-            status: blueprint.validationStatus.status === "failed" ? "failed" : "needs_review",
-            warnings: [...new Set([...(blueprint.validationStatus.warnings || []), note])],
-          }
-        : undefined,
-    },
-    issues: [
-      note,
-      ...unresolvedDependencies.map(
-        (dependency) => `Unresolved cross-feature dependency: ${dependency.summary}`,
-      ),
-    ],
-  };
-}
 
 function recalculateWritePlanStats(writePlan: WritePlan): void {
   writePlan.stats = {

@@ -8,7 +8,6 @@ import type {
 import {
   getGovernanceKeyInputs,
   getIntentGovernanceView,
-  hasGovernanceExternalOrSharedOwnership,
   hasGovernanceFeatureOwnedCandidateCollection,
   hasGovernancePersistentScope,
 } from "../../../../core/wizard/intent-governance-view.js";
@@ -70,10 +69,6 @@ function hasFeatureOwnedCollections(schema: IntentSchema): boolean {
   return hasGovernanceFeatureOwnedCandidateCollection(schema);
 }
 
-function hasExternalOrSharedOwnership(schema: IntentSchema): boolean {
-  return hasGovernanceExternalOrSharedOwnership(schema);
-}
-
 function hasPersistentStateRequest(schema: IntentSchema): boolean {
   return hasGovernancePersistentScope(schema);
 }
@@ -97,6 +92,41 @@ function hasCustomEffectFamilyRequest(schema: IntentSchema): boolean {
 
 function hasMultipleTriggerOwners(schema: IntentSchema): boolean {
   return getGovernanceKeyInputs(schema).length > 1;
+}
+
+function hasFeatureOwnedPoolMembership(
+  parameters: FeatureAuthoringProposal["parameters"],
+): boolean {
+  return countSelectionPoolEntries(parameters) > 0;
+}
+
+function readsSupportedExternalObjectTruth(
+  parameters: FeatureAuthoringProposal["parameters"],
+): boolean {
+  return (parameters.poolEntries || []).some((entry) =>
+    entry.objectRef.source === "feature_export" || entry.objectRef.source === "external_catalog"
+  );
+}
+
+function hasUnsupportedExternalOwnership(
+  schema: IntentSchema,
+  parameters: FeatureAuthoringProposal["parameters"],
+): boolean {
+  const governance = getIntentGovernanceView(schema);
+  const externalStateOwnership = (governance.state.states || []).some((state) => state.owner === "external");
+  if (externalStateOwnership) {
+    return true;
+  }
+
+  const externalOrSharedCandidateCollections = (governance.content.collections || []).some((collection) =>
+    collection.role === "candidate-options" &&
+    (collection.ownership === "external" || collection.ownership === "shared")
+  );
+  if (!externalOrSharedCandidateCollections) {
+    return false;
+  }
+
+  return !readsSupportedExternalObjectTruth(parameters);
 }
 
 function collectFamilyBlockFindings(prompt: string): Array<{ code: string; reason: string }> {
@@ -149,8 +179,9 @@ function assessSelectionPoolContract(
     governance.mechanics.candidatePool ||
       governance.selection.source === "candidate-collection" ||
       governance.selection.source === "weighted-pool" ||
-      hasFeatureOwnedCollections(schema),
-  ) && !hasExternalOrSharedOwnership(schema);
+      hasFeatureOwnedCollections(schema) ||
+      hasFeatureOwnedPoolMembership(normalized),
+  );
   const weightedOrRarityBackedDraw = Boolean(
     governance.mechanics.weightedSelection ||
       governance.selection.source === "weighted-pool" ||
@@ -178,11 +209,13 @@ function assessSelectionPoolContract(
   );
   const selectedRemovedOrUnchosenRetained = Boolean(
     promptHasPostSelectionPoolBehavior(prompt) ||
-      governance.selection.duplicatePolicy === "forbid",
+      governance.selection.duplicatePolicy === "forbid" ||
+      normalized.postSelectionPoolBehavior === "remove_selected_from_remaining" ||
+      normalized.postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible",
   );
   const noPersistence = !hasPersistentStateRequest(schema) &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_PERSISTENCE_NOT_SUPPORTED");
-  const noExternalOwnership = !hasExternalOrSharedOwnership(schema);
+  const noExternalOwnership = !hasUnsupportedExternalOwnership(schema, normalized);
   const noSecondTrigger = triggerKeyCount <= 1 &&
     !collectFamilyBlockFindings(prompt).some((finding) => finding.code === "SELECTION_POOL_MULTI_TRIGGER_NOT_SUPPORTED");
   const noMultiConfirm =
@@ -202,8 +235,8 @@ function assessSelectionPoolContract(
       atom: "feature_owned_candidate_pool",
       satisfied: featureOwnedCandidatePool,
       detail: featureOwnedCandidatePool
-        ? "Candidate pool remains feature-owned inside the current feature boundary."
-        : "selection_pool compression requires a feature-owned candidate pool.",
+        ? "Current feature owns pool membership; object truth may come from local collections, feature exports, or external catalogs."
+        : "selection_pool compression requires feature-owned pool membership, even when object truth comes from feature exports or external catalogs.",
     },
     {
       atom: "weighted_or_rarity_backed_draw",
@@ -258,8 +291,8 @@ function assessSelectionPoolContract(
       atom: "no_external_ownership",
       satisfied: noExternalOwnership,
       detail: noExternalOwnership
-        ? "Prompt/schema avoid external/shared ownership."
-        : "selection_pool requires feature-owned/session-local state and collections.",
+        ? "Prompt/schema keep trigger, session state, and selection authority local while allowing explicit external content reads."
+        : "selection_pool does not admit external/shared trigger ownership, session-state ownership, persistence authority, or hidden cross-feature authority.",
     },
     {
       atom: "no_second_trigger",

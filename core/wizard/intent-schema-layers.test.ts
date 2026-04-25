@@ -49,6 +49,30 @@ function testParaphraseGovernanceDecisionsStayAlignedForCandidateDraw() {
   }
 }
 
+function testBoundedCandidateDrawWithoutExplicitPoolLifecycleStillCountsAsStandaloneSystem() {
+  const prompt =
+    "创建一个奖励抽取功能，按下F4弹出一个三选一的界面，玩家可以选择其中一个。奖励分为R/SR/SSR/UR四个等级，等级会影响界面中的外观和抽取的概率。";
+  const schema = createFallbackIntentSchema(prompt, host);
+  const analysis = analyzeIntentSemanticLayers(schema, prompt, host);
+
+  assert.equal(analysis.governanceDecisions.intentKind.value, "standalone-system");
+  assert.deepEqual(analysis.governanceDecisions.canonicalizationEligible.value, [
+    "candidate_draw_governance_core",
+  ]);
+}
+
+function testInventoryBackedCandidateDrawStillCountsAsStandaloneSystem() {
+  const prompt =
+    "创建一个奖励抽取功能，按下F4弹出一个三选一的界面，玩家可以选择其中一个。奖励分为R/SR/SSR/UR四个等级，等级会影响界面中的外观和抽取的概率。选择后把结果放到一个16格面板里。";
+  const schema = createFallbackIntentSchema(prompt, host);
+  const analysis = analyzeIntentSemanticLayers(schema, prompt, host);
+
+  assert.equal(analysis.governanceDecisions.intentKind.value, "standalone-system");
+  assert.deepEqual(analysis.governanceDecisions.canonicalizationEligible.value, [
+    "candidate_draw_governance_core",
+  ]);
+}
+
 function testExplicitPersistenceStaysGovernanceVisible() {
   const prompt =
     "Press F4 to draw 3 weighted candidates, choose 1, save the selected result across matches, and sync it with an external progression system.";
@@ -212,6 +236,7 @@ function testOpenSemanticResidueSeparatesBoundedDetailsFromGovernanceRisk() {
   assert.equal(ownerResidue?.surface, "state_scope");
   assert.equal(visualResidue?.class, "bounded_detail_only");
   assert.equal(weightResidue?.class, "bounded_detail_only");
+  assert.equal(weightResidue?.surface, "candidate_catalog");
   assert.equal(assumptionResidue?.disposition, "assumed");
   assert.equal(assumptionResidue?.surface, "state_scope");
 }
@@ -412,8 +437,10 @@ async function testWordSwapClusterSharesDecisionFingerprint() {
 
 async function runTests() {
   testRawFactsStayStableForSamePrompt();
-  testParaphraseGovernanceDecisionsStayAlignedForCandidateDraw();
-  testExplicitPersistenceStaysGovernanceVisible();
+testParaphraseGovernanceDecisionsStayAlignedForCandidateDraw();
+testBoundedCandidateDrawWithoutExplicitPoolLifecycleStillCountsAsStandaloneSystem();
+testInventoryBackedCandidateDrawStillCountsAsStandaloneSystem();
+testExplicitPersistenceStaysGovernanceVisible();
   testRuntimePersistenceFactsDoNotInventExternalPersistence();
   testDefinitionOnlyProviderShellStaysLocalAndDoesNotDriftIntoGrantApplication();
   testDashPromptDoesNotAccidentallyEnterCandidateDrawDecision();

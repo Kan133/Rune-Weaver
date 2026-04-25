@@ -1,5 +1,6 @@
 import { CheckCircle2, Circle } from 'lucide-react';
 import { useFeatureStore } from '@/hooks/useFeatureStore';
+import { WorkspaceRefreshAdvisory } from '@/components/workspace/WorkspaceRefreshAdvisory';
 
 export function StatusBar() {
   const features = useFeatureStore((state) => state.features);
@@ -8,6 +9,7 @@ export function StatusBar() {
   const isWorkspaceConnected = useFeatureStore((state) => state.isWorkspaceConnected);
   const workspace = useFeatureStore((state) => state.workspace);
   const workspaceIssues = useFeatureStore((state) => state.workspaceIssues);
+  const workspaceRefreshHint = useFeatureStore((state) => state.workspaceRefreshHint);
 
   const activeCount = features.filter((f) => f.status === 'active').length;
   const draftCount = features.filter((f) => f.status === 'draft').length;
@@ -61,6 +63,9 @@ export function StatusBar() {
               : '等待连接宿主'}
           </span>
         </div>
+        {!connectedHostRoot && workspaceRefreshHint && (
+          <WorkspaceRefreshAdvisory hint={workspaceRefreshHint} variant="compact" />
+        )}
       </div>
     </footer>
   );

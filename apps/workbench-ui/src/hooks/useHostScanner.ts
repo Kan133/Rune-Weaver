@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { RuneWeaverWorkspace } from '@/types/workspace';
+import type { Dota2GovernanceReadModel, RuneWeaverWorkspace } from '@/types/workspace';
 
 // 扫描结果类型
 export interface HostScanResult {
@@ -42,6 +42,7 @@ export interface HostStatusResult {
   hostType: 'dota2-x-template' | 'unknown';
   rwStatus: IntegrationStatus;
   workspace?: RuneWeaverWorkspace;
+  governanceReadModel?: Dota2GovernanceReadModel | null;
   issues: HostIssue[];
   checkedAt: string;
 }

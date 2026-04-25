@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 
 import {
+  getDota2ReusableAssetAdmissionStatus,
+  isDota2ReusableAssetFormallyAdmitted,
+} from "./reusable-assets.js";
+import {
   evaluateAllDota2PromotionReadiness,
   evaluateDota2PromotionReadiness,
 } from "./promotion-readiness-harness.js";
@@ -26,6 +30,14 @@ import { getDota2PromotionReadinessSpecs } from "./promotion-readiness.js";
   const assessment = evaluateDota2PromotionReadiness("grant_only_provider_export_seam");
 
   assert.equal(assessment.verdict, "ready_for_manual_promotion_review");
+  assert.equal(
+    getDota2ReusableAssetAdmissionStatus("seam", "grant_only_provider_export_seam"),
+    "admitted",
+  );
+  assert.equal(
+    isDota2ReusableAssetFormallyAdmitted("seam", "grant_only_provider_export_seam"),
+    true,
+  );
   assert.equal(assessment.proofPoints.every((point) => point.passed), true);
   assert.equal(
     assessment.proofPoints.some((point) =>

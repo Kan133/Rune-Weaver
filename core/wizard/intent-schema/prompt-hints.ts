@@ -208,7 +208,7 @@ export function collectPromptSemanticHints(rawText: string): PromptSemanticHints
     );
   const explicitNoFollowUpChoice = hasExplicitNoFollowUpChoiceSignal(rawText);
   const candidatePool =
-    /candidate|pool|draw|draft|deck|候选池|抽取|抽卡|卡池/iu.test(rawText);
+    /candidate|pool|draw|draft|deck|weighted pool|local pool|候选池|加权池|本地加权池|抽取|抽卡|卡池/iu.test(rawText);
   const playerChoice = !explicitNoFollowUpChoice && Boolean(
     triChoiceMatch || hasUnnegatedChoiceSignal(rawText),
   );

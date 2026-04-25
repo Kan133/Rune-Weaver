@@ -3,6 +3,7 @@ import { useFeatureStore } from '@/hooks/useFeatureStore';
 import { FeatureTree } from '@/components/feature/FeatureTree';
 import { WorkspaceSourceSelector } from '@/components/workspace/WorkspaceSourceSelector';
 import { ProjectSetupPanel } from '@/components/project-setup/ProjectSetupPanel';
+import { isWorkbenchDevMode } from '@/lib/runtimeMode';
 
 export function Sidebar() {
   const features = useFeatureStore((state) => state.features);
@@ -10,7 +11,7 @@ export function Sidebar() {
   const isWorkspaceConnected = useFeatureStore((state) => state.isWorkspaceConnected);
   const rootFeatures = features.filter((f) => f.parentId === null);
   const showDebugSources =
-    import.meta.env.DEV &&
+    isWorkbenchDevMode() &&
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).has('debugSources');
 

@@ -9,7 +9,7 @@ import type {
   RelationCandidate,
   UpdateIntent,
   ValidationIssue,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../../core/schema/types.js";
@@ -18,7 +18,7 @@ import type { WizardRefinementContext } from "../../../core/wizard/types.js";
 import {
   analyzeIntentSemanticLayers,
   buildWizardClarificationPlan,
-  deriveWizardClarificationAuthority,
+  deriveWizardClarificationSignals,
   resolveRelationCandidates,
   runWizardToIntentSchema,
   runWizardToUpdateIntent,
@@ -53,7 +53,7 @@ export interface WizardFlowResult {
   schema: IntentSchema;
   semanticAnalysis?: IntentSemanticAnalysis;
   clarificationPlan?: WizardClarificationPlan;
-  clarificationAuthority: WizardClarificationAuthority;
+  clarificationSignals: WizardClarificationSignals;
   relationCandidates?: RelationCandidate[];
   workspaceSemanticContext?: WorkspaceSemanticContext;
   promptPackageId?: string;
@@ -144,7 +144,7 @@ function buildClarificationState(input: {
   workspaceSemanticContext?: WorkspaceSemanticContext;
   relationCandidates?: RelationCandidate[];
   clarificationPlan?: WizardClarificationPlan;
-  clarificationAuthority: WizardClarificationAuthority;
+  clarificationSignals: WizardClarificationSignals;
 } {
   const workspaceSemanticContext = resolveWorkspaceSemanticContext(input.hostRoot);
   const relationCandidates = resolveRelationCandidates({
@@ -165,7 +165,7 @@ function buildClarificationState(input: {
     ...(workspaceSemanticContext ? { workspaceSemanticContext } : {}),
     ...(relationCandidates.length > 0 ? { relationCandidates } : {}),
     ...(clarificationPlan ? { clarificationPlan } : {}),
-    clarificationAuthority: deriveWizardClarificationAuthority(clarificationPlan),
+    clarificationSignals: deriveWizardClarificationSignals(clarificationPlan),
   };
 }
 

@@ -2,7 +2,10 @@ import { existsSync } from "fs";
 import { join } from "path";
 
 import { deleteFeature, findFeatureById, loadWorkspace, saveWorkspace, workspaceExists } from "../../core/workspace/manager.js";
-import { summarizeDota2FeatureGovernance } from "../../adapters/dota2/governance/feature-governance.js";
+import {
+  buildDota2FeatureGovernanceReadModel,
+  formatDota2FeatureGovernanceReadModel,
+} from "../cli/dota2/commands/dota2-governance-read-model.js";
 
 export async function runList(hostRoot: string): Promise<void> {
   console.log("=".repeat(60));
@@ -199,15 +202,9 @@ export async function runInspect(featureId: string, hostRoot: string): Promise<v
   console.log(`   Selected Patterns: ${feature.selectedPatterns.join(", ")}`);
   console.log(`   Created: ${feature.createdAt}`);
   console.log(`   Updated: ${feature.updatedAt}`);
-  const governanceSummary = summarizeDota2FeatureGovernance(feature);
-  console.log(`   Implementation Strategy: ${governanceSummary.implementationStrategy || "(unknown)"}`);
-  console.log(`   Maturity: ${governanceSummary.maturity || "(unknown)"}`);
-  console.log(`   Commit Outcome: ${governanceSummary.commitOutcome || "(unknown)"}`);
-  if (governanceSummary.familyAdmissions.length > 0) {
-    console.log(`   Family Governance: ${governanceSummary.familyAdmissions.map((item) => `${item.assetId}(${item.status})`).join(", ")}`);
-  }
-  if (governanceSummary.patternAdmissions.length > 0) {
-    console.log(`   Pattern Governance: ${governanceSummary.patternAdmissions.map((item) => `${item.assetId}(${item.status})`).join(", ")}`);
+  const governanceReadModel = buildDota2FeatureGovernanceReadModel(feature);
+  for (const line of formatDota2FeatureGovernanceReadModel(governanceReadModel)) {
+    console.log(`   ${line}`);
   }
 
   if (feature.generatedFiles.length > 0) {

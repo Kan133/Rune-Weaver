@@ -4,13 +4,13 @@
 > Audience: agents
 > Doc family: contract
 > Update cadence: on-contract-change
-> Last verified: 2026-04-20
+> Last verified: 2026-04-24
 > Read when: aligning current Wizard, clarification, Blueprint, and final-gate stage boundaries
 > Do not use for: host-specific routing policy or final lifecycle authority by itself
 
 ## Purpose
 
-This document records the accepted chain from Wizard through Blueprint and explains where continuation is allowed versus where write must still stop.
+This document records the accepted chain from Wizard through Blueprint and explains which stages may observe, annotate, gate execution, or make the final lifecycle decision.
 
 ## Accepted Chain
 
@@ -20,7 +20,8 @@ User Request
   -> IntentSchema
   -> optional clarification sidecars
        - questions
-       - staged clarification authority
+       - semanticPosture
+       - clarificationSignals
   -> Blueprint Stage
        - DesignDraft
        - FeatureContract
@@ -50,53 +51,47 @@ Update Request
 | Stage | Responsibility | Must not do |
 |------|----------------|-------------|
 | Wizard | interpret the ask and emit best-effort semantics | decide host routing, write targets, or final legality |
-| clarification sidecars | expose staged blockers and unresolved dependencies | become final execution truth |
-| Blueprint stage | decide structure, owned scope, dependency contract, and implementation strategy | decide concrete write targets |
+| clarification sidecars | expose `semanticPosture`, unresolved semantic gaps, and `clarificationSignals` | assign feature `ready / weak / blocked`, rewrite Blueprint `commitDecision`, or become final execution truth |
+| Blueprint stage | decide structure, owned scope, dependency contract, implementation strategy, and create-readiness | decide concrete write targets or replace the final lifecycle gate |
 | downstream lifecycle | realize, validate, and commit or block the feature | reinterpret semantic ownership from scratch |
 
-## Clarification Is Now Staged Authority
+## Stage 1 Signals, Not Gate Authority
 
-Current clarification questions may carry different impacts.
+Stage 1 may emit:
 
-### `blocksBlueprint`
+- `IntentSchema`
+- `semanticPosture`
+- clarification questions
+- `clarificationSignals`
 
-Use when:
+These are observation and review surfaces.
+They must not directly decide feature lifecycle status, short-circuit create after a valid `IntentSchema`, or overwrite `executionAuthority`.
 
-- the structure is too unclear to plan honestly
-- the feature boundary cannot be drawn without another answer
+A Stage 1 failure to produce a valid `IntentSchema` is still a real stage failure.
+That is different from using clarification observations as the canonical `weak / ready / blocked` authority for the feature.
 
-Effect:
+Stage 1 may still describe:
 
-- Blueprint should stop
-- write is also blocked
+- what semantic boundary is still unresolved
+- whether the unresolved issue is local-structure-facing or late-gate-facing
+- whether review visibility must remain attached downstream
 
-### `blocksWrite`
+The accepted contract is:
 
-Use when:
-
-- planning may continue
-- host write still lacks enough authority to close safely
-
-Current canonical example:
-
-- unresolved cross-feature target/provider identity
-
-### `requiresReview`
-
-Use when:
-
-- the chain may continue in a weak/exploratory state
-- review must remain visible
+- Stage 1 describes uncertainty
+- Blueprint/create-readiness decides `ready / weak / blocked`
+- late `executionAuthority` decides whether write may continue
+- chain-end `CommitDecision` remains final authority
 
 ## Current Continuation Rule
 
 The key current change is:
 
 - unresolved cross-feature targets do not automatically hard-stop Blueprint
-- if the local shell is still structurally clear, Blueprint may continue and emit `weak`
-- the unresolved dependency stays attached to later gates and blocks write/final closure
+- if the local shell is still structurally clear, Blueprint may continue and create-readiness may emit `weak`
+- the unresolved dependency stays attached to later `executionAuthority` and blocks write/final closure there
 
-This is why the block belongs to write authority, not to planning authority.
+This is why the block belongs to late `executionAuthority`, not to Stage 1 observation authority.
 
 ## Blueprint Stage Rules
 
@@ -113,11 +108,20 @@ Blueprint currently owns:
   - `pattern`
   - `guided_native`
   - `exploratory`
+- create-readiness:
+  - `ready`
+  - `weak`
+  - `blocked`
+- assembly-side execution facts:
+  - `readyForAssembly`
+  - `canAssemble`
+  - review visibility that depends on Blueprint-local facts
 
 Current chain rule:
 
 - missing reuse coverage is not, by itself, a lawful reason to stop Blueprint
 - unknown mechanics may continue into guided-native or exploratory planning if owned scope is still bounded
+- Stage 1 observation fields such as `semanticPosture`, clarification questions, or raw schema uncertainties do not become Blueprint status by themselves
 
 ## Update-Mode Rules
 
@@ -150,6 +154,12 @@ This boundary is enforced by code-side normalization and clarification logic, no
 
 ## Blueprint Status Versus Final Authority
 
+Stage 1 observation surfaces are not Blueprint status:
+
+- `semanticPosture` is not `ready / weak / blocked`
+- `clarificationSignals` are not write-gate authority
+- raw `IntentSchema` uncertainty lists are not, by themselves, final lifecycle truth
+
 Blueprint status remains:
 
 - `ready`
@@ -158,13 +168,15 @@ Blueprint status remains:
 
 Current meaning:
 
-- these are planning-time truth values
+- these are Blueprint/create-readiness truth values
 - they do not replace the chain-end `CommitDecision`
 
 Current final authority remains:
 
-- dependency revalidation
-- host/runtime validation
+- late `executionAuthority`:
+  - dependency resolution and dependency revalidation
+  - host/runtime validation
+  - write-gate legality
 - final `CommitDecision`
 
 ## Summary
@@ -172,6 +184,7 @@ Current final authority remains:
 The current chain is governance-first:
 
 - Wizard captures semantics
-- clarification stages what blocks planning versus what blocks write
-- Blueprint decides structure and strategy
+- clarification exposes observation-only `semanticPosture` and `clarificationSignals`
+- Blueprint/create-readiness decides structure, strategy, and honest `ready / weak / blocked`
+- late `executionAuthority` decides whether write may continue
 - downstream validation and the final gate decide whether the feature may actually land

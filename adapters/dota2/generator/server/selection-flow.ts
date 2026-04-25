@@ -206,8 +206,9 @@ export function generateSelectionFlowCode(
 
   const poolCommitLogic = hasPoolCommit
     ? `
-    if (selection.poolCommit) {
-      selection.poolCommit(selectedOption.id, { trackOwned: ${trackSelectedItems} });
+    const poolCommit = selection.poolCommit;
+    if (poolCommit) {
+      poolCommit(selectedOption.id, { trackOwned: ${trackSelectedItems} });
     }
 ${postSelectionPoolBehavior === "remove_selected_and_keep_unselected_eligible"
     ? `    const unselectedIds = selection.options

@@ -61,9 +61,13 @@ function parseInventoryCapacityFromTexts(texts: string[]): number | undefined {
 }
 
 function requestsStoredSelections(texts: string[]): boolean {
-  return texts.some((text) =>
-    /store selected|store the selected|keep selected|selection goes into inventory|selected.*inventory|confirmed.*inventory|显示在仓库|放入仓库|存入仓库|added into the .*inventory|存入库存|自动出现在面板/iu.test(text),
-  );
+  return texts.some((text) => {
+    const hasStorageSurface =
+      /inventory|storage|stash|warehouse|panel|仓库|库存|存储|面板/iu.test(text);
+    const hasStoredResultVerb =
+      /store selected|store the selected|keep selected|selection goes into inventory|selected.*inventory|confirmed.*inventory|added into the .*inventory|显示在仓库|放入仓库|存入仓库|存入库存|自动出现在面板|放到面板|放入面板|存到面板|加入面板|进入面板|显示在面板|出现在面板/iu.test(text);
+    return hasStorageSurface && hasStoredResultVerb;
+  });
 }
 
 function requestsBlockWhenFull(texts: string[]): boolean {
@@ -516,7 +520,7 @@ function deriveMutationAuthority(input: {
       path: "composition.dependencies.external-system",
       kind: "composition" as const,
       reason: "External persistence requires an explicit owner or storage boundary.",
-      impact: "blueprint-blocking-structural" as const,
+      impact: "structural-open-contract" as const,
     });
   }
 

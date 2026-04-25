@@ -11,7 +11,6 @@ import {
   buildUpdateWizardMessages,
   createFallbackIntentSchema,
   createUpdateIntentFromRequestedChange,
-  deriveWizardClarificationAuthority,
   runWizardToUpdateIntent,
 } from "./index.js";
 import { WIZARD_PROVIDER_TIMEOUT_MS } from "./provider-timeout.js";
@@ -578,6 +577,25 @@ function testStoragePanelUpdatePromptProducesInventoryDelta() {
   assert.ok(updateIntent.delta.modify.some((item) => item.path === "selection.inventory.capacity"));
 }
 
+function testPanelPlacementUpdatePromptProducesStoredSelectionInventoryDelta() {
+  const currentFeatureContext = buildCurrentFeatureContext(
+    createSourceBackedFeatureRecord(),
+    "D:\\rw_test_missing",
+  );
+  const requestedChange = createFallbackIntentSchema(
+    "要求添加一个16格的存储面板，抽取后会放到面板上。",
+    { kind: "dota2-x-template" },
+  );
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+
+  assert.equal(requestedChange.selection?.inventory?.enabled, true);
+  assert.equal(requestedChange.selection?.inventory?.capacity, 16);
+  assert.equal(requestedChange.selection?.inventory?.storeSelectedItems, true);
+  assert.ok(updateIntent.delta.add.some((item) => item.path === "selection.inventory"));
+  assert.ok(updateIntent.delta.modify.some((item) => item.path === "selection.inventory.storeSelectedItems"));
+}
+
 function testExplicitChoiceCountChangeProducesDelta() {
   const currentFeatureContext = buildCurrentFeatureContext(
     createSourceBackedFeatureRecord(),
@@ -747,6 +765,19 @@ async function testRunWizardToUpdateIntentReturnsClarificationSidecar() {
 
   assert.equal(result.updateIntent.readiness, undefined);
   assert.ok((result.clarificationPlan?.questions.length || 0) >= 2);
+  assert.equal(result.clarificationPlan?.signals?.semanticPosture, "open");
+  assert.equal(
+    result.clarificationPlan?.signals?.openStructuralContracts.some(
+      (contract) => contract.kind === "persistence-scope-boundary",
+    ),
+    true,
+  );
+  assert.equal(
+    result.clarificationPlan?.signals?.unresolvedDependencies.some(
+      (dependency) => dependency.id === "cross-feature-target",
+    ),
+    true,
+  );
   const crossFeatureQuestion = result.clarificationPlan?.questions.find(
     (question) => question.id === "clarify-cross-feature-target",
   );
@@ -952,13 +983,12 @@ function testClarificationPlanDoesNotTreatRuntimePersistentAbilityShellAsStorage
     rawText: prompt,
     schema,
   });
-  const authority = deriveWizardClarificationAuthority(plan);
 
   assert.equal(plan?.questions.some((question) => question.id === "clarify-persistence-scope") ?? false, false);
   assert.equal(plan?.questions.some((question) => question.id === "clarify-cross-feature-target") ?? false, false);
   assert.equal(plan?.questions.some((question) => question.id === "clarify-conflicting-semantics") ?? false, false);
-  assert.equal(authority.blocksBlueprint, false);
-  assert.equal(authority.blocksWrite, false);
+  assert.deepEqual(plan?.signals?.openStructuralContracts || [], []);
+  assert.deepEqual(plan?.signals?.unresolvedDependencies || [], []);
 }
 
 async function runTests() {
@@ -972,6 +1002,7 @@ async function runTests() {
   testCreateUpdateIntentDetectsGenericObjectCountExpansion();
   testInventoryCapacityUpdateDoesNotInventChoiceCountDelta();
   testStoragePanelUpdatePromptProducesInventoryDelta();
+  testPanelPlacementUpdatePromptProducesStoredSelectionInventoryDelta();
   testExplicitChoiceCountChangeProducesDelta();
   testRestoreThreeChoiceChineseShorthandProducesDeltaAgainstPollutedTruth();
   testUpdateWizardPromptStaysSemanticOnly();

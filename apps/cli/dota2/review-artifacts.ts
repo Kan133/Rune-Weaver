@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { dirname, join, resolve } from "path";
+import { dirname, extname, join, resolve } from "path";
 
 import type { Dota2ReviewArtifact } from "../dota2-cli.js";
 
@@ -7,12 +7,35 @@ export function getDefaultReviewArtifactOutputDir(): string {
   return join(process.cwd(), "tmp", "cli-review");
 }
 
+export function isExplicitReviewArtifactFilePath(outputPath: string): boolean {
+  return extname(outputPath).toLowerCase() === ".json";
+}
+
 export function resolveReviewArtifactOutputDir(outputPath?: string): string {
   if (!outputPath) {
     return getDefaultReviewArtifactOutputDir();
   }
 
-  return dirname(resolve(process.cwd(), outputPath));
+  const resolvedOutputPath = resolve(process.cwd(), outputPath);
+  return isExplicitReviewArtifactFilePath(resolvedOutputPath)
+    ? dirname(resolvedOutputPath)
+    : resolvedOutputPath;
+}
+
+export function resolveReviewArtifactOutputPath(
+  outputPath: string | undefined,
+  defaultFilePrefix: string,
+): string {
+  if (!outputPath) {
+    return join(getDefaultReviewArtifactOutputDir(), `${defaultFilePrefix}-${Date.now()}.json`);
+  }
+
+  const resolvedOutputPath = resolve(process.cwd(), outputPath);
+  if (isExplicitReviewArtifactFilePath(resolvedOutputPath)) {
+    return resolvedOutputPath;
+  }
+
+  return join(resolvedOutputPath, `${defaultFilePrefix}-${Date.now()}.json`);
 }
 
 export function saveReviewArtifact(artifact: Dota2ReviewArtifact, outputDir: string): string {

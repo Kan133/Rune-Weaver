@@ -182,7 +182,28 @@ export interface IntentUncertainty {
 export type WizardClarificationImpact =
   | "advisory"
   | "write-blocking-unresolved-dependency"
-  | "blueprint-blocking-structural";
+  | "structural-open-contract";
+
+export type WizardSemanticPosture = "bounded" | "open";
+
+export type WizardStructuralOpenContractKind =
+  | "activation-boundary"
+  | "selection-flow-boundary"
+  | "targeting-boundary"
+  | "persistence-scope-boundary"
+  | "cross-feature-target"
+  | "existing-feature-target"
+  | "semantic-conflict"
+  | "generic-structural-boundary";
+
+export interface ExecutionAuthorityDecision {
+  blocksBlueprint: boolean;
+  blocksWrite: boolean;
+  requiresReview: boolean;
+  reasons: string[];
+  remainingStructuralContracts: WizardStructuralOpenContract[];
+  unresolvedDependencies: WizardUnresolvedDependency[];
+}
 
 export interface WizardUnresolvedDependency {
   id: string;
@@ -191,12 +212,20 @@ export interface WizardUnresolvedDependency {
   questionIds: string[];
 }
 
-export interface WizardClarificationAuthority {
-  blocksBlueprint: boolean;
-  blocksWrite: boolean;
-  requiresReview: boolean;
-  unresolvedDependencies: WizardUnresolvedDependency[];
+export interface WizardStructuralOpenContract {
+  id: string;
+  kind: WizardStructuralOpenContractKind;
+  surface?: "activation" | "selection_flow" | "state_scope" | "composition_boundary";
+  summary: string;
+  targetPaths: string[];
+  questionIds: string[];
+}
+
+export interface WizardClarificationSignals {
+  semanticPosture: WizardSemanticPosture;
   reasons: string[];
+  openStructuralContracts: WizardStructuralOpenContract[];
+  unresolvedDependencies: WizardUnresolvedDependency[];
 }
 
 export interface WizardClarificationQuestion {
@@ -220,7 +249,7 @@ export interface WizardClarificationPlan {
   requiredForFaithfulInterpretation: boolean;
   targetPaths: string[];
   reason: string;
-  authority?: WizardClarificationAuthority;
+  signals?: WizardClarificationSignals;
 }
 
 export interface IntentSchema {

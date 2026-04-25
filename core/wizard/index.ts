@@ -2,6 +2,13 @@
  * Rune Weaver - Core Wizard
  */
 
+export type {
+  ExecutionAuthorityDecision,
+  WizardClarificationSignals,
+  WizardSemanticPosture,
+  WizardStructuralOpenContract,
+  WizardStructuralOpenContractKind,
+} from "../schema/types";
 export * from "./types";
 export * from "./intent-schema";
 export * from "./create-intent-finalization";

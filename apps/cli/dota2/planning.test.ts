@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 
 import { buildBlueprint, buildUpdateBlueprint, createWritePlan } from "./planning.js";
+import type { WizardClarificationSignals } from "../../../core/schema/types.js";
 import {
   buildCurrentFeatureContext,
+  createFallbackIntentSchema,
   createUpdateIntentFromRequestedChange,
   normalizeIntentSchema,
 } from "../../../core/wizard/index.js";
@@ -18,6 +20,65 @@ import {
 
 const ORIGINAL_TALENT_DRAW_CREATE_PROMPT =
   "实现一个天赋抽取系统：按F4打开天赋选择界面，从天赋池中随机抽取3个天赋供玩家选择，玩家选择一个后应用效果并永久移除，未选中的返回池中。天赋有稀有度（R/SR/SSR/UR），稀有度影响抽取权重和视觉效果。";
+
+function createNoisyStructuralSignals(summary: string): WizardClarificationSignals {
+  return {
+    semanticPosture: "open",
+    reasons: [summary],
+    openStructuralContracts: [
+      {
+        id: "clarify-trigger-authority",
+        kind: "activation-boundary",
+        surface: "activation",
+        summary,
+        targetPaths: ["interaction.activations"],
+        questionIds: ["clarify-trigger-authority"],
+      },
+      {
+        id: "clarify-conflicting-semantics",
+        kind: "semantic-conflict",
+        summary,
+        targetPaths: ["requirements.typed"],
+        questionIds: ["clarify-conflicting-semantics"],
+      },
+    ],
+    unresolvedDependencies: [],
+  };
+}
+
+function createCrossFeatureSignals(summary: string): WizardClarificationSignals {
+  return {
+    semanticPosture: "open",
+    reasons: [summary],
+    openStructuralContracts: [],
+    unresolvedDependencies: [
+      {
+        id: "cross-feature-target",
+        kind: "cross-feature-target",
+        summary,
+        questionIds: ["clarify-cross-feature-target"],
+      },
+    ],
+  };
+}
+
+function createSelectionFlowSignals(summary: string): WizardClarificationSignals {
+  return {
+    semanticPosture: "open",
+    reasons: [summary],
+    openStructuralContracts: [
+      {
+        id: "clarify-selection-flow",
+        kind: "selection-flow-boundary",
+        surface: "selection_flow",
+        summary,
+        targetPaths: ["selection", "flow", "requirements.typed"],
+        questionIds: ["clarify-selection-flow"],
+      },
+    ],
+    unresolvedDependencies: [],
+  };
+}
 
 function createCanonicalSelectionPoolParameters(
   objects: Array<{ id: string; label: string; description: string; weight: number; tier: "R" | "SR" | "SSR" | "UR" }>,
@@ -475,6 +536,61 @@ function testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton():
   );
 }
 
+function testBuildBlueprintUsesCatalogBackedEquipmentClosure(): void {
+  const prompt =
+    "用户按下F4后弹出三个随机dota2原生装备选项，用户选择一个后获得对应装备，选项分R/SR/SSR/UR四个等级，等级影响概率和抽取权重";
+  const schema = createFallbackIntentSchema(prompt, {
+    kind: "dota2-x-template",
+    projectRoot: "D:\\test3",
+  });
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "equipment_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.executionAuthority.blocksBlueprint, false);
+  assert.ok(
+    result.admissionDiagnostics?.verdict === "admitted_compressed" ||
+      result.admissionDiagnostics?.verdict === "admitted_explicit",
+  );
+  assert.equal(
+    result.admissionDiagnostics?.contract.assessment?.blockerCodes.includes("SELECTION_POOL_EXTERNAL_OWNERSHIP_NOT_SUPPORTED"),
+    false,
+  );
+  assert.ok(
+    result.finalBlueprint?.featureAuthoring?.parameters.poolEntries?.every((entry) =>
+      entry.objectRef.source === "external_catalog"),
+  );
+}
+
+function testBuildBlueprintPreservesCatalogBackedEquipmentTriggerKey(): void {
+  const prompt =
+    "用户按下G后弹出三个随机dota2原生装备选项，用户选择一个后获得对应装备，选项分R/SR/SSR/UR四个等级，等级影响概率和抽取权重";
+  const schema = createFallbackIntentSchema(prompt, {
+    kind: "dota2-x-template",
+    projectRoot: "D:\\test3",
+  });
+  const result = buildBlueprint(schema, {
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "equipment_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.executionAuthority.blocksBlueprint, false);
+  assert.equal(result.finalBlueprint?.featureAuthoring?.parameters.triggerKey, "G");
+  assert.equal(
+    result.finalBlueprint?.modules.find((module) => module.id === "selection_input")?.parameters?.triggerKey,
+    "G",
+  );
+}
+
 function testBuildBlueprintExplicitSelectionPoolClosurePromotesBoundedResidue(): void {
   const prompt =
     "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply the chosen local placeholder immediately, remove the selected reward from future draws, and return unchosen rewards to the pool.";
@@ -696,6 +812,217 @@ function testBuildBlueprintCompressedSelectionPoolDoesNotPromoteBlueprintResidue
   assert.equal(result.admissionDiagnostics?.closure?.closedResidueIds.length, 0);
 }
 
+function testBuildBlueprintTreatsNoisyStageOneSignalsAsResolvedForAdmittedSelectionPoolFamily(): void {
+  const prompts = [
+    {
+      featureId: "talent_draw_demo",
+      prompt:
+        "Press F4 to open a local weighted talent draw UI, draw 3 rarity-weighted talents, let the player choose 1, apply it immediately, remove the selected talent from future draws, and return the unchosen talents to the pool.",
+    },
+    {
+      featureId: "reward_draw_demo",
+      prompt:
+        "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply it immediately, remove the selected reward from future draws, and return the unchosen rewards to the pool.",
+    },
+    {
+      featureId: "blessing_draw_demo",
+      prompt:
+        "Press F4 to open a local weighted blessing draw UI, draw 3 rarity-weighted blessings, let the player choose 1, apply it immediately, remove the selected blessing from future draws, and return the unchosen blessings to the pool.",
+    },
+    {
+      featureId: "equipment_draw_demo",
+      prompt:
+        "Press F4 to open a local weighted equipment draw UI, draw 3 rarity-weighted equipment options, let the player choose 1, apply it immediately, remove the selected equipment from future draws, and return the unchosen equipment to the pool.",
+    },
+  ];
+
+  for (const { featureId, prompt } of prompts) {
+    const schema = {
+      version: "1.0",
+      host: { kind: "dota2-x-template" as const },
+      request: {
+        rawPrompt: prompt,
+        goal: prompt,
+      },
+      classification: {
+        intentKind: "standalone-system" as const,
+        confidence: "high" as const,
+      },
+      requirements: {
+        functional: [prompt],
+      },
+      constraints: {},
+      interaction: {
+        activations: [
+          {
+            actor: "player" as const,
+            kind: "key" as const,
+            input: "F4",
+            phase: "press" as const,
+            repeatability: "repeatable" as const,
+            confirmation: "implicit" as const,
+          },
+        ],
+      },
+      selection: {
+        mode: "weighted" as const,
+        source: "weighted-pool" as const,
+        choiceMode: "user-chosen" as const,
+        choiceCount: 3,
+        cardinality: "single" as const,
+        repeatability: "repeatable" as const,
+        duplicatePolicy: "forbid" as const,
+        commitment: "immediate" as const,
+      },
+      contentModel: {
+        collections: [
+          {
+            id: `${featureId}_pool`,
+            role: "candidate-options" as const,
+            ownership: "feature" as const,
+            updateMode: "replace" as const,
+          },
+        ],
+      },
+      uiRequirements: {
+        needed: true,
+        surfaces: ["selection_modal", "rarity_cards"],
+      },
+      effects: {
+        operations: ["apply"] as const,
+        durationSemantics: "instant" as const,
+      },
+      normalizedMechanics: {
+        trigger: true,
+        candidatePool: true,
+        weightedSelection: true,
+        playerChoice: true,
+        uiModal: true,
+        outcomeApplication: true,
+      },
+      uncertainties: [],
+      resolvedAssumptions: [],
+      isReadyForBlueprint: true,
+    } as any;
+
+    const result = buildBlueprint(
+      schema,
+      {
+        prompt,
+        hostRoot: "D:\\test3",
+        mode: "create",
+        featureId,
+        proposalSource: "fallback",
+      },
+      createNoisyStructuralSignals("Stage 1 guessed trigger ownership and semantic conflict before the bounded family contract closed it."),
+    );
+
+    assert.ok(result.finalBlueprint);
+    assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
+    assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
+    assert.equal(result.executionAuthority.blocksBlueprint, false);
+    assert.equal(result.executionAuthority.blocksWrite, false);
+    assert.equal(result.executionAuthority.remainingStructuralContracts.length, 0);
+  }
+}
+
+function testBuildBlueprintKeepsAmbiguousWeightedCardSelectionFlowBlocked(): void {
+  const prompt =
+    "Press F4 to show 3 rarity-weighted reward cards from a local pool with card UI, then resolve the revealed reward flow immediately.";
+  const schema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" as const },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system" as const,
+      confidence: "high" as const,
+    },
+    requirements: {
+      functional: [
+        "Press F4 to run a local weighted reward-card flow.",
+        "Show 3 rarity-weighted reward cards from a local pool.",
+        "Apply the resolved local placeholder immediately.",
+      ],
+    },
+    constraints: {},
+    interaction: {
+      activations: [
+        {
+          actor: "player" as const,
+          kind: "key" as const,
+          input: "F4",
+          phase: "press" as const,
+          repeatability: "repeatable" as const,
+          confirmation: "implicit" as const,
+        },
+      ],
+    },
+    selection: {
+      mode: "weighted" as const,
+      source: "weighted-pool" as const,
+      choiceMode: "weighted" as const,
+      choiceCount: 3,
+      cardinality: "single" as const,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      commitment: "immediate" as const,
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "reward_pool",
+          role: "candidate-options" as const,
+          ownership: "feature" as const,
+          updateMode: "replace" as const,
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["card_popup", "rarity_cards"],
+    },
+    effects: {
+      operations: ["apply"] as const,
+      durationSemantics: "instant" as const,
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [],
+    resolvedAssumptions: [],
+    isReadyForBlueprint: true,
+  } as any;
+
+  const result = buildBlueprint(
+    schema,
+    {
+      prompt,
+      hostRoot: "D:\\test3",
+      mode: "create",
+      featureId: "ambiguous_weighted_reward_cards",
+      proposalSource: "fallback",
+    },
+    createSelectionFlowSignals(
+      "The request shows multiple candidates but does not say whether the player chooses one or the revealed results resolve immediately without a follow-up choice.",
+    ),
+  );
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
+  assert.equal(result.executionAuthority.blocksBlueprint, true);
+  assert.equal(result.executionAuthority.blocksWrite, true);
+  assert.equal(result.executionAuthority.remainingStructuralContracts.length, 1);
+  assert.equal(result.executionAuthority.remainingStructuralContracts[0]?.kind, "selection-flow-boundary");
+}
+
 function testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable(): void {
   const prompt =
     "Press F4 to open a local weighted reward draw UI, draw 3 rarity-weighted rewards, let the player choose 1, apply the chosen local placeholder immediately, remove the selected reward from future draws, return unchosen rewards to the pool, and later bind one reward to another feature when its target is resolved.";
@@ -781,27 +1108,19 @@ function testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable(): 
       featureId: "consumer_draw_demo",
       proposalSource: "fallback",
     },
-    {
-      blocksBlueprint: false,
-      blocksWrite: true,
-      requiresReview: true,
-      unresolvedDependencies: [
-        {
-          id: "cross-feature-target",
-          kind: "cross-feature-target",
-          summary: "Cross-feature semantics are present, but the target feature boundary is not explicit.",
-          questionIds: ["clarify-cross-feature-target"],
-        },
-      ],
-      reasons: ["Cross-feature semantics are present, but the target feature boundary is not explicit."],
-    },
+    createCrossFeatureSignals(
+      "Cross-feature semantics are present, but the target feature boundary is not explicit.",
+    ),
   );
 
   assert.ok(result.finalBlueprint);
   assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
-  assert.equal(result.finalBlueprint?.status, "weak");
+  assert.equal(result.finalBlueprint?.status, "ready");
   assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
-  assert.equal(result.finalBlueprint?.commitDecision?.canWriteHost, false);
+  assert.equal(result.finalBlueprint?.commitDecision?.canWriteHost, true);
+  assert.equal(result.executionAuthority.blocksBlueprint, false);
+  assert.equal(result.executionAuthority.blocksWrite, true);
+  assert.equal(result.executionAuthority.unresolvedDependencies.length, 1);
 }
 
 function testBuildBlueprintLetsSelectionPoolFamilyOverrideSupersededCrossFeatureBlockers(): void {
@@ -1591,6 +1910,81 @@ function testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge(): void 
   assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
 }
 
+function testBuildUpdateBlueprintTreatsNoisyStageOneSignalsAsDisplayOnly(): void {
+  const currentFeatureContext = buildCurrentFeatureContext({
+    featureId: "talent_draw_demo",
+    intentKind: "standalone-system",
+    status: "active" as const,
+    revision: 1,
+    blueprintId: "bp_talent_draw_demo",
+    modules: [],
+    selectedPatterns: ["input.key_binding"],
+    generatedFiles: [],
+    entryBindings: [],
+    sourceModel: {
+      adapter: "selection_pool",
+      version: 2,
+      path: "game/scripts/src/rune_weaver/features/talent_draw_demo/selection-pool.source.json",
+    },
+    featureAuthoring: {
+      mode: "source-backed" as const,
+      profile: "selection_pool" as const,
+      parameters: createCanonicalSelectionPoolParameters([
+        { id: "TALENT_R_01", label: "Talent R1", description: "R", weight: 50, tier: "R" },
+        { id: "TALENT_SR_01", label: "Talent SR1", description: "SR", weight: 30, tier: "SR" },
+        { id: "TALENT_SSR_01", label: "Talent SSR1", description: "SSR", weight: 15, tier: "SSR" },
+        { id: "TALENT_UR_01", label: "Talent UR1", description: "UR", weight: 5, tier: "UR" },
+      ]),
+      parameterSurface: resolutionParameterSurface(),
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  } as any, "D:\\rw_test_missing");
+
+  const requestedChange = {
+    version: "1.0",
+    host: { kind: "dota2-x-template", projectRoot: "D:\\test3" },
+    request: { rawPrompt: "Add a 15-slot inventory panel for selected talents.", goal: "Add inventory panel" },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    requirements: {
+      functional: ["Add a 15-slot inventory panel for selected talents."],
+    },
+    selection: {
+      mode: "user-chosen" as const,
+      cardinality: "single" as const,
+      repeatability: "repeatable" as const,
+      duplicatePolicy: "forbid" as const,
+      inventory: {
+        enabled: true,
+        capacity: 15,
+        storeSelectedItems: true,
+        blockDrawWhenFull: true,
+        fullMessage: "Talent inventory full",
+        presentation: "persistent_panel" as const,
+      },
+    },
+    normalizedMechanics: {
+      playerChoice: true,
+      uiModal: true,
+    },
+    resolvedAssumptions: [],
+  } as any;
+
+  const updateIntent = createUpdateIntentFromRequestedChange(currentFeatureContext, requestedChange);
+  const result = buildUpdateBlueprint(
+    updateIntent,
+    createNoisyStructuralSignals("Stage 1 inferred a structural trigger question even though the bounded update keeps the existing trigger contract."),
+  );
+
+  assert.ok(result.finalBlueprint);
+  assert.equal(result.finalBlueprint?.featureAuthoring?.profile, "selection_pool");
+  assert.equal(result.finalBlueprint?.featureAuthoring?.parameters.inventory?.capacity, 15);
+  assert.equal(result.finalBlueprint?.commitDecision?.canAssemble, true);
+  assert.equal(result.executionAuthority.blocksBlueprint, false);
+  assert.equal(result.executionAuthority.blocksWrite, false);
+  assert.equal(result.executionAuthority.remainingStructuralContracts.length, 0);
+}
+
 function resolutionParameterSurface() {
   return {
     triggerKey: { kind: "single_hotkey", allowList: ["F4"] },
@@ -1612,8 +2006,12 @@ function runTests(): void {
   testCreateWritePlanKeepsSynthesizedBundleArtifactsCollapsed();
   testBuildBlueprintAppliesSelectionPoolCreateEnrichment();
   testBuildBlueprintCompressesSelectionPoolContractWithoutFullSkeleton();
+  testBuildBlueprintUsesCatalogBackedEquipmentClosure();
+  testBuildBlueprintPreservesCatalogBackedEquipmentTriggerKey();
   testBuildBlueprintExplicitSelectionPoolClosurePromotesBoundedResidue();
   testBuildBlueprintCompressedSelectionPoolDoesNotPromoteBlueprintResidue();
+  testBuildBlueprintTreatsNoisyStageOneSignalsAsResolvedForAdmittedSelectionPoolFamily();
+  testBuildBlueprintKeepsAmbiguousWeightedCardSelectionFlowBlocked();
   testBuildBlueprintKeepsCrossFeatureSelectionShellWeakButAssemblable();
   testBuildBlueprintLetsSelectionPoolFamilyOverrideSupersededCrossFeatureBlockers();
   testBuildBlueprintDoesNotInventInputKeyBindingFromNegativeActivationConstraint();
@@ -1621,6 +2019,7 @@ function runTests(): void {
   testSelectionPoolContractDoesNotInjectStandaloneInventoryState();
   testSelectionPoolUpdateExpansionUsesGenericDeltaContract();
   testBuildUpdateBlueprintAppliesPostBlueprintSelectionPoolMerge();
+  testBuildUpdateBlueprintTreatsNoisyStageOneSignalsAsDisplayOnly();
   console.log("apps/cli/dota2/planning.test.ts: PASS");
 }
 

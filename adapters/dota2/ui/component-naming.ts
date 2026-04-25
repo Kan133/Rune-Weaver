@@ -1,16 +1,23 @@
-export function toGeneratedUiComponentName(value: string): string {
-  const normalized = value
+import { toPascalCase } from "../generator/common/naming.js";
+
+function normalizeGeneratedComponentName(value: string): string {
+  return value
     .trim()
     .replace(/[^\p{L}\p{N}_-]+/gu, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
+}
 
-  const componentName = normalized
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join("");
+function toCanonicalGeneratedComponentName(value: string): string {
+  const normalized = normalizeGeneratedComponentName(value);
+  return normalized ? toPascalCase(normalized) : "RuneWeaverSynthPanel";
+}
 
-  return componentName || "RuneWeaverSynthPanel";
+export function toGeneratedUiComponentName(value: string): string {
+  return toCanonicalGeneratedComponentName(value);
+}
+
+export function toGeneratedComponentExportName(value: string): string {
+  return toCanonicalGeneratedComponentName(value);
 }

@@ -11,6 +11,7 @@ import {
   compileSelectionPoolModuleParameters,
   deriveSelectionPoolCurrentContextHints,
   extractSelectionPoolAdmissionBlockers,
+  materializeSelectionPoolSourceArtifact,
   mergeSelectionPoolFeatureAuthoringForUpdate,
   normalizeSelectionPoolFeatureAuthoringProposal,
   resolveSelectionPoolFamily,
@@ -71,6 +72,118 @@ function testCanonicalCreateSeedsSelectionPoolAuthoring(): void {
     resolution.admissionDiagnostics?.detection.matchedBy.includes("object_kind:talent"),
     true,
   );
+}
+
+function testCreatePromptMergePrefersCanonicalSchemaTriggerKeyAndChoiceCount(): void {
+  const prompt =
+    "Press F4 to open a local weighted talent draw UI, draw 3 rarity-weighted talents, let the player choose 1, apply it immediately, remove the selected talent from future draws, and return the unchosen talents to the pool.";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system",
+      confidence: "high",
+    },
+    requirements: {
+      functional: [prompt],
+    },
+    interaction: {
+      activations: [
+        {
+          actor: "player",
+          kind: "key",
+          input: "G",
+          phase: "press",
+          repeatability: "repeatable",
+          confirmation: "implicit",
+        },
+      ],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 5,
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    schema,
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.equal(resolution.proposal?.parameters.triggerKey, "G");
+  assert.equal(resolution.proposal?.parameters.choiceCount, 5);
+
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+    "D:\\test3",
+  );
+  assert.equal(normalized.featureAuthoring?.parameters.triggerKey, "G");
+  assert.equal(normalized.featureAuthoring?.parameters.choiceCount, 5);
+
+  const compiled = compileSelectionPoolModuleParameters(normalized.featureAuthoring!);
+  assert.equal(compiled.input_trigger.triggerKey, "G");
+  assert.equal(compiled.input_trigger.key, "G");
+  assert.equal(compiled.weighted_pool.choiceCount, 5);
+  assert.equal(compiled.selection_flow.choiceCount, 5);
+  assert.equal(compiled.selection_modal.choiceCount, 5);
+}
+
+function testCreatePromptMergeSupportsGHotkeyFromPromptAuthority(): void {
+  const prompt =
+    "Press G to open a local weighted talent draw UI, draw 3 rarity-weighted talents, let the player choose 1, apply it immediately, remove the selected talent from future draws, and return the unchosen talents to the pool.";
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "talent_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.equal(resolution.proposal?.parameters.triggerKey, "G");
+
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    createFallbackIntentSchema(prompt, { kind: "dota2-x-template", projectRoot: "D:\\test3" }),
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+    "D:\\test3",
+  );
+  assert.equal(normalized.featureAuthoring?.parameterSurface.triggerKey.allowList.includes("G"), true);
+  assert.equal(
+    normalized.warnings.some((warning) => warning.includes("normalized triggerKey 'G'")),
+    false,
+  );
+
+  const compiled = compileSelectionPoolModuleParameters(normalized.featureAuthoring!);
+  assert.equal(compiled.input_trigger.triggerKey, "G");
 }
 
 function testCanonicalUpdateExpandsPoolToTwenty(): void {
@@ -330,7 +443,7 @@ function testAmbiguousCardRevealPromptDeclinesInsteadOfGovernanceBlocking(): voi
   );
 }
 
-function testSiblingEquipmentPromptUsesSameFamily(): void {
+function testSiblingEquipmentPromptUsesCatalogBackedFamilySeed(): void {
   const resolution = resolveSelectionPoolFamily({
     prompt: EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
     hostRoot: "D:\\test4",
@@ -343,7 +456,204 @@ function testSiblingEquipmentPromptUsesSameFamily(): void {
   assert.equal(resolution.blocked, false);
   assert.equal(resolution.proposal?.profile, "selection_pool");
   assert.equal(resolution.proposal?.objectKind, "equipment");
-  assert.ok(getCompiledObjects(resolution.proposal?.parameters).every((item) => item.id.startsWith("EQ_")));
+  assert.equal(resolution.admissionDiagnostics?.proposal.baseSource, "catalog_seed");
+  assert.ok(
+    resolution.proposal?.parameters.poolEntries?.every((entry) => entry.objectRef.source === "external_catalog"),
+  );
+  assert.equal(getCompiledObjects(resolution.proposal?.parameters).length, 6);
+  assert.ok(
+    getCompiledObjects(resolution.proposal?.parameters).every((item) =>
+      item.id.startsWith("EQ_") && item.outcome?.kind === "native_item_delivery"),
+  );
+}
+
+function testEquipmentCatalogSeedMaterializesHonestExternalSourceModel(): void {
+  const resolution = resolveSelectionPoolFamily({
+    prompt: EQUIPMENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    hostRoot: "D:\\test4",
+    mode: "create",
+    featureId: "equipment_draw_demo",
+    proposalSource: "fallback",
+  });
+
+  assert.ok(resolution.proposal);
+
+  const lifecycleState = materializeSelectionPoolSourceArtifact(
+    "equipment_draw_demo",
+    {
+      mode: "source-backed",
+      profile: "selection_pool",
+      objectKind: resolution.proposal.objectKind,
+      parameters: resolution.proposal.parameters,
+      parameterSurface: resolution.proposal.parameterSurface,
+      notes: resolution.proposal.notes,
+    },
+  );
+
+  assert.deepEqual(lifecycleState.sourceArtifact.localCollections, []);
+  assert.ok(
+    lifecycleState.sourceArtifact.poolEntries.every((entry) => entry.objectRef.source === "external_catalog"),
+  );
+  assert.deepEqual(
+    lifecycleState.featureAuthoring.parameters.localCollections,
+    [],
+  );
+  assert.ok(
+    lifecycleState.featureAuthoring.parameters.poolEntries.every((entry) => entry.objectRef.source === "external_catalog"),
+  );
+  const compiled = resolveSelectionPoolCompiledObjects(lifecycleState.featureAuthoring.parameters);
+  assert.equal(compiled.errors.length, 0);
+  assert.equal(compiled.objects.length, 6);
+  assert.ok(
+    compiled.objects.every((item) =>
+      item.id.startsWith("EQ_") && item.outcome?.kind === "native_item_delivery"),
+  );
+}
+
+function testExternalCatalogMembershipDoesNotCountAsExternalOwnership(): void {
+  const prompt =
+    "Press F4 to open a local weighted native equipment draw UI, draw 3 rarity-weighted native Dota 2 equipment options, let the player choose 1, deliver the selected item immediately, and keep future draws session-local.";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    readiness: "ready",
+    requirements: { functional: [prompt] },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "native_item_candidates",
+          role: "candidate-options",
+          ownership: "external",
+          updateMode: "replace",
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test4",
+    mode: "create",
+    schema,
+    featureId: "equipment_draw_demo",
+    proposalSource: "fallback",
+  });
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+  );
+
+  assert.equal(resolution.blocked, false);
+  assert.equal(normalized.admissionDiagnostics?.verdict, "admitted_compressed");
+  assert.equal(
+    normalized.admissionDiagnostics?.contract.assessment?.blockerCodes.includes("SELECTION_POOL_EXTERNAL_OWNERSHIP_NOT_SUPPORTED"),
+    false,
+  );
+  assert.ok(
+    normalized.featureAuthoring?.parameters.poolEntries?.every((entry) => entry.objectRef.source === "external_catalog"),
+  );
+}
+
+function testCatalogBackedEquipmentPromptPreservesNonDefaultTriggerKey(): void {
+  const prompt =
+    "Press G to open a local weighted equipment draw UI, draw 3 rarity-weighted native Dota 2 equipment options, let the player choose 1, deliver the selected item immediately, and return the unchosen equipment options to the pool.";
+  const schema: IntentSchema = {
+    version: "1.0",
+    host: { kind: "dota2-x-template" },
+    request: { rawPrompt: prompt, goal: prompt },
+    classification: { intentKind: "standalone-system", confidence: "high" },
+    readiness: "ready",
+    requirements: { functional: [prompt] },
+    parameters: {
+      triggerKey: "G",
+      choiceCount: 3,
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
+      cardinality: "single",
+      repeatability: "repeatable",
+      duplicatePolicy: "forbid",
+      commitment: "immediate",
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "native_item_candidates",
+          role: "candidate-options",
+          ownership: "external",
+          updateMode: "replace",
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    resolvedAssumptions: [],
+    requiredClarifications: [],
+    openQuestions: [],
+    isReadyForBlueprint: true,
+  };
+
+  const resolution = resolveSelectionPoolFamily({
+    prompt,
+    hostRoot: "D:\\test4",
+    mode: "create",
+    schema,
+    featureId: "equipment_draw_demo",
+    proposalSource: "fallback",
+  });
+  const normalized = normalizeSelectionPoolFeatureAuthoringProposal(
+    schema,
+    resolution.proposal,
+    resolution.admissionDiagnostics,
+  );
+
+  assert.equal(resolution.proposal?.parameters.triggerKey, "G");
+  assert.equal(normalized.featureAuthoring?.parameters.triggerKey, "G");
+  assert.ok(
+    normalized.featureAuthoring?.parameters.poolEntries?.every((entry) => entry.objectRef.source === "external_catalog"),
+  );
 }
 
 function testOriginalTalentDrawPromptCompressesIntoSelectionPool(): void {
@@ -1012,9 +1322,67 @@ function testUpdateMergeRestoresInventoryContractFromBoundedAuthority(): void {
   assert.equal(merged.parameters.choiceCount, 3);
   assert.equal(merged.parameters.inventory?.enabled, true);
   assert.equal(merged.parameters.inventory?.capacity, 16);
+  assert.equal(merged.parameters.inventory?.storeSelectedItems, true);
   assert.equal(merged.parameters.inventory?.blockDrawWhenFull, true);
   assert.equal(compiled.selection_modal.inventory?.capacity, 16);
   assert.equal(compiled.selection_flow.inventory?.blockDrawWhenFull, true);
+}
+
+function testUpdateMergeKeepsStoredSelectionsForPanelPlacementPrompt(): void {
+  const existingResolution = resolveSelectionPoolFamily({
+    prompt: TALENT_DRAW_EXAMPLE_CREATE_PROMPT,
+    hostRoot: "D:\\test3",
+    mode: "create",
+    featureId: "standalone_system_75dh",
+    proposalSource: "fallback",
+  });
+  const currentFeatureAuthoring = {
+    mode: "source-backed" as const,
+    profile: "selection_pool" as const,
+    objectKind: existingResolution.proposal?.objectKind,
+    parameters: existingResolution.proposal!.parameters,
+    parameterSurface: existingResolution.proposal!.parameterSurface,
+  };
+  const requestedChange = createFallbackIntentSchema(
+    "要求添加一个16格的存储面板，抽取后会放到面板上。",
+    { kind: "dota2-x-template" },
+  );
+  const updateIntent = createUpdateIntentFromRequestedChange(
+    {
+      featureId: "standalone_system_75dh",
+      revision: 1,
+      intentKind: "standalone-system",
+      selectedPatterns: [],
+      sourceBacked: true,
+      featureAuthoring: currentFeatureAuthoring,
+      admittedSkeleton: [
+        "input.key_binding",
+        "data.weighted_pool",
+        "rule.selection_flow",
+        "effect.outcome_realizer",
+        "ui.selection_modal",
+      ],
+      preservedInvariants: [],
+      boundedFields: {
+        triggerKey: "F4",
+        choiceCount: 3,
+        objectCount: 6,
+      },
+    },
+    requestedChange,
+  );
+
+  const merged = mergeSelectionPoolFeatureAuthoringForUpdate({
+    currentFeatureAuthoring,
+    updateIntent,
+  });
+  const compiled = compileSelectionPoolModuleParameters(merged);
+
+  assert.equal(merged.parameters.inventory?.enabled, true);
+  assert.equal(merged.parameters.inventory?.capacity, 16);
+  assert.equal(merged.parameters.inventory?.storeSelectedItems, true);
+  assert.equal(compiled.selection_flow.inventory?.storeSelectedItems, true);
+  assert.equal(compiled.selection_modal.inventory?.storeSelectedItems, true);
 }
 
 function testUpdateMergeDoesNotInventInventoryCapacity(): void {
@@ -1287,13 +1655,18 @@ function testExplicitRevealBatchPromptStaysOutsideSelectionPoolBoundary(): void 
 }
 
 testCanonicalCreateSeedsSelectionPoolAuthoring();
+testCreatePromptMergePrefersCanonicalSchemaTriggerKeyAndChoiceCount();
+testCreatePromptMergeSupportsGHotkeyFromPromptAuthority();
 testCanonicalUpdateExpandsPoolToTwenty();
 testGenericInventoryUpdateUsesPromptAuthority();
 testInventoryPromptDoesNotDependOnFeatureId();
 testStoragePanelPromptUsesSameInventoryAuthority();
 testCardDrawPromptShapeDetectionHandlesCardPhrasing();
 testAmbiguousCardRevealPromptDeclinesInsteadOfGovernanceBlocking();
-testSiblingEquipmentPromptUsesSameFamily();
+testSiblingEquipmentPromptUsesCatalogBackedFamilySeed();
+testEquipmentCatalogSeedMaterializesHonestExternalSourceModel();
+testExternalCatalogMembershipDoesNotCountAsExternalOwnership();
+testCatalogBackedEquipmentPromptPreservesNonDefaultTriggerKey();
 testOriginalTalentDrawPromptCompressesIntoSelectionPool();
 testNoUiFireballPromptStaysNotApplicable();
 testSelectionPoolCompressionDeclinesWithoutUiOrPlayerChoice();
@@ -1304,6 +1677,7 @@ testUpdateMergeUsesUpdateIntentAuthority();
 testUpdateMergePrefersRequestedTargetTriggerKey();
 testUpdateMergeUsesObjectCountDeltaAuthorityWithoutPromptUnit();
 testUpdateMergeRestoresInventoryContractFromBoundedAuthority();
+testUpdateMergeKeepsStoredSelectionsForPanelPlacementPrompt();
 testUpdateMergeDoesNotInventInventoryCapacity();
 testUnsupportedContractEscapeHonestBlocks();
 testLegacyEffectProfileNormalizesIntoObjectOutcomes();

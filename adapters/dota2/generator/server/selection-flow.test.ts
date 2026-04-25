@@ -70,6 +70,9 @@ function testTrackSelectedItems() {
   const code = generateSelectionFlowCode("TestSelectionFlow", "test-feature", entry);
 
   assert(code.includes("trackOwned: true"), "Should pass trackOwned through pool commit options");
+  assert(code.includes("const poolCommit = selection.poolCommit;"), "Should lift poolCommit into a standalone function value before invocation");
+  assert(code.includes("poolCommit(selectedOption.id, { trackOwned: true });"), "Should invoke poolCommit without method-call syntax");
+  assert(!code.includes("selection.poolCommit(selectedOption.id"), "Should avoid direct property invocation that TS->Lua may lower to a method call");
   assert(!code.includes("ownedIds"), "Should not store ownedIds in selection_flow");
 
   console.log("✓ Test 3 passed\n");

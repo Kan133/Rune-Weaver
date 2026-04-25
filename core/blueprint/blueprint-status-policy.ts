@@ -58,10 +58,10 @@ export function getNormalizedStatus(
   modules: BlueprintModule[],
   assessment: SemanticAssessment
 ): NormalizedBlueprintStatus {
-  const readiness = getSchemaReadiness(schema);
-  if (readiness === "blocked" || proposal.status === "blocked") {
-    return "blocked";
-  }
+  // Stage 1 proposal posture remains useful evidence, but final blueprint status
+  // must come from assembled blueprint facts and semantic assessment only.
+  void schema;
+  void proposal;
 
   if (modules.length === 0) {
     return "blocked";
@@ -72,9 +72,7 @@ export function getNormalizedStatus(
   }
 
   if (
-    readiness === "weak"
-    || proposal.status === "needs_review"
-    || assessment.warnings.length > 0
+    assessment.warnings.length > 0
   ) {
     return "weak";
   }

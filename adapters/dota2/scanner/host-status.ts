@@ -8,12 +8,17 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { scanDota2Project } from "./project-scan.js";
-import { loadWorkspace, RuneWeaverWorkspace } from "../../../core/workspace/index.js";
+import { loadWorkspace } from "../../../core/workspace/index.js";
+import type { RuneWeaverWorkspace } from "../../../core/workspace/index.js";
 import type { HostKind } from "../../../core/host/types.js";
 import {
   DOTA2_X_TEMPLATE_HOST_KIND,
   UNKNOWN_HOST_KIND,
 } from "../../../core/host/types.js";
+import {
+  buildDota2GovernanceReadModel,
+  type Dota2GovernanceReadModel,
+} from "../governance/read-model.js";
 
 /**
  * Rune Weaver 接入状态
@@ -61,6 +66,7 @@ export interface HostStatusResult {
   rwStatus: RWIntegrationStatus;
   /** Workspace 数据 (如存在) */
   workspace?: RuneWeaverWorkspace;
+  governanceReadModel?: Dota2GovernanceReadModel;
   /** 发现的问题 */
   issues: HostIssue[];
   /** 时间戳 */
@@ -129,6 +135,12 @@ export function checkHostStatus(hostRoot: string = "D:\\test1"): HostStatusResul
   // Step 2: 检查初始化状态 (addon_name)
   const workspaceResult = loadWorkspace(hostRoot);
   const workspace = workspaceResult.workspace;
+  const governanceReadModel = workspaceResult.success && workspace
+    ? buildDota2GovernanceReadModel({
+        hostRoot,
+        features: workspace.features,
+      })
+    : undefined;
   
   const initialized = workspaceResult.success && workspace 
     ? workspace.addonName !== "x_template" 
@@ -272,6 +284,7 @@ export function checkHostStatus(hostRoot: string = "D:\\test1"): HostStatusResul
     hostType: DOTA2_X_TEMPLATE_HOST_KIND,
     rwStatus,
     workspace: workspace || undefined,
+    governanceReadModel,
     issues,
     checkedAt,
   };

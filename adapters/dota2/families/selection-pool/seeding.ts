@@ -36,6 +36,7 @@ import {
 } from "./shared.js";
 import { migrateLegacyTalentDrawArtifact } from "./shared.js";
 import { countSelectionPoolEntries } from "./source-model.js";
+import { getSelectionPoolCatalogBackedSeedParameters } from "./catalog-seeds.js";
 
 function loadExistingSourceArtifact(
   input: ResolveSelectionPoolFamilyInput,
@@ -170,6 +171,29 @@ function buildPromptMergedInventory(
   };
 }
 
+function readSchemaTriggerKey(input: ResolveSelectionPoolFamilyInput): string | undefined {
+  const activationKeys = dedupeStrings(
+    (input.schema?.interaction?.activations || [])
+      .filter((activation) => activation.kind === "key" && typeof activation.input === "string")
+      .map((activation) => activation.input?.toUpperCase()),
+  );
+  if (activationKeys.length === 1) {
+    return activationKeys[0];
+  }
+
+  const triggerKey = input.schema?.parameters?.triggerKey;
+  return typeof triggerKey === "string" && triggerKey.trim().length > 0
+    ? triggerKey.trim().toUpperCase()
+    : undefined;
+}
+
+function readSchemaChoiceCount(input: ResolveSelectionPoolFamilyInput): number | undefined {
+  const choiceCount = input.schema?.selection?.choiceCount ?? input.schema?.parameters?.choiceCount;
+  return typeof choiceCount === "number" && Number.isFinite(choiceCount)
+    ? Math.floor(choiceCount)
+    : undefined;
+}
+
 export function applyPromptMerge(
   input: ResolveSelectionPoolFamilyInput,
   proposal: FeatureAuthoringProposal,
@@ -179,8 +203,8 @@ export function applyPromptMerge(
     || resolveSelectionPoolObjectKind(proposal.objectKind)
     || inferObjectKind(input.prompt, input.existingFeature);
 
-  const requestedTriggerKey = parseTriggerKey(input.prompt);
-  const requestedChoiceCount = parseChoiceCount(input.prompt);
+  const requestedTriggerKey = readSchemaTriggerKey(input) || parseTriggerKey(input.prompt);
+  const requestedChoiceCount = readSchemaChoiceCount(input) || parseChoiceCount(input.prompt);
   const requestedObjectCount = parseRequestedObjectCount(input.prompt);
   const requestedInventory = buildPromptMergedInventory(input.prompt, proposal.parameters.inventory);
 
@@ -243,6 +267,24 @@ export function createSelectionPoolSeedProposal(
 ): SelectionPoolProposalBuildResult {
   const objectKindHint = inferObjectKind(input.prompt, input.existingFeature);
   if (input.mode === "create") {
+    const catalogBackedSeed = getSelectionPoolCatalogBackedSeedParameters(objectKindHint);
+    if (catalogBackedSeed) {
+      return {
+        proposal: createFeatureAuthoringProposal(
+          normalizeFeatureAuthoringParameters({
+            ...buildGenericSeedParameters({ objectKindHint }),
+            objectKind: objectKindHint,
+            localCollections: catalogBackedSeed.localCollections,
+            poolEntries: catalogBackedSeed.poolEntries,
+          }, objectKindHint),
+          input.proposalSource,
+          [catalogBackedSeed.seedNote],
+        ),
+        baseSource: "catalog_seed",
+        seedNotes: [catalogBackedSeed.seedNote],
+      };
+    }
+
     return {
       proposal: createFeatureAuthoringProposal(
         buildGenericSeedParameters({ objectKindHint }),

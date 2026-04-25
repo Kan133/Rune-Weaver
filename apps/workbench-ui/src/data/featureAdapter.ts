@@ -42,6 +42,10 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
       ? new Date(card.updatedAt)
       : null;
   const hasWrittenOutputs = result.updateWriteResult?.writeStatus === 'written';
+  const compatibilityWarnings = [
+    'Legacy workbench result payload has no governance read-model; UI is using the compatibility-only display boundary.',
+    ...governanceWarnings,
+  ];
 
   if (result.updateWriteResult?.touchedOutputs) {
     result.updateWriteResult.touchedOutputs.forEach((output) => {
@@ -52,6 +56,28 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
   }
 
   const reviewSignals = {
+    lifecycle: {
+      featureStatus: hasWrittenOutputs ? 'active' as const : card.status === 'blocked' ? 'rolled_back' as const : 'unknown' as const,
+      maturity: null,
+      implementationStrategy: null,
+      commitOutcome:
+        result.governanceRelease?.status === 'blocked'
+          ? 'blocked' as const
+          : null,
+      canAssemble: null,
+      canWriteHost: null,
+      requiresReview: governanceWarnings.length > 0,
+      reasons: governanceWarnings,
+      summary: proposalMessage || 'Legacy workbench result adapter compatibility view.',
+    },
+    reusableGovernance: {
+      admittedCount: 0,
+      attentionCount: 0,
+      familyAdmissions: [],
+      patternAdmissions: [],
+      seamAdmissions: [],
+      summary: 'Legacy workbench result adapter does not carry reusable-governance admissions.',
+    },
     proposalStatus: {
       ready: card.status === 'ready',
       percentage: card.status === 'ready' ? 100 : null,
@@ -70,7 +96,30 @@ export function adaptWorkbenchResultToFeature(result: WorkbenchResult): Feature 
       : [],
     readiness: {
       score: null,
-      warnings: governanceWarnings,
+      warnings: compatibilityWarnings,
+    },
+    compatibilitySource: 'compatibility-only' as const,
+    grounding: {
+      status: 'none_required' as const,
+      reviewRequired: false,
+      verifiedSymbolCount: 0,
+      allowlistedSymbolCount: 0,
+      weakSymbolCount: 0,
+      unknownSymbolCount: 0,
+      warningCount: 0,
+      warnings: [],
+      reasonCodes: [],
+      summary: 'Legacy workbench result adapter does not carry grounding detail.',
+    },
+    repairability: {
+      status: 'not_checked' as const,
+      reasons: [
+        ...governanceWarnings,
+        ...(result.governanceRelease?.blockedReason ? [result.governanceRelease.blockedReason] : []),
+      ],
+      summary: hasWrittenOutputs
+        ? 'Legacy workbench result reports generated outputs, but canonical repairability is unavailable without a governance read-model.'
+        : 'Legacy workbench result does not carry validation-stage repairability detail.',
     },
   };
 

@@ -5,6 +5,7 @@ import type { WritePlan } from "../../assembler/index.js";
 import { buildSelectionPoolSyntheticParameters } from "./__fixtures__/synthetic.js";
 import {
   appendSelectionPoolSourceModelEntry,
+  refreshSelectionPoolWritePlanEntries,
   resolveSelectionPoolWorkspaceFields,
 } from "./index.js";
 import { resolveSelectionPoolCompiledObjects } from "./source-model.js";
@@ -119,9 +120,67 @@ function testResolverUsesWritePlanMetadataWhenArtifactEntryExists(): void {
   assert.equal(compiled.objects[0]?.outcome?.kind, "attribute_bonus");
 }
 
+function testRefreshUpdatesSelectionPoolSourceModelAndPatternEntries(): void {
+  const staleFeatureAuthoring = createSelectionPoolFeatureAuthoring();
+  staleFeatureAuthoring.parameters = {
+    ...staleFeatureAuthoring.parameters,
+    inventory: {
+      enabled: true,
+      capacity: 16,
+      storeSelectedItems: false,
+      blockDrawWhenFull: true,
+      fullMessage: "Selection inventory full",
+      presentation: "persistent_panel",
+    },
+  };
+  const refreshedFeatureAuthoring = createSelectionPoolFeatureAuthoring();
+  refreshedFeatureAuthoring.parameters = {
+    ...refreshedFeatureAuthoring.parameters,
+    inventory: {
+      enabled: true,
+      capacity: 16,
+      storeSelectedItems: true,
+      blockDrawWhenFull: true,
+      fullMessage: "Selection inventory full",
+      presentation: "persistent_panel",
+    },
+  };
+  const writePlan = createWritePlan();
+  writePlan.entries.push({
+    operation: "update",
+    targetPath: "game/scripts/src/rune_weaver/generated/server/talent_draw_demo_selection_flow_rule_selection_flow.ts",
+    contentType: "ts",
+    contentSummary: "rule.selection_flow (ts) params: {}",
+    sourcePattern: "rule.selection_flow",
+    sourceModule: "selection_flow",
+    safe: true,
+  } as WritePlan["entries"][number]);
+  writePlan.entries.push({
+    operation: "update",
+    targetPath: "content/panorama/src/rune_weaver/generated/ui/talent_draw_demo_selection_modal_ui_selection_modal.tsx",
+    contentType: "tsx",
+    contentSummary: "ui.selection_modal (tsx) params: {}",
+    sourcePattern: "ui.selection_modal",
+    sourceModule: "selection_modal",
+    safe: true,
+  } as WritePlan["entries"][number]);
+
+  appendSelectionPoolSourceModelEntry(writePlan, "talent_draw_demo", staleFeatureAuthoring);
+  refreshSelectionPoolWritePlanEntries(writePlan, "talent_draw_demo", refreshedFeatureAuthoring);
+
+  const sourceEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rw.feature_source_model");
+  const flowEntry = writePlan.entries.find((entry) => entry.sourcePattern === "rule.selection_flow");
+  const modalEntry = writePlan.entries.find((entry) => entry.sourcePattern === "ui.selection_modal");
+
+  assert.equal((sourceEntry?.parameters as any)?.inventory?.storeSelectedItems, true);
+  assert.equal((flowEntry?.parameters as any)?.inventory?.storeSelectedItems, true);
+  assert.equal((modalEntry?.parameters as any)?.inventory?.storeSelectedItems, true);
+}
+
 testCreateDerivesLifecycleFieldsFromBlueprintAuthoring();
 testUpdateClearsSourceBackedFieldsWhenNoOwnedArtifactRemains();
 testUpdateCanRehydrateLifecycleFieldsFromBlueprintAuthoring();
 testResolverUsesWritePlanMetadataWhenArtifactEntryExists();
+testRefreshUpdatesSelectionPoolSourceModelAndPatternEntries();
 
 console.log("adapters/dota2/families/selection-pool/lifecycle.test.ts passed");

@@ -420,8 +420,7 @@ function isCanonicalCandidateDrawGovernanceCore(
 
   if (
     hasTrueRawFact(rawFacts, "prompt.composition.runtime_persistence") ||
-    hasTrueRawFact(rawFacts, "prompt.composition.explicit_cross_feature") ||
-    hasTrueRawFact(rawFacts, "prompt.inventory.enabled")
+    hasTrueRawFact(rawFacts, "prompt.composition.explicit_cross_feature")
   ) {
     return false;
   }
@@ -455,18 +454,6 @@ function isCanonicalCandidateDrawGovernanceCore(
         || false;
     }) ||
     (hasUserChoiceSemantics && choiceCount > 1);
-  const hasPoolMutationSemantics =
-    promptHints.noRepeatAfterSelection ||
-    promptHints.returnsUnchosenToPool ||
-    hasSelectionEligibilityRemovalSignal(rawText) ||
-    hasReturnToPoolSignal(rawText) ||
-    candidate.selection?.duplicatePolicy === "forbid" ||
-    (candidate.requirements?.functional || []).some((entry) =>
-      /future draws|future eligibility|return.*pool|unchosen.*pool/i.test(entry),
-    ) ||
-    (candidate.resolvedAssumptions || []).some((entry) =>
-      /future draws|session scope|return.*pool|unchosen.*pool/i.test(entry),
-    );
   const requestsOneShotOnly = /one[- ]shot|single[- ]use|only once|只能一次|单次使用/iu.test(rawText);
 
   return Boolean(
@@ -474,7 +461,6 @@ function isCanonicalCandidateDrawGovernanceCore(
       hasUserChoiceSemantics &&
       hasWeightedCandidateSemantics &&
       hasUiSurface &&
-      hasPoolMutationSemantics &&
       !requestsOneShotOnly,
   );
 }

@@ -3,7 +3,7 @@ import type {
   WizardClarificationPlan,
   WizardClarificationQuestion,
 } from "../schema/types.js";
-import { deriveWizardClarificationAuthority } from "./clarification-plan.js";
+import { deriveWizardClarificationSignals } from "./clarification-plan.js";
 
 function dedupeQuestions(
   questions: WizardClarificationQuestion[],
@@ -54,7 +54,7 @@ export function buildUpdateClarificationPlan(
         question: "What ownership scope should persist this behavior or state?",
         targetPaths: residue.targetPaths,
         reason: residue.summary,
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       });
       continue;
     }
@@ -66,7 +66,7 @@ export function buildUpdateClarificationPlan(
       reason: residue.summary,
       impact:
         residue.class === "governance_relevant"
-          ? "blueprint-blocking-structural"
+          ? "structural-open-contract"
           : "advisory",
     });
   }
@@ -77,7 +77,7 @@ export function buildUpdateClarificationPlan(
       question: "Which semantic boundary should win for this update?",
       targetPaths: ["governedChange.scope"],
       reason: "Update governance could not collapse the requested change into one unambiguous bounded scope.",
-      impact: "blueprint-blocking-structural",
+      impact: "structural-open-contract",
     });
   }
 
@@ -89,22 +89,17 @@ export function buildUpdateClarificationPlan(
   const targetPaths = Array.from(
     new Set(finalQuestions.flatMap((question) => question.targetPaths || [])),
   );
-  const authority = deriveWizardClarificationAuthority({
+  const basePlan: WizardClarificationPlan = {
     questions: finalQuestions,
     maxQuestions,
     requiredForFaithfulInterpretation: true,
     targetPaths,
     reason:
       "The governed update still contains one or more unresolved semantic boundaries that would materially change execution.",
-  });
+  };
 
   return {
-    questions: finalQuestions,
-    maxQuestions,
-    requiredForFaithfulInterpretation: true,
-    targetPaths,
-    reason:
-      "The governed update still contains one or more unresolved semantic boundaries that would materially change execution.",
-    authority,
+    ...basePlan,
+    signals: deriveWizardClarificationSignals(basePlan),
   };
 }

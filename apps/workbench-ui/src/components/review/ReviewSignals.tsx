@@ -1,10 +1,58 @@
-import { CheckCircle2, AlertTriangle, Info, FileWarning } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
+import { AlertTriangle, CheckCircle2, Info, Wrench } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { Feature } from '@/types/feature';
 import { normalizeFeatureDisplay } from '@/lib/normalizeFeatureDisplay';
 
 interface ReviewSignalsProps {
   feature: Feature | null | undefined;
+}
+
+function toneClass(tone: 'success' | 'warning' | 'danger' | 'neutral'): string {
+  if (tone === 'success') return 'text-[#22c55e]';
+  if (tone === 'warning') return 'text-[#f59e0b]';
+  if (tone === 'danger') return 'text-[#ef4444]';
+  return 'text-white/70';
+}
+
+function borderToneClass(tone: 'success' | 'warning' | 'danger' | 'neutral'): string {
+  if (tone === 'success') return 'border-[#22c55e]/20';
+  if (tone === 'warning') return 'border-[#f59e0b]/20';
+  if (tone === 'danger') return 'border-[#ef4444]/20';
+  return 'border-white/5';
+}
+
+function SectionCard({
+  title,
+  tone,
+  icon,
+  summary,
+  lines,
+}: {
+  title: string;
+  tone: 'success' | 'warning' | 'danger' | 'neutral';
+  icon: ReactNode;
+  summary: string;
+  lines: string[];
+}) {
+  return (
+    <div className={`rounded-xl border bg-[#252525] p-4 ${borderToneClass(tone)}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <span className={toneClass(tone)}>{icon}</span>
+        <h4 className="text-sm font-medium text-white">{title}</h4>
+      </div>
+      <p className="text-xs leading-5 text-white/70">{summary}</p>
+      {lines.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {lines.map((line) => (
+            <div key={line} className="flex items-start gap-2 text-xs text-white/55">
+              <span className={`mt-1 h-1 w-1 rounded-full ${tone === 'success' ? 'bg-[#22c55e]' : tone === 'warning' ? 'bg-[#f59e0b]' : tone === 'danger' ? 'bg-[#ef4444]' : 'bg-white/30'}`} />
+              <span>{line}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ReviewSignals({ feature }: ReviewSignalsProps) {
@@ -15,165 +63,118 @@ export function ReviewSignals({ feature }: ReviewSignalsProps) {
   }
 
   const { reviewSignals } = normalizedFeature;
-  const proposalPercentage = reviewSignals.proposalStatus.percentage ?? 0;
-  const readinessScore = reviewSignals.readiness.score ?? 0;
-  const readinessTone =
-    readinessScore >= 80 ? 'text-[#22c55e]' : readinessScore >= 50 ? 'text-[#f59e0b]' : 'text-[#ef4444]';
+  const isCompatibilityOnly = reviewSignals.compatibilitySource === 'compatibility-only';
+  const governanceSourceLabel =
+    !isCompatibilityOnly
+      ? 'bridge governance read-model'
+      : 'compatibility-only warning: legacy fallback payload';
+  const lifecycleTone =
+    isCompatibilityOnly
+      ? 'warning'
+      : reviewSignals.lifecycle.commitOutcome === 'blocked'
+    || reviewSignals.lifecycle.featureStatus === 'rolled_back'
+      ? 'danger'
+      : reviewSignals.lifecycle.requiresReview || reviewSignals.lifecycle.commitOutcome === 'exploratory'
+        ? 'warning'
+        : reviewSignals.lifecycle.featureStatus === 'active'
+          ? 'success'
+          : 'neutral';
+  const reusableTone =
+    reviewSignals.reusableGovernance.attentionCount > 0
+      ? 'warning'
+      : reviewSignals.reusableGovernance.admittedCount > 0
+        ? 'success'
+        : 'neutral';
   const groundingTone =
-    reviewSignals.grounding.status === 'exact' || reviewSignals.grounding.status === 'none_required'
-      ? 'text-[#22c55e]'
+    isCompatibilityOnly
+      ? 'warning'
+      : reviewSignals.grounding.status === 'insufficient'
+      ? 'danger'
       : reviewSignals.grounding.status === 'partial'
-        ? 'text-[#f59e0b]'
-        : 'text-[#ef4444]';
+        ? 'warning'
+        : reviewSignals.grounding.status === 'exact' || reviewSignals.grounding.status === 'none_required'
+          ? 'success'
+          : 'neutral';
+  const repairabilityTone =
+    isCompatibilityOnly
+      ? 'warning'
+      : reviewSignals.repairability.status === 'requires_regenerate'
+      ? 'danger'
+      : reviewSignals.repairability.status === 'review_required'
+        || reviewSignals.repairability.status === 'upgrade_workspace_grounding'
+        || reviewSignals.repairability.status === 'repair_safe'
+        ? 'warning'
+        : reviewSignals.repairability.status === 'clean'
+          ? 'success'
+          : 'neutral';
+
+  const lifecycleLines = [
+    `Feature status: ${reviewSignals.lifecycle.featureStatus}`,
+    reviewSignals.lifecycle.maturity ? `Maturity: ${reviewSignals.lifecycle.maturity}` : '',
+    reviewSignals.lifecycle.implementationStrategy ? `Strategy: ${reviewSignals.lifecycle.implementationStrategy}` : '',
+    reviewSignals.lifecycle.commitOutcome ? `Commit outcome: ${reviewSignals.lifecycle.commitOutcome}` : '',
+    reviewSignals.lifecycle.canWriteHost !== null ? `Can write host: ${reviewSignals.lifecycle.canWriteHost ? 'yes' : 'no'}` : '',
+    reviewSignals.lifecycle.requiresReview ? 'Manual review is still required.' : '',
+    ...reviewSignals.lifecycle.reasons.slice(0, 3),
+  ].filter(Boolean);
+
+  const reusableLines = [
+    `Admitted assets: ${reviewSignals.reusableGovernance.admittedCount}`,
+    `Attention assets: ${reviewSignals.reusableGovernance.attentionCount}`,
+    ...reviewSignals.reusableGovernance.familyAdmissions.slice(0, 2).map((entry) => `Family ${entry.assetId}: ${entry.status}`),
+    ...reviewSignals.reusableGovernance.patternAdmissions.slice(0, 2).map((entry) => `Pattern ${entry.assetId}: ${entry.status}`),
+    ...reviewSignals.reusableGovernance.seamAdmissions.slice(0, 2).map((entry) => `Seam ${entry.assetId}: ${entry.status}`),
+  ].filter(Boolean);
+
+  const groundingLines = [
+    `Review required: ${reviewSignals.grounding.reviewRequired ? 'yes' : 'no'}`,
+    `Verified: ${reviewSignals.grounding.verifiedSymbolCount}`,
+    `Allowlisted: ${reviewSignals.grounding.allowlistedSymbolCount}`,
+    `Weak: ${reviewSignals.grounding.weakSymbolCount}`,
+    `Unknown: ${reviewSignals.grounding.unknownSymbolCount}`,
+    ...reviewSignals.grounding.warnings.slice(0, 3),
+  ];
+
+  const repairabilityLines = [
+    `Repairability status: ${reviewSignals.repairability.status}`,
+    ...reviewSignals.repairability.reasons.slice(0, 4),
+  ].filter(Boolean);
 
   return (
     <div className="space-y-4">
-      {/* Proposal Status */}
-      <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
-        <div className="flex items-center gap-2 mb-3">
-          <CheckCircle2 className="h-4 w-4 text-[#22c55e]" />
-          <h4 className="text-sm font-medium text-white">Proposal 状态</h4>
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-white/60">准备度</span>
-            <span className="text-white">{proposalPercentage}%</span>
-          </div>
-          <Progress
-            value={proposalPercentage}
-            className="h-1.5 bg-white/10"
-          />
-          <p className="text-xs text-white/50">{reviewSignals.proposalStatus.message || '暂无明确 proposal 进度信息'}</p>
-        </div>
+      <div className="rounded-xl border border-white/5 bg-[#202020] px-4 py-3 text-[11px] text-white/45">
+        Governance source: {governanceSourceLabel}
       </div>
 
-      {/* Gap Fill Summary */}
-      <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
-        <div className="flex items-center gap-2 mb-3">
-          <Info className="h-4 w-4 text-[#3b82f6]" />
-          <h4 className="text-sm font-medium text-white">Gap Fill 摘要</h4>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-[#22c55e]">
-              {reviewSignals.gapFillSummary.autoFilled}
-            </span>
-            <span className="text-xs text-white/50">自动填充</span>
-          </div>
-          <div className="w-px h-6 bg-white/10" />
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-lg font-semibold ${
-                reviewSignals.gapFillSummary.needsAttention > 0
-                  ? 'text-[#f59e0b]'
-                  : 'text-white/30'
-              }`}
-            >
-              {reviewSignals.gapFillSummary.needsAttention}
-            </span>
-            <span className="text-xs text-white/50">需关注</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Category E Clarification */}
-      {reviewSignals.categoryEClarification.count > 0 && (
-        <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
-          <div className="flex items-center gap-2 mb-3">
-            <Info className="h-4 w-4 text-[#818cf8]" />
-            <h4 className="text-sm font-medium text-white">Category E 澄清</h4>
-          </div>
-          <p className="text-xs text-white/60 mb-2">
-            {reviewSignals.categoryEClarification.count} 项已澄清
-          </p>
-          <div className="space-y-1">
-            {reviewSignals.categoryEClarification.items.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 text-xs text-white/50"
-              >
-                <span className="w-1 h-1 rounded-full bg-[#818cf8]" />
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Invalid Pattern IDs */}
-      {reviewSignals.invalidPatternIds.length > 0 && (
-        <div className="bg-[#252525] rounded-xl p-4 border border-[#ef4444]/20">
-          <div className="flex items-center gap-2 mb-3">
-            <FileWarning className="h-4 w-4 text-[#ef4444]" />
-            <h4 className="text-sm font-medium text-white">无效 Pattern</h4>
-          </div>
-          <div className="space-y-1">
-            {reviewSignals.invalidPatternIds.map((id, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 text-xs text-[#ef4444]"
-              >
-                <span className="w-1 h-1 rounded-full bg-[#ef4444]" />
-                {id}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Readiness Score */}
-      <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle
-            className={`h-4 w-4 ${readinessTone}`}
-          />
-          <h4 className="text-sm font-medium text-white">就绪评分</h4>
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className={`text-2xl font-bold ${readinessTone}`}
-          >
-            {reviewSignals.readiness.score ?? '—'}
-          </span>
-          <span className="text-xs text-white/50">/ 100</span>
-        </div>
-        {reviewSignals.readiness.warnings.length > 0 && (
-          <div className="mt-3 space-y-1">
-            {reviewSignals.readiness.warnings.map((warning, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 text-xs text-[#f59e0b]"
-              >
-                <span className="w-1 h-1 rounded-full bg-[#f59e0b]" />
-                {warning}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-[#252525] rounded-xl p-4 border border-white/5">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle className={`h-4 w-4 ${groundingTone}`} />
-          <h4 className="text-sm font-medium text-white">Grounding</h4>
-        </div>
-        <div className="space-y-2 text-xs text-white/60">
-          <div className="flex items-center justify-between">
-            <span>Status</span>
-            <span className={`font-medium ${groundingTone}`}>{reviewSignals.grounding.status}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Review Required</span>
-            <span className="text-white">{reviewSignals.grounding.reviewRequired ? 'Yes' : 'No'}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <span>Verified: {reviewSignals.grounding.verifiedSymbolCount}</span>
-            <span>Allowlisted: {reviewSignals.grounding.allowlistedSymbolCount}</span>
-            <span>Weak: {reviewSignals.grounding.weakSymbolCount}</span>
-            <span>Unknown: {reviewSignals.grounding.unknownSymbolCount}</span>
-          </div>
-          <div className="text-white/50">Warnings: {reviewSignals.grounding.warningCount}</div>
-        </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <SectionCard
+          title="Lifecycle"
+          tone={lifecycleTone}
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          summary={reviewSignals.lifecycle.summary}
+          lines={lifecycleLines}
+        />
+        <SectionCard
+          title="Reusable Governance"
+          tone={reusableTone}
+          icon={<Info className="h-4 w-4" />}
+          summary={reviewSignals.reusableGovernance.summary}
+          lines={reusableLines}
+        />
+        <SectionCard
+          title="Grounding"
+          tone={groundingTone}
+          icon={<AlertTriangle className="h-4 w-4" />}
+          summary={reviewSignals.grounding.summary || `Grounding status: ${reviewSignals.grounding.status}`}
+          lines={groundingLines}
+        />
+        <SectionCard
+          title="Repairability"
+          tone={repairabilityTone}
+          icon={<Wrench className="h-4 w-4" />}
+          summary={reviewSignals.repairability.summary || 'No repairability summary recorded.'}
+          lines={repairabilityLines}
+        />
       </div>
     </div>
   );

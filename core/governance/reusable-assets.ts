@@ -1,9 +1,9 @@
 import type { HostKind } from "../host/types.js";
 
-export type ReusableAssetType = "pattern" | "family";
+export type ReusableAssetType = "pattern" | "family" | "seam";
 export type ReusableAssetOriginLevel = "explore" | "pattern";
 export type ReusableAssetAdmissionStatus = "candidate" | "admitted" | "deprecated";
-export type PromotionPacketKind = "explore_to_pattern" | "pattern_to_family";
+export type PromotionPacketKind = "explore_to_pattern" | "explore_to_seam" | "pattern_to_family";
 
 export interface ReusableAssetDecision {
   summary: string;
@@ -53,6 +53,7 @@ export interface ReusableAssetPromotionPacket {
 export interface ReusableAssetImplementationLookup {
   patternExists(assetId: string): boolean;
   familyExists(assetId: string): boolean;
+  seamExists(assetId: string): boolean;
 }
 
 export interface ReusableAssetGovernanceValidationResult {
@@ -119,21 +120,22 @@ export function validatePromotionPacket(
   }
   errors.push(...validateDecision(packet.decision, prefix));
 
-  if (packet.kind === "explore_to_pattern") {
-    if (packet.assetType !== "pattern") {
-      errors.push(`${prefix}: explore_to_pattern packets must target assetType='pattern'`);
+  if (packet.kind === "explore_to_pattern" || packet.kind === "explore_to_seam") {
+    const targetAssetType = packet.kind === "explore_to_pattern" ? "pattern" : "seam";
+    if (packet.assetType !== targetAssetType) {
+      errors.push(`${prefix}: ${packet.kind} packets must target assetType='${targetAssetType}'`);
     }
     if (packet.originLevel !== "explore") {
-      errors.push(`${prefix}: explore_to_pattern packets must originate from 'explore'`);
+      errors.push(`${prefix}: ${packet.kind} packets must originate from 'explore'`);
     }
     if ((packet.stableCapabilities || []).length === 0) {
-      errors.push(`${prefix}: stableCapabilities are required for explore_to_pattern`);
+      errors.push(`${prefix}: stableCapabilities are required for ${packet.kind}`);
     }
     if ((packet.stableInputs || []).length === 0) {
-      errors.push(`${prefix}: stableInputs are required for explore_to_pattern`);
+      errors.push(`${prefix}: stableInputs are required for ${packet.kind}`);
     }
     if ((packet.stableOutputs || []).length === 0) {
-      errors.push(`${prefix}: stableOutputs are required for explore_to_pattern`);
+      errors.push(`${prefix}: stableOutputs are required for ${packet.kind}`);
     }
   }
 
@@ -166,6 +168,20 @@ export function validatePromotionPacket(
     valid: errors.length === 0,
     errors,
   };
+}
+
+function implementationExists(
+  entry: ReusableAssetPromotionRegistryEntry,
+  lookup: ReusableAssetImplementationLookup,
+): boolean {
+  switch (entry.assetType) {
+    case "pattern":
+      return lookup.patternExists(entry.assetId);
+    case "family":
+      return lookup.familyExists(entry.assetId);
+    case "seam":
+      return lookup.seamExists(entry.assetId);
+  }
 }
 
 export function validatePromotionRegistryEntry(
@@ -205,11 +221,7 @@ export function validatePromotionRegistryEntry(
   }
 
   if (entry.status === "admitted") {
-    const implementationExists =
-      entry.assetType === "pattern"
-        ? lookup.patternExists(entry.assetId)
-        : lookup.familyExists(entry.assetId);
-    if (!implementationExists) {
+    if (!implementationExists(entry, lookup)) {
       errors.push(`${prefix}: admitted asset has no matching code implementation`);
     }
   }

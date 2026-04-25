@@ -7,6 +7,30 @@ export interface HostRealization {
 }
 
 export interface ReviewSignals {
+  lifecycle?: {
+    featureStatus: 'active' | 'disabled' | 'archived' | 'rolled_back' | 'unknown';
+    maturity: 'exploratory' | 'stabilized' | 'templated' | null;
+    implementationStrategy: 'family' | 'pattern' | 'guided_native' | 'exploratory' | null;
+    commitOutcome: 'committable' | 'exploratory' | 'blocked' | null;
+    canAssemble: boolean | null;
+    canWriteHost: boolean | null;
+    requiresReview: boolean;
+    reasons: string[];
+    summary: string;
+  };
+  reusableGovernance?: {
+    admittedCount: number;
+    attentionCount: number;
+    familyAdmissions: GovernanceAdmissionView[];
+    patternAdmissions: GovernanceAdmissionView[];
+    seamAdmissions: GovernanceAdmissionView[];
+    summary: string;
+  };
+  repairability?: {
+    status: 'not_checked' | 'clean' | 'review_required' | 'repair_safe' | 'upgrade_workspace_grounding' | 'requires_regenerate';
+    reasons: string[];
+    summary: string;
+  };
   proposalStatus: {
     ready: boolean;
     percentage: number | null;
@@ -25,6 +49,7 @@ export interface ReviewSignals {
     score: number | null;
     warnings: string[];
   };
+  compatibilitySource?: 'governance-read-model' | 'compatibility-only';
   grounding?: {
     status: 'none_required' | 'exact' | 'partial' | 'insufficient';
     reviewRequired: boolean;
@@ -33,7 +58,15 @@ export interface ReviewSignals {
     weakSymbolCount: number;
     unknownSymbolCount: number;
     warningCount: number;
+    warnings?: string[];
+    reasonCodes?: string[];
+    summary?: string;
   };
+}
+
+export interface GovernanceAdmissionView {
+  assetId: string;
+  status: 'candidate' | 'admitted' | 'deprecated' | 'untracked';
 }
 
 export interface Feature {

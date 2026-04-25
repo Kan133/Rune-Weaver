@@ -490,6 +490,13 @@ function resolveObjectFromRef(
       : { error: `Missing local collection object '${ref.collectionId}:${ref.objectId}'.` };
   }
 
+  if (ref.source === "external_catalog") {
+    const object = resolveExternalContentCatalogObject(ref.catalogId, ref.objectId);
+    return object
+      ? { object }
+      : { error: `Missing external catalog object '${ref.catalogId}:${ref.objectId}'.` };
+  }
+
   if (!hostRoot) {
     if (allowDeferredFeatureExportResolution && ref.source === "feature_export") {
       return {
@@ -503,30 +510,23 @@ function resolveObjectFromRef(
     return { error: `Resolving '${objectRefKey(ref)}' requires hostRoot-backed source artifacts.` };
   }
 
-  if (ref.source === "feature_export") {
-    const artifact = readFeatureContentCollectionsArtifact(hostRoot, ref.featureId);
-    if (!artifact) {
-      return { error: `Missing exported content collections for feature '${ref.featureId}'.` };
-    }
-    const collection = artifact.collections.find((candidate) => candidate.collectionId === ref.collectionId);
-    if (!collection) {
-      return { error: `Missing exported collection '${ref.collectionId}' on feature '${ref.featureId}'.` };
-    }
-    if (collection.itemContract !== SELECTION_POOL_OBJECT_ITEM_CONTRACT) {
-      return {
-        error: `Exported collection '${ref.featureId}:${ref.collectionId}' has incompatible item contract '${collection.itemContract}'.`,
-      };
-    }
-    const object = collection.items.find((candidate) => candidate.objectId === ref.objectId);
-    return object
-      ? { object }
-      : { error: `Missing exported object '${ref.featureId}:${ref.collectionId}:${ref.objectId}'.` };
+  const artifact = readFeatureContentCollectionsArtifact(hostRoot, ref.featureId);
+  if (!artifact) {
+    return { error: `Missing exported content collections for feature '${ref.featureId}'.` };
   }
-
-  const object = resolveExternalContentCatalogObject(ref.catalogId, ref.objectId);
+  const collection = artifact.collections.find((candidate) => candidate.collectionId === ref.collectionId);
+  if (!collection) {
+    return { error: `Missing exported collection '${ref.collectionId}' on feature '${ref.featureId}'.` };
+  }
+  if (collection.itemContract !== SELECTION_POOL_OBJECT_ITEM_CONTRACT) {
+    return {
+      error: `Exported collection '${ref.featureId}:${ref.collectionId}' has incompatible item contract '${collection.itemContract}'.`,
+    };
+  }
+  const object = collection.items.find((candidate) => candidate.objectId === ref.objectId);
   return object
     ? { object }
-    : { error: `Missing external catalog object '${ref.catalogId}:${ref.objectId}'.` };
+    : { error: `Missing exported object '${ref.featureId}:${ref.collectionId}:${ref.objectId}'.` };
 }
 
 export function countSelectionPoolEntries(parameters: SelectionPoolFeatureAuthoringParameters): number {

@@ -2,10 +2,12 @@ import type {
   CurrentFeatureContext,
   IntentSchema,
   RelationCandidate,
-  WizardClarificationAuthority,
   WizardClarificationImpact,
   WizardClarificationPlan,
   WizardClarificationQuestion,
+  WizardClarificationSignals,
+  WizardStructuralOpenContract,
+  WizardStructuralOpenContractKind,
   WizardUnresolvedDependency,
   WorkspaceSemanticContext,
 } from "../schema/types";
@@ -98,6 +100,12 @@ function hasTriggerAuthority(schema: IntentSchema): boolean {
     (schema.interaction?.activations || []).length > 0 ||
       schema.flow?.triggerSummary ||
       (schema.requirements.typed || []).some((requirement) => requirement.kind === "trigger"),
+  );
+}
+
+function hasExplicitPromptTriggerAuthority(rawText: string): boolean {
+  return /(?:(?:press|hit|tap|trigger(?:ed)? by|when(?:ever)?(?: the)? player presses?)\s+(?:key\s+)?)((?:f(?:1[0-2]|[1-9]))|[a-z]|\d)\b|(?:按下|点击|触发键|热键)\s*((?:F(?:1[0-2]|[1-9]))|[A-Z]|\d)/iu.test(
+    rawText,
   );
 }
 
@@ -224,65 +232,278 @@ function applyQuestionImpact(
   return question;
 }
 
-export function deriveWizardClarificationAuthority(
-  clarificationPlan: WizardClarificationPlan | undefined,
-): WizardClarificationAuthority {
-  if (!clarificationPlan || clarificationPlan.questions.length === 0) {
-    return {
-      blocksBlueprint: false,
-      blocksWrite: false,
-      requiresReview: false,
-      unresolvedDependencies: [],
-      reasons: [],
-    };
+function createReadyClarificationSignals(): WizardClarificationSignals {
+  return {
+    semanticPosture: "bounded",
+    reasons: [],
+    openStructuralContracts: [],
+    unresolvedDependencies: [],
+  };
+}
+
+function getQuestionImpact(question: WizardClarificationQuestion): WizardClarificationImpact {
+  return question.impact || "structural-open-contract";
+}
+
+function getUnresolvedDependencyKind(
+  dependencyId: string,
+): WizardUnresolvedDependency["kind"] {
+  if (dependencyId === "cross-feature-target") {
+    return "cross-feature-target";
   }
 
-  const unresolvedDependencies = new Map<string, WizardUnresolvedDependency>();
-  const reasons = new Set<string>();
-  let blocksBlueprint = false;
-  let blocksWrite = false;
-  let requiresReview = false;
+  if (dependencyId === "existing-feature-target") {
+    return "existing-feature-target";
+  }
 
-  for (const question of clarificationPlan.questions) {
-    const impact = question.impact || "blueprint-blocking-structural";
-    requiresReview = true;
-    reasons.add(question.reason);
+  return "generic";
+}
 
-    if (impact === "blueprint-blocking-structural") {
-      blocksBlueprint = true;
-      blocksWrite = true;
+function resolveWizardStructuralOpenContractKind(
+  question: WizardClarificationQuestion,
+): WizardStructuralOpenContractKind {
+  const contractId = question.unresolvedDependencyId || question.id;
+
+  switch (contractId) {
+    case "clarify-trigger-authority":
+      return "activation-boundary";
+    case "clarify-selection-flow":
+      return "selection-flow-boundary";
+    case "clarify-targeting-boundary":
+      return "targeting-boundary";
+    case "clarify-persistence-scope":
+      return "persistence-scope-boundary";
+    case "cross-feature-target":
+    case "clarify-cross-feature-target":
+      return "cross-feature-target";
+    case "existing-feature-target":
+    case "clarify-existing-feature-target":
+      return "existing-feature-target";
+    case "clarify-conflicting-semantics":
+      return "semantic-conflict";
+    default:
+      return "generic-structural-boundary";
+  }
+}
+
+function resolveWizardStructuralOpenContractSurface(
+  question: WizardClarificationQuestion,
+): WizardStructuralOpenContract["surface"] | undefined {
+  const contractId = question.unresolvedDependencyId || question.id;
+
+  switch (contractId) {
+    case "clarify-trigger-authority":
+      return "activation";
+    case "clarify-selection-flow":
+      return "selection_flow";
+    case "clarify-persistence-scope":
+      return "state_scope";
+    case "clarify-cross-feature-target":
+    case "clarify-existing-feature-target":
+      return "composition_boundary";
+    default:
+      return undefined;
+  }
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+export function resolveWizardStructuralOpenContracts(
+  questions: WizardClarificationQuestion[],
+): WizardStructuralOpenContract[] {
+  const contracts = new Map<string, WizardStructuralOpenContract>();
+
+  for (const question of questions) {
+    if (getQuestionImpact(question) !== "structural-open-contract") {
       continue;
     }
 
-    if (impact === "write-blocking-unresolved-dependency") {
-      blocksWrite = true;
-      const dependencyId = question.unresolvedDependencyId || question.id;
-      const existing = unresolvedDependencies.get(dependencyId);
-      if (existing) {
-        existing.questionIds = [...new Set([...existing.questionIds, question.id])];
-        continue;
-      }
-
-      unresolvedDependencies.set(dependencyId, {
-        id: dependencyId,
-        kind:
-          dependencyId === "cross-feature-target"
-            ? "cross-feature-target"
-            : dependencyId === "existing-feature-target"
-              ? "existing-feature-target"
-              : "generic",
-        summary: question.reason,
-        questionIds: [question.id],
-      });
+    const contractId = question.id;
+    const existing = contracts.get(contractId);
+    if (existing) {
+      existing.questionIds = dedupeStrings([...existing.questionIds, question.id]);
+      existing.targetPaths = dedupeStrings([...existing.targetPaths, ...(question.targetPaths || [])]);
+      continue;
     }
+
+    contracts.set(contractId, {
+      id: contractId,
+      kind: resolveWizardStructuralOpenContractKind(question),
+      surface: resolveWizardStructuralOpenContractSurface(question),
+      summary: question.reason,
+      targetPaths: dedupeStrings(question.targetPaths || []),
+      questionIds: [question.id],
+    });
   }
 
+  return [...contracts.values()];
+}
+
+export function resolveWizardUnresolvedDependencies(
+  questions: WizardClarificationQuestion[],
+): WizardUnresolvedDependency[] {
+  const unresolvedDependencies = new Map<string, WizardUnresolvedDependency>();
+
+  for (const question of questions) {
+    if (getQuestionImpact(question) !== "write-blocking-unresolved-dependency") {
+      continue;
+    }
+
+    const dependencyId = question.unresolvedDependencyId || question.id;
+    const existing = unresolvedDependencies.get(dependencyId);
+    if (existing) {
+      existing.questionIds = dedupeStrings([...existing.questionIds, question.id]);
+      continue;
+    }
+
+    unresolvedDependencies.set(dependencyId, {
+      id: dependencyId,
+      kind: getUnresolvedDependencyKind(dependencyId),
+      summary: question.reason,
+      questionIds: [question.id],
+    });
+  }
+
+  return [...unresolvedDependencies.values()];
+}
+
+export function deriveWizardClarificationSignals(
+  clarificationPlan: WizardClarificationPlan | undefined,
+): WizardClarificationSignals {
+  if (clarificationPlan?.signals) {
+    return clarificationPlan.signals;
+  }
+
+  if (!clarificationPlan || clarificationPlan.questions.length === 0) {
+    return createReadyClarificationSignals();
+  }
+
+  const openStructuralContracts = resolveWizardStructuralOpenContracts(clarificationPlan.questions);
+  const unresolvedDependencies = resolveWizardUnresolvedDependencies(clarificationPlan.questions);
+  const reasons = dedupeStrings(clarificationPlan.questions.map((question) => question.reason));
+  const semanticPosture = reasons.length > 0 ? "open" : "bounded";
+
   return {
-    blocksBlueprint,
-    blocksWrite,
-    requiresReview,
-    unresolvedDependencies: [...unresolvedDependencies.values()],
-    reasons: [...reasons],
+    semanticPosture,
+    reasons,
+    openStructuralContracts,
+    unresolvedDependencies,
+  };
+}
+
+export function hasResolvedGovernedActivationBoundary(input: {
+  schema: IntentSchema;
+  currentFeatureContext?: CurrentFeatureContext;
+}): boolean {
+  const governance = getIntentGovernanceView(input.schema);
+  return Boolean(
+    input.currentFeatureContext
+      || looksLikeGovernedPassiveRequest(input.schema)
+      || governance.activation.interactive
+      || (governance.activation.kinds || []).includes("passive"),
+  );
+}
+
+export function hasResolvedSelectionFlowBoundary(schema: IntentSchema): boolean {
+  const governance = getIntentGovernanceView(schema);
+  if (
+    schema.selection?.resolutionMode === "player_confirm_single"
+    || schema.selection?.resolutionMode === "reveal_batch_immediate"
+  ) {
+    return true;
+  }
+
+  const presentsMultipleCandidates = Boolean(
+    (schema.selection?.choiceCount || 0) > 1 ||
+      governance.mechanics.candidatePool ||
+      governance.mechanics.weightedSelection ||
+      governance.mechanics.uiModal,
+  );
+  if (!presentsMultipleCandidates) {
+    return true;
+  }
+
+  return Boolean(
+    governance.mechanics.playerChoice ||
+      governance.selection.choiceMode === "user-chosen" ||
+      governance.selection.choiceMode === "hybrid",
+  );
+}
+
+export function hasResolvedStateScopeBoundary(schema: IntentSchema): boolean {
+  const needsPersistentScope =
+    schema.timing?.duration?.kind === "persistent"
+    || (schema.stateModel?.states || []).some((state) => state.lifetime === "persistent")
+    || (schema.composition?.dependencies || []).some((dependency) => dependency.kind === "external-system");
+  if (!needsPersistentScope) {
+    return true;
+  }
+
+  if (hasPersistenceOwnerScope(schema)) {
+    return true;
+  }
+
+  return (schema.stateModel?.states || []).length > 0
+    && (schema.stateModel?.states || []).every((state) => Boolean(state.owner && state.lifetime));
+}
+
+export function hasResolvedGovernedTargetBoundary(schema: IntentSchema): boolean {
+  return !requiresGovernedTargetOwnershipQuestion(schema);
+}
+
+export function hasResolvedGovernedContradictorySemantics(schema: IntentSchema): boolean {
+  return !hasGovernedContradictorySignals(schema);
+}
+
+export function isWizardStructuralOpenContractResolved(
+  contract: WizardStructuralOpenContract,
+  input: {
+    schema: IntentSchema;
+    currentFeatureContext?: CurrentFeatureContext;
+    closedSurfaces?: Set<NonNullable<WizardStructuralOpenContract["surface"]>>;
+  },
+): boolean {
+  if (contract.surface && input.closedSurfaces?.has(contract.surface)) {
+    return true;
+  }
+
+  switch (contract.kind) {
+    case "activation-boundary":
+      return hasResolvedGovernedActivationBoundary(input);
+    case "selection-flow-boundary":
+      return hasResolvedSelectionFlowBoundary(input.schema);
+    case "targeting-boundary":
+      return hasResolvedGovernedTargetBoundary(input.schema);
+    case "persistence-scope-boundary":
+      return hasResolvedStateScopeBoundary(input.schema);
+    case "semantic-conflict":
+      return hasResolvedGovernedContradictorySemantics(input.schema);
+    default:
+      return false;
+  }
+}
+
+function buildClarificationPlan(
+  questions: WizardClarificationQuestion[],
+  maxQuestions: number,
+  reason: string,
+): WizardClarificationPlan {
+  const targetPaths = Array.from(
+    new Set(questions.flatMap((question) => question.targetPaths || [])),
+  );
+  const basePlan: WizardClarificationPlan = {
+    questions,
+    maxQuestions,
+    requiredForFaithfulInterpretation: true,
+    targetPaths,
+    reason,
+  };
+
+  return {
+    ...basePlan,
+    signals: deriveWizardClarificationSignals(basePlan),
   };
 }
 
@@ -332,6 +553,7 @@ function buildSemanticClarificationPlan(
     !looksLikeGovernedPassiveRequest(input.schema) &&
     !governance.activation.interactive
     && !(governance.activation.kinds || []).includes("passive")
+    && !hasExplicitPromptTriggerAuthority(input.rawText)
   ) {
     questions.push(
       applyQuestionImpact({
@@ -339,7 +561,7 @@ function buildSemanticClarificationPlan(
         question: "What exactly triggers this feature, and who owns that trigger?",
         targetPaths: ["interaction.activations", "flow.triggerSummary", "requirements.typed"],
         reason: "The governed create semantics still do not expose a reliable trigger or passive ownership boundary.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -372,7 +594,7 @@ function buildSemanticClarificationPlan(
         question: "What is the intended target or direction boundary for this behavior?",
         targetPaths: ["targeting", "spatial", "effects.targets"],
         reason: "The governed create semantics imply non-trivial targeting or spatial behavior, but the target boundary is still ambiguous.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -384,7 +606,7 @@ function buildSemanticClarificationPlan(
         question: "Two parts of the request imply different behavior boundaries. Which one should win?",
         targetPaths: ["interaction.activations", "selection.repeatability", "timing.duration"],
         reason: "The governed create semantics still contain contradictory structure that would materially change realization.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -394,28 +616,11 @@ function buildSemanticClarificationPlan(
     return undefined;
   }
 
-  const targetPaths = Array.from(
-    new Set(finalQuestions.flatMap((question) => question.targetPaths || [])),
+  return buildClarificationPlan(
+    finalQuestions,
+    maxQuestions,
+    "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
   );
-
-  const authority = deriveWizardClarificationAuthority({
-    questions: finalQuestions,
-    maxQuestions,
-    requiredForFaithfulInterpretation: true,
-    targetPaths,
-    reason:
-      "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
-  });
-
-  return {
-    questions: finalQuestions,
-    maxQuestions,
-    requiredForFaithfulInterpretation: true,
-    targetPaths,
-    reason:
-      "The governed create semantics still contain unresolved structural boundaries that would materially change execution.",
-    authority,
-  };
 }
 
 function buildLegacyClarificationPlan(
@@ -429,7 +634,8 @@ function buildLegacyClarificationPlan(
     !input.currentFeatureContext &&
     !guards.definitionOnlyProvider &&
     !looksLikePassiveRequest(input.rawText, input.schema) &&
-    !hasTriggerAuthority(input.schema)
+    !hasTriggerAuthority(input.schema) &&
+    !hasExplicitPromptTriggerAuthority(input.rawText)
   ) {
     questions.push(
       applyQuestionImpact({
@@ -437,7 +643,7 @@ function buildLegacyClarificationPlan(
         question: "What exactly triggers this feature, and who owns that trigger?",
         targetPaths: ["interaction.activations", "flow.triggerSummary", "requirements.typed"],
         reason: "The semantic structure is missing a reliable trigger or passive ownership boundary.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -452,7 +658,7 @@ function buildLegacyClarificationPlan(
         question: "What ownership scope should persist this behavior or state?",
         targetPaths: ["timing.duration", "stateModel.states", "composition.dependencies"],
         reason: "Persistence is requested, but the owner or storage boundary is still unclear.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -499,7 +705,7 @@ function buildLegacyClarificationPlan(
         question: "What is the intended target or direction boundary for this behavior?",
         targetPaths: ["targeting", "spatial", "effects.targets"],
         reason: "The request implies non-trivial targeting or spatial behavior, but the target boundary is still ambiguous.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -511,7 +717,7 @@ function buildLegacyClarificationPlan(
         question: "Two parts of the request imply different behavior boundaries. Which one should win?",
         targetPaths: ["interaction.activations", "selection.repeatability", "timing.duration"],
         reason: "The current schema captures contradictory signals that would change the resulting semantic structure.",
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       }),
     );
   }
@@ -521,28 +727,11 @@ function buildLegacyClarificationPlan(
     return undefined;
   }
 
-  const targetPaths = Array.from(
-    new Set(finalQuestions.flatMap((question) => question.targetPaths || [])),
+  return buildClarificationPlan(
+    finalQuestions,
+    maxQuestions,
+    "The current IntentSchema is missing one or more high-signal structural details that would materially change the semantic interpretation.",
   );
-
-  const authority = deriveWizardClarificationAuthority({
-    questions: finalQuestions,
-    maxQuestions,
-    requiredForFaithfulInterpretation: true,
-    targetPaths,
-    reason:
-      "The current IntentSchema is missing one or more high-signal structural details that would materially change the semantic interpretation.",
-  });
-
-  return {
-    questions: finalQuestions,
-    maxQuestions,
-    requiredForFaithfulInterpretation: true,
-    targetPaths,
-    reason:
-      "The current IntentSchema is missing one or more high-signal structural details that would materially change the semantic interpretation.",
-    authority,
-  };
 }
 
 function buildSemanticResidueQuestion(
@@ -558,7 +747,7 @@ function buildSemanticResidueQuestion(
           "After the shown candidates appear, should the player choose one to commit, or should the shown results resolve without a follow-up choice?",
         targetPaths: targetPaths || ["selection", "flow", "requirements.typed"],
         reason,
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       });
     case "activation":
       return applyQuestionImpact({
@@ -566,7 +755,7 @@ function buildSemanticResidueQuestion(
         question: "What exactly triggers this feature, and who owns that trigger?",
         targetPaths: targetPaths || ["interaction.activations", "flow.triggerSummary", "requirements.typed"],
         reason,
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       });
     case "state_scope":
       return applyQuestionImpact({
@@ -574,7 +763,7 @@ function buildSemanticResidueQuestion(
         question: "What ownership scope should persist this behavior or state?",
         targetPaths: targetPaths || ["stateModel.states", "composition.dependencies"],
         reason,
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       });
     case "composition_boundary":
       return applyQuestionImpact({
@@ -591,7 +780,7 @@ function buildSemanticResidueQuestion(
         question: "Two parts of the request still leave one semantic boundary open. Which one should win?",
         targetPaths,
         reason,
-        impact: "blueprint-blocking-structural",
+        impact: "structural-open-contract",
       });
   }
 }

@@ -151,6 +151,33 @@ function testFinalizeCreateIntentSchemaAppliesDeterministicPromptParameters() {
   assert.equal(finalized.normalizedMechanics.playerChoice, true);
 }
 
+function testFinalizeCreateIntentSchemaRecognizesGenericLetterTriggerKey() {
+  const prompt = "按下G显示3 choices并让玩家选择一个。";
+  const finalized = finalizeCreateIntentSchema({
+    version: "1.0",
+    host,
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system",
+    },
+    requirements: {
+      functional: [prompt],
+    },
+    constraints: {},
+    normalizedMechanics: {
+      candidatePool: true,
+      weightedSelection: true,
+    },
+    resolvedAssumptions: [],
+  } as IntentSchema, prompt);
+
+  assert.equal(finalized.parameters?.triggerKey, "G");
+  assert.equal(finalized.normalizedMechanics.trigger, true);
+}
+
 function testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints() {
   const schema = createFallbackIntentSchema(
     "做一个主动技能，不要UI，不要inventory，不要persistence。按Q向鼠标方向冲刺400距离。",
@@ -842,6 +869,19 @@ async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
 
   assert.equal(result.schema.readiness, undefined);
   assert.ok((result.clarificationPlan?.questions.length || 0) >= 2);
+  assert.equal(result.clarificationPlan?.signals?.semanticPosture, "open");
+  assert.equal(
+    result.clarificationPlan?.signals?.openStructuralContracts.some(
+      (contract) => contract.kind === "persistence-scope-boundary",
+    ),
+    true,
+  );
+  assert.equal(
+    result.clarificationPlan?.signals?.unresolvedDependencies.some(
+      (dependency) => dependency.id === "cross-feature-target",
+    ),
+    true,
+  );
   const crossFeatureQuestion = result.clarificationPlan?.questions.find(
     (question) => question.id === "clarify-cross-feature-target",
   );
@@ -851,7 +891,147 @@ async function testRunWizardToIntentSchemaProducesClarificationSidecar() {
   assert.ok(crossFeatureQuestion);
   assert.ok(persistenceQuestion);
   assert.equal(crossFeatureQuestion?.impact, "write-blocking-unresolved-dependency");
-  assert.equal(persistenceQuestion?.impact, "blueprint-blocking-structural");
+  assert.equal(persistenceQuestion?.impact, "structural-open-contract");
+}
+
+async function testRunWizardToIntentSchemaTreatsNativeItemSubsetAsBoundedCatalogDetail() {
+  const prompt =
+    "用户按下F4后弹出三个随机dota2原生装备选项，用户选择一个后获得对应装备，选项分R/SR/SSR/UR四个等级，等级影响概率和抽取权重";
+  const schemaObject: Partial<IntentSchema> = {
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "standalone-system",
+      confidence: "high",
+    },
+    requirements: {
+      functional: [prompt],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "user-chosen",
+      choiceCount: 3,
+      cardinality: "single",
+      commitment: "immediate",
+    },
+    contentModel: {
+      collections: [
+        {
+          id: "native_item_candidates",
+          role: "candidate-options",
+          ownership: "external",
+          updateMode: "replace",
+        },
+      ],
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["selection_modal", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: true,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [
+      {
+        id: "unc_native_item_subset",
+        summary: "The exact eligible subset of native Dota 2 items is not specified.",
+        affects: ["blueprint"],
+        severity: "medium",
+      },
+    ],
+    resolvedAssumptions: [],
+  };
+
+  const result = await runWizardToIntentSchema({
+    client: {
+      async generateObject() {
+        return { object: schemaObject, raw: schemaObject };
+      },
+    },
+    input: {
+      rawText: prompt,
+    },
+  });
+
+  assert.equal(result.clarificationPlan?.questions.length ?? 0, 0);
+  assert.equal(result.schema.selection?.choiceMode, "user-chosen");
+  assert.equal(result.schema.uncertainties?.length ?? 0, 1);
+}
+
+async function testRunWizardToIntentSchemaClarifiesOnlyAmbiguousSelectionFlow() {
+  const prompt = "用户按下F4后从本地加权池中弹出三张卡片，显示R/SR/SSR/UR稀有度和权重。";
+  const schemaObject: Partial<IntentSchema> = {
+    request: {
+      rawPrompt: prompt,
+      goal: prompt,
+    },
+    classification: {
+      intentKind: "micro-feature",
+      confidence: "high",
+    },
+    requirements: {
+      functional: [prompt],
+    },
+    selection: {
+      mode: "weighted",
+      source: "weighted-pool",
+      choiceMode: "none",
+      choiceCount: 3,
+      cardinality: "multiple",
+      commitment: "immediate",
+    },
+    uiRequirements: {
+      needed: true,
+      surfaces: ["card_popup", "rarity_cards"],
+    },
+    normalizedMechanics: {
+      trigger: true,
+      candidatePool: true,
+      weightedSelection: true,
+      playerChoice: false,
+      uiModal: true,
+      outcomeApplication: true,
+    },
+    uncertainties: [
+      {
+        id: "unc_duplicate_candidates",
+        summary: "The request does not specify whether duplicate candidates may appear within the same set of 3 draws.",
+        affects: ["blueprint"],
+        severity: "medium",
+      },
+    ],
+    resolvedAssumptions: [],
+  };
+
+  const result = await runWizardToIntentSchema({
+    client: {
+      async generateObject() {
+        return { object: schemaObject, raw: schemaObject };
+      },
+    },
+    input: {
+      rawText: prompt,
+    },
+  });
+
+  assert.equal(result.clarificationPlan?.questions.length ?? 0, 1);
+  assert.equal(result.clarificationPlan?.questions[0]?.id, "clarify-selection-flow");
+  assert.match(
+    result.clarificationPlan?.questions[0]?.reason || "",
+    /follow-up choice|revealed results resolve immediately/i,
+  );
+  assert.equal(
+    result.clarificationPlan?.signals?.openStructuralContracts[0]?.kind,
+    "selection-flow-boundary",
+  );
 }
 
 async function testRunWizardToIntentSchemaDoesNotClarifyDefinitionOnlyProviderShell() {
@@ -998,6 +1178,79 @@ function testFinalizeCreateIntentSchemaKeepsRevealBatchImmediateNonInteractive()
   assert.equal(finalized.normalizedMechanics?.playerChoice, false);
 }
 
+function testNormalizeIntentSchemaDefinitionOnlyProviderShellOverridesDriftedTriggerAndEffectFacts() {
+  const prompt =
+    "Create one gameplay ability shell only for later external granting. No activation key, no player input, no auto-attach, no grant logic, and no modifier application. It defines one primary hero ability for later external granting.";
+  const schema = normalizeIntentSchema(
+    {
+      request: { rawPrompt: prompt, goal: prompt },
+      classification: { intentKind: "cross-system-composition", confidence: "high" },
+      requirements: {
+        functional: [
+          "Define exactly one gameplay ability shell only.",
+          "Press Q to activate the shell.",
+          "Apply the modifier when granted.",
+        ],
+        typed: [
+          {
+            id: "ability_shell_definition",
+            kind: "resource",
+            summary: "Define one primary hero ability shell for later external granting.",
+            outputs: ["ability shell definition"],
+            priority: "must",
+          },
+          {
+            id: "trigger_req",
+            kind: "trigger",
+            summary: "Capture a Q key press to activate the ability shell.",
+            parameters: { triggerKey: "Q" },
+            priority: "must",
+          },
+          {
+            id: "effect_req",
+            kind: "effect",
+            summary: "Apply a modifier when the shell is granted.",
+            priority: "must",
+          },
+        ],
+      },
+      interaction: {
+        activations: [{ kind: "key", input: "Q", phase: "press", repeatability: "repeatable" }],
+      },
+      effects: {
+        operations: ["apply"],
+        durationSemantics: "instant",
+      },
+      outcomes: {
+        operations: ["grant-feature"],
+      },
+      parameters: {
+        shellOnly: true,
+        playerInput: false,
+        autoAttach: false,
+        grantLogicIncluded: false,
+        modifierApplicationIncluded: false,
+        externalGrantLater: true,
+        triggerKey: "Q",
+      },
+      resolvedAssumptions: [],
+    },
+    prompt,
+    host,
+  );
+
+  assert.equal(schema.interaction, undefined);
+  assert.equal(schema.effects, undefined);
+  assert.equal(schema.outcomes, undefined);
+  assert.equal(schema.parameters?.triggerKey, undefined);
+  assert.equal(schema.normalizedMechanics?.trigger, false);
+  assert.equal(schema.normalizedMechanics?.outcomeApplication, false);
+  assert.deepEqual(
+    (schema.requirements.typed || []).map((requirement) => requirement.kind),
+    ["generic"],
+  );
+}
+
 async function runTests() {
   testNormalizeIntentSchemaStaysSemanticOnly();
   testBuildWizardMessagesExplicitlyBanImplementationAuthority();
@@ -1005,6 +1258,7 @@ async function runTests() {
   testCreateFallbackIntentSchemaPreservesWeightedDrawFacts();
   testCreateFallbackIntentSchemaRecognizesRarityProbabilitySignalsWithoutWeightedKeyword();
   testFinalizeCreateIntentSchemaAppliesDeterministicPromptParameters();
+  testFinalizeCreateIntentSchemaRecognizesGenericLetterTriggerKey();
   testCreateFallbackIntentSchemaHonorsNegativeUiAndPersistenceConstraints();
   testCreateFallbackIntentSchemaKeepsRuntimePersistenceSessionLocal();
   testCreateFallbackIntentSchemaRecognizesStoragePanelInventorySemantics();
@@ -1016,11 +1270,14 @@ async function runTests() {
   testGovernanceDecisionsDoNotInventInputTriggerForSystemGrantActivation();
   testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShell();
   testNormalizeIntentSchemaCanonicalizesDefinitionOnlyProviderShellWithoutConsumerDrift();
+  testNormalizeIntentSchemaDefinitionOnlyProviderShellOverridesDriftedTriggerAndEffectFacts();
   testNormalizeIntentSchemaParaphraseGovernanceCoreConsistency();
   testFinalizeCreateIntentSchemaKeepsRevealBatchImmediateNonInteractive();
   await testRunWizardToIntentSchemaFallsBackOnProviderFailure();
   await testRunWizardToIntentSchemaUsesBoundedProviderTimeout();
   await testRunWizardToIntentSchemaProducesClarificationSidecar();
+  await testRunWizardToIntentSchemaTreatsNativeItemSubsetAsBoundedCatalogDetail();
+  await testRunWizardToIntentSchemaClarifiesOnlyAmbiguousSelectionFlow();
   await testRunWizardToIntentSchemaDoesNotClarifyDefinitionOnlyProviderShell();
   console.log("core/wizard/intent-schema.test.ts passed");
 }

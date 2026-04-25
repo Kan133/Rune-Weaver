@@ -1,9 +1,11 @@
 import { mkdirSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
 
 import { LifecycleArtifactBuilder } from "../../../../core/lifecycle/artifact-builder.js";
 import type { Dota2CLIOptions, Dota2ReviewArtifact } from "../../dota2-cli.js";
-import { resolveReviewArtifactOutputDir } from "../review-artifacts.js";
+import {
+  resolveReviewArtifactOutputDir,
+  resolveReviewArtifactOutputPath,
+} from "../review-artifacts.js";
 import { resolveReviewInputProvenance } from "../input-provenance.js";
 import { createPendingSemanticExportStatus } from "../semantic-artifacts.js";
 
@@ -94,9 +96,7 @@ export function persistDota2ReviewArtifact(
   const outputDir = resolveReviewArtifactOutputDir(options.output);
   mkdirSync(outputDir, { recursive: true });
 
-  const outputPath = options.output
-    ? resolve(process.cwd(), options.output)
-    : join(outputDir, `${defaultFilePrefix}-${Date.now()}.json`);
+  const outputPath = resolveReviewArtifactOutputPath(options.output, defaultFilePrefix);
 
   writeFileSync(outputPath, JSON.stringify(artifact, null, 2), "utf-8");
   return outputPath;

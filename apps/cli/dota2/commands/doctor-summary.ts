@@ -1,9 +1,22 @@
 import type { ActionSummary } from "./action-summary.js";
 import type { DoctorCheck } from "./doctor-checks.js";
+import {
+  buildDota2RepairabilityReadModel,
+  type Dota2GovernanceRepairabilityKind,
+} from "./dota2-governance-read-model.js";
+
+function getPostGenerationRepairability(
+  postGeneration: DoctorCheck | undefined,
+): ReturnType<typeof buildDota2RepairabilityReadModel> | undefined {
+  return postGeneration?.remediationKind
+    ? buildDota2RepairabilityReadModel(postGeneration.remediationKind as Dota2GovernanceRepairabilityKind)
+    : undefined;
+}
 
 export function buildDoctorActionSummary(checks: DoctorCheck[], hostRoot: string): ActionSummary {
   const byName = new Map(checks.map((check) => [check.name, check]));
   const postGeneration = byName.get("Post-Generation Validation");
+  const postGenerationRepairability = getPostGenerationRepairability(postGeneration);
 
   if (byName.get("Addon Config")?.status === "fail" || byName.get("Dota Directories")?.status === "fail") {
     return {
@@ -25,30 +38,31 @@ export function buildDoctorActionSummary(checks: DoctorCheck[], hostRoot: string
     };
   }
 
-  if (postGeneration?.status === "fail" && postGeneration.remediationKind === "requires_regenerate") {
+  if (postGeneration?.status === "fail" && postGenerationRepairability?.kind === "requires_regenerate") {
     return {
       status: "action_required",
-      headline: "Regenerate stale synthesized grounding",
-      reason: "This host predates the canonical grounding contract and repair cannot reconstruct missing raw grounding honestly.",
+      headline: postGenerationRepairability.doctorHeadline,
+      reason: postGenerationRepairability.doctorReason,
       source: "doctor",
     };
   }
 
-  if (postGeneration?.status === "fail" && postGeneration.remediationKind === "upgrade_workspace_grounding") {
+  if (postGeneration?.status === "fail" && postGenerationRepairability?.kind === "upgrade_workspace_grounding") {
     return {
       status: "action_required",
-      headline: "Upgrade legacy synthesized grounding",
-      reason: "Preserved raw grounding is present and can be upgraded into canonical module and feature assessments.",
+      headline: postGenerationRepairability.doctorHeadline,
+      reason: postGenerationRepairability.doctorReason,
       command: `npm run cli -- dota2 repair --host ${hostRoot} --safe`,
       source: "doctor",
     };
   }
 
   if (postGeneration?.status === "fail" || byName.get("Runtime Bridge Wiring")?.status === "fail") {
+    const repairability = postGenerationRepairability || buildDota2RepairabilityReadModel("repair_safe");
     return {
       status: "action_required",
-      headline: "Repair generated/runtime wiring",
-      reason: "Generated files or bridge wiring are inconsistent with a runnable host.",
+      headline: repairability.doctorHeadline,
+      reason: repairability.doctorReason,
       command: `npm run cli -- dota2 repair --host ${hostRoot} --safe`,
       source: "doctor",
     };
@@ -64,11 +78,11 @@ export function buildDoctorActionSummary(checks: DoctorCheck[], hostRoot: string
     };
   }
 
-  if (postGeneration?.status === "warn" && postGeneration.remediationKind === "review_required") {
+  if (postGeneration?.status === "warn" && postGenerationRepairability?.kind === "review_required") {
     return {
       status: "action_required",
-      headline: "Review exploratory grounding warnings",
-      reason: "Fresh synthesized output still has partial or insufficient grounding and remains review-required.",
+      headline: postGenerationRepairability.doctorHeadline,
+      reason: postGenerationRepairability.doctorReason,
       source: "doctor",
     };
   }

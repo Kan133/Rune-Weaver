@@ -68,11 +68,11 @@ export function deriveUpdateOpenSemanticResidue(input: {
           : `blocked:${blocker.path}`,
       summary: blocker.reason,
       class:
-        blocker.impact === "blueprint-blocking-structural"
+        blocker.impact === "structural-open-contract"
           ? "governance_relevant"
           : "blueprint_relevant",
       affects:
-        blocker.impact === "blueprint-blocking-structural"
+        blocker.impact === "structural-open-contract"
           ? ["intent", "blueprint"]
           : ["blueprint"],
       severity: "high",

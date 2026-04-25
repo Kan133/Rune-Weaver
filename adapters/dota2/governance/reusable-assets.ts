@@ -6,13 +6,82 @@ import {
   isFormallyAdmittedReusableAsset,
   validateReusableAssetGovernance,
 } from "../../../core/governance/reusable-assets.js";
+import {
+  DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+  GRANTABLE_PRIMARY_HERO_ABILITY_SURFACE_ID,
+} from "../cross-feature/index.js";
 import { getPatternMeta } from "../patterns/index.js";
 import { isKnownDota2Family } from "../families/registry.js";
 
 const SELECTION_POOL_ADMISSION_NOTE_REF =
   "archive/docs/2026-04-session-sync-history/dota2-mainline-20260423-0232.md";
+export const GRANT_ONLY_PROVIDER_EXPORT_SEAM_ID = "grant_only_provider_export_seam";
+const GRANT_ONLY_PROVIDER_EXPORT_SEAM_PACKET_ID =
+  "dota2.grant_only_provider_export_seam.explore_to_seam.v1";
+const GRANT_ONLY_PROVIDER_EXPORT_SEAM_CONTRACT_REFS = [
+  DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+  "dota2_provider_ability_export",
+  "dota2_selection_grant_contract",
+  "dota2_selection_grant_binding",
+] as const;
+const GRANT_ONLY_PROVIDER_EXPORT_SEAM_EVIDENCE_REFS = [
+  "adapters/dota2/cross-feature/grant-seam.ts",
+  "adapters/dota2/cross-feature/grant-artifacts.ts",
+  "adapters/dota2/governance/promotion-readiness-harness.ts",
+  "docs/provider-export-seam/artifact.json",
+] as const;
+const GRANT_ONLY_PROVIDER_EXPORT_SEAM_ACCEPTANCE_REFS = [
+  "docs/provider-export-seam/artifact.json",
+  "docs/provider-export-seam/acceptance-summary.json",
+] as const;
+const GRANT_ONLY_PROVIDER_EXPORT_SEAM_INVARIANTS = [
+  "Lua, KV, and provider export identity must close to exactly one authoritative runtime abilityName.",
+  "The provider may export only one grant_only capability surface for the seam.",
+  "Consumer grant binding must stay explicit and remain local to the consuming feature.",
+  "Bridge wiring may preload the grant runtime but must not auto-attach it to heroes.",
+  "Non-provider features must not leak the provider export sidecar.",
+] as const;
+const GRANT_ONLY_PROVIDER_EXPORT_SEAM_REVIEW_REQUIRED_RISKS = [
+  "The seam must not collapse back into hidden attachment authority.",
+  "selection_pool and other consumer-local families must not absorb provider seam authority.",
+  "Exploratory success or exact grounding must not auto-promote reusable truth without manual admission.",
+] as const;
+const DOTA2_REUSABLE_SEAM_IMPLEMENTATIONS = new Set<string>([
+  GRANT_ONLY_PROVIDER_EXPORT_SEAM_ID,
+]);
 
 const DOTA2_REUSABLE_ASSET_PROMOTION_PACKETS: ReusableAssetPromotionPacket[] = [
+  {
+    id: GRANT_ONLY_PROVIDER_EXPORT_SEAM_PACKET_ID,
+    kind: "explore_to_seam",
+    assetId: GRANT_ONLY_PROVIDER_EXPORT_SEAM_ID,
+    assetType: "seam",
+    originLevel: "explore",
+    hostKinds: [DOTA2_X_TEMPLATE_HOST_KIND],
+    contractRefs: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_CONTRACT_REFS],
+    evidenceRefs: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_EVIDENCE_REFS],
+    acceptanceRefs: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_ACCEPTANCE_REFS],
+    invariants: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_INVARIANTS],
+    reviewRequiredRisks: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_REVIEW_REQUIRED_RISKS],
+    stableCapabilities: [
+      "dota2.provider_export.grant_only",
+      "dota2.selection_grant_binding.explicit",
+    ],
+    stableInputs: [
+      DOTA2_PRIMARY_HERO_ABILITY_GRANTABLE_CONTRACT_ID,
+      "dota2_selection_grant_contract",
+    ],
+    stableOutputs: [
+      "dota2-provider-ability-export.json",
+      "selection-grant-bindings.json",
+      "selection-grant-contract.json",
+    ],
+    decision: {
+      summary: "Manual review admitted the grant-only provider export seam after fresh-host proof, stale-host upgrade proof, and formal governance closure.",
+      decidedBy: "manual-review",
+      decidedAt: "2026-04-23",
+    },
+  },
   {
     id: "dota2.effect.outcome_realizer.explore_to_pattern.v1",
     kind: "explore_to_pattern",
@@ -107,6 +176,22 @@ const DOTA2_REUSABLE_ASSET_PROMOTION_PACKETS: ReusableAssetPromotionPacket[] = [
 
 const DOTA2_REUSABLE_ASSET_REGISTRY: ReusableAssetPromotionRegistryEntry[] = [
   {
+    assetId: GRANT_ONLY_PROVIDER_EXPORT_SEAM_ID,
+    assetType: "seam",
+    originLevel: "explore",
+    hostKinds: [DOTA2_X_TEMPLATE_HOST_KIND],
+    status: "admitted",
+    contractRefs: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_CONTRACT_REFS],
+    evidenceRefs: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_EVIDENCE_REFS],
+    acceptanceRefs: [...GRANT_ONLY_PROVIDER_EXPORT_SEAM_ACCEPTANCE_REFS],
+    packetId: GRANT_ONLY_PROVIDER_EXPORT_SEAM_PACKET_ID,
+    decision: {
+      summary: "Manual review admitted the provider export seam as formal reusable truth after the positive stale-host upgrade proof closed.",
+      decidedBy: "manual-review",
+      decidedAt: "2026-04-23",
+    },
+  },
+  {
     assetId: "effect.outcome_realizer",
     assetType: "pattern",
     originLevel: "explore",
@@ -176,12 +261,13 @@ export function validateDota2ReusableAssetGovernance() {
     {
       patternExists: (assetId) => Boolean(getPatternMeta(assetId)),
       familyExists: (assetId) => isKnownDota2Family(assetId),
+      seamExists: (assetId) => DOTA2_REUSABLE_SEAM_IMPLEMENTATIONS.has(assetId),
     },
   );
 }
 
 export function getDota2ReusableAssetAdmissionStatus(
-  assetType: "pattern" | "family",
+  assetType: "pattern" | "family" | "seam",
   assetId: string,
 ): "candidate" | "admitted" | "deprecated" | "untracked" {
   return getReusableAssetAdmissionStatus(
@@ -193,7 +279,7 @@ export function getDota2ReusableAssetAdmissionStatus(
 }
 
 export function isDota2ReusableAssetFormallyAdmitted(
-  assetType: "pattern" | "family",
+  assetType: "pattern" | "family" | "seam",
   assetId: string,
 ): boolean {
   return isFormallyAdmittedReusableAsset(

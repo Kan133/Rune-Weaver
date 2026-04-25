@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { FeatureDetail, refreshFeatureAfterUpdate } from "./FeatureDetail";
 import { useFeatureStore } from "@/hooks/useFeatureStore";
+import { normalizeFeatureDisplay } from "@/lib/normalizeFeatureDisplay";
 import type { Feature } from "@/types/feature";
 
 const baseFeature = {
@@ -49,6 +50,7 @@ const baseFeature = {
       score: 100,
       warnings: [],
     },
+    compatibilitySource: "compatibility-only" as const,
   },
   gapFillBoundaries: [],
 };
@@ -91,8 +93,16 @@ async function runTests(): Promise<void> {
 
   const html = renderToStaticMarkup(React.createElement(FeatureDetail));
   assert.equal(html.includes("Update"), true);
-  assert.equal(html.includes("预览更新"), true);
-  assert.equal(html.includes("应用更新"), true);
+  assert.equal(html.includes("Preview Update"), true);
+  assert.equal(html.includes("Apply Update"), true);
+  assert.equal(html.includes("Governance source: compatibility-only warning: legacy fallback payload"), true);
+  assert.equal(normalizeFeatureDisplay({
+    ...baseFeature,
+    reviewSignals: {
+      ...baseFeature.reviewSignals,
+      compatibilitySource: undefined,
+    },
+  } as Feature)?.reviewSignals.compatibilitySource, "compatibility-only");
 
   let reselectedFeatureId: string | null = null;
   await refreshFeatureAfterUpdate(

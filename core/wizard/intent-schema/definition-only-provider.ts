@@ -138,6 +138,44 @@ function normalizeDefinitionOnlyProviderRequirement(
   };
 }
 
+function stripDefinitionOnlyProviderParameters(
+  candidate: Partial<IntentSchema>,
+): Partial<IntentSchema>["parameters"] {
+  if (!isRecord(candidate.parameters)) {
+    return candidate.parameters;
+  }
+
+  const {
+    triggerKey: _triggerKey,
+    key: _key,
+    toKey: _toKey,
+    eventName: _eventName,
+    ...rest
+  } = candidate.parameters;
+
+  return rest;
+}
+
+function isOutOfScopeDefinitionOnlyProviderRequirement(
+  requirement: IntentRequirement,
+): boolean {
+  if (isDefinitionOnlyProviderShellRequirement(requirement)) {
+    return false;
+  }
+
+  if (
+    requirement.kind === "trigger" ||
+    requirement.kind === "rule" ||
+    requirement.kind === "ui" ||
+    requirement.kind === "effect" ||
+    requirement.kind === "integration"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isDefinitionOnlyProviderDerivedState(
   state: Pick<NonNullable<IntentSchema["stateModel"]>["states"][number], "id" | "summary" | "owner" | "lifetime" | "mutationMode">,
 ): boolean {
@@ -235,7 +273,10 @@ export function analyzeDefinitionOnlyProviderSemantics(
   const definitionOnlyRequested =
     readBooleanParameter(parameters, "shellOnly", "definitionOnly") === true ||
     DEFINITION_ONLY_PATTERN.test(evidenceText);
-  const noInteractiveActivation = !(candidate.interaction?.activations || []).some(
+  const explicitNoInteractiveActivation =
+    readBooleanParameter(parameters, "playerInput", "hasPlayerInput") === false ||
+    NO_TRIGGER_OR_INPUT_PATTERN.test(evidenceText);
+  const noInteractiveActivation = explicitNoInteractiveActivation || !(candidate.interaction?.activations || []).some(
     (activation) => activation.kind === "key" || activation.kind === "mouse",
   );
   const noSelectionOrUi =
@@ -314,6 +355,7 @@ export function canonicalizeDefinitionOnlyProviderCandidate(
 ): Partial<IntentSchema> {
   const timing = candidate.timing;
   const normalizedTypedRequirements = (candidate.requirements?.typed || [])
+    .filter((requirement) => !isOutOfScopeDefinitionOnlyProviderRequirement(requirement))
     .filter((requirement) => !isOutOfScopeProviderIntegrationRequirement(requirement))
     .map((requirement) => normalizeDefinitionOnlyProviderRequirement(requirement));
   const filteredStateModel = filterDefinitionOnlyProviderStateModel(candidate.stateModel);
@@ -345,5 +387,6 @@ export function canonicalizeDefinitionOnlyProviderCandidate(
     integrations: undefined,
     normalizedMechanics: undefined,
     uiRequirements: candidate.uiRequirements?.needed === false ? { needed: false } : undefined,
+    parameters: stripDefinitionOnlyProviderParameters(candidate),
   };
 }

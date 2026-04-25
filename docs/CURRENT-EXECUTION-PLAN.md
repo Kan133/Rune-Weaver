@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: baseline
 > Update cadence: on-phase-change
-> Last verified: 2026-04-18
+> Last verified: 2026-04-23
 > Read when: deciding the active Dota2 mainline execution queue and critical-path task order
 > Do not use for: cross-track coordination by itself or long-term roadmap planning
 
@@ -16,62 +16,66 @@ If a fresh session-sync note disagrees with this file on the current step or blo
 
 ## Current Step
 
-**Step 6. Validation / evidence / case generalization**
+**Step 7. Productization / UX bridge**
 
-The V2 governance-first control plane is now closed enough in code and ratified into the root baseline.
+The V2 governance-first control plane and Step 6 evidence closure are now strong enough to move Dota2 into productization.
 
 The active Dota2 queue is no longer:
 
-- v1 grammar-family closure
-- package-6 grammar refresh
-- synthetic exploratory bridge migration
+- pure case/evidence closure work
+- ad hoc CLI/workbench/bridge lifecycle summaries
+- workbench-side governance heuristics growing as a second authority
 
 The active queue is now:
 
-- validate the closed V2 chain on real Dota2 cases
-- prove templated and exploratory paths with the same final gate semantics
-- prove dependency-driven revalidation and maintenance-command truthfulness
+- project existing governance truth through one Dota2-owned product read-model
+- make bridge, CLI, and workbench consume the same lifecycle / reusable-governance / grounding / repairability axes
+- keep compatibility-only fallback visibly secondary for stale bridge/workspace payloads without turning it back into product authority
+- use `export-bridge` as the only legacy payload refresh lane when stale payloads need to be retired
+- keep checked-in public samples and dev/test fixtures from re-teaching raw legacy payload shapes as the default product path
 
 ## Current Goal
 
-Validate the ratified Dota2 V2 lifecycle on honest end-to-end evidence.
+Productize the ratified Dota2 V2 lifecycle truth without inventing a second governance authority.
 
 Current target chain:
 
-`IntentSchema -> Blueprint Stage -> Strategy Selection -> Assembly / ArtifactSynthesis -> LocalRepair -> Host Realization / Routing / Write -> Validation -> Final CommitDecision -> Workspace Lifecycle`
+`Canonical Dota2 Governance Truth -> Dota2 Governance Read-Model -> Bridge / CLI / Workbench Product Surfaces`
 
 ## Current Blocker
 
-The primary blocker is no longer missing architecture.
+The primary blocker is no longer missing architecture or case evidence.
 
-The primary blocker is missing fresh end-to-end evidence across the new V2 paths:
+The primary blocker is keeping product surfaces honest while stale payloads still exist:
 
-- templated create/update/regenerate stability
-- exploratory/guided-native synthesis with review-required commit
-- dependency-driven revalidation on provider/consumer changes
-- delete / rollback maintenance truth under the same final gate semantics
+- older bridge/workspace payloads without `governanceReadModel` still need compatibility-only display fallback
+- stale host-status and legacy workbench-result payloads still need the same display-only fallback boundary
+- `export-bridge` is the only payload refresh lane for retiring those stale payloads; doctor/validate/repair are not migration tools
+- repairability must stay live observational truth rather than persisted workspace authority
+- future product entry points must not re-derive lifecycle, admission, grounding, or repairability locally
+- genericization into core is premature until another host proves the same axes without Dota2-specific semantics
+
+Current Step 7 policy is fixed:
+
+- compatibility-only fallback may shrink further only after all product/public sources are governed, connected-host stays read-model-first, legacy probes remain dev/debug/test-only, and guard tests prove no product path depends on the compatibility projector
+- stale payload refresh is event-driven, not time-driven: refresh only when product-facing host truth changes, the read-model projection changes, the public bridge artifact is missing root-level `governanceReadModel`, or a checked-in proof host/sample must be re-exported
+- `npm run cli -- export-bridge --host <path> [--output <dir>]` is the only refresh lane; `doctor`, `validate`, `repair`, `workbench --inspect`, connected-host status, and manual JSON edits are never refresh mechanisms
+- `buildDota2GovernanceReadModel(...)` stays Dota2 adapter-owned with schema version `dota2-governance-read-model/v1`, and no core genericization work is in scope until a second host proves the same axes without importing Dota2 seam or doctor semantics
 
 ## Current Plan Items
 
-- `[done]` Preserve the governance backbone:
-  - stable feature identity
-  - owned files
-  - bridge authority
-  - workspace lifecycle truth
-- `[done]` Ratify V2 baseline semantics:
-  - grammar is no longer a pre-generation hard gate
-  - unknown mechanics can continue into guided-native / exploratory
-  - repair is no longer the primary generation model
-- `[done]` Land Dota2 artifact synthesis for guided-native / exploratory asks
-- `[done]` Land bounded local repair / muscle fill
-- `[done]` Land dependency-driven revalidation
-- `[done]` Land final commit decision as chain-end authority
-- `[doing]` Re-prove the lifecycle with fresh evidence
-- `[todo]` Add or refresh narrow acceptance evidence for:
-  - stable templated feature iteration
-  - exploratory synthesized feature
-  - dependency contract break / downgrade behavior
-- `[todo]` Decide which successful exploratory outputs are ready to graduate into reusable pattern/family assets
+- `[done]` Close the V2 governance-first control plane and re-prove the bounded Dota2 case lanes on fresh hosts.
+- `[done]` Land Dota2-first governance product read-model V1 with four explicit axes:
+  - `lifecycle`
+  - `reusableGovernance`
+  - `grounding`
+  - `repairability`
+- `[done]` Route bridge export, workbench inspect, doctor wording, and workbench UI through the shared read-model instead of local heuristics.
+- `[done]` Reduce compatibility-only fallback to an explicit legacy display boundary across raw workspace, bridge, connected-host status, and legacy workbench-result payloads.
+- `[done]` Move the default public sample and dev/test teaching lane onto governed payloads, while preserving one explicit legacy compatibility probe for regression.
+- `[done]` Fix the compatibility shrink gate: only shrink fallback after all product/public sources are governed, connected-host remains read-model-first, legacy probes stay dev/debug/test-only, and guard tests prove no product path depends on compatibility projection.
+- `[done]` Fix the stale-payload refresh cadence as event-driven and `export-bridge`-only; `doctor`/`validate`/`repair` remain observation or proof surfaces rather than migration tools.
+- `[done]` Fix the no-core guard: governance read-model genericization stays blocked until second-host evidence proves the same axes without Dota2-specific seam or doctor semantics.
 
 ## Mainline Rules
 
@@ -79,59 +83,60 @@ The primary blocker is missing fresh end-to-end evidence across the new V2 paths
 2. Do not present repair as a substitute for blueprinting or synthesis.
 3. Do not allow raw prompt text to infer undeclared cross-feature writes.
 4. Do not treat exploratory write success as “stabilized” without review and repeated evidence.
-5. Do not let workbench or demo artifacts replace CLI lifecycle truth.
+5. Do not let bridge, CLI, or workbench invent a second governance authority on top of the canonical Dota2 truth.
 
 ## Ordered Work Packages
 
-### 1. Prove Templated Lifecycle Stability
+### 1. Land And Hold One Governance Read-Model
 
 Acceptance:
 
-- known templated feature can create, update, and regenerate without ownership drift
-- stable file layout remains stable
-- dependency graph remains truthful
+- one Dota2-owned builder projects product-facing governance truth
+- the builder consumes only canonical Dota2/workspace truth plus optional live observation
+- product verdict stays derived guidance, not new authority
 
-### 2. Prove Exploratory / Guided-Native Path
-
-Acceptance:
-
-- no family/pattern hit still reaches synthesis
-- owned Lua/KV/UI candidate artifacts are produced
-- final commit decision is `exploratory`
-- review artifact clearly states review requirement
-
-### 3. Prove Repair Boundary
+### 2. Unify Product Consumption
 
 Acceptance:
 
-- boundary-local failure can trigger repair
-- repair stays inside bounded owned scope
-- repair cannot widen ownership or dependency truth
+- bridge export emits the read-model at the top level
+- CLI inspect and doctor wording consume the same read-model or its repairability formatter
+- workbench UI prefers the read-model over local heuristics
 
-### 4. Prove Dependency Revalidation
-
-Acceptance:
-
-- provider update with compatible surface keeps consumers valid
-- required surface break blocks provider commit
-- optional break downgrades consumer to `needs_review`
-
-### 5. Tighten Graduation
+### 3. Bound Compatibility
 
 Acceptance:
 
-- repeated successful exploratory outputs can be promoted without changing workspace ownership semantics
-- family/pattern graduation is evidence-driven, not aspirational
+- older payloads still render without breaking the product
+- compatibility-only fallback is explicitly marked and visibly secondary
+- bridge refresh is the only stale-payload retirement lane
+- no new product surface grows its own lifecycle/admission/grounding heuristics
+
+### 4. Protect Observational Repairability
+
+Acceptance:
+
+- live validation/repair output can inform product surfaces
+- repairability does not become persisted workspace authority
+- `not_checked` remains an honest state where no live observation exists
+
+### 5. Delay Genericization Until Evidence Exists
+
+Acceptance:
+
+- Dota2 seam and doctor semantics stay adapter-owned
+- no core generic read-model is introduced without second-host proof
+- future extraction is evidence-driven, not aspirational
 
 ## Non-Goals
 
 Do not treat these as the active queue unless explicitly reopened:
 
 - bringing back v1 grammar package work
-- broad new case growth as a substitute for V2 validation
+- broad new case growth as a substitute for product-surface convergence
 - arbitrary host-side code editing
 - second-host write-ready claims
-- workbench-first lifecycle execution
+- product UIs inferring governance truth on their own
 
 ## Related Docs
 

@@ -21,6 +21,7 @@ import { runAssemblyCLI, showAssemblyHelp } from "./assembly-cli.js";
 import { runDota2CLI, showDota2Help } from "./dota2-cli.js";
 import { resolveDota2CommandSurface } from "./dota2/command-surface.js";
 import { runPatternCLI, showPatternHelp } from "./pattern-cli.js";
+import { consumePossiblySpacedFlagValue } from "./arg-value.js";
 import { readLLMExecutionConfig } from "../../core/llm/factory.js";
 
 // ============================================================================
@@ -123,7 +124,11 @@ function parseArgs(): CLIOptions {
     const arg = args[i];
     switch (arg) {
       case "--host":
-        options.host = args[++i];
+        {
+          const parsed = consumePossiblySpacedFlagValue(args, i);
+          options.host = parsed.value;
+          i = parsed.nextIndex;
+        }
         break;
       case "--input":
       case "-i":
@@ -142,7 +147,11 @@ function parseArgs(): CLIOptions {
         options.instruction = args[++i];
         break;
       case "--approve":
-        options.approve = args[++i];
+        {
+          const parsed = consumePossiblySpacedFlagValue(args, i);
+          options.approve = parsed.value;
+          i = parsed.nextIndex;
+        }
         break;
       case "--mode":
         options.gapFillMode = args[++i] as "review" | "apply" | "validate-applied";
@@ -170,7 +179,11 @@ function parseArgs(): CLIOptions {
         break;
       case "--output":
       case "-o":
-        options.output = args[++i];
+        {
+          const parsed = consumePossiblySpacedFlagValue(args, i);
+          options.output = parsed.value;
+          i = parsed.nextIndex;
+        }
         break;
       case "--temperature":
         options.temperature = parseFloat(args[++i]);
@@ -250,11 +263,13 @@ function showHelp(command?: string, subcommand?: string): void {
   wizard stability      运行 Wizard 稳定性采样与摘要
   blueprint <text>      运行 Wizard -> Blueprint 完整链路
   dota2 run <prompt>    运行完整 Dota2 主链�?
-  export-bridge         导出 workspace �?UI bridge
+  export-bridge         唯一 legacy payload refresh lane；重新导出 governed UI bridge
 
 export-bridge 命令:
   npm run cli -- export-bridge --host <path>
   npm run cli -- export-bridge --host <path> --output <dir>
+                      重新生成 canonical bridge payload 与 governanceReadModel
+                      不属于 repair / doctor / validate surface
 
 dota2 命令:
   npm run cli -- dota2 init --host <path> --skip-install
@@ -391,27 +406,10 @@ async function runAssemblyCommand(options: CLIOptions): Promise<boolean> {
   return await runAssemblyCLI(assemblyOptions);
 }
 
-// F011: Export bridge command - CLI �?UI bridge
+// F011: Export bridge command - canonical legacy payload refresh lane for the UI bridge
 async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
-  const args = process.argv.slice(2);
-  let hostRoot: string | undefined;
-  let outputDir: string | undefined;
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--host") {
-      hostRoot = args[i + 1];
-    }
-    if (args[i] === "--output" || args[i] === "-o") {
-      outputDir = args[i + 1];
-    }
-  }
-
-  if (!hostRoot) {
-    hostRoot = options.host;
-  }
-  if (!outputDir) {
-    outputDir = options.output;
-  }
+  const hostRoot = options.host;
+  const outputDir = options.output;
 
   if (!hostRoot) {
     console.error("�?Missing --host. Usage: npm run cli -- export-bridge --host <path>");
@@ -419,7 +417,7 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
   }
 
   console.log("=".repeat(60));
-  console.log("🌉 Rune Weaver - Export Bridge for UI");
+  console.log("Rune Weaver - Export Bridge (Legacy Payload Refresh Lane)");
   console.log("=".repeat(60));
   console.log(`\n📁 Host: ${hostRoot}`);
   if (outputDir) {
@@ -427,6 +425,8 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
   } else {
     console.log(`📤 Output: apps/workbench-ui/public (default)`);
   }
+  console.log("Surface: canonical refresh lane for legacy bridge/raw payload consumers");
+  console.log("Boundary: does not run doctor, repair, or validate");
 
   const { exportHostToBridge } = await import("../../adapters/dota2/bridge/export.js");
   const result = await exportHostToBridge(hostRoot, outputDir);
@@ -449,7 +449,8 @@ async function runExportBridgeCommand(options: CLIOptions): Promise<boolean> {
     }
   }
 
-  console.log("\n💡 Tip: Run workbench-ui and select 'Local Bridge' source to view this workspace");
+  console.log("\nTip: use this command to refresh legacy payload consumers with a governed bridge export.");
+  console.log("Tip: doctor / repair / validate remain separate runtime and validation surfaces.");
 
   return result.success;
 }

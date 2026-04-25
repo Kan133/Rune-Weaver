@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-mainline-transition
-> Last verified: 2026-04-23
+> Last verified: 2026-04-24
 > Read when: coordinating Dota2 and War3 mainlines or deciding the current cross-track attention split
 > Do not use for: replacing latest session-sync notes or subsystem contract docs by itself
 
@@ -21,23 +21,32 @@ Use these status markers:
 
 Current step:
 
-- Step 6. Validation / evidence / case generalization
-- Current proof delta: structured Panorama reference coverage now closes the fresh reveal-only UI grounding seam without policy softening, and a repo-side promotion-readiness harness now judges repeated exploratory seams without mutating formal admission truth. `rw-test14` still proves too-old exploratory hosts remain regenerate-only when raw grounding is missing, while fresh `rw-test24` proves both provider-shell and reveal-batch outputs write, validate, and doctor-pass with `groundingSummary = exact`. Stable family regression on `rw-test-1` and `rw-test-2` still confirms the source-backed selection cases remain clean.
-- Current control-plane delta: Dota2-first generic contract helpers, typed dependency revalidation, manual reusable-asset promotion governance, canonical grounding assessment governance, structured Panorama exact-backing, and a proof-first promotion-readiness harness are all landed. The active mainline no longer needs to argue about provider/consumer contract identity, reveal-only routing, or the last fresh-host UI grounding unknown; it can now focus on honest stale-host recovery boundaries and explicit manual promotion judgment.
-- Current slice: Dota2 V2 has now closed update-authority correctness, backbone-and-facet planning convergence, bounded create-side `IntentSchema` governance-core stability for the local weighted-selection / `talent_draw` semantic cluster, the second-round internal `IntentSchema` layer split that turns `raw facts / governance decisions / open semantic residue` into first-class seams, the downstream consumer audit that propagates `IntentGovernanceDecisions` into blueprint status, `selection_pool` family admission, and planning verdicts, the update-side three-layer governance upgrade that makes `CurrentFeatureTruth -> semanticAnalysis -> governedChange` the only intended update authority, the generic selection outcome layer extraction that moves concrete attribute/item/unit realization out of `rule.selection_flow`, the shared selection-case demo/evidence runner extraction that turns the old talent-only proof lane into one reusable selection-case acceptance surface, the provider-side ability identity alignment that stops cross-feature provider export from guessing `abilityName` when KV/Lua/export truth does not close, the Dota2-first generic contract layer and reusable-asset governance V1, the reveal-only weighted-card boundary closure that keeps ambiguous prompts in clarification while explicit batch-reveal prompts route to a proven non-family exploratory continuation, the review-only grounding governance layer that turns raw adapter-local symbol checks into canonical artifact/module/feature assessments consumed by final commit, workspace persistence, validator, CLI, and workbench, the explicit stale-host grounding recovery seam that upgrades only when raw evidence survives, and now the structured Panorama exact-backing plus proof-first promotion-readiness harness that close the last fresh `TextButton` grounding gap without auto-promoting repeated exploratory outputs. Fresh `rw-test6` dry-run evidence still shows the bounded inventory wording cluster (`存储面板 / 仓库 / 库存面板`) converging through the same governed update seam, fresh `rw-test11` create evidence still isolates one honest `selection_flow` clarification plus a reproved explicit choose-one variant, fresh `rw-test-1` host evidence re-proves both the real CLI talent draw create path and the legacy `demo:talent-draw` harness on the new `selection_pool + selection_outcome` skeleton, fresh `rw-test-2` host evidence proves `equipment_draw_demo` as the second sibling case on the same family with Dota2-native item delivery owned by `selection_outcome`, and fresh `rw-test24` host evidence proves provider-shell plus reveal-batch writes, validate, doctor, and review outputs on the tightened grounding contract.
+- Step 7. Productization / UX bridge
+- Current create-path delta: the Dota2 create front-door is no longer wizard-by-default for bounded local selection asks. Explicit choose-one `selection_pool` prompts now advance directly through Blueprint/family closure, `selection_pool` admission treats feature-owned pool membership plus `external_catalog` object truth honestly, and ambiguous weighted-card prompts stop on a single `selection_flow` clarification instead of leaking into synthesized fallback.
+- Current host-proof delta: fresh hosts now prove the repaired create path end to end. `talent_draw_demo` writes and validates on `D:\rw-test30`, `equipment_draw_demo` writes and validates on `D:\rw-test31` through a catalog-backed `selection_pool` path, and the ambiguous weighted-card negative probe on `D:\rw-test32` remains blocked before write with exactly one honest `selection-flow-boundary`.
+- Current proof delta: the Dota2-first governance product read-model now closes product-surface drift end to end. Bridge export emits a top-level `governanceReadModel`, workbench inspect and doctor wording consume the same lifecycle / reusable-governance / grounding / repairability projection, workbench UI prefers that shared projection over local heuristics, and the connected-host live path now also carries `governanceReadModel` through `/api/host/status -> useHostScanner -> useFeatureStore -> workspaceAdapter` without live observation side effects. Fresh host regressions still pass on `rw-test24`, `rw-test25`, `rw-test-1`, and `rw-test-2`, and the checked-in workbench bridge sample reflects the root-level `governanceReadModel` so compatibility-only fallback is no longer the default sample path.
+- Current sample/debug delta: the checked-in public sample lane now defaults to a governed bridge-style payload, while the old raw workspace shape survives only as an explicitly named legacy compatibility probe for regression. Dev/mock fixture lanes are also neutralized so they no longer infer `committable`, `clean`, admitted reusable assets, grounding quality, or readiness scores from compatibility-only data.
+- Current control-plane delta: Dota2 owns `buildDota2GovernanceReadModel(...)` as a product read-model builder without lifting Dota2 seam or doctor semantics into core. Product surfaces no longer need to infer lifecycle, admission, grounding, or repairability separately; repairability remains live observational truth and may be exported as a snapshot, but it is not promoted into persisted workspace authority.
+- Current slice: Dota2 has moved past Step 6 evidence closure into a governance-read-model productization slice. The active work is now to keep CLI / workbench / bridge aligned on one honest projection of existing canonical truth, keep compatibility fallback visibly secondary only for stale bridge/workspace/host-status payloads, and avoid re-growing product-side heuristics while the admitted `grant_only_provider_export_seam` and the exploratory reveal/provider feature proofs remain bounded to their existing lifecycle and governance truths. In this slice, `export-bridge` is the only legacy payload refresh lane: it retires stale payloads by re-exporting governed bridge data, but it does not act as doctor/repair/validate, does not reopen Step 6 seam proof, and does not create runtime semantics or reusable admission.
+- Current Step 7 policy is now explicit instead of aspirational:
+  - compatibility-only fallback may shrink further only after all product/public sources are governed, connected-host stays read-model-first, legacy probes remain dev/debug/test-only, and guard tests prove no product path depends on compatibility projection
+  - stale payload refresh is event-driven and only runs when product-facing host truth changes, the read-model projection changes, the public bridge artifact lacks root-level `governanceReadModel`, or a checked-in proof host/sample needs re-export
+  - the only refresh command is `npm run cli -- export-bridge --host <path> [--output <dir>]`
+  - Dota2 keeps `buildDota2GovernanceReadModel(...)` and schema version `dota2-governance-read-model/v1` inside the adapter until a second host proves the same axes without Dota2-specific seam or doctor semantics
 
 Primary blocker:
 
-- Update: exploratory grounding governance V1 is now closed; the remaining active blockers are the regenerate-only subset of stale exploratory hosts, positive stale-host upgrade proof where raw evidence survives, and promotion judgment for repeated exploratory outputs.
-- The blocker is no longer missing typed `data + capability` contract metadata on the current Dota2 seams, and reusable-asset governance V1 is now explicit instead of implicit.
-- The blocker is no longer missing canonical grounding assessment authority in final commit, validator, workspace, CLI, or workbench.
+- Update: Step 6 evidence closure is now strong enough that the active blocker has moved to product-surface honesty and compatibility control.
+- The blocker is no longer missing admitted seam governance, positive stale-host upgrade proof where raw grounding survives, fresh reveal-only UI grounding closure, or a unified review-only grounding assessment consumed by validator, workspace, CLI, and workbench.
+- The blocker is no longer missing typed `data + capability` contract metadata on the active Dota2 seams, and reusable-asset governance V1 is now explicit instead of implicit.
 - The blocker is no longer missing V2 control-plane pieces, grammar gating removal, single-skill bundle convergence, facet-warning cleanup, source-backed update purity, templated `talent_draw` lifecycle stability, or initialized-host exploratory commit evidence.
-- The blocker is no longer exploratory bounded trigger-key updates drifting into split `input.key_binding` vs preserved Lua shell truth, and it is no longer Dota2 ability KV ownership drifting back toward aggregate-file ownership.
 - The blocker is now:
-  - stale exploratory hosts that were written before grounding governance landed now split into two honest paths: explicit upgrade only when raw grounding survives, regenerate-only otherwise
-  - stale-host recovery still lacks a positive end-to-end host proof where raw `metadata.grounding` survives and the explicit upgrade path succeeds
-  - repeated exploratory write paths still need explicit promotion judgment instead of drifting into "probably reusable" status; the new readiness harness closes evidence shape but not the manual decision
-  - reveal-only weighted-card is now a proven exploratory path, but it remains review-required and must not be treated as a stabilized reusable asset
+  - the former create-path blocker is closed: `equipment` no longer drifts to exploratory because of front-door/wizard authority leakage, and ambiguous weighted-card prompts no longer sneak past clarification
+  - compatibility-only fallback still exists for stale raw workspace, old bridge, old host-status, and legacy workbench-result payloads, and it must remain display-only instead of regrowing product heuristics
+  - the refresh lane must stay narrow: only `export-bridge` retires stale payloads, while doctor/validate/repair stay observational or validation-only
+  - repairability must remain live observational truth rather than persisted workspace authority, even when bridge exports a snapshot for display or connected-host status projects read-only governance state
+  - same-host repeated `F4` create proofs currently hit an honest downstream integration-point conflict; treat that as a separate governance/integration slice, not as a reason to reopen wizard/front-door authority
+  - any future genericization of the read-model must wait for second-host evidence; do not lift Dota2 seam or doctor semantics into core prematurely
 
 Plan items:
 
@@ -77,8 +86,19 @@ Plan items:
 - `[done]` Land explicit synthesized grounding recovery for raw-metadata-bearing stale hosts, keep too-old hosts regenerate-only, and tighten fresh grounding extraction/exact lookup to remove the reveal-batch helper/type false positives on fresh hosts.
 - `[done]` Close the fresh reveal-only UI grounding seam with structured Panorama exact-backing instead of allowlist/prompt fallback, and re-prove provider-shell plus reveal-batch on fresh `rw-test24` host evidence.
 - `[done]` Land the repo-side Dota2 promotion-readiness harness so repeated exploratory seams can be judged by explicit invariants without mutating formal admission truth.
-- `[doing]` Decide whether the `grant_only` provider export seam is ready for its first manual promotion packet.
-- `[todo]` Add one positive stale-host upgrade proof where raw grounding metadata survives, so the explicit recovery path is backed by host evidence instead of tests only.
+- `[done]` Land durable provider export seam proof artifacts so manual packet prep has stable candidate evidence refs without claiming formal admission.
+- `[done]` Add one positive stale-host upgrade proof where raw grounding metadata survives, so the explicit recovery path is backed by host evidence instead of tests only.
+- `[done]` Admit `grant_only_provider_export_seam` as the first formal Dota2 `seam` asset after fresh-host proof, stale-host upgrade proof, durable acceptance refs, and governance closure all passed.
+- `[done]` Land Dota2 Step 7 governance product read-model V1 so bridge export, workbench inspect, doctor wording, and workbench UI consume one four-axis projection of existing canonical truth.
+- `[done]` Refresh the checked-in workbench bridge sample so the public artifact demonstrates a root-level `governanceReadModel` instead of teaching the compatibility-only path by default.
+- `[done]` Close the connected-host live governance gap so `/api/host/status`, `useHostScanner`, `useFeatureStore`, and `workspaceAdapter` all prefer the Dota2 read-model-first path with `repairability = not_checked` when no live observation is requested.
+- `[done]` Reduce compatibility-only fallback to an explicit legacy display boundary so stale raw workspace, bridge, host-status, and legacy workbench-result payloads no longer emit quasi-governance conclusions such as `committable`, `clean`, admitted reusable assets, or grounding trust.
+- `[done]` Move the checked-in public sample and dev/mock teaching path onto governed truth: `sample-workspace.json` now carries a root-level `governanceReadModel`, the raw workspace sample survives only as an explicit legacy compatibility probe, and compatibility-only mock fixtures are neutralized to display-safe signals.
+- `[done]` Record the Step 7 refresh-lane boundary so `export-bridge` is the only stale-payload refresh path, while doctor/validate/repair remain observation or proof surfaces rather than migration tools.
+- `[done]` Fix the compatibility shrink policy: only shrink fallback after all product/public sources are governed, connected-host remains read-model-first, legacy probes stay dev/debug/test-only, and guard tests prove no product path depends on compatibility projection.
+- `[done]` Fix the stale-payload refresh cadence as event-driven and `export-bridge`-only; refresh follows host-backed product changes or read-model/public-artifact deltas, never doctor/validate/repair/manual JSON edits.
+- `[done]` Fix the no-core guard so Dota2 governance read-model genericization stays blocked until second-host evidence exists.
+- `[done]` Close the Dota2 create front-door leak so wizard/clarification is no longer the default path for explicit choose-one local weighted-selection prompts, `selection_pool` admits honest external-catalog object truth, `equipment` writes through the same family/source-backed path as its siblings on a fresh host, and ambiguous weighted-card prompts remain blocked on a single `selection_flow` clarification.
 - `[todo]` Decide whether any reveal-only runtime slice has enough repeated evidence to become a future promotion candidate without polluting `selection_pool`.
 
 Mainline rule:
@@ -117,7 +137,7 @@ Current judgment:
 
 Plan items:
 
-- `[doing]` Keep Dota2 focused on evidence for the ratified V2 chain.
+- `[doing]` Keep Dota2 focused on holding the fixed Step 7 policy: read-model-first product surfaces, compatibility-only as legacy display only, `export-bridge` as the only stale-payload refresh lane, and no core lift before second-host evidence.
 - `[doing]` Keep War3 focused on bounded probe truth rather than broad expansion.
 - `[todo]` Reuse shared seams only when one track produces stable evidence the other side can honestly consume.
 
@@ -130,7 +150,7 @@ Recommended split:
 
 Plan items:
 
-- `[doing]` Keep most attention on Dota2 evidence closure.
+- `[doing]` Keep most attention on Dota2 productization and governance-surface convergence.
 - `[todo]` Keep War3 narrow until a fresh probe run lands.
 - `[done]` Keep second-host scope outside the near-term primary delivery lane.
 

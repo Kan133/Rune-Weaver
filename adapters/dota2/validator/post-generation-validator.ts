@@ -763,13 +763,14 @@ function checkUIGeneratedIndexMounts(hostRoot: string): PostGenerationCheck {
 
   try {
     const content = readFileSync(indexPath, "utf-8");
-    const importPattern = /from\s+['"]([^'"]+)['"]/g;
-    const missingComponents: string[] = [];
+    const importPattern = /import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/g;
+    const uiIndexIssues: string[] = [];
 
     let match;
     while ((match = importPattern.exec(content)) !== null) {
-      const importPath = match[1];
-      if (!importPath) continue;
+      const importSpecifiers = match[1];
+      const importPath = match[2];
+      if (!importSpecifiers || !importPath) continue;
 
       // Skip node_modules and absolute imports
       if (!importPath.startsWith(".") && !importPath.startsWith("/")) {
@@ -790,19 +791,42 @@ function checkUIGeneratedIndexMounts(hostRoot: string): PostGenerationCheck {
         existsSync(resolvedPath);
 
       if (!exists) {
-        missingComponents.push(importPath);
+        uiIndexIssues.push(`${importPath}: referenced UI module does not exist`);
+        continue;
+      }
+
+      const resolvedFile = extensions
+        .map((ext) => `${resolvedPath}${ext}`)
+        .find((candidatePath) => existsSync(candidatePath))
+        || (existsSync(resolvedPath) ? resolvedPath : undefined);
+      if (!resolvedFile) {
+        uiIndexIssues.push(`${importPath}: referenced UI module does not exist`);
+        continue;
+      }
+
+      const importedNames = importSpecifiers
+        .split(",")
+        .map((specifier) => specifier.trim())
+        .filter(Boolean)
+        .map((specifier) => specifier.split(/\s+as\s+/i)[0]?.trim())
+        .filter((specifier): specifier is string => Boolean(specifier));
+      const exportedContent = readFileSync(resolvedFile, "utf-8");
+      for (const importedName of importedNames) {
+        if (!hasNamedExport(exportedContent, importedName)) {
+          uiIndexIssues.push(`${importPath}: missing named export '${importedName}'`);
+        }
       }
     }
 
-    if (missingComponents.length > 0) {
-    return {
-      check: checkName,
-      passed: false,
-      message: `${missingComponents.length} UI imports reference non-existent components`,
-      details: missingComponents.slice(0, 10),
-      suggestion: "Refresh the bridge so generated/ui/index.tsx only imports existing UI components.",
-    };
-  }
+    if (uiIndexIssues.length > 0) {
+      return {
+        check: checkName,
+        passed: false,
+        message: `${uiIndexIssues.length} UI index imports drift from generated component modules`,
+        details: uiIndexIssues.slice(0, 10),
+        suggestion: "Refresh the bridge so generated/ui/index.tsx imports existing UI modules and their actual named exports.",
+      };
+    }
 
     return {
       check: checkName,
@@ -817,6 +841,23 @@ function checkUIGeneratedIndexMounts(hostRoot: string): PostGenerationCheck {
       message: `Failed to validate UI index: ${message}`,
     };
   }
+}
+
+function hasNamedExport(content: string, exportName: string): boolean {
+  const escapedName = escapeRegExp(exportName);
+  const declarationPattern = new RegExp(
+    `\\bexport\\s+(?:async\\s+)?(?:function|class|const|let|var|type|interface|enum)\\s+${escapedName}\\b`,
+  );
+  if (declarationPattern.test(content)) {
+    return true;
+  }
+
+  const reExportPattern = new RegExp(`\\bexport\\s*\\{[^}]*\\b${escapedName}\\b[^}]*\\}`, "s");
+  return reExportPattern.test(content);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

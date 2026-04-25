@@ -10,7 +10,7 @@ import type {
   IntentSchema,
   RelationCandidate,
   UpdateIntent,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
   WizardClarificationPlan,
   WorkspaceSemanticContext,
 } from "../../../../core/schema/types.js";
@@ -32,10 +32,12 @@ import { realizeDota2Host, summarizeRealization } from "../../../../adapters/dot
 import { shouldUseArtifactSynthesis } from "../../../../adapters/dota2/synthesis/index.js";
 import { applyDota2GrantSeam } from "../../../../adapters/dota2/cross-feature/index.js";
 import {
+  refreshSelectionPoolWritePlanEntries,
   resolveSelectionPoolWorkspaceFields,
 } from "../../../../adapters/dota2/families/selection-pool/index.js";
 import { generateKVContentWithIndex, performUpdateHostValidation } from "../../helpers/index.js";
 import { resolveReviewArtifactOutputDir } from "../review-artifacts.js";
+import { reconcileClarificationArtifactTruth } from "../clarification-artifact-reconciliation.js";
 import {
   createPendingSemanticExportStatus,
   createWrittenSemanticExportStatus,
@@ -50,11 +52,16 @@ import {
   createDota2ReviewArtifactBuilder,
   persistDota2ReviewArtifact,
 } from "../pipeline/review-artifact.js";
+import { reconcileClarificationForReviewArtifact } from "../review-clarification.js";
 import { runPipelineStage } from "../pipeline/stage-runner.js";
 import { orchestrateValidation } from "../pipeline/validation-orchestration.js";
 import { createUpdateReviewArtifact } from "../update-artifact.js";
 import type { Dota2CLIOptions } from "../../dota2-cli.js";
-import type { Dota2BlueprintBuildResult, FeatureMode } from "../planning.js";
+import {
+  getUpdateIntentSemanticPosture,
+  type Dota2BlueprintBuildResult,
+  type FeatureMode,
+} from "../planning.js";
 import { printHostValidationStage, runDota2RuntimeValidation } from "./lifecycle-runner.js";
 import { normalizeUpdateWritePlanEntries } from "../update-entry-normalizer.js";
 import { runLocalRepairWithLLM } from "../../../../core/local-repair/index.js";
@@ -64,7 +71,6 @@ import {
   isAbilityKvFragmentPath,
   materializeKvWritePlanEntries,
 } from "../../../../adapters/dota2/kv/index.js";
-
 export interface UpdateCommandDeps {
   createUpdateIntent: (
     prompt: string,
@@ -77,14 +83,13 @@ export interface UpdateCommandDeps {
     updateIntent: UpdateIntent | null;
     usedFallback: boolean;
     clarificationPlan?: WizardClarificationPlan;
-    clarificationAuthority: WizardClarificationAuthority;
+    clarificationSignals: WizardClarificationSignals;
     relationCandidates?: RelationCandidate[];
     workspaceSemanticContext?: WorkspaceSemanticContext;
-    requiresClarification: boolean;
   }>;
   buildUpdateBlueprint: (
     updateIntent: UpdateIntent,
-    clarificationAuthority?: WizardClarificationAuthority,
+    clarificationSignals?: WizardClarificationSignals,
   ) => Dota2BlueprintBuildResult;
   resolvePatternsFromBlueprint: (blueprint: Blueprint) => PatternResolutionResult;
   buildAssemblyPlan: (
@@ -387,7 +392,7 @@ export async function runUpdateCommand(
     updateIntent,
     usedFallback,
     clarificationPlan,
-    clarificationAuthority,
+    clarificationSignals,
     relationCandidates,
     workspaceSemanticContext,
   } = updateIntentResult;
@@ -407,6 +412,7 @@ export async function runUpdateCommand(
     usedFallback,
     intentKind: requestedChange.classification.intentKind,
     uiNeeded: requestedChange.uiRequirements?.needed || false,
+    semanticPosture: getUpdateIntentSemanticPosture(updateIntent),
     mechanics: Object.entries(requestedChange.normalizedMechanics)
       .filter(([, value]) => value === true)
       .map(([key]) => key),
@@ -436,8 +442,6 @@ export async function runUpdateCommand(
     requestedChangeIntentSchema: requestedChange,
     updateIntent,
   };
-  artifact.clarificationPlan = clarificationPlan;
-  artifact.clarificationAuthority = clarificationAuthority;
   artifact.relationCandidates = relationCandidates;
   artifact.workspaceSemanticContext = workspaceSemanticContext;
   try {
@@ -473,28 +477,33 @@ export async function runUpdateCommand(
   console.log(`     Uncertainties: ${requestedChange.uncertainties?.length || 0}`);
   console.log(`     UI Needed: ${requestedChange.uiRequirements?.needed || false}`);
 
-  if (clarificationAuthority.blocksBlueprint) {
-    artifact.finalVerdict.weakestStage = "intentSchema";
-    artifact.finalVerdict.remainingRisks.push(
-      ...(clarificationAuthority.reasons.length > 0
-        ? clarificationAuthority.reasons
-        : ["UpdateIntent requires clarification before Blueprint generation can continue."]),
-    );
-    artifact.finalVerdict.nextSteps.push("Answer the clarification questions and rerun update.");
-    persistReviewArtifact();
-    return false;
-  }
-
   const {
     blueprint: blueprintDraft,
     finalBlueprint,
     issues: blueprintIssues,
     status: blueprintStatus,
+    executionAuthority,
     moduleNeedsCount,
-  } = deps.buildUpdateBlueprint(updateIntent, clarificationAuthority);
+  } = deps.buildUpdateBlueprint(updateIntent, clarificationSignals);
   let blueprint = finalBlueprint;
   const blueprintView = finalBlueprint || blueprintDraft;
-  const canContinueBlueprint = blueprint?.commitDecision?.canAssemble ?? false;
+  const canContinueBlueprint = !executionAuthority.blocksBlueprint;
+  const reconciledClarification = reconcileClarificationForReviewArtifact({
+    clarificationPlan,
+    clarificationSignals,
+    executionAuthority,
+  });
+  artifact.clarificationPlan = reconciledClarification.clarificationPlan;
+  artifact.clarificationSignals = reconciledClarification.clarificationSignals;
+  artifact.executionAuthority = executionAuthority;
+  ({
+    clarificationPlan: artifact.clarificationPlan,
+    clarificationSignals: artifact.clarificationSignals,
+  } = reconcileClarificationArtifactTruth({
+    clarificationPlan: artifact.clarificationPlan,
+    clarificationSignals: artifact.clarificationSignals,
+    executionAuthority,
+  }));
   if (!blueprint || !canContinueBlueprint) {
     console.error(`\n❌ FinalBlueprint ${blueprintStatus}: ${blueprintIssues.join(", ")}`);
     artifact.stages.blueprint = {
@@ -502,11 +511,17 @@ export async function runUpdateCommand(
       summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
       moduleCount: blueprintView?.modules.length || 0,
       patternHints: blueprintView?.patternHints.flatMap((hint) => hint.suggestedPatterns) || [],
-      issues: blueprintIssues,
+      issues: [...new Set([...blueprintIssues, ...executionAuthority.reasons])],
     };
     artifact.finalVerdict.weakestStage = "blueprint";
     artifact.finalVerdict.remainingRisks.push(
-      ...(blueprintIssues.length > 0 ? blueprintIssues : [`FinalBlueprint ${blueprintStatus}`])
+      ...(
+        blueprintIssues.length > 0
+          ? [...new Set([...blueprintIssues, ...executionAuthority.reasons])]
+          : executionAuthority.reasons.length > 0
+            ? executionAuthority.reasons
+            : [`FinalBlueprint ${blueprintStatus}`]
+      )
     );
     persistReviewArtifact();
     return false;
@@ -517,7 +532,9 @@ export async function runUpdateCommand(
     summary: `FinalBlueprint ${blueprintStatus} (moduleNeeds: ${moduleNeedsCount})`,
     moduleCount: blueprintView?.modules.length || 0,
     patternHints: blueprintView?.patternHints.flatMap((hint) => hint.suggestedPatterns) || [],
-    issues: blueprintIssues,
+    issues: executionAuthority.blocksWrite
+      ? [...new Set([...blueprintIssues, ...executionAuthority.reasons])]
+      : blueprintIssues,
   };
   try {
     const semanticArtifacts = saveUpdateSemanticArtifacts({
@@ -658,7 +675,8 @@ export async function runUpdateCommand(
       blueprint,
       writePlan,
       relationCandidates,
-      clarificationAuthority,
+      clarificationSignals,
+      executionAuthority,
       currentFeature: existingFeature,
       workspaceFeatures: workspaceResult.workspace.features,
     });
@@ -693,6 +711,12 @@ export async function runUpdateCommand(
         console.log(`     - ${reason}`);
       }
     }
+
+    refreshSelectionPoolWritePlanEntries(
+      writePlan,
+      existingFeature.featureId,
+      blueprint.featureAuthoring,
+    );
   }
   if (!writePlan) {
     console.error(`\n❌ Failed to create WritePlan: ${generatorIssues.join(", ")}`);
@@ -815,6 +839,34 @@ export async function runUpdateCommand(
   if (!dependencyRevalidation.success) {
     artifact.finalVerdict.weakestStage = "dependencyRevalidation";
     artifact.finalVerdict.remainingRisks.push(...dependencyRevalidation.blockers);
+    persistReviewArtifact();
+    return false;
+  }
+
+  if (!options.dryRun && options.write && !options.force && executionAuthority.blocksWrite) {
+    const readinessBlockers = executionAuthority.reasons.length > 0
+      ? executionAuthority.reasons
+      : ["Update host write is blocked by unresolved execution authority."];
+    console.log("\n" + "=".repeat(70));
+    console.log("Stage 7: Selective Update Execution");
+    console.log("=".repeat(70));
+    console.log("  ⛔ Blocked by execution authority");
+    for (const blocker of readinessBlockers) {
+      console.log(`    - ${blocker}`);
+    }
+    artifact.stages.writeExecutor = {
+      success: false,
+      executedActions: 0,
+      skippedActions: 0,
+      failedActions: 0,
+      createdFiles: [],
+      modifiedFiles: [],
+      blockedByReadinessGate: true,
+      readinessBlockers,
+    };
+    artifact.finalVerdict.weakestStage = "writeExecutor";
+    artifact.finalVerdict.remainingRisks.push(...readinessBlockers);
+    artifact.finalVerdict.nextSteps.push("Resolve the unresolved provider/binding dependency before rerunning update.");
     persistReviewArtifact();
     return false;
   }

@@ -1,10 +1,15 @@
 import type { IntentSchema } from "../schema/types.js";
 
+const FALLBACK_TRIGGER_KEY_TOKEN = "(?:F\\d+|[QWERDFG]|[1-6])";
+
 export function extractNumericParameters(prompt: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
   const keyMatch = prompt.match(
-    /按下?\s*(F\d+|[QWERDF]|[1-6])(?:键)?|按键\s*(F\d+|[QWERDF]|[1-6])|触发键[：:\s]*(F\d+|[QWERDF]|[1-6])/i,
+    new RegExp(
+      `按下?\\s*(${FALLBACK_TRIGGER_KEY_TOKEN})(?:键)?|按键\\s*(${FALLBACK_TRIGGER_KEY_TOKEN})|触发键[：:\\s]*(${FALLBACK_TRIGGER_KEY_TOKEN})`,
+      "i",
+    ),
   );
   if (keyMatch) {
     result.triggerKey = (keyMatch[1] || keyMatch[2] || keyMatch[3]).toUpperCase();
@@ -95,17 +100,22 @@ export function finalizeCreateIntentSchema(
   schema: IntentSchema,
   rawText: string,
 ): IntentSchema {
+  const {
+    readiness: _readiness,
+    isReadyForBlueprint: _isReadyForBlueprint,
+    ...semanticSchema
+  } = schema;
   const extractedParameters = extractNumericParameters(rawText);
   const mergedParameters = Object.keys(extractedParameters).length > 0
     ? {
-        ...(schema.parameters || {}),
+        ...(semanticSchema.parameters || {}),
         ...extractedParameters,
       }
-    : schema.parameters;
+    : semanticSchema.parameters;
 
   return {
-    ...schema,
-    normalizedMechanics: applyDeterministicMechanicHints(schema, extractedParameters),
+    ...semanticSchema,
+    normalizedMechanics: applyDeterministicMechanicHints(semanticSchema, extractedParameters),
     ...(mergedParameters ? { parameters: mergedParameters } : {}),
   };
 }

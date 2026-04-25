@@ -5,10 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import type {
   Blueprint,
+  ExecutionAuthorityDecision,
   IntentSchema,
   SelectionPoolFeatureAuthoringParameters,
   SelectionPoolParameterSurface,
-  WizardClarificationAuthority,
+  WizardClarificationSignals,
 } from "../../../core/schema/types.js";
 import { lookupDota2HostSymbolsExact } from "../../../core/retrieval/dota2-bundles.js";
 import type { RuneWeaverWorkspace } from "../../../core/workspace/types.js";
@@ -336,15 +337,28 @@ function createSelectionPoolBlueprint(featureId: string): Blueprint {
   } as Blueprint;
 }
 
-function createClarificationAuthority(
-  overrides: Partial<WizardClarificationAuthority> = {},
-): WizardClarificationAuthority {
+function createExecutionAuthorityDecision(
+  overrides: Partial<ExecutionAuthorityDecision> = {},
+): ExecutionAuthorityDecision {
   return {
     blocksBlueprint: false,
     blocksWrite: false,
     requiresReview: false,
-    unresolvedDependencies: [],
     reasons: [],
+    remainingStructuralContracts: [],
+    unresolvedDependencies: [],
+    ...overrides,
+  };
+}
+
+function createClarificationSignals(
+  overrides: Partial<WizardClarificationSignals> = {},
+): WizardClarificationSignals {
+  return {
+    semanticPosture: "bounded",
+    reasons: [],
+    openStructuralContracts: [],
+    unresolvedDependencies: [],
     ...overrides,
   };
 }
@@ -688,7 +702,7 @@ function evaluateGrantOnlyProviderExportSeam(): Dota2PromotionReadinessAssessmen
             schema: createDefinitionOnlyProviderSchema(),
             blueprint,
             writePlan,
-            clarificationAuthority: createClarificationAuthority(),
+            clarificationSignals: createClarificationSignals(),
             workspaceFeatures: [],
           });
 
@@ -745,7 +759,7 @@ function evaluateGrantOnlyProviderExportSeam(): Dota2PromotionReadinessAssessmen
             schema: createSelectionSchema(),
             blueprint,
             writePlan,
-            clarificationAuthority: createClarificationAuthority(),
+            clarificationSignals: createClarificationSignals(),
             workspaceFeatures: [],
           });
 
@@ -798,7 +812,7 @@ function evaluateGrantOnlyProviderExportSeam(): Dota2PromotionReadinessAssessmen
             schema: createGameplayProviderSchema(),
             blueprint,
             writePlan,
-            clarificationAuthority: createClarificationAuthority(),
+            clarificationSignals: createClarificationSignals(),
             workspaceFeatures: [],
           });
 

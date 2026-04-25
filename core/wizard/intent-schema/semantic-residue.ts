@@ -133,7 +133,7 @@ export function shouldSuppressBoundedCandidateDrawDetailSummary(
       value,
     );
   const isCatalogNoise =
-    /specific|concrete|catalog|candidate contents|effect definitions|what are the choices|which choices|which options|object definitions|具体效果|具体内容|候选池内容|图标|名称|描述|label|icon|copy/iu.test(
+    /specific|concrete|catalog|candidate contents|candidate subset|eligible subset|effect definitions|what are the choices|which choices|which options|which items|native items|native d(?:ota)? ?2 items|object definitions|具体效果|具体内容|候选池内容|候选范围|候选子集|哪些装备|哪些物品|图标|名称|描述|label|icon|copy/iu.test(
       value,
     );
   const isPresentationNoise =
@@ -362,7 +362,7 @@ function classifyResidueSurface(
       return "state_scope";
     }
 
-    if (/(?:catalog|candidate contents|candidate catalog|option list|icon|label|copy|description|object definition|候选池内容|候选目录|图标|名称|描述)/iu.test(summary)) {
+    if (/(?:catalog|candidate contents|candidate catalog|candidate subset|eligible subset|option list|which items|native items|native d(?:ota)? ?2 items|icon|label|copy|description|object definition|候选池内容|候选目录|候选范围|候选子集|图标|名称|描述)/iu.test(summary)) {
       return "candidate_catalog";
     }
 
@@ -373,6 +373,10 @@ function classifyResidueSurface(
     if (/(?:effect|effect profile|consequence|reward outcome|visual effect|appearance|rarity effect|占位效果|效果|后果|外观)/iu.test(summary)) {
       return "effect_profile";
     }
+  }
+
+  if (typeof summary === "string" && /(?:exact probability|exact probability weights|probability weights|weight values|exact weights|drop rate values|drop rates|odds values|rarity weights|tier weights|rarity odds|权重|加权|概率|几率|掉率|稀有度权重|品级权重)/iu.test(summary)) {
+    return "candidate_catalog";
   }
 
   if (affects?.includes("blueprint") || affects?.includes("pattern") || affects?.includes("realization")) {
@@ -428,8 +432,12 @@ function isBoundedVariabilityQuestion(value: unknown): boolean {
   const question = value.toLowerCase();
   const detailHints = [
     "exact probability",
+    "exact numeric probability",
     "exact probability weights",
     "probability weights",
+    "exact numeric weighting values",
+    "exact numeric probability or weighting values",
+    "weighting values",
     "weight values",
     "drop rate values",
     "exact visual treatment",
@@ -443,6 +451,8 @@ function isBoundedVariabilityQuestion(value: unknown): boolean {
     "specific",
     "specific choices",
     "specific options",
+    "candidate subset",
+    "eligible subset",
     "catalog",
     "list",
     "names",
@@ -462,10 +472,27 @@ function isBoundedVariabilityQuestion(value: unknown): boolean {
     "what are the three choices",
     "which choices",
     "which options",
+    "which items",
+    "native items",
+    "native dota 2 items",
+    "candidate range",
+    "pool range",
+    "duplicate candidates",
+    "duplicate options",
+    "duplicate choices",
+    "same draw",
+    "same set of draws",
+    "same set of 3 draws",
+    "within one draw",
+    "within the same draw",
     "具体内容",
     "具体数值",
     "具体选项",
     "候选池内容",
+    "候选范围",
+    "候选子集",
+    "装备范围",
+    "物品范围",
     "效果列表",
     "列表",
     "名称",
