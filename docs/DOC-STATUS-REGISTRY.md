@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-20
+> Last verified: 2026-04-25
 > Read when: deciding whether a doc is safe to trust, ignore, or archive
 > Do not use for: architecture design by itself; this is a routing/trust registry, not a subsystem spec
 
@@ -119,7 +119,7 @@ Minimum machine-readable header automation scope:
 | [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md) | active-reference | needs-refresh | read-by-task | canonical acceptance case definitions; packet-era case framing still helps, but same-day current slice and blocker truth must come from `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
 | [CANONICAL-WALKTHROUGH.md](/D:/Rune%20Weaver/docs/CANONICAL-WALKTHROUGH.md) | active-reference | current | read-by-task | canonical demo / handoff walkthrough |
 | [CLEAN-STATE-PROTOCOL.md](/D:/Rune%20Weaver/docs/CLEAN-STATE-PROTOCOL.md) | active-reference | current | read-by-task | clean-state preparation before verification |
-| [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md) | active-reference | needs-refresh | read-by-task | validated command entry points and recipes; packet-era acceptance wording may lag current shared truth, so use only after cross-checking live queue/blocker status against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
+| [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md) | active-reference | current | read-by-task | current CLI/workbench/export-bridge command surface and authority boundaries for lifecycle, validation, and product review |
 | [DEVELOPMENT-GUIDE.md](/D:/Rune%20Weaver/docs/DEVELOPMENT-GUIDE.md) | active-reference | current | read-by-task | implementation-oriented development guide |
 | [ENGINEERING-GUARDRAILS.md](/D:/Rune%20Weaver/docs/ENGINEERING-GUARDRAILS.md) | active-reference | current | read-by-task | engineering anti-drift guardrails |
 | [FAILURE-CLASSIFICATION.md](/D:/Rune%20Weaver/docs/FAILURE-CLASSIFICATION.md) | active-reference | current | read-by-task | failure-classification vocabulary for validation work |
@@ -127,7 +127,7 @@ Minimum machine-readable header automation scope:
 | [HOST-REALIZATION-SCHEMA.md](/D:/Rune%20Weaver/docs/HOST-REALIZATION-SCHEMA.md) | active-reference | current | read-by-task | `HostRealizationPlan` data shape |
 | [TECHNICAL-REFERENCE-LAYER.md](/D:/Rune%20Weaver/docs/TECHNICAL-REFERENCE-LAYER.md) | active-reference | current | read-by-task | entry point for deeper technical reference docs |
 | [VALIDATION-AUTOMATION-BOUNDARY.md](/D:/Rune%20Weaver/docs/VALIDATION-AUTOMATION-BOUNDARY.md) | active-reference | current | read-by-task | validation automation boundary rules |
-| [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md) | active-reference | needs-refresh | read-by-task | validation execution playbook; packet-era validation flow remains useful, but same-day authoritative path and blocker truth must be cross-checked against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
+| [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md) | active-reference | current | read-by-task | current validation execution playbook for CLI lifecycle, governed bridge checks, connected-host product surfaces, and legacy compatibility boundary checks |
 
 ---
 
@@ -165,7 +165,7 @@ Volatile coordination note:
 
 | Document | Status | Freshness | Agent action | Use |
 |----------|--------|-----------|--------------|-----|
-| [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) | active-reference | needs-refresh | read-by-task | demo-safe walkthrough and presentation paths; packet-era demo framing may lag current shared truth, so cross-check live scope/blockers against `CURRENT-EXECUTION-PLAN.md`, `RW-SHARED-PLAN.md`, and the latest relevant session-sync note |
+| [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) | active-reference | current | read-by-task | current demo-safe walkthroughs for CLI authoritative path plus governed bridge/workbench product surfaces |
 | [PRODUCT-GUIDE-FOR-AI-PM-ZH.md](/D:/Rune%20Weaver/docs/PRODUCT-GUIDE-FOR-AI-PM-ZH.md) | active-reference | current | read-by-task | public AI-PM-facing product introduction, workflow framing, and feature-first explanation |
 | [PRODUCT.md](/D:/Rune%20Weaver/docs/PRODUCT.md) | planning | current | planning-only | long-term product thesis and boundary framing |
 | [ROADMAP.md](/D:/Rune%20Weaver/docs/ROADMAP.md) | planning | needs-refresh | planning-only | roadmap sequencing and product milestones; current-step language may lag fresh session-sync truth |

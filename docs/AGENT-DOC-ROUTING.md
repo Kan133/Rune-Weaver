@@ -4,7 +4,7 @@
 > Audience: agents
 > Doc family: control
 > Update cadence: on-contract-change
-> Last verified: 2026-04-20
+> Last verified: 2026-04-25
 > Read when: deciding the minimum doc set for a task
 > Do not use for: subsystem truth by itself; this file routes readers to the right docs
 
@@ -164,23 +164,32 @@ Read in this order:
 3. [ARCHITECTURE.md](/D:/Rune%20Weaver/docs/ARCHITECTURE.md)
 4. [WORKSPACE-MODEL.md](/D:/Rune%20Weaver/docs/WORKSPACE-MODEL.md)
 
+Add when relevant:
+
+- [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md)
+- [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md)
+- [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md)
+- [PRODUCT-GUIDE-FOR-AI-PM-ZH.md](/D:/Rune%20Weaver/docs/PRODUCT-GUIDE-FOR-AI-PM-ZH.md)
+
 Reference only:
 
-- roadmap / product narrative docs
+- roadmap / long-range product docs
 
 Rule:
 
 - UI must follow authoritative CLI lifecycle truth, not invent a second execution model
+- Workbench should be treated as product entry / orchestration / review shell, not lifecycle authority
 
 ---
 
 ## 7. Acceptance Evidence / Canonical Walkthrough Verification
 
-Packet-era warning:
+Freshness warning:
 
-- [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md), [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md), [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md), [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md), and [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) still contain packet-era wording and can lag same-day current-slice or blocker truth
-- before using those docs to drive acceptance, validation, or demo decisions, cross-check against [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md), [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md), and the latest relevant session-sync note under `docs/session-sync/`
-- if the packet-era docs imply a different current blocker, current step, or authoritative acceptance entrance, stop and escalate instead of treating them as fresher than session-sync
+- [ACCEPTANCE-CHECKLISTS.md](/D:/Rune%20Weaver/docs/ACCEPTANCE-CHECKLISTS.md) and [CANONICAL-ACCEPTANCE-CASES.md](/D:/Rune%20Weaver/docs/CANONICAL-ACCEPTANCE-CASES.md) are still `needs-refresh`
+- [VALIDATION-PLAYBOOK.md](/D:/Rune%20Weaver/docs/VALIDATION-PLAYBOOK.md), [COMMAND-RECIPES.md](/D:/Rune%20Weaver/docs/COMMAND-RECIPES.md), and [DEMO-PATHS.md](/D:/Rune%20Weaver/docs/DEMO-PATHS.md) are current execution/product references after the Step 7 doc sync
+- before using any acceptance/demo doc to drive decisions, still cross-check against [CURRENT-EXECUTION-PLAN.md](/D:/Rune%20Weaver/docs/CURRENT-EXECUTION-PLAN.md), [RW-SHARED-PLAN.md](/D:/Rune%20Weaver/docs/session-sync/RW-SHARED-PLAN.md), and the latest relevant session-sync note under `docs/session-sync/`
+- if an acceptance/demo doc implies a different current blocker, current step, or authoritative entrance, stop and escalate instead of treating it as fresher than session-sync
 
 Read in this order:
 
